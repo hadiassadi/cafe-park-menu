@@ -3193,3 +3193,46 @@ footer {
   font-size: 22px;
   line-height: 1;
 }
+/* ========================================
+   29. STICKY CATEGORIES - FIX
+   ======================================== */
+
+/* اطمینان از اینکه html و body overflow افقی ندارن */
+html,
+body {
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+}
+
+/* theme-root نباید overflow داشته باشه */
+.theme-root {
+  overflow: visible !important;
+  overflow-x: hidden !important;
+}
+
+/* نوار جستجو */
+.toolbar {
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 30 !important;
+  background: var(--background-color);
+}
+
+/* نوار دسته‌بندی */
+.cats {
+  position: sticky !important;
+  top: 62px !important;
+  z-index: 25 !important;
+  background: var(--background-color) !important;
+}
+
+/* موبایل */
+@media (max-width: 650px) {
+  .toolbar {
+    top: 0 !important;
+  }
+
+  .cats {
+    top: 62px !important;
+  }
+}
