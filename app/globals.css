@@ -4046,3 +4046,73 @@ footer {
   color: #766f64;
   margin-bottom: 0;
 }
+/* =========================
+   Mobile Product Card Fix
+   ========================= */
+
+@media (max-width: 650px) {
+  .product {
+    padding: 0;
+    overflow: hidden;
+  }
+
+  .product-info {
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .name {
+    font-size: 16px !important;
+    font-weight: 800;
+    line-height: 1.5;
+    color: var(--text-color);
+    word-break: break-word;
+  }
+
+  .desc {
+    font-size: 12px;
+    color: var(--muted-text-color);
+    line-height: 1.8;
+    word-break: break-word;
+  }
+
+  .meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 4px;
+    padding-top: 10px;
+    border-top: 1px solid var(--secondary-color);
+  }
+
+  .size {
+    font-size: 12px;
+    padding: 4px 10px;
+    background: var(--secondary-color);
+    color: var(--muted-text-color);
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+
+  .price {
+    font-size: 15px !important;
+    font-weight: 800;
+    color: var(--accent-color);
+    white-space: nowrap;
+  }
+
+  .price small {
+    font-size: 10px;
+  }
+
+  /* عکس محصول */
+  .photo {
+    aspect-ratio: 16 / 10;
+    max-height: 220px;
+  }
+}
