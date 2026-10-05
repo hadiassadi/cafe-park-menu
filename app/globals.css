@@ -4046,3 +4046,197 @@ footer {
   color: #766f64;
   margin-bottom: 0;
 }
+/* =========================
+   Mobile Fixes
+   ========================= */
+
+@media (max-width: 768px) {
+  /* جلوگیری از بیرون‌زدگی */
+  html,
+  body {
+    overflow-x: hidden;
+    max-width: 100%;
+  }
+
+  .theme-root,
+  .admin-shell,
+  .admin-main {
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  /* صفحه لاگین */
+  .admin {
+    max-width: 100%;
+    padding: 0 4px;
+    box-sizing: border-box;
+  }
+
+  .admin-card {
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  .field input,
+  .field textarea,
+  .field select {
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  /* هدر */
+  .hero {
+    padding: 40px 14px 28px;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  .brand {
+    font-size: 26px;
+  }
+
+  .sub {
+    font-size: 12px;
+  }
+
+  /* گرید محصولات */
+  .grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .product {
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  .photo {
+    aspect-ratio: 4 / 3;
+  }
+
+  .product-info {
+    padding: 12px;
+  }
+
+  .name {
+    font-size: 15px;
+  }
+
+  .desc {
+    font-size: 11px;
+  }
+
+  /* نوار دسته‌بندی */
+  .cats {
+    padding: 10px 12px;
+    gap: 6px;
+  }
+
+  .cat {
+    padding: 8px 14px;
+    font-size: 12px;
+  }
+
+  /* نوار ابزار */
+  .toolbar {
+    padding: 10px 12px;
+    gap: 6px;
+  }
+
+  .search-box {
+    min-height: 40px;
+  }
+
+  .filter-chip {
+    min-height: 40px;
+    padding: 0 12px;
+    font-size: 12px;
+  }
+
+  /* فوتر */
+  footer {
+    padding: 16px;
+    font-size: 11px;
+  }
+
+  /* کارت‌های آماری داشبورد */
+  .stats-grid,
+  .status-grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .stat-card {
+    padding: 12px;
+  }
+}
+/* =========================
+   Mobile Product Card Fix
+   ========================= */
+
+@media (max-width: 650px) {
+  .product {
+    padding: 0;
+    overflow: hidden;
+  }
+
+  .product-info {
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .name {
+    font-size: 16px !important;
+    font-weight: 800;
+    line-height: 1.5;
+    color: var(--text-color);
+    word-break: break-word;
+  }
+
+  .desc {
+    font-size: 12px;
+    color: var(--muted-text-color);
+    line-height: 1.8;
+    word-break: break-word;
+  }
+
+  .meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 4px;
+    padding-top: 10px;
+    border-top: 1px solid var(--secondary-color);
+  }
+
+  .size {
+    font-size: 12px;
+    padding: 4px 10px;
+    background: var(--secondary-color);
+    color: var(--muted-text-color);
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+
+  .price {
+    font-size: 15px !important;
+    font-weight: 800;
+    color: var(--accent-color);
+    white-space: nowrap;
+  }
+
+  .price small {
+    font-size: 10px;
+  }
+
+  /* عکس محصول */
+  .photo {
+    aspect-ratio: 16 / 10;
+    max-height: 220px;
+  }
+}
