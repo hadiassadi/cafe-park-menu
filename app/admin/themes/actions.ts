@@ -719,7 +719,7 @@ export async function addTheme(
   }
 
   const uploaded =
-    processed.uploaded
+  processed.uploaded ?? []
 
   const detectedFamily =
     uploaded.find(
@@ -1025,24 +1025,23 @@ export async function updateTheme(
   }
 
   const uploaded =
-    processed.uploaded
+  processed.uploaded ?? []
 
-  const allMetadata = [
-    ...existingMetadata,
-    ...uploaded,
-  ]
+  cconst uploadedSafe = processed.uploaded ?? []
+const allMetadata = [
+  ...existingMetadata,
+  ...uploadedSafe,
+]
 
   let finalFamily =
     fontFamily
 
-  if (!finalFamily) {
-    finalFamily =
-      uploaded.find(
-        (font) =>
-          font.family
-      )?.family ??
-      existingMetadata.find(
-        (font) =>
+  if finalFamily =
+  uploadedSafe.find(
+    (font) =>
+      font.family
+  )?.family ??
+  existingMetadata.find(        (font) =>
           font.family
       )?.family ??
       ''
