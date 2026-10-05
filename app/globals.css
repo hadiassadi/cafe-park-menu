@@ -684,7 +684,7 @@ footer {
     line-height: 1;
   }
 
-    .admin-mobile-item small {
+        .admin-mobile-item small {
     font-size: 8px;
   }
 
@@ -694,9 +694,9 @@ footer {
   }
 }
 
-   /* =========================
+/* =========================
    Image Upload
-   ========================= */    ← خط ۶۹۸
+   ========================= */
 
 .image-upload {
   display: flex;
@@ -1190,7 +1190,7 @@ footer {
 /* موبایل */
 @media (max-width: 768px) {
   .admin-main {
-    padding: 16px 14px 90px;
+    padding: 16px 14px 110px;
   }
 
   .admin-main .admin-header h1 {
@@ -2927,21 +2927,14 @@ footer {
     border-radius: 14px;
   }
 
-  .dashboard-welcome h1 {
+    .dashboard-welcome h1 {
     font-size: 20px;
   }
-
-  .status-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 12px;
-}
 
   .stat-card {
     padding: 12px;
     gap: 10px;
   }
-
   .stat-icon {
     width: 38px;
     height: 38px;
