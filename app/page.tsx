@@ -6,6 +6,7 @@ import Image from 'next/image'
 type Category = {
   id: string
   name: string
+  icon: string | null
   sort_order: number
 }
 
@@ -365,18 +366,21 @@ export default function Home() {
 
         {categories.length > 0 && (
           <nav className="cats">
-            {grouped.map(({ category }) => (
-              <button
-                key={category.id}
-                className={`cat ${
-                  activeCategory === category.id ? 'active' : ''
-                }`}
-                onClick={() => scrollToCategory(category.id)}
-              >
-                {category.name}
-              </button>
-            ))}
-          </nav>
+  {grouped.map(({ category }) => (
+    <button
+      key={category.id}
+      className={`cat ${
+        activeCategory === category.id ? 'active' : ''
+      }`}
+      onClick={() => scrollToCategory(category.id)}
+    >
+      {category.icon && (
+        <span className="cat-icon">{category.icon}</span>
+      )}
+      {category.name}
+    </button>
+  ))}
+</nav>
         )}
 
         <main className="wrap">
@@ -405,9 +409,12 @@ export default function Home() {
                 }}
               >
                 <h2>
-                  {category.name}
-                  <span className="count">{items.length}</span>
-                </h2>
+  {category.icon && (
+    <span className="section-icon">{category.icon}</span>
+  )}
+  {category.name}
+  <span className="count">{items.length}</span>
+</h2>
 
                 <div className="grid">
                   {items.map((product, index) => (

@@ -3174,3 +3174,22 @@ footer {
     font-size: 20px;
   }
 }
+/* ========================================
+   28. CATEGORY ICONS
+   ======================================== */
+
+.cat {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cat-icon {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.section-icon {
+  font-size: 22px;
+  line-height: 1;
+}

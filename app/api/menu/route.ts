@@ -11,7 +11,7 @@ export async function GET() {
     await Promise.all([
       db
         .from('categories')
-        .select('id,name,sort_order')
+        .select('id,name,icon,sort_order')
         .eq('is_active', true)
         .order('sort_order', { ascending: true }),
 
