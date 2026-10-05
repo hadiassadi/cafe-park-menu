@@ -1025,9 +1025,8 @@ export async function updateTheme(
   }
 
   const uploaded =
-  processed.uploaded ?? []
-
-  cconst uploadedSafe = processed.uploaded ?? []
+  
+  const uploadedSafe = processed.uploaded ?? []
 const allMetadata = [
   ...existingMetadata,
   ...uploadedSafe,
