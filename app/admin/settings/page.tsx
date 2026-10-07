@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Modal from '../components/Modal'
+import { revalidateMenu } from '../actions'
 
 type Settings = {
   cafe_name: string
@@ -98,6 +99,9 @@ export default function SettingsPage() {
         console.error('API error:', err)
         throw new Error(err.error || 'خطا در ذخیره')
       }
+
+      // منوی عمومی را فوراً به‌روز کن
+      await revalidateMenu().catch(() => {})
 
       setForm(draft)
       setMessage('✅ تنظیمات ذخیره شد')

@@ -1,6 +1,7 @@
 'use server'
 
 import { supabaseServer } from '@/lib/supabase/server'
+import { revalidatePath } from 'next/cache'
 
 export async function addCategory(formData: FormData) {
   const db = await supabaseServer()
@@ -28,6 +29,7 @@ export async function addCategory(formData: FormData) {
     return { error: error.message }
   }
 
+  revalidatePath('/')
   return { success: true }
 }
 
@@ -65,5 +67,6 @@ export async function updateCategory(formData: FormData) {
     return { error: error.message }
   }
 
+  revalidatePath('/')
   return { success: true }
 }

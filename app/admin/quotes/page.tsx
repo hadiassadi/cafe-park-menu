@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Modal from '../components/Modal'
+import { revalidateMenu } from '../actions'
 
 type Quote = {
   id: string
@@ -96,6 +97,9 @@ export default function QuotesPage() {
 
       if (!res.ok) throw new Error('خطا')
 
+      // منوی عمومی را فوراً به‌روز کن
+      await revalidateMenu().catch(() => {})
+
       setMessage(editingQuote ? '✅ ویرایش شد' : '✅ جمله اضافه شد')
       await loadQuotes()
       closeModal()
@@ -114,6 +118,8 @@ export default function QuotesPage() {
     try {
       const res = await fetch(`/api/quotes/${id}`, { method: 'DELETE' })
       if (!res.ok) throw new Error('خطا')
+
+      await revalidateMenu().catch(() => {})
 
       setMessage('✅ حذف شد')
       await loadQuotes()
@@ -138,6 +144,8 @@ export default function QuotesPage() {
       })
 
       if (!res.ok) throw new Error('خطا')
+
+      await revalidateMenu().catch(() => {})
 
       await loadQuotes()
     } catch {

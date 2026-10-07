@@ -2,6 +2,7 @@
 
 import * as fontkit from 'fontkit'
 import { supabaseServer } from '@/lib/supabase/server'
+import { revalidatePath } from 'next/cache'
 
 type FontMetadataItem = {
   id: string
@@ -409,6 +410,7 @@ export async function addTheme(formData: FormData) {
 
   if (error) return { error: error.message }
 
+  revalidatePath('/')
   return { success: true }
 }
 
@@ -518,6 +520,7 @@ export async function updateTheme(formData: FormData) {
 
   if (error) return { error: error.message }
 
+  revalidatePath('/')
   return { success: true }
 }
 
@@ -544,5 +547,6 @@ export async function activateTheme(formData: FormData) {
 
   if (activateError) return { error: activateError.message }
 
+  revalidatePath('/')
   return { success: true }
 }

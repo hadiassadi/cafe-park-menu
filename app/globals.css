@@ -3193,49 +3193,586 @@ footer {
   line-height: 1;
 }
 /* ========================================
-   29. STICKY CATEGORIES - FINAL FIX
+   29. PUBLIC MENU - FIXES (جایگزین کل بخش ۲۹ قبلی)
+   این بلاک باید آخرین چیز در globals.css باشد.
    ======================================== */
 
-/* overflow رو به html و body منتقل کن (نه theme-root) */
-html {
-  overflow-x: hidden;
-}
-
+/* overflow-x: hidden روی html/body باعث می‌شد position: sticky کار نکند.
+   clip همان برش را انجام می‌دهد ولی scroll container نمی‌سازد. */
+html,
 body {
-  overflow-x: hidden;
+  overflow-x: clip;
 }
 
-/* toolbar sticky */
-.toolbar {
+/* فونت: next/font اسم family را هش می‌کند، فقط از var(--font-vazir) در دسترس است */
+body {
+  font-family: var(--font-vazir), Tahoma, Arial, sans-serif;
+}
+
+.theme-root {
+  font-family: var(--font-family, var(--font-vazir)), Tahoma, Arial, sans-serif;
+}
+
+/* ---- Sticky: toolbar + دسته‌ها داخل یک wrapper ---- */
+.sticky-head {
   position: sticky;
   top: 0;
   z-index: 30;
   background: var(--background-color);
 }
 
-/* categories sticky */
-.cats {
-  position: sticky;
-  top: 62px;
-  z-index: 25;
-  background: var(--background-color);
+.sticky-head .toolbar,
+.sticky-head .cats {
+  position: static;
+  top: auto;
 }
 
-/* موبایل */
+.sticky-head .toolbar {
+  border-bottom: 0;
+}
+
+.sticky-head .cats {
+  box-shadow: 0 2px 8px rgba(41, 37, 31, 0.06);
+}
+
+/* ارتفاع تقریبی sticky-head (toolbar ≈ 67 + cats ≈ 56) */
+.section {
+  scroll-margin-top: 134px;
+}
+
+/* ---- کارت‌ها: انیمیشن ورود بدون تداخل با hover ---- */
+.product {
+  opacity: 1;
+  transform: none;
+  animation: fadeUp 0.45s ease backwards;
+}
+
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.product:hover {
+  transform: none;
+  box-shadow: none;
+}
+
+@media (hover: hover) {
+  .product:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 10px 30px rgba(41, 37, 31, 0.08);
+  }
+}
+
+/* ---- ریزه‌کاری‌ها ---- */
+.brand {
+  margin: 0;
+}
+
+.desc {
+  font-size: 13px;
+}
+
+.featured-inline {
+  margin-inline-start: 6px;
+  font-size: 13px;
+}
+
+.share-btn,
+.hero-info span {
+  -webkit-backdrop-filter: blur(6px);
+}
+
+.cat:focus-visible,
+.filter-chip:focus-visible,
+.share-btn:focus-visible,
+.search-box input:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 2px;
+}
+
+/* ---- Toast (جایگزین alert) ---- */
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(24px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  z-index: 100;
+  padding: 10px 18px;
+  border-radius: 999px;
+  background: var(--text-color);
+  color: var(--background-color);
+  font-size: 13px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.2);
+  animation: toastIn 0.25s ease;
+}
+
+@keyframes toastIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 8px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+/* ---- احترام به reduced motion ---- */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  .product,
+  .quote-bar,
+  .toast {
+    animation: none;
+  }
+  .product:hover,
+  .product:hover .photo img {
+    transform: none;
+  }
+}
+/* ========================================
+   30. PUBLIC MENU - POLISH
+   این بلاک را در انتهای globals.css (بعد از بخش ۲۹) paste کن.
+   برای برگشت به حالت قبل کافی است همین بخش را پاک کنی.
+   ======================================== */
+
+/* ---- هدر کم‌ارتفاع‌تر: آیتم‌ها زودتر در دید باشند ---- */
+.hero {
+  padding: 36px 18px 26px;
+}
+
+.quote-bar {
+  padding: 10px 18px;
+}
+
 @media (max-width: 650px) {
-  .toolbar {
-    position: sticky;
-    top: 0;
-    z-index: 30;
+  .hero {
+    padding: 28px 14px 22px;
   }
 
-  .cats {
-    position: sticky;
-    top: 62px;
-    z-index: 25;
+  .brand {
+    font-size: 26px;
   }
 }
-  .cats {
-    top: 62px !important;
+
+/* ---- toolbar و دسته‌ها هم‌عرض محتوا (روی دسکتاپ) ----
+   پس‌زمینه تمام‌عرض می‌ماند، ولی محتوای داخلش مثل منو وسط‌چین می‌شود */
+.sticky-head {
+  border-bottom: 1px solid var(--secondary-color);
+  box-shadow: 0 2px 8px rgba(41, 37, 31, 0.06);
+}
+
+.sticky-head .toolbar,
+.sticky-head .cats {
+  max-width: 1000px;
+  margin-inline: auto;
+  border-bottom: 0;
+  box-shadow: none;
+}
+
+/* ---- کارت افقی: عکس کوچک کنار متن ----
+   کارت بدون عکس دیگر کشیده و خالی نمی‌شود، منو کوتاه‌تر می‌شود،
+   و روی دسکتاپ عکس‌ها غول‌پیکر نمی‌شوند */
+.product {
+  flex-direction: row;
+}
+
+.product .photo {
+  flex: 0 0 112px;
+  width: 112px;
+  min-height: 112px;
+  aspect-ratio: auto;
+  max-height: none;
+  align-self: stretch;
+}
+
+.product .photo img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.product .featured-badge {
+  top: 6px;
+  right: 6px;
+  padding: 3px 7px;
+  font-size: 10px;
+}
+
+.product-info {
+  padding: 12px 14px;
+  gap: 4px;
+}
+
+@media (min-width: 640px) {
+  .product .photo {
+    flex-basis: 128px;
+    width: 128px;
   }
+}
+/* ========================================
+   31. PUBLIC MENU - PRICE + DIMMED CATEGORIES
+   این بلاک را در انتهای globals.css (بعد از بخش ۳۰) paste کن.
+   ======================================== */
+
+/* قیمت و اندازه کنار هم؛ قیمت اول (زیر اسم و هم‌تراز با متن)، اندازه بعد از آن.
+   اگر عرض کم بود، flex-wrap باعث می‌شود اندازه بیاید خط بعد و چیزی به هم نریزد. */
+.product .meta {
+  justify-content: flex-start;
+  align-items: center;
+  gap: 8px 10px;
+  flex-wrap: wrap;
+}
+
+.product .meta .price {
+  order: -1;
+}
+
+/* دسته‌ای که با فیلتر فعلی مخفی است: کم‌رنگ ولی قابل کلیک */
+.cat.dim:not(.active) {
+  opacity: 0.55;
+}
+
+.cat.dim:not(.active):hover {
+  opacity: 1;
+}
+/* ========================================
+   32. PUBLIC MENU - ALL MENU (کل منو)
+   این بلاک را در انتهای globals.css (بعد از بخش ۳۱) paste کن.
+   ======================================== */
+
+/* دکمه «کل منو»: اولین چیپ نوار دسته‌ها و همیشه چسبیده به ابتدای نوار */
+.cat-all {
+  position: sticky;
+  inset-inline-start: 0;
+  z-index: 2;
+  flex-shrink: 0;
+  font-weight: 700;
+  color: var(--primary-color);
+  border-color: var(--primary-color);
+  /* دور چیپ را با رنگ پس‌زمینه می‌پوشاند تا چیپ‌های دیگر زیرش تمیز رد شوند */
+  box-shadow: 0 0 0 6px var(--background-color);
+}
+
+/* ---- پس‌زمینه و شیت ---- */
+.sheet-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: rgba(41, 37, 31, 0.5);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+  animation: sheetFade 0.2s ease;
+}
+
+.sheet {
+  width: 100%;
+  max-width: 560px;
+  max-height: 85vh;
+  max-height: 85dvh;
+  display: flex;
+  flex-direction: column;
+  background: var(--background-color);
+  color: var(--text-color);
+  border-radius: 20px 20px 0 0;
+  box-shadow: 0 -10px 40px rgba(41, 37, 31, 0.2);
+  padding-bottom: env(safe-area-inset-bottom);
+  animation: sheetUp 0.28s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.sheet-handle {
+  width: 40px;
+  height: 4px;
+  margin: 10px auto 0;
+  border-radius: 999px;
+  background: var(--secondary-color);
+  flex-shrink: 0;
+}
+
+.sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 18px 6px;
+  flex-shrink: 0;
+}
+
+.sheet-head h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--primary-color);
+}
+
+.sheet-close {
+  width: 38px;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--secondary-color);
+  border-radius: 999px;
+  background: var(--surface-color);
+  color: var(--muted-text-color);
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.sheet-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  padding: 10px 16px 20px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.sheet-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 56px;
+  padding: 10px 12px;
+  border: 1px solid var(--secondary-color);
+  border-radius: var(--border-radius, 12px);
+  background: var(--surface-color);
+  color: var(--text-color);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.sheet-item:hover {
+  border-color: var(--primary-color);
+}
+
+.sheet-item.active {
+  background: var(--primary-color);
+  border-color: var(--primary-color);
+  color: #fff;
+}
+
+.sheet-icon {
+  font-size: 24px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.sheet-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.sheet-count {
+  flex-shrink: 0;
+  min-width: 24px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--secondary-color);
+  color: var(--muted-text-color);
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.sheet-item.active .sheet-count {
+  background: rgba(255, 255, 255, 0.22);
+  color: #fff;
+}
+
+.sheet-close:focus-visible,
+.sheet-item:focus-visible,
+.cat-all:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 2px;
+}
+
+/* دسکتاپ: پنجره وسط‌چین به‌جای شیت پایین */
+@media (min-width: 640px) {
+  .sheet-overlay {
+    align-items: center;
+  }
+
+  .sheet {
+    border-radius: 20px;
+    padding-bottom: 0;
+  }
+
+  .sheet-handle {
+    display: none;
+  }
+
+  .sheet-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@keyframes sheetFade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes sheetUp {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sheet-overlay,
+  .sheet {
+    animation: none;
+  }
+}
+/* ========================================
+   33. ADMIN LOGIN
+   این بلاک را در انتهای globals.css (بعد از بخش ۳۲) paste کن.
+   کلاس‌ها همه با login- شروع می‌شوند و با بقیه صفحه‌ها تداخل ندارند.
+   ======================================== */
+
+.login-page {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+  background: #f7f3eb;
+}
+
+.login-card {
+  width: 100%;
+  max-width: 400px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 28px 24px;
+  background: #fffdf9;
+  border: 1px solid #e3ddd2;
+  border-radius: 16px;
+  box-shadow: 0 10px 40px rgba(41, 37, 31, 0.08);
+}
+
+.login-head {
+  text-align: center;
+  margin-bottom: 4px;
+}
+
+.login-logo {
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #6b4f3a 0%, #9a6b3f 100%);
+  font-size: 28px;
+}
+
+.login-head h1 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 800;
+  color: #29251f;
+}
+
+.login-head p {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: #766f64;
+}
+
+.login-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.login-field label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #4a443d;
+}
+
+.login-field input {
+  width: 100%;
+  min-height: 46px;
+  padding: 11px 14px;
+  border: 1px solid #d8d0c4;
+  border-radius: 10px;
+  background: #fff;
+  color: #29251f;
+  font: inherit;
+  font-size: 16px; /* جلوگیری از زوم خودکار iOS */
+  text-align: left;
+}
+
+.login-field input:focus {
+  outline: 0;
+  border-color: #6b4f3a;
+  box-shadow: 0 0 0 3px rgba(107, 79, 58, 0.12);
+}
+
+.login-error {
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: #fde8e6;
+  color: #9b3c32;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.login-btn {
+  min-height: 46px;
+  border: 0;
+  border-radius: 10px;
+  background: #6b4f3a;
+  color: #fff;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.login-btn:hover:not(:disabled) {
+  background: #5a4230;
+}
+
+.login-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.login-btn:focus-visible {
+  outline: 2px solid #9a6b3f;
+  outline-offset: 2px;
 }

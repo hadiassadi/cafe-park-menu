@@ -1,6 +1,7 @@
 'use server'
 
 import { supabaseServer } from '@/lib/supabase/server'
+import { revalidatePath } from 'next/cache'
 
 async function uploadProductImage(
   db: Awaited<ReturnType<typeof supabaseServer>>,
@@ -106,6 +107,7 @@ export async function addProduct(formData: FormData) {
     return { error: error.message }
   }
 
+  revalidatePath('/')
   return { success: true }
 }
 
@@ -171,5 +173,6 @@ export async function updateProduct(formData: FormData) {
     return { error: error.message }
   }
 
+  revalidatePath('/')
   return { success: true }
 }
