@@ -1,6 +1,7 @@
 import './globals.css'
 import type { Metadata, Viewport } from 'next'
 import localFont from 'next/font/local'
+import { getSettings } from '@/lib/menu'
 
 // اگر فایل‌های Medium و Bold را هم داری، این‌جا اضافه‌شان کن
 // تا font-weight 500/700 مصنوعی ساخته نشود:
@@ -17,29 +18,45 @@ const vazir = localFont({
 
 const SITE_URL = 'https://cafe-park-menu.vercel.app'
 
-export const metadata: Metadata = {
-  metadataBase: new URL(SITE_URL),
-  title: {
-    default: 'منوی کافه پارک | پارک سلامت شیراز',
-    template: '%s | کافه پارک',
-  },
-  description:
-    'منوی آنلاین کافه پارک — پارک سلامت شیراز. قهوه، نوشیدنی و غذا.',
-  openGraph: {
-    title: 'منوی کافه پارک | پارک سلامت شیراز',
-    description: 'منوی آنلاین کافه پارک؛ قهوه، نوشیدنی و غذا',
-    locale: 'fa_IR',
-    type: 'website',
-    siteName: 'کافه پارک',
-    url: '/',
-    // برای پیش‌نمایش در تلگرام و واتساپ: یک عکس ۱۲۰۰×۶۳۰ با اسم
-    // opengraph-image.png (یا .jpg) داخل پوشه app/ بگذار؛ خودکار اضافه می‌شود.
-  },
-  twitter: {
-    card: 'summary_large_image',
-    title: 'منوی کافه پارک | پارک سلامت شیراز',
-    description: 'منوی آنلاین کافه پارک؛ قهوه، نوشیدنی و غذا',
-  },
+// عنوان و پیش‌نمایش لینک از «تنظیمات» در پنل ادمین می‌آید
+export async function generateMetadata(): Promise<Metadata> {
+  const s = await getSettings().catch(() => null)
+
+  const name = s?.cafe_name?.trim() || 'کافه پارک'
+  const baseTitle = `منوی ${name}`
+  const description =
+    s?.tagline?.trim() || `منوی آنلاین ${name} — قهوه، نوشیدنی و غذا`
+
+  const metadata: Metadata = {
+    metadataBase: new URL(SITE_URL),
+    title: { default: baseTitle, template: `%s | ${name}` },
+    description,
+  }
+
+  // اگر پیش‌نمایش لینک فعال باشد (پیش‌فرض: فعال)
+  if (s?.og_enabled !== false) {
+    const ogTitle = s?.og_title?.trim() || baseTitle
+    const ogDescription = s?.og_description?.trim() || description
+    const ogImage = s?.og_image_url?.trim()
+
+    metadata.openGraph = {
+      title: ogTitle,
+      description: ogDescription,
+      locale: 'fa_IR',
+      type: 'website',
+      siteName: name,
+      url: '/',
+      ...(ogImage ? { images: [{ url: ogImage }] } : {}),
+    }
+    metadata.twitter = {
+      card: ogImage ? 'summary_large_image' : 'summary',
+      title: ogTitle,
+      description: ogDescription,
+      ...(ogImage ? { images: [ogImage] } : {}),
+    }
+  }
+
+  return metadata
 }
 
 export const viewport: Viewport = {

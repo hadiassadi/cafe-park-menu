@@ -3,7 +3,7 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import Image from 'next/image'
 import { DEFAULT_THEME } from '@/lib/menu-types'
-import type { MenuData, Quote } from '@/lib/menu-types'
+import type { MenuData, Quote, Settings } from '@/lib/menu-types'
 
 /* ---------- کمکی‌ها ---------- */
 
@@ -44,12 +44,113 @@ const formatPrice = (price: number) =>
 const toFaDigits = (s: string) =>
   s.replace(/\d/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[Number(d)])
 
+// ارقام فارسی/عربی → انگلیسی (برای لینک تماس)
+const toLatinDigits = (s: string) =>
+  s
+    .replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06f0))
+    .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660))
+
+// فقط آدرس‌های http/https
+function safeHttpUrl(u: string | null | undefined) {
+  const v = (u ?? '').trim()
+  return /^https?:\/\//i.test(v) ? v : null
+}
+
+// «@name» یا لینک کامل اینستاگرام → { handle, url }
+function parseInstagram(v: string | null | undefined) {
+  const raw = (v ?? '').trim()
+  if (!raw) return null
+  const m = raw.match(/instagram\.com\/([A-Za-z0-9._]+)/i)
+  const handle = (m ? m[1] : raw.replace(/^@/, '')).replace(/[^A-Za-z0-9._]/g, '')
+  return handle ? { handle, url: `https://instagram.com/${handle}` } : null
+}
+
+/* ---------- آیکن‌ها و مدل اطلاعات تماس ---------- */
+
+type ContactKey = 'address' | 'phone' | 'instagram' | 'hours'
+type ContactItem = { text: string; href: string | null }
+type IconName = ContactKey | 'close' | 'chat'
+
+const ICON_PATHS: Record<IconName, React.ReactNode> = {
+  phone: (
+    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
+  ),
+  address: (
+    <>
+      <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z" />
+      <circle cx="12" cy="10" r="3" />
+    </>
+  ),
+  instagram: (
+    <>
+      <rect width="20" height="20" x="2" y="2" rx="5" ry="5" />
+      <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
+      <line x1="17.5" x2="17.51" y1="6.5" y2="6.5" />
+    </>
+  ),
+  hours: (
+    <>
+      <circle cx="12" cy="12" r="10" />
+      <polyline points="12 6 12 12 16 14" />
+    </>
+  ),
+  close: (
+    <>
+      <path d="M18 6 6 18" />
+      <path d="m6 6 12 12" />
+    </>
+  ),
+  chat: <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z" />,
+}
+
+function Icon({ name }: { name: IconName }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="20"
+      height="20"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      {ICON_PATHS[name]}
+    </svg>
+  )
+}
+
+const CHIP_EMOJI: Record<ContactKey, string> = {
+  address: '📍',
+  phone: '📞',
+  instagram: '📷',
+  hours: '🕐',
+}
+
+const extProps = (href: string) =>
+  href.startsWith('http') ? { target: '_blank', rel: 'noopener noreferrer' } : {}
+
 /* ---------- کامپوننت ---------- */
 
 export default function MenuClient({ initial }: { initial: MenuData }) {
   const { categories, products, quotes } = initial
   const theme = { ...DEFAULT_THEME, ...(initial.theme ?? {}) }
-  const settings = initial.settings ?? {}
+  const settings: Settings = initial.settings ?? {}
+
+  // کلیدهای «نمایش در منو» از تنظیمات (پیش‌فرض همه روشن)
+  const show = {
+    quote: settings.show_quote !== false,
+    shareButton: settings.show_share_button !== false,
+    featuredFilter: settings.show_featured_filter !== false,
+    productImages: settings.show_product_images !== false,
+    productSize: settings.show_product_size !== false,
+    footer: settings.show_footer !== false,
+    address: settings.show_address !== false,
+    phone: settings.show_phone !== false,
+    instagram: settings.show_instagram !== false,
+    workingHours: settings.show_working_hours !== false,
+  }
 
   const [search, setSearch] = useState('')
   const deferredSearch = useDeferredValue(search)
@@ -58,7 +159,7 @@ export default function MenuClient({ initial }: { initial: MenuData }) {
   const [currentQuote, setCurrentQuote] = useState<Quote | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const [pendingScroll, setPendingScroll] = useState<string | null>(null)
-  const [menuOpen, setMenuOpen] = useState(false)
+  const [fabOpen, setFabOpen] = useState(false)
 
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({})
 
@@ -75,6 +176,16 @@ export default function MenuClient({ initial }: { initial: MenuData }) {
     const t = setTimeout(() => setToast(null), 2200)
     return () => clearTimeout(t)
   }, [toast])
+
+  // دکمه شناور: بستن با Esc
+  useEffect(() => {
+    if (!fabOpen) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setFabOpen(false)
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [fabOpen])
 
   /* ---------- فونت سفارشی (فقط اگر ادمین واقعاً فایل آپلود کرده) ---------- */
 
@@ -165,12 +276,6 @@ export default function MenuClient({ initial }: { initial: MenuData }) {
     [grouped]
   )
 
-  // تعداد کل محصولات هر دسته (بدون در نظر گرفتن فیلتر) برای بخش «کل منو»
-  const categoryCounts = useMemo(() => {
-    const m = new Map<string, number>()
-    for (const p of products) m.set(p.category_id, (m.get(p.category_id) ?? 0) + 1)
-    return m
-  }, [products])
 
   /* ---------- هایلایت دسته فعال هنگام اسکرول ---------- */
 
@@ -198,6 +303,61 @@ export default function MenuClient({ initial }: { initial: MenuData }) {
     settings.tagline ||
     'پارک سلامت شیراز · قهوه، نوشیدنی و غذا'
   const footerText = settings.footer_text || `${cafeName} · پارک سلامت شیراز`
+
+  const addressText = show.address ? (settings.address ?? '').trim() : ''
+  const phoneText = show.phone ? (settings.phone ?? '').trim() : ''
+  const hoursText = show.workingHours ? (settings.working_hours ?? '').trim() : ''
+  const ig = show.instagram ? parseInstagram(settings.instagram) : null
+  const mapsUrl = safeHttpUrl(settings.maps_url)
+
+  const contacts: Record<ContactKey, ContactItem | null> = {
+    address: addressText ? { text: addressText, href: mapsUrl } : null,
+    phone: phoneText
+      ? {
+          text: phoneText,
+          href: `tel:${toLatinDigits(phoneText).replace(/[^\d+]/g, '')}`,
+        }
+      : null,
+    instagram: ig ? { text: `@${ig.handle}`, href: ig.url } : null,
+    hours: hoursText ? { text: hoursText, href: null } : null,
+  }
+
+  // جای نمایش هر مورد (پیش‌فرض: هدر و فوتر روشن، شناور خاموش)
+  const inHeader: Record<ContactKey, boolean> = {
+    address: settings.address_in_header !== false,
+    phone: settings.phone_in_header !== false,
+    instagram: settings.instagram_in_header !== false,
+    hours: settings.hours_in_header !== false,
+  }
+  const inFooter: Record<ContactKey, boolean> = {
+    address: settings.address_in_footer !== false,
+    phone: settings.phone_in_footer !== false,
+    instagram: settings.instagram_in_footer !== false,
+    hours: settings.hours_in_footer !== false,
+  }
+  const inFloating = {
+    address: settings.address_in_floating === true,
+    phone: settings.phone_in_floating === true,
+    instagram: settings.instagram_in_floating === true,
+  }
+
+  const ALL_KEYS: ContactKey[] = ['address', 'phone', 'instagram', 'hours']
+  const headerKeys = ALL_KEYS.filter((k) => contacts[k] && inHeader[k])
+  const footerKeys = ALL_KEYS.filter((k) => contacts[k] && inFooter[k])
+  const floatKeys = (['phone', 'address', 'instagram'] as const).filter(
+    (k) => contacts[k] && inFloating[k]
+  )
+
+  const headerStyle = settings.contact_header_style === 'text' ? 'text' : 'icons'
+  const showFab = settings.floating_enabled === true && floatKeys.length > 0
+  const fabSide = settings.floating_side === 'left' ? 'left' : 'right'
+
+  // ظاهر هدر و پس‌زمینه صفحه
+  const heroImage =
+    settings.hero_bg_mode === 'image' ? safeHttpUrl(settings.hero_bg_image_url) : null
+  const heroOverlay = Math.min(80, Math.max(0, settings.hero_overlay ?? 45))
+  const pageBg = settings.bg_enabled === true ? safeHttpUrl(settings.bg_image_url) : null
+  const bgWash = Math.min(98, Math.max(0, settings.bg_overlay ?? 88))
 
   const handleShare = async () => {
     const shareData = {
@@ -240,24 +400,12 @@ export default function MenuClient({ initial }: { initial: MenuData }) {
     }
   }, [pendingScroll, grouped])
 
-  // «کل منو»: بستن با Esc و قفل اسکرول پس‌زمینه
-  useEffect(() => {
-    if (!menuOpen) return
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setMenuOpen(false)
-    }
-    document.addEventListener('keydown', onKey)
-    document.documentElement.style.overflow = 'hidden'
-    return () => {
-      document.removeEventListener('keydown', onKey)
-      document.documentElement.style.overflow = ''
-    }
-  }, [menuOpen])
-
-  const pickFromAllMenu = (id: string) => {
-    setMenuOpen(false)
-    // کمی صبر تا قفل اسکرول برداشته شود، بعد اسکرول
-    setTimeout(() => scrollToCategory(id), 60)
+  // «کل منو»: برگشت به نمای اصلی (همه دسته‌ها، بدون فیلتر، از بالای صفحه)
+  const showAllMenu = () => {
+    setSearch('')
+    setOnlyFeatured(false)
+    setActiveCategory(null)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   const themeStyle = {
@@ -282,30 +430,109 @@ export default function MenuClient({ initial }: { initial: MenuData }) {
     <>
       {fontFaces && <style dangerouslySetInnerHTML={{ __html: fontFaces }} />}
 
-      <div className="theme-root" style={themeStyle}>
-        <header className="hero">
-          <div className="hero-bg" aria-hidden="true" />
+      <div className={`theme-root ${pageBg ? 'has-page-bg' : ''}`} style={themeStyle}>
+        {pageBg && (
+          <div
+            className="page-bg"
+            aria-hidden="true"
+            style={{ backgroundImage: `url("${safeUrl(pageBg)}")` }}
+          >
+            <div className="page-bg-wash" style={{ opacity: bgWash / 100 }} />
+          </div>
+        )}
+        <header className={`hero ${heroImage ? 'hero-has-image' : ''}`}>
+          {heroImage && (
+            <Image
+              className="hero-img"
+              src={heroImage}
+              alt=""
+              fill
+              priority
+              sizes="100vw"
+            />
+          )}
+          <div
+            className="hero-bg"
+            aria-hidden="true"
+            style={
+              heroImage
+                ? {
+                    backgroundImage: `linear-gradient(rgba(41,37,31,${
+                      heroOverlay / 100
+                    }), rgba(41,37,31,${Math.min(0.9, heroOverlay / 100 + 0.15)}))`,
+                  }
+                : undefined
+            }
+          />
           <div className="hero-content">
+            {settings.logo_url && (
+              <Image
+                className="hero-logo"
+                src={settings.logo_url}
+                alt={cafeName}
+                width={72}
+                height={72}
+                priority
+              />
+            )}
             <h1 className="brand">{heroTitle}</h1>
             <div className="sub">{heroSubtitle}</div>
 
-            {(settings.address || settings.phone || settings.working_hours) && (
+            {headerKeys.length > 0 && (
               <div className="hero-info">
-                {settings.address && <span>📍 {settings.address}</span>}
-                {settings.phone && <span dir="ltr">📞 {settings.phone}</span>}
-                {settings.working_hours && <span>🕐 {settings.working_hours}</span>}
+                {headerKeys.map((k) => {
+                  const c = contacts[k]!
+                  const asIcon = headerStyle === 'icons' && k !== 'hours' && !!c.href
+
+                  if (asIcon) {
+                    const label =
+                      k === 'phone'
+                        ? `تماس با ${c.text}`
+                        : k === 'address'
+                          ? 'مسیریابی در نقشه'
+                          : 'اینستاگرام'
+                    return (
+                      <a
+                        key={k}
+                        className="hero-icon"
+                        href={c.href!}
+                        aria-label={label}
+                        title={label}
+                        {...extProps(c.href!)}
+                      >
+                        <Icon name={k} />
+                      </a>
+                    )
+                  }
+
+                  const chip = `${CHIP_EMOJI[k]} ${c.text}`
+                  return c.href ? (
+                    <a
+                      key={k}
+                      href={c.href}
+                      dir={k === 'address' ? undefined : 'ltr'}
+                      {...extProps(c.href)}
+                    >
+                      {chip}
+                    </a>
+                  ) : (
+                    <span key={k}>{chip}</span>
+                  )
+                })}
               </div>
             )}
 
-            <div className="hero-actions">
-              <button type="button" className="share-btn" onClick={handleShare}>
-                اشتراک‌گذاری منو
-              </button>
-            </div>
+            {show.shareButton && (
+              <div className="hero-actions">
+                <button type="button" className="share-btn" onClick={handleShare}>
+                  اشتراک‌گذاری منو
+                </button>
+              </div>
+            )}
           </div>
         </header>
 
-        {currentQuote && (
+        {show.quote && currentQuote && (
           <div className="quote-bar">
             <span className="quote-icon" aria-hidden="true">❝</span>
             <span className="quote-text">{currentQuote.text}</span>
@@ -328,7 +555,7 @@ export default function MenuClient({ initial }: { initial: MenuData }) {
                 onChange={(e) => setSearch(e.target.value)}
               />
             </div>
-            {hasFeatured && (
+            {hasFeatured && show.featuredFilter && (
               <button
                 type="button"
                 className={`filter-chip ${onlyFeatured ? 'active' : ''}`}
@@ -345,10 +572,9 @@ export default function MenuClient({ initial }: { initial: MenuData }) {
               <button
                 type="button"
                 className="cat cat-all"
-                aria-haspopup="dialog"
-                onClick={() => setMenuOpen(true)}
+                onClick={showAllMenu}
               >
-                <span aria-hidden="true">☰</span> کل منو
+                <span aria-hidden="true">🍽️</span> کل منو
               </button>
               {navCategories.map((category) => (
                 <button
@@ -399,7 +625,7 @@ export default function MenuClient({ initial }: { initial: MenuData }) {
                       style={{ animationDelay: `${Math.min(index * 40, 400)}ms` }}
                     >
                       {/* بدون عکس = بدون باکس خاکستری */}
-                      {product.image_url && (
+                      {show.productImages && product.image_url && (
                         <div className="photo">
                           <Image
                             src={product.image_url}
@@ -418,7 +644,7 @@ export default function MenuClient({ initial }: { initial: MenuData }) {
                       <div className="product-info">
                         <div className="name">
                           {product.name}
-                          {!product.image_url && product.is_featured && (
+                          {!(show.productImages && product.image_url) && product.is_featured && (
                             <span className="featured-inline">⭐</span>
                           )}
                         </div>
@@ -428,7 +654,7 @@ export default function MenuClient({ initial }: { initial: MenuData }) {
                         )}
 
                         <div className="meta">
-                          {product.size && (
+                          {show.productSize && product.size && (
                             <span className="size">{toFaDigits(product.size)}</span>
                           )}
                           <span className="price">
@@ -444,49 +670,87 @@ export default function MenuClient({ initial }: { initial: MenuData }) {
           )}
         </main>
 
-        <footer>{footerText}</footer>
+        {(show.footer || footerKeys.length > 0) && (
+          <footer>
+            {footerKeys.length > 0 && (
+              <ul className="footer-contact">
+                {footerKeys.map((k) => {
+                  const c = contacts[k]!
+                  const inner = (
+                    <>
+                      <Icon name={k} />
+                      <span dir={k === 'phone' || k === 'instagram' ? 'ltr' : undefined}>
+                        {c.text}
+                      </span>
+                    </>
+                  )
+                  return (
+                    <li key={k}>
+                      {c.href ? (
+                        <a href={c.href} {...extProps(c.href)}>
+                          {inner}
+                        </a>
+                      ) : (
+                        <span className="fc">{inner}</span>
+                      )}
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+            {show.footer && <div>{footerText}</div>}
+          </footer>
+        )}
 
-        {menuOpen && (
-          <div className="sheet-overlay" onClick={() => setMenuOpen(false)}>
-            <div
-              className="sheet"
-              role="dialog"
-              aria-modal="true"
-              aria-label="کل منو"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="sheet-handle" aria-hidden="true" />
-              <div className="sheet-head">
-                <h2>کل منو</h2>
-                <button
-                  type="button"
-                  className="sheet-close"
-                  aria-label="بستن"
-                  onClick={() => setMenuOpen(false)}
-                >
-                  ✕
-                </button>
-              </div>
-              <div className="sheet-grid">
-                {navCategories.map((c) => (
-                  <button
-                    type="button"
-                    key={c.id}
-                    className={`sheet-item ${currentActive === c.id ? 'active' : ''}`}
-                    onClick={() => pickFromAllMenu(c.id)}
-                  >
-                    <span className="sheet-icon" aria-hidden="true">
-                      {c.icon || '🍽️'}
-                    </span>
-                    <span className="sheet-name">{c.name}</span>
-                    <span className="sheet-count">
-                      {formatPrice(categoryCounts.get(c.id) ?? 0)}
-                    </span>
-                  </button>
-                ))}
-              </div>
+        {showFab && (
+          <>
+            {fabOpen && (
+              <div className="fab-backdrop" onClick={() => setFabOpen(false)} />
+            )}
+            <div className={`fab fab-${fabSide}`}>
+              {fabOpen && (
+                <div className="fab-panel">
+                  {floatKeys.map((k) => {
+                    const c = contacts[k]!
+                    const text =
+                      k === 'address' && c.href ? 'مسیریابی' : c.text
+                    const inner = (
+                      <>
+                        <Icon name={k} />
+                        <span dir={k === 'phone' || k === 'instagram' ? 'ltr' : undefined}>
+                          {text}
+                        </span>
+                      </>
+                    )
+                    return c.href ? (
+                      <a
+                        key={k}
+                        className="fab-item"
+                        href={c.href}
+                        {...extProps(c.href)}
+                        onClick={() => setFabOpen(false)}
+                      >
+                        {inner}
+                      </a>
+                    ) : (
+                      <div key={k} className="fab-item static">
+                        {inner}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+              <button
+                type="button"
+                className="fab-btn"
+                aria-expanded={fabOpen}
+                aria-label={fabOpen ? 'بستن' : 'تماس با ما'}
+                onClick={() => setFabOpen((v) => !v)}
+              >
+                <Icon name={fabOpen ? 'close' : 'chat'} />
+              </button>
             </div>
-          </div>
+          </>
         )}
 
         {toast && (

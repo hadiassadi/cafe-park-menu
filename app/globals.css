@@ -3776,3 +3776,687 @@ body {
   outline: 2px solid #9a6b3f;
   outline-offset: 2px;
 }
+/* ========================================
+   34. SETTINGS (کلیدها، آپلود تصویر) + EXTRAS هدر منو
+   این بلاک را در انتهای globals.css (بعد از بخش ۳۳) paste کن.
+   ======================================== */
+
+/* ---- ردیف عنوان فیلد + کلید ---- */
+.field-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.field.is-off > input,
+.field.is-off > textarea {
+  opacity: 0.55;
+}
+
+.is-off-group {
+  opacity: 0.55;
+}
+
+/* ---- کلید روشن/خاموش ---- */
+.switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 12px;
+  color: #766f64;
+  user-select: none;
+  position: relative;
+}
+
+/* ورودی واقعی مخفی (باید از استایل عمومی .field input جدا شود) */
+.switch input,
+.field .switch input,
+.modal-body .field .switch input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  margin: 0;
+}
+
+.switch-track {
+  position: relative;
+  width: 40px;
+  height: 24px;
+  flex-shrink: 0;
+  border-radius: 999px;
+  background: #d8d0c4;
+  transition: background 0.15s ease;
+}
+
+.switch-track::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  inset-inline-start: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  transition: inset-inline-start 0.15s ease;
+}
+
+.switch input:checked + .switch-track {
+  background: #6b4f3a;
+}
+
+.switch input:checked + .switch-track::after {
+  inset-inline-start: 19px;
+}
+
+.switch input:focus-visible + .switch-track {
+  outline: 2px solid #9a6b3f;
+  outline-offset: 2px;
+}
+
+/* ---- ردیف‌های «نمایش در منو» ---- */
+.toggle-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid #ebe6de;
+  border-radius: 12px;
+  background: #fbf9f5;
+}
+
+.toggle-row strong {
+  display: block;
+  font-size: 13px;
+  color: #29251f;
+}
+
+.toggle-row small {
+  display: block;
+  margin-top: 3px;
+  font-size: 11px;
+  color: #766f64;
+  line-height: 1.7;
+}
+
+/* ---- آپلود تصویر ---- */
+.imgf-box {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 12px;
+  border: 1px dashed #d8d0c4;
+  border-radius: 12px;
+  background: #fbf9f5;
+}
+
+.imgf-preview {
+  width: 96px;
+  height: 96px;
+  border-radius: 10px;
+  object-fit: cover;
+  background: #efe9e0;
+  flex-shrink: 0;
+}
+
+.imgf-preview.wide {
+  width: 160px;
+  height: 84px;
+}
+
+.imgf-preview.empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  color: #9a9287;
+}
+
+.imgf-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.imgf-error {
+  color: #9b3c32;
+}
+
+/* ---- هدر منو: لوگو و لینک‌های تماس ---- */
+.hero-logo {
+  width: 72px;
+  height: 72px;
+  margin: 0 auto 10px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: #fff;
+  border: 2px solid rgba(255, 255, 255, 0.6);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15);
+}
+
+.hero-info a {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+  color: inherit;
+  text-decoration: none;
+}
+
+.hero-info a:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.hero-info a:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+/* ========================================
+   35. HERO IMAGE + PAGE BACKGROUND + CONTACT ICONS + FLOATING BUTTON
+       + کنترل‌های جدید تنظیمات
+   این بلاک را در انتهای globals.css (بعد از بخش ۳۴) paste کن.
+   ======================================== */
+
+/* ---------- هدر با تصویر ---------- */
+.hero-img {
+  object-fit: cover;
+  object-position: center;
+}
+
+/* تصویر هدر زیر لایه تیره (.hero-bg) و متن قرار می‌گیرد */
+.hero-has-image .hero-bg {
+  z-index: 0;
+}
+
+/* ---------- پس‌زمینه تصویری صفحه با لایه سفید محوکننده ---------- */
+.theme-root {
+  position: relative;
+  isolation: isolate;
+}
+
+.page-bg {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  pointer-events: none;
+}
+
+.page-bg-wash {
+  position: absolute;
+  inset: 0;
+  background: var(--background-color);
+}
+
+/* وقتی پس‌زمینه تصویری فعال است، نوار بالا نیمه‌شفاف می‌شود تا تصویر دیده شود */
+.has-page-bg .sticky-head {
+  background: color-mix(in srgb, var(--background-color) 86%, transparent);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+}
+
+.has-page-bg .sticky-head .toolbar,
+.has-page-bg .sticky-head .cats {
+  background: transparent;
+}
+
+.has-page-bg footer {
+  background: transparent;
+}
+
+/* ---------- هدر: دکمه‌های آیکنی تماس ---------- */
+.hero-info a.hero-icon {
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+}
+
+.hero-info a.hero-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.hero-info a.hero-icon:hover {
+  background: rgba(255, 255, 255, 0.28);
+}
+
+.hero-info {
+  align-items: center;
+}
+
+/* ---------- فوتر: اطلاعات تماس ---------- */
+.footer-contact {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px 18px;
+}
+
+.footer-contact a,
+.footer-contact .fc {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.footer-contact svg {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+}
+
+.footer-contact a:hover {
+  color: var(--primary-color);
+}
+
+/* ---------- دکمه شناور ---------- */
+.fab-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 44;
+  background: transparent;
+}
+
+.fab {
+  position: fixed;
+  bottom: calc(18px + env(safe-area-inset-bottom));
+  z-index: 45;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.fab-right {
+  right: 16px;
+  align-items: flex-end;
+}
+
+.fab-left {
+  left: 16px;
+  align-items: flex-start;
+}
+
+.fab-btn {
+  width: 54px;
+  height: 54px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 50%;
+  background: var(--primary-color);
+  color: #fff;
+  cursor: pointer;
+  box-shadow: 0 6px 20px rgba(41, 37, 31, 0.28);
+  transition: transform 0.15s ease;
+}
+
+.fab-btn:active {
+  transform: scale(0.94);
+}
+
+.fab-btn svg {
+  width: 24px;
+  height: 24px;
+}
+
+.fab-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  animation: fabIn 0.18s ease;
+}
+
+.fab-right .fab-panel {
+  align-items: flex-end;
+}
+
+.fab-left .fab-panel {
+  align-items: flex-start;
+}
+
+.fab-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 10px 16px;
+  border: 1px solid var(--secondary-color);
+  border-radius: 999px;
+  background: var(--surface-color);
+  color: var(--text-color);
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  box-shadow: 0 4px 16px rgba(41, 37, 31, 0.16);
+}
+
+.fab-item svg {
+  width: 18px;
+  height: 18px;
+  color: var(--primary-color);
+  flex-shrink: 0;
+}
+
+.fab-item.static {
+  font-weight: 500;
+}
+
+.fab-btn:focus-visible,
+.fab-item:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 2px;
+}
+
+@keyframes fabIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fab-panel {
+    animation: none;
+  }
+}
+
+/* ========================================
+   کنترل‌های تنظیمات (ادمین)
+   ======================================== */
+
+/* ---- انتخاب دوحالته ---- */
+.segmented {
+  display: inline-flex;
+  padding: 3px;
+  gap: 3px;
+  border: 1px solid #d8d0c4;
+  border-radius: 10px;
+  background: #f5f0e9;
+  align-self: flex-start;
+}
+
+.segmented button {
+  min-height: 36px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #625b51;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.segmented button.active {
+  background: #6b4f3a;
+  color: #fff;
+}
+
+.segmented button:focus-visible {
+  outline: 2px solid #9a6b3f;
+  outline-offset: 2px;
+}
+
+/* ---- لغزنده ---- */
+.range-value {
+  font-size: 12px;
+  font-weight: 700;
+  color: #6b4f3a;
+}
+
+.field input.range,
+.modal-body .field input.range {
+  width: 100%;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  accent-color: #6b4f3a;
+  cursor: pointer;
+}
+
+.field input.range:focus {
+  box-shadow: none;
+}
+
+.sec-divider {
+  margin: 20px 0;
+  border: 0;
+  border-top: 1px solid #ebe6de;
+}
+
+/* ---- جای نمایش اطلاعات تماس ---- */
+.place-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.place-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  border: 1px solid #ebe6de;
+  border-radius: 12px;
+  background: #fbf9f5;
+}
+
+.place-row.is-off {
+  opacity: 0.55;
+}
+
+.place-name {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #29251f;
+}
+
+.place-name small {
+  font-size: 10px;
+  font-weight: 500;
+  color: #766f64;
+}
+
+.place-chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.place-chip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 0 14px;
+  border: 1px solid #d8d0c4;
+  border-radius: 999px;
+  background: #fffdf9;
+  color: #625b51;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.15s ease;
+}
+
+.place-chip input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.place-chip.on {
+  background: #6b4f3a;
+  border-color: #6b4f3a;
+  color: #fff;
+}
+
+.place-chip:focus-within {
+  outline: 2px solid #9a6b3f;
+  outline-offset: 2px;
+}
+
+/* ---- گالری پس‌زمینه ---- */
+.gal {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  gap: 10px;
+}
+
+.gal-item {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 2px solid transparent;
+}
+
+.gal-item.selected {
+  border-color: #6b4f3a;
+}
+
+.gal-pick {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  padding: 0;
+  background-color: #efe9e0;
+  background-size: cover;
+  background-position: center;
+  cursor: pointer;
+}
+
+.gal-check {
+  position: absolute;
+  bottom: 6px;
+  inset-inline-start: 6px;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: #6b4f3a;
+  color: #fff;
+  font-size: 12px;
+  pointer-events: none;
+}
+
+.gal-del {
+  position: absolute;
+  top: 6px;
+  inset-inline-end: 6px;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(41, 37, 31, 0.7);
+  color: #fff;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.gal-add {
+  aspect-ratio: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  border: 1px dashed #b8ad9c;
+  border-radius: 12px;
+  background: #fbf9f5;
+  color: #6b4f3a;
+  cursor: pointer;
+}
+
+.gal-add span {
+  font-size: 26px;
+  line-height: 1;
+}
+
+.gal-add small {
+  font-size: 11px;
+}
+
+/* ---- پیش‌نمایش پس‌زمینه با لایه سفید ---- */
+.bgprev {
+  position: relative;
+  height: 140px;
+  margin-top: 12px;
+  border: 1px solid #e3ddd2;
+  border-radius: 12px;
+  overflow: hidden;
+  background-size: cover;
+  background-position: center;
+}
+
+.bgprev-wash {
+  position: absolute;
+  inset: 0;
+  background: #fffdf9;
+}
+
+.bgprev-card {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 70%;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #e3ddd2;
+  border-radius: 10px;
+  background: #fff;
+  color: #29251f;
+  font-size: 12px;
+  font-weight: 700;
+}

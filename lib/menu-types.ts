@@ -60,6 +60,42 @@ export type Settings = {
   phone?: string
   instagram?: string
   working_hours?: string
+  logo_url?: string | null
+  maps_url?: string | null
+  og_title?: string | null
+  og_description?: string | null
+  og_image_url?: string | null
+  og_enabled?: boolean | null
+  show_address?: boolean | null
+  show_phone?: boolean | null
+  show_instagram?: boolean | null
+  show_working_hours?: boolean | null
+  show_quote?: boolean | null
+  show_share_button?: boolean | null
+  show_featured_filter?: boolean | null
+  show_product_images?: boolean | null
+  show_product_size?: boolean | null
+  show_footer?: boolean | null
+  hero_bg_mode?: string | null
+  hero_bg_image_url?: string | null
+  hero_overlay?: number | null
+  bg_enabled?: boolean | null
+  bg_image_url?: string | null
+  bg_overlay?: number | null
+  contact_header_style?: string | null
+  address_in_header?: boolean | null
+  address_in_footer?: boolean | null
+  address_in_floating?: boolean | null
+  phone_in_header?: boolean | null
+  phone_in_footer?: boolean | null
+  phone_in_floating?: boolean | null
+  instagram_in_header?: boolean | null
+  instagram_in_footer?: boolean | null
+  instagram_in_floating?: boolean | null
+  hours_in_header?: boolean | null
+  hours_in_footer?: boolean | null
+  floating_enabled?: boolean | null
+  floating_side?: string | null
 }
 
 export type Quote = {

@@ -5,6 +5,7 @@ import { supabaseServer } from '@/lib/supabase/server'
 
 // بعد از هر تغییر در جملات یا تنظیمات (که از طریق API ذخیره می‌شوند)
 // این تابع از صفحه ادمین صدا زده می‌شود تا منوی عمومی فوراً به‌روز شود.
+// نوع 'layout' باعث می‌شود متای صفحه (پیش‌نمایش لینک) هم دوباره ساخته شود.
 // فقط برای کاربر واردشده کار می‌کند.
 export async function revalidateMenu() {
   const db = await supabaseServer()
@@ -16,6 +17,6 @@ export async function revalidateMenu() {
     return { error: 'اجازه دسترسی ندارید.' }
   }
 
-  revalidatePath('/')
+  revalidatePath('/', 'layout')
   return { success: true }
 }
