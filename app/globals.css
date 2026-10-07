@@ -4460,3 +4460,66 @@ body {
   font-size: 12px;
   font-weight: 700;
 }
+/* ========================================
+   36. SETTINGS - کارت اطلاعات تماس (فیلد + جای نمایش کنار هم)
+   این بلاک را در انتهای globals.css (بعد از بخش ۳۵) paste کن.
+   ======================================== */
+
+.legend {
+  margin: 0 0 14px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: #f5f0e9;
+  color: #625b51;
+  font-size: 12px;
+  line-height: 1.9;
+}
+
+.contact-card {
+  padding: 14px;
+  margin-bottom: 12px;
+  border: 1px solid #ebe6de;
+  border-radius: 14px;
+  background: #fbf9f5;
+  gap: 10px;
+}
+
+.contact-card.is-off > .field,
+.contact-card.is-off .place-line {
+  opacity: 0.55;
+}
+
+.place-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.place-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: #625b51;
+}
+
+.place-chip.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ورودی چک‌باکس چیپ‌ها نباید استایل عمومی فیلدها را بگیرد */
+.field .place-chip input,
+.modal-body .field .place-chip input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  margin: 0;
+}
+
+.warn-note {
+  color: #9b3c32;
+}
