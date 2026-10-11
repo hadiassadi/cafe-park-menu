@@ -6,3 +6,6 @@ node_modules/
 *.lnk
 # بکاپ‌های محلی
 backups/
+# بکاپ‌های محلی
+backups/
+backups-server/

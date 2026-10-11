@@ -9,7 +9,11 @@
     "lint": "eslint .",
     "backup": "node scripts/backup.mjs",
     "backup:clean": "node scripts/backup.mjs --clean",
-    "backup:schedule": "node scripts/schedule-backup.mjs"
+    "backup:schedule": "node scripts/schedule-backup.mjs",
+    "backup:server": "node scripts/backup-server.mjs",
+    "backup:server:clean": "node scripts/backup-server.mjs --clean",
+    "backup:server:light": "node scripts/backup-server.mjs --no-deps",
+    "backup:server:test": "node scripts/backup-server.mjs --dry-run"
   },
   "dependencies": {
     "@supabase/ssr": "^0.5.2",
