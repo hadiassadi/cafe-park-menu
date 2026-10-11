@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
+import { createPortal } from 'react-dom'  // ← اضافه شد
 import { createClient } from '@supabase/supabase-js'
 import { updateOrderStatus } from './actions'
 
@@ -74,16 +75,20 @@ const NEXT_LABEL: Record<string, string> = {
 
 type Filter = 'all' | 'pending' | 'active' | 'done'
 
-export default function OrdersManager({
-  orders: initialOrders,
-}: {
-  orders: Order[]
-}) {
+export default function OrdersManager({ orders: initialOrders }: { orders: Order[] }) {
   const [orders, setOrders] = useState<Order[]>(initialOrders)
   const [filter, setFilter] = useState<Filter>('pending')
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
   const [loading, setLoading] = useState(false)
+  const [printOrder, setPrintOrder] = useState<Order | null>(null)
+  const [mounted, setMounted] = useState(false)  // ← برای Portal
 
+  // اطمینان از اینکه فقط سمت کلاینت رندر می‌شه
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  // ─── useEffect اول: Realtime ───
   useEffect(() => {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL
     const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
@@ -119,6 +124,26 @@ export default function OrdersManager({
       supabase.removeChannel(channel)
     }
   }, [])
+
+  // ─── useEffect دوم: چاپ فاکتور ───
+  useEffect(() => {
+    if (!printOrder) return
+
+    const handleAfterPrint = () => {
+      setPrintOrder(null)
+    }
+
+    window.addEventListener('afterprint', handleAfterPrint)
+
+    const timer = setTimeout(() => {
+      window.print()
+    }, 500)
+
+    return () => {
+      clearTimeout(timer)
+      window.removeEventListener('afterprint', handleAfterPrint)
+    }
+  }, [printOrder])
 
   const counts = useMemo(() => {
     return {
@@ -182,212 +207,370 @@ export default function OrdersManager({
   }
 
   return (
-    <div className="admin-main">
-      {/* هدر */}
-      <div className="admin-header">
-        <div>
-          <h1>مدیریت سفارش‌ها</h1>
-          <p className="admin-subtitle">
-            {counts.pending > 0 ? (
-              <>
-                <b style={{ color: '#9b3c32' }}>
-                  {formatPrice(counts.pending)} سفارش جدید
-                </b>{' '}
-                در انتظار تأیید
-              </>
-            ) : (
-              'سفارش جدیدی در انتظار تأیید نیست'
-            )}
-          </p>
-        </div>
-      </div>
-
-      {/* فیلترها */}
-      <div className="toolbar" style={{ padding: '0 0 16px 0', background: 'transparent', borderBottom: 'none', position: 'static' }}>
-        <button
-          type="button"
-          className={`filter-chip ${filter === 'pending' ? 'active' : ''}`}
-          onClick={() => setFilter('pending')}
-        >
-          🔴 جدید ({formatPrice(counts.pending)})
-        </button>
-        <button
-          type="button"
-          className={`filter-chip ${filter === 'active' ? 'active' : ''}`}
-          onClick={() => setFilter('active')}
-        >
-          ⏳ در جریان ({formatPrice(counts.active)})
-        </button>
-        <button
-          type="button"
-          className={`filter-chip ${filter === 'done' ? 'active' : ''}`}
-          onClick={() => setFilter('done')}
-        >
-          ✅ تمام‌شده ({formatPrice(counts.done)})
-        </button>
-        <button
-          type="button"
-          className={`filter-chip ${filter === 'all' ? 'active' : ''}`}
-          onClick={() => setFilter('all')}
-        >
-          📋 همه ({formatPrice(counts.all)})
-        </button>
-      </div>
-
-      {/* لیست سفارش‌ها */}
-      {filteredOrders.length === 0 ? (
-        <div className="admin-card">
-          <p className="empty-admin">سفارشی در این بخش نیست.</p>
-        </div>
-      ) : (
-        <div className="orders-grid">
-          {filteredOrders.map((order) => (
-            <div
-              key={order.id}
-              className={`order-card ${STATUS_COLORS[order.status]}`}
-              onClick={() => setSelectedOrder(order)}
-            >
-              <div className="order-header">
-                <span className="order-id">سفارش #{formatPrice(order.order_number)}</span>
-                <span className="order-time">{formatTime(order.created_at)}</span>
-              </div>
-
-              <div className="order-body">
-                <div>👤 <strong>{order.customer_name}</strong></div>
-                <div>📞 <span dir="ltr">{order.customer_phone}</span></div>
-                {order.table_number && (
-                  <div>📍 میز {formatPrice(order.table_number)}</div>
-                )}
-                <div>🧾 {formatPrice(order.items.length)} قلم · {formatPrice(order.subtotal)} تومان</div>
-              </div>
-
-              <div className="order-actions">
-                {NEXT_STATUS[order.status] && (
-                  <button
-                    type="button"
-                    className="btn btn-approve"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      handleStatusChange(order, NEXT_STATUS[order.status]!)
-                    }}
-                    disabled={loading}
-                  >
-                    {NEXT_LABEL[order.status]}
-                  </button>
-                )}
-                {order.status === 'pending' && (
-                  <button
-                    type="button"
-                    className="btn btn-cancel"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      handleCancel(order)
-                    }}
-                    disabled={loading}
-                  >
-                    ❌ لغو
-                  </button>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Modal جزئیات سفارش */}
-      {selectedOrder && (
-        <div
-          className="modal-overlay"
-          onClick={() => setSelectedOrder(null)}
-        >
-          <div
-            className="modal-container modal-md"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="modal-header">
-              <div className="modal-header-content">
-                <h2>سفارش #{formatPrice(selectedOrder.order_number)}</h2>
-                <p>وضعیت: {STATUS_LABELS[selectedOrder.status]}</p>
-              </div>
-              <button
-                type="button"
-                className="modal-close-btn"
-                onClick={() => setSelectedOrder(null)}
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="modal-body">
-              <div className="info-card">
-                <h3>👤 اطلاعات مشتری</h3>
-                <div className="info-row">
-                  <span>نام:</span>
-                  <strong>{selectedOrder.customer_name}</strong>
-                </div>
-                <div className="info-row">
-                  <span>شماره:</span>
-                  <strong dir="ltr">{selectedOrder.customer_phone}</strong>
-                </div>
-                {selectedOrder.table_number && (
-                  <div className="info-row">
-                    <span>میز:</span>
-                    <strong>{formatPrice(selectedOrder.table_number)}</strong>
-                  </div>
-                )}
-                {selectedOrder.note && (
-                  <div className="info-row">
-                    <span>توضیحات:</span>
-                    <strong>{selectedOrder.note}</strong>
-                  </div>
-                )}
-              </div>
-
-              <div className="info-card" style={{ marginTop: '16px' }}>
-                <h3>🧾 اقلام سفارش</h3>
-                {selectedOrder.items.map((item, idx) => (
-                  <div key={idx} className="info-row">
-                    <span>
-                      {formatPrice(item.quantity)} × {item.product_name}
-                      {item.option_name && <small> ({item.option_name})</small>}
-                    </span>
-                    <strong>{formatPrice(item.unit_price * item.quantity)}</strong>
-                  </div>
-                ))}
-                <div className="total-row">
-                  <span>جمع کل</span>
-                  <span>{formatPrice(selectedOrder.subtotal)} تومان</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="modal-footer">
-              <a
-                href={`tel:${selectedOrder.customer_phone}`}
-                className="btn"
-                style={{ textDecoration: 'none' }}
-              >
-                📞 تماس
-              </a>
-              {NEXT_STATUS[selectedOrder.status] && (
-                <button
-                  type="button"
-                  className="btn primary-btn"
-                  onClick={() =>
-                    handleStatusChange(
-                      selectedOrder,
-                      NEXT_STATUS[selectedOrder.status]!
-                    )
-                  }
-                  disabled={loading}
-                >
-                  {NEXT_LABEL[selectedOrder.status]}
-                </button>
+    <>
+      <div className="admin-main">
+        {/* هدر */}
+        <div className="admin-header">
+          <div>
+            <h1>مدیریت سفارش‌ها</h1>
+            <p className="admin-subtitle">
+              {counts.pending > 0 ? (
+                <>
+                  <b style={{ color: '#9b3c32' }}>
+                    {formatPrice(counts.pending)} سفارش جدید
+                  </b>{' '}
+                  در انتظار تأیید
+                </>
+              ) : (
+                'سفارش جدیدی در انتظار تأیید نیست'
               )}
-            </div>
+            </p>
           </div>
         </div>
-      )}
-    </div>
+
+        {/* فیلترها */}
+        <div
+          className="toolbar"
+          style={{
+            padding: '0 0 16px 0',
+            background: 'transparent',
+            borderBottom: 'none',
+            position: 'static',
+          }}
+        >
+          <button
+            type="button"
+            className={`filter-chip ${filter === 'pending' ? 'active' : ''}`}
+            onClick={() => setFilter('pending')}
+          >
+            🔴 جدید ({formatPrice(counts.pending)})
+          </button>
+          <button
+            type="button"
+            className={`filter-chip ${filter === 'active' ? 'active' : ''}`}
+            onClick={() => setFilter('active')}
+          >
+            ⏳ در جریان ({formatPrice(counts.active)})
+          </button>
+          <button
+            type="button"
+            className={`filter-chip ${filter === 'done' ? 'active' : ''}`}
+            onClick={() => setFilter('done')}
+          >
+            ✅ تمام‌شده ({formatPrice(counts.done)})
+          </button>
+          <button
+            type="button"
+            className={`filter-chip ${filter === 'all' ? 'active' : ''}`}
+            onClick={() => setFilter('all')}
+          >
+            📋 همه ({formatPrice(counts.all)})
+          </button>
+        </div>
+
+        {/* لیست سفارش‌ها */}
+        {filteredOrders.length === 0 ? (
+          <div className="admin-card">
+            <p className="empty-admin">سفارشی در این بخش نیست.</p>
+          </div>
+        ) : (
+          <div className="orders-grid">
+            {filteredOrders.map((order) => (
+              <div
+                key={order.id}
+                className={`order-card ${STATUS_COLORS[order.status]}`}
+                onClick={() => setSelectedOrder(order)}
+              >
+                <div className="order-header">
+                  <span className="order-id">
+                    سفارش #{formatPrice(order.order_number)}
+                  </span>
+                  <span className="order-time">
+                    {formatTime(order.created_at)}
+                  </span>
+                </div>
+
+                <div className="order-body">
+                  <div>
+                    👤 <strong>{order.customer_name}</strong>
+                  </div>
+                  <div>
+                    📞 <span dir="ltr">{order.customer_phone}</span>
+                  </div>
+                  {order.table_number && (
+                    <div>📍 میز {formatPrice(order.table_number)}</div>
+                  )}
+                  <div>
+                    🧾 {formatPrice(order.items.length)} قلم ·{' '}
+                    {formatPrice(order.subtotal)} تومان
+                  </div>
+                </div>
+
+                <div className="order-actions">
+                  {NEXT_STATUS[order.status] && (
+                    <button
+                      type="button"
+                      className="btn btn-approve"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleStatusChange(order, NEXT_STATUS[order.status]!)
+                      }}
+                      disabled={loading}
+                    >
+                      {NEXT_LABEL[order.status]}
+                    </button>
+                  )}
+                  {order.status === 'pending' && (
+                    <button
+                      type="button"
+                      className="btn btn-cancel"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleCancel(order)
+                      }}
+                      disabled={loading}
+                    >
+                      ❌ لغو
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Modal جزئیات سفارش */}
+        {selectedOrder && (
+          <div
+            className="modal-overlay"
+            onClick={() => setSelectedOrder(null)}
+          >
+            <div
+              className="modal-container modal-md"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="modal-header">
+                <div className="modal-header-content">
+                  <h2>سفارش #{formatPrice(selectedOrder.order_number)}</h2>
+                  <p>وضعیت: {STATUS_LABELS[selectedOrder.status]}</p>
+                </div>
+                <button
+                  type="button"
+                  className="modal-close-btn"
+                  onClick={() => setSelectedOrder(null)}
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="modal-body">
+                <div className="info-card">
+                  <h3>👤 اطلاعات مشتری</h3>
+                  <div className="info-row">
+                    <span>نام:</span>
+                    <strong>{selectedOrder.customer_name}</strong>
+                  </div>
+                  <div className="info-row">
+                    <span>شماره:</span>
+                    <strong dir="ltr">{selectedOrder.customer_phone}</strong>
+                  </div>
+                  {selectedOrder.table_number && (
+                    <div className="info-row">
+                      <span>میز:</span>
+                      <strong>{formatPrice(selectedOrder.table_number)}</strong>
+                    </div>
+                  )}
+                  {selectedOrder.note && (
+                    <div className="info-row">
+                      <span>توضیحات:</span>
+                      <strong>{selectedOrder.note}</strong>
+                    </div>
+                  )}
+                </div>
+
+                <div className="info-card" style={{ marginTop: '16px' }}>
+                  <h3>🧾 اقلام سفارش</h3>
+                  {selectedOrder.items.map((item, idx) => (
+                    <div key={idx} className="info-row">
+                      <span>
+                        {formatPrice(item.quantity)} × {item.product_name}
+                        {item.option_name && (
+                          <small> ({item.option_name})</small>
+                        )}
+                      </span>
+                      <strong>
+                        {formatPrice(item.unit_price * item.quantity)}
+                      </strong>
+                    </div>
+                  ))}
+                  <div className="total-row">
+                    <span>جمع کل</span>
+                    <span>{formatPrice(selectedOrder.subtotal)} تومان</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="modal-footer">
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => setPrintOrder(selectedOrder)}
+                  title="چاپ فاکتور"
+                >
+                  🖨️ چاپ
+                </button>
+                <a
+                  href={`tel:${selectedOrder.customer_phone}`}
+                  className="btn"
+                  style={{ textDecoration: 'none' }}
+                >
+                  📞 تماس
+                </a>
+                {NEXT_STATUS[selectedOrder.status] && (
+                  <button
+                    type="button"
+                    className="btn primary-btn"
+                    onClick={() =>
+                      handleStatusChange(
+                        selectedOrder,
+                        NEXT_STATUS[selectedOrder.status]!
+                      )
+                    }
+                    disabled={loading}
+                  >
+                    {NEXT_LABEL[selectedOrder.status]}
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ─── فاکتور چاپی — با Portal به body منتقل می‌شه ─── */}
+      {mounted &&
+        printOrder &&
+        createPortal(
+          <div className="print-invoice">
+            <div className="print-invoice-header">
+              <h1 className="print-invoice-title">کافه پارک</h1>
+              <p className="print-invoice-subtitle">فاکتور سفارش</p>
+            </div>
+
+            <div className="print-invoice-meta">
+              <div className="print-invoice-meta-row">
+                <span>شماره سفارش:</span>
+                <strong>#{formatPrice(printOrder.order_number)}</strong>
+              </div>
+              <div className="print-invoice-meta-row">
+                <span>تاریخ و ساعت:</span>
+                <strong>
+                  {new Date(printOrder.created_at).toLocaleString('fa-IR')}
+                </strong>
+              </div>
+              <div className="print-invoice-meta-row">
+                <span>وضعیت:</span>
+                <strong>{STATUS_LABELS[printOrder.status]}</strong>
+              </div>
+            </div>
+
+            <div className="print-invoice-customer">
+              <h3>اطلاعات مشتری</h3>
+              <div className="print-invoice-meta-row">
+                <span>نام:</span>
+                <strong>{printOrder.customer_name}</strong>
+              </div>
+              <div className="print-invoice-meta-row">
+                <span>شماره تماس:</span>
+                <strong dir="ltr">{printOrder.customer_phone}</strong>
+              </div>
+              {printOrder.table_number && (
+                <div className="print-invoice-meta-row">
+                  <span>شماره میز:</span>
+                  <strong>{formatPrice(printOrder.table_number)}</strong>
+                </div>
+              )}
+              {printOrder.note && (
+                <div className="print-invoice-meta-row">
+                  <span>توضیحات:</span>
+                  <strong>{printOrder.note}</strong>
+                </div>
+              )}
+            </div>
+
+            <div className="print-invoice-items">
+              <h3>اقلام سفارش</h3>
+              <table className="print-invoice-table">
+                <thead>
+                  <tr>
+                    <th style={{ width: '40px' }}>#</th>
+                    <th>نام محصول</th>
+                    <th style={{ width: '60px', textAlign: 'center' }}>
+                      تعداد
+                    </th>
+                    <th style={{ width: '120px', textAlign: 'left' }}>
+                      قیمت واحد
+                    </th>
+                    <th style={{ width: '120px', textAlign: 'left' }}>جمع</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {printOrder.items.map((item, idx) => (
+                    <tr key={idx}>
+                      <td>{formatPrice(idx + 1)}</td>
+                      <td>
+                        {item.product_name}
+                        {item.option_name && (
+                          <small
+                            style={{ color: '#666', display: 'block' }}
+                          >
+                            ({item.option_name})
+                          </small>
+                        )}
+                      </td>
+                      <td style={{ textAlign: 'center' }}>
+                        {formatPrice(item.quantity)}
+                      </td>
+                      <td style={{ textAlign: 'left' }}>
+                        {formatPrice(item.unit_price)}
+                      </td>
+                      <td style={{ textAlign: 'left' }}>
+                        {formatPrice(item.unit_price * item.quantity)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <td
+                      colSpan={4}
+                      style={{ textAlign: 'left', fontWeight: 700 }}
+                    >
+                      جمع کل:
+                    </td>
+                    <td
+                      style={{
+                        textAlign: 'left',
+                        fontWeight: 800,
+                        fontSize: '16px',
+                      }}
+                    >
+                      {formatPrice(printOrder.subtotal)} تومان
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+
+            <div className="print-invoice-footer">
+              <p>با تشکر از سفارش شما 🌹</p>
+              <p className="print-invoice-footer-small">
+                کافه پارک — پارک سلامت شیراز
+              </p>
+            </div>
+          </div>,
+          document.body
+        )}
+    </>
   )
 }
