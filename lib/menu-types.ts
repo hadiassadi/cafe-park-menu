@@ -9,6 +9,27 @@ export type Category = {
   sort_order: number
 }
 
+/* ---------- واریانت‌ها ---------- */
+
+export type VariantOption = {
+  id: string
+  group_id: string
+  name: string
+  price_modifier: number
+  is_default: boolean
+  is_available: boolean
+  sort_order: number
+}
+
+export type VariantGroup = {
+  id: string
+  product_id: string
+  name: string
+  is_required: boolean
+  sort_order: number
+  variant_options: VariantOption[]
+}
+
 export type Product = {
   id: string
   category_id: string
@@ -19,6 +40,14 @@ export type Product = {
   image_url: string | null
   is_featured: boolean
   sort_order: number
+  is_available: boolean
+  is_new: boolean
+  calories: number | null
+  prep_time_minutes: number | null
+  ingredients: string | null
+  allergens: string | null
+  dietary_info: string | null
+  variant_groups: VariantGroup[]
 }
 
 export type FontFile = {

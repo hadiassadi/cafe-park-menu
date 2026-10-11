@@ -31,6 +31,17 @@ const TEXT_FIELDS = [
   'working_hours',
   'og_title',
   'og_description',
+  // ✅ پرداخت
+  'card_number',
+  'card_holder',
+  'bank_name',
+  'sheba_number',
+  'payment_note',
+  // ✅ پیام‌رسان‌ها
+  'cafe_phone',
+  'eitaa_id',
+  'bale_id',
+  'rubika_id',
 ]
 
 // آدرس‌ها: خالی یا فقط http/https
@@ -67,6 +78,14 @@ const BOOL_FIELDS = [
   'instagram_in_floating',
   'hours_in_header',
   'hours_in_footer',
+  // ✅ پرداخت
+  'payment_enabled',
+  'request_card_enabled',
+  // ✅ پیام‌رسان‌ها
+  'whatsapp_enabled',
+  'eitaa_enabled',
+  'bale_enabled',
+  'rubika_enabled',
 ]
 
 // مقدارهای مجاز برای فیلدهای انتخابی

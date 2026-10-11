@@ -5,9 +5,15 @@ export default async function ProductsPage() {
   const db = await supabaseServer()
 
   const productsResult = await db
-    .from('products')
-    .select('*')
-    .order('sort_order', { ascending: true })
+  .from('products')
+  .select(
+    `*,
+     variant_groups(
+       id, product_id, name, is_required, sort_order,
+       variant_options(id, group_id, name, price_modifier, is_default, is_available, sort_order)
+     )`
+  )
+  .order('sort_order', { ascending: true })
 
   const categoriesResult = await db
     .from('categories')

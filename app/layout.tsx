@@ -2,6 +2,7 @@ import './globals.css'
 import type { Metadata, Viewport } from 'next'
 import localFont from 'next/font/local'
 import { getSettings } from '@/lib/menu'
+import { SITE_URL } from '@/lib/site'
 
 // اگر فایل‌های Medium و Bold را هم داری، این‌جا اضافه‌شان کن
 // تا font-weight 500/700 مصنوعی ساخته نشود:
@@ -15,8 +16,6 @@ const vazir = localFont({
   display: 'swap',
   variable: '--font-vazir',
 })
-
-const SITE_URL = 'https://cafe-park-menu.vercel.app'
 
 // عنوان و پیش‌نمایش لینک از «تنظیمات» در پنل ادمین می‌آید
 export async function generateMetadata(): Promise<Metadata> {
@@ -66,14 +65,18 @@ export const viewport: Viewport = {
   themeColor: '#6b4f3a',
 }
 
+import { CartProvider } from '@/lib/cart-context'
+
 export default function RootLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
   return (
-    <html lang="fa" dir="rtl" className={vazir.variable}>
-      <body>{children}</body>
+    <html lang="fa-IR" dir="rtl" className={vazir.variable} suppressHydrationWarning>
+      <body>
+        <CartProvider>{children}</CartProvider>
+      </body>
     </html>
   )
 }

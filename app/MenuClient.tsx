@@ -4,6 +4,10 @@ import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import Image from 'next/image'
 import { DEFAULT_THEME } from '@/lib/menu-types'
 import type { MenuData, Quote, Settings } from '@/lib/menu-types'
+import ProductDetailModal from './components/ProductDetailModal'
+import type { Product } from '@/lib/menu-types'
+import { useCart } from '@/lib/cart-context'
+import CartFloatingBar from './components/CartFloatingBar'
 
 /* ---------- کمکی‌ها ---------- */
 
@@ -36,6 +40,21 @@ function cleanFamily(f: string | null | undefined) {
 }
 
 const safeUrl = (u: string) => u.replace(/"/g, '%22')
+function getMinPrice(product: Product): number {
+  const groups = product.variant_groups ?? []
+  if (groups.length === 0) return product.price
+
+  let min = Infinity
+  for (const g of groups) {
+    for (const o of g.variant_options) {
+      if (!o.is_available) continue
+      // ✅ قیمت گزینه، خودش قیمت نهایی هست
+      const p = o.price_modifier
+      if (p < min) min = p
+    }
+  }
+  return min === Infinity ? product.price : min
+}
 
 const formatPrice = (price: number) =>
   new Intl.NumberFormat('fa-IR').format(price)
@@ -160,6 +179,8 @@ export default function MenuClient({ initial }: { initial: MenuData }) {
   const [toast, setToast] = useState<string | null>(null)
   const [pendingScroll, setPendingScroll] = useState<string | null>(null)
   const [fabOpen, setFabOpen] = useState(false)
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
+  const { totalItems, totalPrice } = useCart()
 
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({})
 
@@ -522,7 +543,7 @@ export default function MenuClient({ initial }: { initial: MenuData }) {
               </div>
             )}
 
-            {show.shareButton && (
+                                    {show.shareButton && (
               <div className="hero-actions">
                 <button type="button" className="share-btn" onClick={handleShare}>
                   اشتراک‌گذاری منو
@@ -618,52 +639,98 @@ export default function MenuClient({ initial }: { initial: MenuData }) {
                 </h2>
 
                 <div className="grid">
-                  {items.map((product, index) => (
-                    <article
-                      className="product"
-                      key={product.id}
-                      style={{ animationDelay: `${Math.min(index * 40, 400)}ms` }}
-                    >
-                      {/* بدون عکس = بدون باکس خاکستری */}
-                      {show.productImages && product.image_url && (
-                        <div className="photo">
-                          <Image
-                            src={product.image_url}
-                            alt={product.name}
-                            width={256}
-                            height={256}
-                            sizes="(max-width: 640px) 112px, 128px"
-                            priority={groupIndex === 0 && index < 2}
-                          />
-                          {product.is_featured && (
-                            <span className="featured-badge">⭐ پیشنهاد</span>
-                          )}
-                        </div>
-                      )}
+                  {items.map((product, index) => {
+  const hasVariants = (product.variant_groups ?? []).length > 0
+const hasInfo = !!(
+  product.calories ||
+  product.prep_time_minutes ||
+  product.ingredients ||
+  product.allergens ||
+  product.dietary_info
+)
+const isClickable = true   // ✅ همه محصولات کلیک‌پذیر
 
-                      <div className="product-info">
-                        <div className="name">
-                          {product.name}
-                          {!(show.productImages && product.image_url) && product.is_featured && (
-                            <span className="featured-inline">⭐</span>
-                          )}
-                        </div>
+  return (
+    <article
+      className={`product ${isClickable ? 'product-clickable' : ''}`}
+      key={product.id}
+      style={{ animationDelay: `${Math.min(index * 40, 400)}ms` }}
+      onClick={() => {
+        if (isClickable) setSelectedProduct(product)
+      }}
+      role={isClickable ? 'button' : undefined}
+      tabIndex={isClickable ? 0 : undefined}
+      onKeyDown={(e) => {
+        if (isClickable && (e.key === 'Enter' || e.key === ' ')) {
+          e.preventDefault()
+          setSelectedProduct(product)
+        }
+      }}
+    >
+      {/* بدون عکس = بدون باکس خاکستری */}
+      {show.productImages && product.image_url && (
+        <div className="photo">
+          <Image
+            src={product.image_url}
+            alt={product.name}
+            width={256}
+            height={256}
+            sizes="(max-width: 640px) 112px, 128px"
+            priority={groupIndex === 0 && index < 2}
+          />
+          {product.is_featured && (
+            <span className="featured-badge">⭐ پیشنهاد</span>
+          )}
+          {product.is_new && (
+            <span className="new-badge">🆕 جدید</span>
+          )}
+          {product.is_available === false && (
+  <span className="unavailable-badge">ناموجود</span>
+)}
+        </div>
+      )}
 
-                        {product.description && (
-                          <div className="desc">{product.description}</div>
-                        )}
+      <div className="product-info">
+        <div className="name">
+          {product.name}
+          {!(show.productImages && product.image_url) &&
+            product.is_featured && (
+              <span className="featured-inline">⭐</span>
+            )}
+          {!(show.productImages && product.image_url) &&
+            product.is_new && <span className="new-inline">🆕</span>}
+        </div>
 
-                        <div className="meta">
-                          {show.productSize && product.size && (
-                            <span className="size">{toFaDigits(product.size)}</span>
-                          )}
-                          <span className="price">
-                            {formatPrice(product.price)} <small>تومان</small>
-                          </span>
-                        </div>
-                      </div>
-                    </article>
-                  ))}
+        {product.description && (
+          <div className="desc">{product.description}</div>
+        )}
+
+        <div className="meta">
+          {show.productSize && product.size && (
+            <span className="size">{toFaDigits(product.size)}</span>
+          )}
+
+          {hasVariants ? (
+  <span className="price price-from">
+    از {formatPrice(getMinPrice(product))}{' '}
+    <small>تومان</small>
+  </span>
+) : (
+  <span className="price">
+    {formatPrice(product.price)} <small>تومان</small>
+  </span>
+)}
+        </div>
+
+        {isClickable && (
+          <div className="product-action-hint">
+            {hasVariants ? '👆 مشاهده گزینه‌ها' : '👆 اطلاعات بیشتر'}
+          </div>
+        )}
+      </div>
+    </article>
+  )
+})}
                 </div>
               </section>
             ))
@@ -752,6 +819,15 @@ export default function MenuClient({ initial }: { initial: MenuData }) {
             </div>
           </>
         )}
+
+                {/* ✅ Modal جزئیات محصول */}
+        <ProductDetailModal
+          product={selectedProduct}
+          isOpen={!!selectedProduct}
+          onClose={() => setSelectedProduct(null)}
+        />
+        {/* ✅ نوار شناور سبد */}
+        <CartFloatingBar />
 
         {toast && (
           <div className="toast" role="status" aria-live="polite">
