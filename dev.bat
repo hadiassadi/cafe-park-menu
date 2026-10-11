@@ -9,53 +9,53 @@ cls
 echo.
 echo  ============================================================
 echo.
-echo             ☕  کافه پارک - پنل توسعه‌دهنده  ☕
+echo             [ Cafe Park - Developer Panel ]
 echo.
 echo  ============================================================
 echo.
-echo    [1]  🚀  اجرای پروژه در حالت توسعه (npm run dev)
+echo    [1]  🚀  Run project in dev mode  (npm run dev)
 echo.
-echo    [2]  🏗️   بیلد گرفتن پروژه (npm run build)
+echo    [2]  🏗️   Build project  (npm run build)
 echo.
-echo    [3]  🌐  اجرای نسخه Build شده (npm start)
+echo    [3]  🌐  Run built version  (npm start)
 echo.
-echo    [4]  🔍  اجرای Linter (npm run lint)
-echo.
-echo  ------------------------------------------------------------
-echo.
-echo    [5]  💾  بکاپ‌گیری از پروژه (npm run backup)
-echo.
-echo    [6]  🗑️   پاکسازی بکاپ‌های قدیمی
-echo.
-echo    [7]  ⏰  فعال‌سازی بکاپ خودکار (هر ۲۴ ساعت)
-echo.
-echo    [8]  📂  باز کردن پوشه بکاپ‌ها در ویندوز
+echo    [4]  🔍  Run Linter  (npm run lint)
 echo.
 echo  ------------------------------------------------------------
 echo.
-echo    [9]  📤  ارسال تغییرات به GitHub (commit + push)
+echo    [5]  💾  Backup project  (npm run backup)
 echo.
-echo    [A]  📥  دریافت تغییرات از GitHub (pull)
+echo    [6]  🗑️   Clean old backups
 echo.
-echo    [B]  📊  نمایش وضعیت Git (status)
+echo    [7]  ⏰  Enable auto backup (every 24h)
 echo.
-echo    [C]  📜  نمایش لاگ اخیر Git (10 کامیت آخر)
-echo.
-echo  ------------------------------------------------------------
-echo.
-echo    [D]  📋  باز کردن فایل PROJECT_STATE.md برای ویرایش
-echo.
-echo    [E]  📁  باز کردن پروژه در VS Code
-echo.
-echo    [F]  🧹  پاک کردن کش Next.js (.next)
+echo    [8]  📂  Open backups folder
 echo.
 echo  ------------------------------------------------------------
 echo.
-echo    [0]  🚪  خروج
+echo    [9]  📤  Push changes to GitHub
+echo.
+echo    [A]  📥  Pull changes from GitHub
+echo.
+echo    [B]  📊  Show Git status
+echo.
+echo    [C]  📜  Show recent Git log
+echo.
+echo  ------------------------------------------------------------
+echo.
+echo    [D]  📋  Open PROJECT_STATE.md
+echo.
+echo    [E]  📁  Open project in VS Code
+echo.
+echo    [F]  🧹  Clear Next.js cache (.next)
+echo.
+echo  ------------------------------------------------------------
+echo.
+echo    [0]  🚪  Exit
 echo.
 echo  ============================================================
 echo.
-set /p choice="  👉 انتخاب شما: "
+set /p choice="  Select: "
 
 if /i "%choice%"=="1" goto DEV
 if /i "%choice%"=="2" goto BUILD
@@ -74,67 +74,57 @@ if /i "%choice%"=="E" goto OPEN_VSCODE
 if /i "%choice%"=="F" goto CLEAN_NEXT
 if /i "%choice%"=="0" goto EXIT
 echo.
-echo  ❌ انتخاب نامعتبر! دوباره تلاش کن.
+echo  [X] Invalid choice, try again.
 timeout /t 2 >nul
 goto MAIN_MENU
 
 :: ═══════════════════════════════════════════════════════════
-:: 1. اجرای پروژه
-:: ═══════════════════════════════════════════════════════════
 :DEV
 cls
 echo.
-echo  🚀  اجرای پروژه در حالت توسعه...
+echo  🚀  Starting dev mode...
 echo  ────────────────────────────────────────────
-echo  💡 برای توقف، Ctrl+C را بزن.
+echo  [i] Press Ctrl+C to stop.
 echo.
 call npm run dev
-echo.
-echo  ⏸️  پروژه متوقف شد.
 pause
 goto MAIN_MENU
 
 :: ═══════════════════════════════════════════════════════════
-:: 2. بیلد گرفتن
-:: ═══════════════════════════════════════════════════════════
 :BUILD
 cls
 echo.
-echo  🏗️   در حال بیلد گرفتن پروژه...
+echo  🏗️   Building project...
 echo  ────────────────────────────────────────────
 echo.
 call npm run build
 if %errorlevel%==0 (
   echo.
-  echo  ✅  بیلد با موفقیت انجام شد!
+  echo  [OK]  Build successful!
 ) else (
   echo.
-  echo  ❌  بیلد با خطا مواجه شد!
+  echo  [ERR]  Build failed!
 )
 pause
 goto MAIN_MENU
 
 :: ═══════════════════════════════════════════════════════════
-:: 3. اجرای نسخه Build
-:: ═══════════════════════════════════════════════════════════
 :START
 cls
 echo.
-echo  🌐  اجرای نسخه Build شده...
+echo  🌐  Running built version...
 echo  ────────────────────────────────────────────
-echo  💡 برای توقف، Ctrl+C را بزن.
+echo  [i] Press Ctrl+C to stop.
 echo.
 call npm start
 pause
 goto MAIN_MENU
 
 :: ═══════════════════════════════════════════════════════════
-:: 4. Linter
-:: ═══════════════════════════════════════════════════════════
 :LINT
 cls
 echo.
-echo  🔍  بررسی کدها با ESLint...
+echo  🔍  Running ESLint...
 echo  ────────────────────────────────────────────
 echo.
 call npm run lint
@@ -142,32 +132,28 @@ pause
 goto MAIN_MENU
 
 :: ═══════════════════════════════════════════════════════════
-:: 5. بکاپ‌گیری
-:: ═══════════════════════════════════════════════════════════
 :BACKUP
 cls
 echo.
-echo  💾  در حال بکاپ‌گیری از پروژه...
+echo  💾  Creating backup...
 echo  ────────────────────────────────────────────
 echo.
 call npm run backup
 if %errorlevel%==0 (
   echo.
-  echo  ✅  بکاپ با موفقیت ساخته شد!
+  echo  [OK]  Backup created successfully!
 ) else (
   echo.
-  echo  ❌  بکاپ با خطا مواجه شد!
+  echo  [ERR]  Backup failed!
 )
 pause
 goto MAIN_MENU
 
 :: ═══════════════════════════════════════════════════════════
-:: 6. پاکسازی بکاپ‌های قدیمی
-:: ═══════════════════════════════════════════════════════════
 :CLEAN_BACKUP
 cls
 echo.
-echo  🗑️   پاکسازی بکاپ‌های قدیمی‌تر از ۳۰ روز...
+echo  🗑️   Cleaning backups older than 30 days...
 echo  ────────────────────────────────────────────
 echo.
 call npm run backup:clean
@@ -175,102 +161,92 @@ pause
 goto MAIN_MENU
 
 :: ═══════════════════════════════════════════════════════════
-:: 7. بکاپ خودکار
-:: ═══════════════════════════════════════════════════════════
 :SCHEDULE_BACKUP
 cls
 echo.
-echo  ⏰  فعال‌سازی بکاپ خودکار (هر ۲۴ ساعت)...
+echo  ⏰  Enabling auto backup (every 24h)...
 echo  ────────────────────────────────────────────
 echo.
-echo  ⚠️  این ترمینال باید باز بماند تا بکاپ خودکار کار کند.
-echo     برای توقف، Ctrl+C را بزن.
+echo  [i] This window must stay open.
+echo      Press Ctrl+C to stop.
 echo.
 start "Cafe Park Auto Backup" cmd /k "npm run backup:schedule"
-echo  ✅  ترمینال بکاپ خودکار در یک پنجره جدا باز شد.
+echo  [OK]  Auto backup started in a new window.
 pause
 goto MAIN_MENU
 
 :: ═══════════════════════════════════════════════════════════
-:: 8. باز کردن پوشه بکاپ‌ها
-:: ═══════════════════════════════════════════════════════════
 :OPEN_BACKUPS
 cls
 echo.
-echo  📂  در حال باز کردن پوشه بکاپ‌ها...
+echo  📂  Opening backups folder...
 if exist "backups" (
   start "" "backups"
-  echo  ✅  پوشه بکاپ باز شد.
+  echo  [OK]  Folder opened.
 ) else (
-  echo  ❌  پوشه backups وجود ندارد! اول یک بکاپ بگیر (گزینه ۵).
+  echo  [ERR]  backups folder not found. Create a backup first (option 5).
 )
 timeout /t 2 >nul
 goto MAIN_MENU
 
 :: ═══════════════════════════════════════════════════════════
-:: 9. ارسال تغییرات به GitHub
-:: ═══════════════════════════════════════════════════════════
 :GIT_PUSH
 cls
 echo.
-echo  📤  ارسال تغییرات به GitHub
+echo  📤  Pushing changes to GitHub
 echo  ────────────────────────────────────────────
 echo.
-echo  📊  وضعیت فعلی Git:
+echo  📊  Current status:
 echo.
 git status --short
 echo.
 echo  ────────────────────────────────────────────
 echo.
-set /p commit_msg="  💬 پیام کامیت (یا Enter برای پیام پیش‌فرض): "
+set /p commit_msg="  Commit message (empty = default): "
 if "!commit_msg!"=="" set commit_msg=Update: %date% %time%
 
 echo.
-echo  📥  در حال افزودن فایل‌ها...
+echo  [1/3]  Adding files...
 git add .
 echo.
-echo  💾  در حال کامیت...
+echo  [2/3]  Committing...
 git commit -m "!commit_msg!"
 echo.
-echo  📤  در حال ارسال به GitHub...
+echo  [3/3]  Pushing...
 git push
 if %errorlevel%==0 (
   echo.
-  echo  ✅  تغییرات با موفقیت ارسال شد!
+  echo  [OK]  Changes pushed successfully!
 ) else (
   echo.
-  echo  ❌  خطا در ارسال! احتمالاً باید اول pull کنی (گزینه A).
+  echo  [ERR]  Push failed! Try pull first (option A).
 )
 pause
 goto MAIN_MENU
 
 :: ═══════════════════════════════════════════════════════════
-:: A. دریافت تغییرات از GitHub
-:: ═══════════════════════════════════════════════════════════
 :GIT_PULL
 cls
 echo.
-echo  📥  دریافت تغییرات از GitHub...
+echo  📥  Pulling changes from GitHub...
 echo  ────────────────────────────────────────────
 echo.
 git pull
 if %errorlevel%==0 (
   echo.
-  echo  ✅  تغییرات با موفقیت دریافت شد!
+  echo  [OK]  Pull successful!
 ) else (
   echo.
-  echo  ❌  خطا در دریافت! احتمالاً تعارض (conflict) داری.
+  echo  [ERR]  Pull failed! Check for conflicts.
 )
 pause
 goto MAIN_MENU
 
 :: ═══════════════════════════════════════════════════════════
-:: B. وضعیت Git
-:: ═══════════════════════════════════════════════════════════
 :GIT_STATUS
 cls
 echo.
-echo  📊  وضعیت فعلی Git
+echo  📊  Git Status
 echo  ────────────────────────────────────────────
 echo.
 git status
@@ -278,12 +254,10 @@ pause
 goto MAIN_MENU
 
 :: ═══════════════════════════════════════════════════════════
-:: C. لاگ Git
-:: ═══════════════════════════════════════════════════════════
 :GIT_LOG
 cls
 echo.
-echo  📜  ۱۰ کامیت آخر
+echo  📜  Last 10 commits
 echo  ────────────────────────────────────────────
 echo.
 git log --oneline -10
@@ -291,62 +265,54 @@ pause
 goto MAIN_MENU
 
 :: ═══════════════════════════════════════════════════════════
-:: D. ویرایش فایل وضعیت پروژه
-:: ═══════════════════════════════════════════════════════════
 :EDIT_STATE
 cls
 echo.
-echo  📋  باز کردن فایل PROJECT_STATE.md...
+echo  📋  Opening PROJECT_STATE.md...
 if exist "PROJECT_STATE.md" (
   start "" "PROJECT_STATE.md"
-  echo  ✅  فایل باز شد.
+  echo  [OK]  File opened.
 ) else (
-  echo  ❌  فایل PROJECT_STATE.md پیدا نشد!
+  echo  [ERR]  PROJECT_STATE.md not found!
 )
 timeout /t 2 >nul
 goto MAIN_MENU
 
-:: ═══════════════════════════════════════════════════════════
-:: E. باز کردن پروژه در VS Code
 :: ═══════════════════════════════════════════════════════════
 :OPEN_VSCODE
 cls
 echo.
-echo  📁  در حال باز کردن پروژه در VS Code...
+echo  📁  Opening project in VS Code...
 start "" code .
-echo  ✅  VS Code باز شد.
+echo  [OK]  VS Code opened.
 timeout /t 2 >nul
 goto MAIN_MENU
 
 :: ═══════════════════════════════════════════════════════════
-:: F. پاک کردن کش Next.js
-:: ═══════════════════════════════════════════════════════════
 :CLEAN_NEXT
 cls
 echo.
-echo  🧹  پاک کردن کش Next.js (.next)...
+echo  🧹  Clearing Next.js cache (.next)...
 echo  ────────────────────────────────────────────
 echo.
 if exist ".next" (
   rmdir /s /q ".next"
-  echo  ✅  پوشه .next پاک شد.
+  echo  [OK]  .next folder removed.
 ) else (
-  echo  ℹ️  پوشه .next وجود ندارد.
+  echo  [i]  .next folder not found.
 )
 echo.
-echo  💡  دفعه بعد که پروژه را اجرا کنی، از نو ساخته می‌شود.
+echo  [i] It will be regenerated on next run.
 pause
 goto MAIN_MENU
 
-:: ═══════════════════════════════════════════════════════════
-:: خروج
 :: ═══════════════════════════════════════════════════════════
 :EXIT
 cls
 echo.
 echo  ============================================================
 echo.
-echo             👋  خدانگهدار! روز خوبی داشته باشی!
+echo             👋  Goodbye! Have a great day!
 echo.
 echo  ============================================================
 echo.
