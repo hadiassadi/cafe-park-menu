@@ -8,6 +8,8 @@ import ProductDetailModal from './components/ProductDetailModal'
 import type { Product } from '@/lib/menu-types'
 import { useCart } from '@/lib/cart-context'
 import CartFloatingBar from './components/CartFloatingBar'
+import ServiceWorkerRegister from './components/ServiceWorkerRegister'
+import PWAInstallPrompt from './components/PWAInstallPrompt'
 
 /* ---------- کمکی‌ها ---------- */
 
@@ -826,8 +828,12 @@ const isClickable = true   // ✅ همه محصولات کلیک‌پذیر
           isOpen={!!selectedProduct}
           onClose={() => setSelectedProduct(null)}
         />
-        {/* ✅ نوار شناور سبد */}
+                {/* ✅ نوار شناور سبد */}
         <CartFloatingBar />
+
+        {/* ✅ PWA */}
+        <ServiceWorkerRegister />
+        <PWAInstallPrompt />
 
         {toast && (
           <div className="toast" role="status" aria-live="polite">

@@ -6217,3 +6217,115 @@ body {
   color: #777 !important;
   font-weight: 400 !important;
 }
+/* ========================================
+   44. PWA INSTALL PROMPT (دکمه نصب اپ)
+   ======================================== */
+
+.pwa-prompt {
+  position: fixed;
+  bottom: calc(16px + env(safe-area-inset-bottom));
+  left: 12px;
+  right: 12px;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 12px 14px;
+  background: #fffdf9;
+  border: 1px solid #e3ddd2;
+  border-radius: 14px;
+  box-shadow: 0 8px 32px rgba(41, 37, 31, 0.18);
+  animation: pwaSlideUp 0.35s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+@keyframes pwaSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.pwa-prompt-icon {
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  background: #f5f0e9;
+  font-size: 22px;
+}
+
+.pwa-prompt-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.pwa-prompt-content strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 800;
+  color: #29251f;
+}
+
+.pwa-prompt-content small {
+  display: block;
+  font-size: 11px;
+  color: #766f64;
+}
+
+.pwa-prompt-install {
+  min-height: 38px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 10px;
+  background: #6b4f3a;
+  color: #fff;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s ease;
+}
+
+.pwa-prompt-install:hover {
+  background: #5a4230;
+}
+
+.pwa-prompt-close {
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #9a9287;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.pwa-prompt-close:hover {
+  background: #f5f0e9;
+  color: #29251f;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pwa-prompt {
+    animation: none;
+  }
+}

@@ -34,12 +34,12 @@ export default function ProductDetailModal({
 
   // قیمت واحد
   // ✅ اگه گزینه‌ای انتخاب شده، قیمت خودش، قیمت نهایی هست
-// اگه هیچ گزینه‌ای نیست، قیمت پایه محصول
-let unitPrice = product?.price ?? 0
-if (selectedOption) {
-  unitPrice = selectedOption.price_modifier
-}
-const totalPrice = unitPrice * quantity
+  // اگه هیچ گزینه‌ای نیست، قیمت پایه محصول
+  let unitPrice = product?.price ?? 0
+  if (selectedOption) {
+    unitPrice = selectedOption.price_modifier
+  }
+  const totalPrice = unitPrice * quantity
 
   // ریست وقتی محصول عوض می‌شه
   useEffect(() => {
@@ -77,17 +77,20 @@ const totalPrice = unitPrice * quantity
 
   if (!isOpen || !product) return null
 
+  // ✅ TypeScript را مطمئن می‌کند که product دیگر null نیست
+  const currentProduct = product
+
   const infoItems: Array<{ icon: string; value: string }> = []
-  if (product.calories) {
+  if (currentProduct.calories) {
     infoItems.push({
       icon: '🔥',
-      value: `${formatPrice(product.calories)} کالری`,
+      value: `${formatPrice(currentProduct.calories)} کالری`,
     })
   }
-  if (product.prep_time_minutes) {
+  if (currentProduct.prep_time_minutes) {
     infoItems.push({
       icon: '⏱',
-      value: `${formatPrice(product.prep_time_minutes)} دقیقه`,
+      value: `${formatPrice(currentProduct.prep_time_minutes)} دقیقه`,
     })
   }
 
@@ -97,44 +100,44 @@ const totalPrice = unitPrice * quantity
   }
 
   function handleAddToCart() {
-  if (hasMultipleGroups && !selectedGroupId) {
-    setToast('اول نوع سرو رو انتخاب کن')
-    setTimeout(() => setToast(null), 2000)
-    return
-  }
-  if (groups.length > 0 && !selectedOptionId) {
-    setToast('لطفاً یک گزینه انتخاب کن')
-    setTimeout(() => setToast(null), 2000)
-    return
-  }
+    if (hasMultipleGroups && !selectedGroupId) {
+      setToast('اول نوع سرو رو انتخاب کن')
+      setTimeout(() => setToast(null), 2000)
+      return
+    }
+    if (groups.length > 0 && !selectedOptionId) {
+      setToast('لطفاً یک گزینه انتخاب کن')
+      setTimeout(() => setToast(null), 2000)
+      return
+    }
 
-  // ✅ افزودن به سبد
-  addItem({
-    productId: product.id,
-    productName: product.name,
-    productImage: product.image_url,
-    selectedGroupName: selectedGroup?.name ?? null,
-    selectedOptionName: selectedOption?.name ?? null,
-    selectedOptionId: selectedOption?.id ?? null,
-    unitPrice,
-    quantity,
-  })
+    // ✅ افزودن به سبد
+    addItem({
+      productId: currentProduct.id,
+      productName: currentProduct.name,
+      productImage: currentProduct.image_url,
+      selectedGroupName: selectedGroup?.name ?? null,
+      selectedOptionName: selectedOption?.name ?? null,
+      selectedOptionId: selectedOption?.id ?? null,
+      unitPrice,
+      quantity,
+    })
 
-  setToast(`✅ ${product.name} به سبد اضافه شد`)
-  setTimeout(() => {
-    setToast(null)
-    onClose()
-  }, 1200)
-}
+    setToast(`✅ ${currentProduct.name} به سبد اضافه شد`)
+    setTimeout(() => {
+      setToast(null)
+      onClose()
+    }, 1200)
+  }
 
   return (
     <div className="product-modal-overlay" onClick={onClose}>
       <div className="product-modal" onClick={(e) => e.stopPropagation()}>
-        {product.image_url && (
+        {currentProduct.image_url && (
           <div className="product-modal-image">
             <Image
-              src={product.image_url}
-              alt={product.name}
+              src={currentProduct.image_url}
+              alt={currentProduct.name}
               fill
               sizes="(max-width: 640px) 100vw, 600px"
               priority
@@ -151,7 +154,7 @@ const totalPrice = unitPrice * quantity
         )}
 
         <div className="product-modal-body">
-          {!product.image_url && (
+          {!currentProduct.image_url && (
             <button
               type="button"
               className="product-modal-close product-modal-close-inline"
@@ -162,10 +165,12 @@ const totalPrice = unitPrice * quantity
             </button>
           )}
 
-          <h2 className="product-modal-title">{product.name}</h2>
+          <h2 className="product-modal-title">{currentProduct.name}</h2>
 
-          {product.description && (
-            <p className="product-modal-desc">{product.description}</p>
+          {currentProduct.description && (
+            <p className="product-modal-desc">
+              {currentProduct.description}
+            </p>
           )}
 
           {infoItems.length > 0 && (
@@ -179,35 +184,35 @@ const totalPrice = unitPrice * quantity
             </div>
           )}
 
-          {product.ingredients && (
+          {currentProduct.ingredients && (
             <div className="product-modal-info-box ingredients">
               <div className="product-modal-info-box-title">
                 🥗 مواد تشکیل‌دهنده:
               </div>
               <div className="product-modal-info-box-content">
-                {product.ingredients}
+                {currentProduct.ingredients}
               </div>
             </div>
           )}
 
-          {product.allergens && (
+          {currentProduct.allergens && (
             <div className="product-modal-info-box allergens">
               <div className="product-modal-info-box-title">
                 ⚠️ آلرژن‌ها:
               </div>
               <div className="product-modal-info-box-content">
-                {product.allergens}
+                {currentProduct.allergens}
               </div>
             </div>
           )}
 
-          {product.dietary_info && (
+          {currentProduct.dietary_info && (
             <div className="product-modal-info-box dietary">
               <div className="product-modal-info-box-title">
                 🌱 اطلاعات رژیمی:
               </div>
               <div className="product-modal-info-box-content">
-                {product.dietary_info}
+                {currentProduct.dietary_info}
               </div>
             </div>
           )}
@@ -243,11 +248,12 @@ const totalPrice = unitPrice * quantity
                 </div>
                 <div className="variant-options-grid">
                   {selectedGroup.variant_options
-  .filter((o) => o.is_available)
-  .map((option) => {
-    const isSelected = selectedOptionId === option.id
-    const optionTotal = option.price_modifier  // ✅ قیمت خودش، نه اضافه‌شده
-    return (
+                    .filter((o) => o.is_available)
+                    .map((option) => {
+                      const isSelected = selectedOptionId === option.id
+                      // ✅ قیمت خودش، نه اضافه‌شده
+                      const optionTotal = option.price_modifier
+                      return (
                         <button
                           key={option.id}
                           type="button"
@@ -260,8 +266,7 @@ const totalPrice = unitPrice * quantity
                             {option.name}
                           </span>
                           <span className="variant-option-price">
-                            {formatPrice(optionTotal)}{' '}
-                            <small>تومان</small>
+                            {formatPrice(optionTotal)} <small>تومان</small>
                           </span>
                         </button>
                       )
