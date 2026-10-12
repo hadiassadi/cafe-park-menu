@@ -1,2 +1,18 @@
-# Auto detect text files and perform LF normalization
-* text=auto
+# تنظیم خودکار خط‌پایان‌ها
+* text=auto eol=lf
+
+# فایل‌های ویندوزی
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# فایل‌های باینری
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary
+*.zip binary
