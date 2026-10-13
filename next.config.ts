@@ -1,6 +1,7 @@
 import type { NextConfig } from 'next'
 
 const nextConfig: NextConfig = {
+  poweredByHeader: false,   // ✅ حذف X-Powered-By
   images: {
     remotePatterns: [
       {

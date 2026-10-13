@@ -1,4 +1,10 @@
-// app/admin/page.tsx
+
+import type { Metadata } from 'next'
+
+export const metadata: Metadata = {
+  title: 'پنل مدیریت',
+  robots: { index: false, follow: false },
+}// app/admin/page.tsx
 import Link from 'next/link'
 import { getOrderStats } from '@/lib/stats'
 import CleanupOrdersCard from './components/CleanupOrdersCard'

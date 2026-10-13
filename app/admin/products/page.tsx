@@ -1,3 +1,9 @@
+import type { Metadata } from 'next'
+
+export const metadata: Metadata = {
+  title: 'محصولات',
+  robots: { index: false, follow: false },
+}
 import { supabaseServer } from '@/lib/supabase/server'
 import ProductsManager from './ProductsManager'
 
