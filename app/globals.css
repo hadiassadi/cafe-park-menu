@@ -7570,3 +7570,649 @@ body {
     padding-top: 8px !important;
   }
 }
+/* ========================================
+   54. ADMIN DARK MODE (حالت شبانه پنل ادمین)
+   ======================================== */
+
+/* ─── رنگ‌های اصلی در حالت شبانه ─── */
+.admin-shell.dark-mode {
+  --admin-bg: #1a1815;
+  --admin-surface: #24211c;
+  --admin-surface-2: #2d2924;
+  --admin-border: #3a352c;
+  --admin-text: #f0e9df;
+  --admin-text-muted: #9a9287;
+  --admin-primary: #a88264;
+  --admin-hover: #2d2924;
+
+  background: var(--admin-bg);
+  color: var(--admin-text);
+}
+
+/* ─── سایدبار ─── */
+.admin-shell.dark-mode .admin-sidebar {
+  background: var(--admin-surface);
+  border-left-color: var(--admin-border);
+}
+
+.admin-shell.dark-mode .admin-sidebar-header {
+  border-bottom-color: var(--admin-border);
+}
+
+.admin-shell.dark-mode .admin-logo {
+  color: var(--admin-primary);
+}
+
+.admin-shell.dark-mode .admin-logo-sub {
+  color: var(--admin-text-muted);
+}
+
+.admin-shell.dark-mode .admin-nav-item {
+  color: var(--admin-text);
+}
+
+.admin-shell.dark-mode .admin-nav-item:hover {
+  background: var(--admin-hover);
+  color: var(--admin-primary);
+}
+
+.admin-shell.dark-mode .admin-nav-item.active {
+  background: #6b4f3a;
+  color: #fff;
+}
+
+.admin-shell.dark-mode .admin-sidebar-footer {
+  border-top-color: var(--admin-border);
+}
+
+.admin-shell.dark-mode .admin-logout-btn {
+  color: #d97a6c;
+}
+
+.admin-shell.dark-mode .admin-logout-btn:hover {
+  background: rgba(155, 60, 50, 0.15);
+}
+
+/* ─── محتوای اصلی ─── */
+.admin-shell.dark-mode .admin-main {
+  background: var(--admin-bg);
+}
+
+.admin-shell.dark-mode .admin-main .admin-header h1 {
+  color: var(--admin-text);
+}
+
+.admin-shell.dark-mode .admin-main .admin-subtitle {
+  color: var(--admin-text-muted);
+}
+
+/* ─── کارت‌ها ─── */
+.admin-shell.dark-mode .admin-card,
+.admin-shell.dark-mode .stat-card,
+.admin-shell.dark-mode .status-card,
+.admin-shell.dark-mode .quick-link-card,
+.admin-shell.dark-mode .recent-product,
+.admin-shell.dark-mode .info-card,
+.admin-shell.dark-mode .order-card,
+.admin-shell.dark-mode .table-card,
+.admin-shell.dark-mode .quote-card,
+.admin-shell.dark-mode .settings-card,
+.admin-shell.dark-mode .theme-detail-panel,
+.admin-shell.dark-mode .theme-list-panel,
+.admin-shell.dark-mode .products-list-panel,
+.admin-shell.dark-mode .categories-list-panel,
+.admin-shell.dark-mode .coupon-card,
+.admin-shell.dark-mode .top-product-item,
+.admin-shell.dark-mode .cleanup-card {
+  background: var(--admin-surface);
+  border-color: var(--admin-border);
+  color: var(--admin-text);
+}
+
+.admin-shell.dark-mode .dashboard-welcome {
+  background: linear-gradient(135deg, #5a4230 0%, #7a5735 100%);
+}
+
+.admin-shell.dark-mode .stat-value,
+.admin-shell.dark-mode .status-card-value,
+.admin-shell.dark-mode .quick-link-card strong,
+.admin-shell.dark-mode .recent-product-info strong,
+.admin-shell.dark-mode .info-row strong,
+.admin-shell.dark-mode .order-id,
+.admin-shell.dark-mode .table-card-title,
+.admin-shell.dark-mode .card-title h2,
+.admin-shell.dark-mode .top-product-info strong {
+  color: var(--admin-text);
+}
+
+.admin-shell.dark-mode .stat-label,
+.admin-shell.dark-mode .status-card-label,
+.admin-shell.dark-mode .quick-link-card small,
+.admin-shell.dark-mode .recent-product-info small,
+.admin-shell.dark-mode .card-title p,
+.admin-shell.dark-mode .empty-admin,
+.admin-shell.dark-mode .top-product-info small {
+  color: var(--admin-text-muted);
+}
+
+/* ─── دکمه‌ها ─── */
+.admin-shell.dark-mode .btn {
+  background: var(--admin-surface-2);
+  border-color: var(--admin-border);
+  color: var(--admin-text);
+}
+
+.admin-shell.dark-mode .btn:hover {
+  background: var(--admin-hover);
+  border-color: #5a5247;
+}
+
+.admin-shell.dark-mode .btn.primary-btn {
+  background: var(--admin-primary);
+  color: #1a1815;
+  border-color: var(--admin-primary);
+}
+
+.admin-shell.dark-mode .btn.primary-btn:hover {
+  background: #c49370;
+}
+
+.admin-shell.dark-mode .btn.danger {
+  color: #d97a6c;
+  border-color: rgba(155, 60, 50, 0.4);
+}
+
+.admin-shell.dark-mode .btn.danger:hover {
+  background: rgba(155, 60, 50, 0.15);
+}
+
+.admin-shell.dark-mode .filter-chip {
+  background: var(--admin-surface);
+  border-color: var(--admin-border);
+  color: var(--admin-text-muted);
+}
+
+.admin-shell.dark-mode .filter-chip.active {
+  background: var(--admin-primary);
+  border-color: var(--admin-primary);
+  color: #1a1815;
+}
+
+/* ─── فیلدهای فرم ─── */
+.admin-shell.dark-mode .field label {
+  color: var(--admin-text);
+}
+
+.admin-shell.dark-mode .field input,
+.admin-shell.dark-mode .field textarea,
+.admin-shell.dark-mode .field select,
+.admin-shell.dark-mode .checkout-field input,
+.admin-shell.dark-mode .checkout-field textarea {
+  background: var(--admin-surface-2);
+  border-color: var(--admin-border);
+  color: var(--admin-text);
+}
+
+.admin-shell.dark-mode .field input::placeholder,
+.admin-shell.dark-mode .field textarea::placeholder {
+  color: #6a6259;
+}
+
+.admin-shell.dark-mode .field input:focus,
+.admin-shell.dark-mode .field textarea:focus,
+.admin-shell.dark-mode .field select:focus {
+  border-color: var(--admin-primary);
+  box-shadow: 0 0 0 3px rgba(168, 130, 100, 0.2);
+}
+
+.admin-shell.dark-mode .field small {
+  color: var(--admin-text-muted);
+}
+
+/* ─── مودال ─── */
+.admin-shell.dark-mode .modal-container {
+  background: var(--admin-surface);
+  border-color: var(--admin-border);
+}
+
+.admin-shell.dark-mode .modal-header {
+  border-bottom-color: var(--admin-border);
+}
+
+.admin-shell.dark-mode .modal-header h2 {
+  color: var(--admin-text);
+}
+
+.admin-shell.dark-mode .modal-header p {
+  color: var(--admin-text-muted);
+}
+
+.admin-shell.dark-mode .modal-close-btn {
+  background: var(--admin-surface-2);
+  border-color: var(--admin-border);
+  color: var(--admin-text-muted);
+}
+
+.admin-shell.dark-mode .modal-close-btn:hover {
+  background: var(--admin-hover);
+  color: var(--admin-text);
+}
+
+.admin-shell.dark-mode .modal-footer {
+  background: var(--admin-surface-2);
+  border-top-color: var(--admin-border);
+}
+
+/* ─── ورودی جستجو ─── */
+.admin-shell.dark-mode .search-box,
+.admin-shell.dark-mode .category-search-box {
+  background: var(--admin-surface);
+  border-color: var(--admin-border);
+}
+
+.admin-shell.dark-mode .search-box input,
+.admin-shell.dark-mode .category-search-box input {
+  color: var(--admin-text);
+}
+
+.admin-shell.dark-mode .search-box input::placeholder {
+  color: #6a6259;
+}
+
+/* ─── لیست محصولات/دسته‌ها/میزها ─── */
+.admin-shell.dark-mode .products-list-header,
+.admin-shell.dark-mode .categories-list-header,
+.admin-shell.dark-mode .themes-list-header {
+  background: var(--admin-surface-2);
+  border-bottom-color: var(--admin-border);
+  color: var(--admin-text-muted);
+}
+
+.admin-shell.dark-mode .product-list-row,
+.admin-shell.dark-mode .category-list-row,
+.admin-shell.dark-mode .theme-list-row {
+  background: var(--admin-surface);
+  border-bottom-color: var(--admin-border);
+  color: var(--admin-text);
+}
+
+.admin-shell.dark-mode .product-list-row:hover,
+.admin-shell.dark-mode .category-list-row:hover,
+.admin-shell.dark-mode .theme-list-row:hover {
+  background: var(--admin-hover);
+}
+
+.admin-shell.dark-mode .list-product-name strong,
+.admin-shell.dark-mode .category-name-wrapper strong {
+  color: var(--admin-text);
+}
+
+.admin-shell.dark-mode .list-col-price,
+.admin-shell.dark-mode .list-col-category {
+  color: var(--admin-text-muted);
+}
+
+/* ─── کارت‌های سفارش ─── */
+.admin-shell.dark-mode .order-body,
+.admin-shell.dark-mode .order-body strong,
+.admin-shell.dark-mode .order-time {
+  color: var(--admin-text);
+}
+
+.admin-shell.dark-mode .order-time {
+  background: var(--admin-surface-2);
+  color: var(--admin-text-muted);
+}
+
+.admin-shell.dark-mode .order-body {
+  color: var(--admin-text-muted);
+}
+
+.admin-shell.dark-mode .order-body strong {
+  color: var(--admin-text);
+}
+
+.admin-shell.dark-mode .order-header {
+  border-bottom-color: var(--admin-border);
+}
+
+/* ─── داشبورد ─── */
+.admin-shell.dark-mode .chart-card {
+  background: var(--admin-surface);
+  border-color: var(--admin-border);
+}
+
+.admin-shell.dark-mode .chart-bar-wrapper {
+  background: var(--admin-surface-2);
+  border-color: var(--admin-border);
+}
+
+.admin-shell.dark-mode .chart-col-value,
+.admin-shell.dark-mode .chart-col-label {
+  color: var(--admin-text-muted);
+}
+
+.admin-shell.dark-mode .top-product-rank {
+  background: var(--admin-surface-2);
+  color: var(--admin-primary);
+}
+
+.admin-shell.dark-mode .top-product-bar {
+  background: var(--admin-surface-2);
+}
+
+/* ─── کوپن ─── */
+.admin-shell.dark-mode .coupon-code {
+  background: var(--admin-surface-2);
+  color: var(--admin-primary);
+}
+
+.admin-shell.dark-mode .coupon-row {
+  color: var(--admin-text);
+  border-bottom-color: var(--admin-border);
+}
+
+.admin-shell.dark-mode .coupon-row span {
+  color: var(--admin-text-muted);
+}
+
+.admin-shell.dark-mode .coupon-row strong {
+  color: var(--admin-text);
+}
+
+.admin-shell.dark-mode .coupon-option {
+  background: var(--admin-surface);
+  border-color: var(--admin-border);
+}
+
+.admin-shell.dark-mode .coupon-option:hover {
+  background: var(--admin-hover);
+  border-color: #5a5247;
+}
+
+.admin-shell.dark-mode .coupon-option:has(input:checked) {
+  background: rgba(168, 130, 100, 0.15);
+  border-color: var(--admin-primary);
+  box-shadow: 0 0 0 3px rgba(168, 130, 100, 0.15);
+}
+
+.admin-shell.dark-mode .coupon-option-content strong {
+  color: var(--admin-text);
+}
+
+.admin-shell.dark-mode .coupon-option-content small {
+  color: var(--admin-text-muted);
+}
+
+.admin-shell.dark-mode .coupon-toggle-card {
+  background: var(--admin-surface);
+  border-color: var(--admin-border);
+}
+
+.admin-shell.dark-mode .coupon-toggle-info strong {
+  color: var(--admin-text);
+}
+
+.admin-shell.dark-mode .coupon-toggle-info small {
+  color: var(--admin-text-muted);
+}
+
+/* ─── تنظیمات ─── */
+.admin-shell.dark-mode .legend {
+  background: var(--admin-surface-2);
+  color: var(--admin-text-muted);
+}
+
+.admin-shell.dark-mode .contact-card,
+.admin-shell.dark-mode .toggle-row,
+.admin-shell.dark-mode .place-row,
+.admin-shell.dark-mode .imgf-box,
+.admin-shell.dark-mode .gal-add,
+.admin-shell.dark-mode .image-upload-box,
+.admin-shell.dark-mode .font-upload-box {
+  background: var(--admin-surface-2);
+  border-color: var(--admin-border);
+}
+
+.admin-shell.dark-mode .place-chip {
+  background: var(--admin-surface);
+  border-color: var(--admin-border);
+  color: var(--admin-text);
+}
+
+.admin-shell.dark-mode .place-chip.on {
+  background: var(--admin-primary);
+  border-color: var(--admin-primary);
+  color: #1a1815;
+}
+
+.admin-shell.dark-mode .toggle-row strong {
+  color: var(--admin-text);
+}
+
+.admin-shell.dark-mode .toggle-row small {
+  color: var(--admin-text-muted);
+}
+
+/* ─── تم‌ها ─── */
+.admin-shell.dark-mode .theme-color-preview {
+  border-color: var(--admin-border);
+}
+
+.admin-shell.dark-mode .theme-detail-empty {
+  background: var(--admin-surface);
+  border-color: var(--admin-border);
+}
+
+.admin-shell.dark-mode .theme-detail-empty h2 {
+  color: var(--admin-text);
+}
+
+.admin-shell.dark-mode .theme-detail-empty p {
+  color: var(--admin-text-muted);
+}
+
+.admin-shell.dark-mode .theme-list-row.selected {
+  background: var(--admin-hover);
+}
+
+.admin-shell.dark-mode .color-field {
+  background: var(--admin-surface-2);
+  border-color: var(--admin-border);
+}
+
+.admin-shell.dark-mode .color-field span {
+  color: var(--admin-text);
+}
+
+.admin-shell.dark-mode .theme-activate-box {
+  background: var(--admin-surface-2);
+  border-color: var(--admin-border);
+}
+
+.admin-shell.dark-mode .theme-activate-box strong {
+  color: var(--admin-text);
+}
+
+.admin-shell.dark-mode .theme-activate-box p {
+  color: var(--admin-text-muted);
+}
+
+/* ─── منوی موبایل ─── */
+@media (max-width: 768px) {
+  .admin-shell.dark-mode .admin-mobile-nav {
+    background: var(--admin-surface);
+    border-top-color: var(--admin-border);
+  }
+
+  .admin-shell.dark-mode .admin-mobile-item {
+    color: var(--admin-text-muted);
+  }
+
+  .admin-shell.dark-mode .admin-mobile-item.active {
+    color: var(--admin-primary);
+    background: var(--admin-hover);
+  }
+}
+
+/* ─── متن‌های خالی ─── */
+.admin-shell.dark-mode .products-list-empty,
+.admin-shell.dark-mode .categories-list-empty,
+.admin-shell.dark-mode .themes-empty {
+  color: var(--admin-text-muted);
+}
+
+/* ─── پیام‌های موفقیت/خطا ─── */
+.admin-shell.dark-mode .admin-message {
+  background: rgba(71, 112, 82, 0.2);
+  color: #8cc79a;
+}
+
+.admin-shell.dark-mode .admin-error {
+  background: rgba(155, 60, 50, 0.2);
+  color: #d97a6c;
+}
+/* ========================================
+   55. ADMIN DARK MODE - FIXES
+   ======================================== */
+
+/* ─── عنوان بخش‌های داشبورد ─── */
+.admin-shell.dark-mode .dashboard-section h2,
+.admin-shell.dark-mode .section-header h2,
+.admin-shell.dark-mode .dashboard-section-title {
+  color: var(--admin-text);
+}
+
+/* ─── عنوان کارت‌ها ─── */
+.admin-shell.dark-mode .card-title h2,
+.admin-shell.dark-mode .admin-main h1,
+.admin-shell.dark-mode .admin-main h2,
+.admin-shell.dark-mode .admin-main h3,
+.admin-shell.dark-mode .admin-main h4 {
+  color: var(--admin-text);
+}
+
+.admin-shell.dark-mode .admin-main p {
+  color: var(--admin-text-muted);
+}
+
+/* ─── عنوان‌های داخل کارت (info-card) ─── */
+.admin-shell.dark-mode .info-card h3 {
+  color: var(--admin-primary);
+  border-bottom-color: var(--admin-border);
+}
+
+.admin-shell.dark-mode .info-row {
+  color: var(--admin-text-muted);
+  border-bottom-color: var(--admin-border);
+}
+
+.admin-shell.dark-mode .total-row {
+  color: var(--admin-primary);
+  border-top-color: var(--admin-border);
+}
+
+/* ─── خلاصه پرداخت (تخفیف) ─── */
+.admin-shell.dark-mode .info-row.discount {
+  color: #8cc79a;
+}
+
+.admin-shell.dark-mode .info-row.discount strong {
+  color: #8cc79a !important;
+}
+
+/* ─── کارت خوش‌آمد (نمی‌خوایم تغییر کنه - یه accent رنگیه) ─── */
+/* اگه بخوای می‌تونی کامنت رو برداری تا dark‌تر بشه: */
+/* .admin-shell.dark-mode .dashboard-welcome {
+  background: linear-gradient(135deg, #3d2f24 0%, #5a4230 100%);
+} */
+
+/* ─── پرفروش‌ترین محصولات ─── */
+.admin-shell.dark-mode .top-product-info strong {
+  color: var(--admin-text);
+}
+
+.admin-shell.dark-mode .top-product-info small {
+  color: var(--admin-text-muted);
+}
+
+/* ─── empty states ─── */
+.admin-shell.dark-mode .empty-admin,
+.admin-shell.dark-mode .products-list-empty,
+.admin-shell.dark-mode .categories-list-empty,
+.admin-shell.dark-mode .themes-empty {
+  color: var(--admin-text-muted);
+}
+
+/* ─── بج‌های وضعیت ─── */
+.admin-shell.dark-mode .status.active {
+  background: rgba(71, 112, 82, 0.25);
+  color: #8cc79a;
+}
+
+.admin-shell.dark-mode .status.inactive {
+  background: rgba(118, 111, 100, 0.25);
+  color: #b8b0a6;
+}
+
+.admin-shell.dark-mode .coupon-badge.active {
+  background: rgba(71, 112, 82, 0.25);
+  color: #8cc79a;
+}
+
+.admin-shell.dark-mode .coupon-badge.inactive {
+  background: rgba(118, 111, 100, 0.25);
+  color: #b8b0a6;
+}
+
+.admin-shell.dark-mode .coupon-badge.expired {
+  background: rgba(155, 60, 50, 0.25);
+  color: #d97a6c;
+}
+
+.admin-shell.dark-mode .coupon-badge.pending {
+  background: rgba(217, 159, 89, 0.2);
+  color: #e0b478;
+}
+
+/* ─── جدول فاکتور ─── */
+.admin-shell.dark-mode .print-invoice-table th {
+  background: var(--admin-surface-2);
+  color: var(--admin-text);
+  border-color: var(--admin-border);
+}
+
+.admin-shell.dark-mode .print-invoice-table td {
+  background: var(--admin-surface);
+  color: var(--admin-text);
+  border-color: var(--admin-border);
+}
+
+.admin-shell.dark-mode .print-invoice-table tfoot td {
+  background: var(--admin-surface-2);
+  border-top-color: var(--admin-primary);
+}
+
+/* ─── separator/divider ─── */
+.admin-shell.dark-mode .sec-divider {
+  border-top-color: var(--admin-border);
+}
+
+/* ─── اسکرول‌بار (اختیاری) ─── */
+.admin-shell.dark-mode ::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.admin-shell.dark-mode ::-webkit-scrollbar-track {
+  background: var(--admin-bg);
+}
+
+.admin-shell.dark-mode ::-webkit-scrollbar-thumb {
+  background: var(--admin-border);
+  border-radius: 5px;
+}
+
+.admin-shell.dark-mode ::-webkit-scrollbar-thumb:hover {
+  background: #5a5247;
+}

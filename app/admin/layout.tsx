@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabaseBrowser } from '@/lib/supabase/client'
+import AdminThemeToggle from './components/AdminThemeToggle'
 
 export default function AdminLayout({
   children,
@@ -15,6 +16,13 @@ export default function AdminLayout({
   const [checking, setChecking] = useState(true)
 
   useEffect(() => {
+    // ✅ اعمال تم ذخیره‌شده قبل از هر چیز
+    try {
+      if (localStorage.getItem('cafe-park-admin-theme') === 'dark') {
+        document.querySelector('.admin-shell')?.classList.add('dark-mode')
+      }
+    } catch {}
+
     if (pathname === '/admin/login') {
       setChecking(false)
       return
@@ -34,6 +42,18 @@ export default function AdminLayout({
 
     checkUser()
   }, [pathname, router])
+
+  // ✅ اعمال تم بعد از mount (برای صفحه‌های بعدی)
+  useEffect(() => {
+    try {
+      const isDark =
+        localStorage.getItem('cafe-park-admin-theme') === 'dark'
+      const shell = document.querySelector('.admin-shell')
+      if (shell) {
+        shell.classList.toggle('dark-mode', isDark)
+      }
+    } catch {}
+  }, [pathname])
 
   // صفحه لاگین منو نداره
   if (pathname === '/admin/login') {
@@ -58,7 +78,7 @@ export default function AdminLayout({
     { href: '/admin/tables', label: 'میزها', icon: '🪑' },
     { href: '/admin/themes', label: 'تم‌ها', icon: '🎨' },
     { href: '/admin/quotes', label: 'جملات', icon: '💬' },
-    { href: '/admin/coupons', label: 'کد تخفیف', icon: '🎟️' },   // ← جدید
+    { href: '/admin/coupons', label: 'کد تخفیف', icon: '🎟️' },
     { href: '/admin/settings', label: 'تنظیمات', icon: '⚙️' },
   ]
 
@@ -101,6 +121,9 @@ export default function AdminLayout({
             <span className="admin-nav-icon">🌐</span>
             <span>مشاهده منو</span>
           </Link>
+
+          {/* ✅ دکمه تغییر تم */}
+          <AdminThemeToggle />
 
           <button onClick={handleLogout} className="admin-logout-btn">
             <span className="admin-nav-icon">🚪</span>
