@@ -7,6 +7,7 @@ import { supabaseBrowser } from '@/lib/supabase/client'
 import AdminThemeToggle from './components/AdminThemeToggle'
 import NewOrderAlert from './components/NewOrderAlert'
 import { useOrderNotifications } from '@/lib/use-order-notifications'
+import { useDocumentTitle } from '@/lib/use-document-title'
 
 export default function AdminLayout({
   children,
@@ -25,6 +26,7 @@ export default function AdminLayout({
     dismissOrder,
     dismissAll,
   } = useOrderNotifications(!isLoginPage)
+    useDocumentTitle(pendingCount)
 
   useEffect(() => {
     try {

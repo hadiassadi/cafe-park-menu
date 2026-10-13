@@ -4,6 +4,7 @@ import localFont from 'next/font/local'
 import { getSettings } from '@/lib/menu'
 import { SITE_URL } from '@/lib/site'
 import { CartProvider } from '@/lib/cart-context'
+import { useDocumentTitle } from '@/lib/use-document-title'
 
 // اگر فایل‌های Medium و Bold را هم داری، این‌جا اضافه‌شان کن
 // تا font-weight 500/700 مصنوعی ساخته نشود:
