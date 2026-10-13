@@ -3,6 +3,7 @@ import type { Metadata, Viewport } from 'next'
 import localFont from 'next/font/local'
 import { getSettings } from '@/lib/menu'
 import { SITE_URL } from '@/lib/site'
+import { CartProvider } from '@/lib/cart-context'
 
 // اگر فایل‌های Medium و Bold را هم داری، این‌جا اضافه‌شان کن
 // تا font-weight 500/700 مصنوعی ساخته نشود:
@@ -17,7 +18,7 @@ const vazir = localFont({
   variable: '--font-vazir',
 })
 
-// عنوان و پیش‌نمایش لینک از «تنظیمات» در پنل ادمین می‌آید
+// ─── متادیتای داینامیک (از تنظیمات پنل ادمین) ───
 export async function generateMetadata(): Promise<Metadata> {
   const s = await getSettings().catch(() => null)
 
@@ -26,17 +27,77 @@ export async function generateMetadata(): Promise<Metadata> {
   const description =
     s?.tagline?.trim() || `منوی آنلاین ${name} — قهوه، نوشیدنی و غذا`
 
+  // آدرس تصویر پیش‌نمایش
+  const ogImage =
+    s?.og_image_url?.trim() || s?.logo_url?.trim() || '/icons/icon-512.png'
+
   const metadata: Metadata = {
     metadataBase: new URL(SITE_URL),
     title: { default: baseTitle, template: `%s | ${name}` },
     description,
+
+    // ✅ کلیدواژه‌های جستجو
+    keywords: [
+      name,
+      'کافه',
+      'منو',
+      'منوی آنلاین',
+      'قهوه',
+      'نوشیدنی',
+      'غذا',
+      'پارک سلامت',
+      'شیراز',
+    ],
+
+    // ✅ اطلاعات پدیدآورنده
+    applicationName: name,
+    authors: [{ name }],
+    creator: name,
+    publisher: name,
+
+    // ✅ آدرس اصلی صفحه (برای جلوگیری از محتوای تکراری)
+    alternates: {
+      canonical: '/',
+    },
+
+    // ✅ راهنمای ربات‌های جستجو
+    robots: {
+      index: true,
+      follow: true,
+      googleBot: {
+        index: true,
+        follow: true,
+        'max-image-preview': 'large',
+        'max-snippet': -1,
+        'max-video-preview': -1,
+      },
+    },
+
+    // ✅ PWA
+    manifest: '/manifest.webmanifest',
+    formatDetection: {
+      telephone: false,
+    },
+    appleWebApp: {
+      capable: true,
+      title: name,
+      statusBarStyle: 'default',
+    },
+
+    // ✅ فاویکون‌ها
+    icons: {
+      icon: [
+        { url: '/icons/favicon-32x32.png', sizes: '32x32', type: 'image/png' },
+        { url: '/icons/favicon-16x16.png', sizes: '16x16', type: 'image/png' },
+      ],
+      apple: [{ url: '/icons/apple-touch-icon.png', sizes: '180x180' }],
+      },
   }
 
   // اگر پیش‌نمایش لینک فعال باشد (پیش‌فرض: فعال)
   if (s?.og_enabled !== false) {
     const ogTitle = s?.og_title?.trim() || baseTitle
     const ogDescription = s?.og_description?.trim() || description
-    const ogImage = s?.og_image_url?.trim()
 
     metadata.openGraph = {
       title: ogTitle,
@@ -45,35 +106,49 @@ export async function generateMetadata(): Promise<Metadata> {
       type: 'website',
       siteName: name,
       url: '/',
-      ...(ogImage ? { images: [{ url: ogImage }] } : {}),
+      images: [
+        {
+          url: ogImage,
+          width: 1200,
+          height: 630,
+          alt: name,
+        },
+      ],
     }
+
     metadata.twitter = {
-      card: ogImage ? 'summary_large_image' : 'summary',
+      card: 'summary_large_image',
       title: ogTitle,
       description: ogDescription,
-      ...(ogImage ? { images: [ogImage] } : {}),
+      images: [ogImage],
     }
   }
 
   return metadata
 }
 
+// ─── Viewport ───
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   maximumScale: 5,
+  userScalable: true,
   themeColor: '#6b4f3a',
 }
 
-import { CartProvider } from '@/lib/cart-context'
-
+// ─── Root Layout ───
 export default function RootLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
   return (
-    <html lang="fa-IR" dir="rtl" className={vazir.variable} suppressHydrationWarning>
+    <html
+      lang="fa-IR"
+      dir="rtl"
+      className={vazir.variable}
+      suppressHydrationWarning
+    >
       <body>
         <CartProvider>{children}</CartProvider>
       </body>

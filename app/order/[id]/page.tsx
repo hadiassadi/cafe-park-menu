@@ -7,6 +7,13 @@ import { createClient } from '@supabase/supabase-js'
 const formatPrice = (price: number) =>
   new Intl.NumberFormat('fa-IR').format(price)
 
+// فرمت شمارش معکوس: 4:35
+function formatCountdown(seconds: number): string {
+  const m = Math.floor(seconds / 60)
+  const s = seconds % 60
+  return `${m}:${s.toString().padStart(2, '0')}`
+}
+
 type OrderItem = {
   product_name: string
   option_name: string | null
@@ -45,6 +52,15 @@ export default function OrderPage({
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  // ✅ State های مربوط به لغو
+  const [cancelling, setCancelling] = useState(false)
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false)
+  const [cancelError, setCancelError] = useState<string | null>(null)
+  const [cancelSuccess, setCancelSuccess] = useState(false)
+  const [canCancel, setCanCancel] = useState(false)
+  const [secondsLeft, setSecondsLeft] = useState(0)
+
+  // ✅ بارگذاری اولیه سفارش
   useEffect(() => {
     async function load() {
       const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -71,6 +87,7 @@ export default function OrderPage({
     load()
   }, [id])
 
+  // ✅ بروزرسانی خودکار هر ۱۰ ثانیه
   useEffect(() => {
     if (!order) return
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -90,16 +107,98 @@ export default function OrderPage({
     return () => clearInterval(interval)
   }, [id, order])
 
+  // ✅ تایمر شمارش معکوس برای دکمه لغو
+  useEffect(() => {
+    if (!order || order.status !== 'pending') {
+      setCanCancel(false)
+      setSecondsLeft(0)
+      return
+    }
+
+    const WINDOW_MS = 5 * 60 * 1000 // ۵ دقیقه
+    const createdAt = new Date(order.created_at).getTime()
+
+    function tick() {
+      const remaining = WINDOW_MS - (Date.now() - createdAt)
+
+      if (remaining <= 0) {
+        setCanCancel(false)
+        setSecondsLeft(0)
+        return false
+      }
+
+      setCanCancel(true)
+      setSecondsLeft(Math.floor(remaining / 1000))
+      return true
+    }
+
+    if (!tick()) return
+
+    const interval = setInterval(() => {
+      if (!tick()) clearInterval(interval)
+    }, 1000)
+
+    return () => clearInterval(interval)
+  }, [order])
+
+  // ✅ لغو سفارش توسط مشتری
+  async function handleCancelOrder() {
+    if (!order) return
+    setCancelling(true)
+    setCancelError(null)
+
+    try {
+      const res = await fetch('/api/orders/cancel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          orderId: order.id,
+          phone: order.customer_phone,
+        }),
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        throw new Error(data.error || 'خطا در لغو سفارش')
+      }
+
+      setOrder({ ...order, status: 'cancelled' })
+      setCancelSuccess(true)
+      setShowCancelConfirm(false)
+
+      setTimeout(() => setCancelSuccess(false), 3000)
+    } catch (err) {
+      setCancelError(err instanceof Error ? err.message : 'خطا')
+    } finally {
+      setCancelling(false)
+    }
+  }
+
   if (loading) {
-    return <div className="order-detail-container" style={{ textAlign: 'center', paddingTop: '50px' }}>در حال بارگذاری سفارش...</div>
+    return (
+      <div
+        className="order-detail-container"
+        style={{ textAlign: 'center', paddingTop: '50px' }}
+      >
+        در حال بارگذاری سفارش...
+      </div>
+    )
   }
 
   if (error || !order) {
     return (
-      <div className="order-detail-container" style={{ textAlign: 'center', paddingTop: '50px' }}>
+      <div
+        className="order-detail-container"
+        style={{ textAlign: 'center', paddingTop: '50px' }}
+      >
         <div style={{ fontSize: 48 }}>😕</div>
         <h1>{error || 'خطا'}</h1>
-        <Link href="/" className="btn primary-btn" style={{ marginTop: '20px', display: 'inline-flex' }}>
+        <Link
+          href="/"
+          className="btn primary-btn"
+          style={{ marginTop: '20px', display: 'inline-flex' }}
+        >
           بازگشت به منو
         </Link>
       </div>
@@ -117,7 +216,14 @@ export default function OrderPage({
   return (
     <div className="order-detail-container">
       {/* هدر صفحه */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginBottom: '10px',
+        }}
+      >
         <Link href="/" className="btn" style={{ padding: '6px 12px' }}>
           ← منو
         </Link>
@@ -129,10 +235,15 @@ export default function OrderPage({
 
       {/* استپر وضعیت */}
       {isCancelled ? (
-        <div className="info-card" style={{ textAlign: 'center', padding: '30px' }}>
+        <div
+          className="info-card"
+          style={{ textAlign: 'center', padding: '30px' }}
+        >
           <div style={{ fontSize: 48 }}>❌</div>
           <h2 style={{ color: '#9b3c32' }}>سفارش لغو شد</h2>
-          <p style={{ color: '#766f64' }}>این سفارش توسط کافه لغو شده است.</p>
+          <p style={{ color: '#766f64' }}>
+            این سفارش لغو شده است.
+          </p>
         </div>
       ) : (
         <div className="status-stepper">
@@ -142,7 +253,9 @@ export default function OrderPage({
             return (
               <div
                 key={step.key}
-                className={`step-item ${isDone ? 'done' : ''} ${isCurrent ? 'active' : ''}`}
+                className={`step-item ${isDone ? 'done' : ''} ${
+                  isCurrent ? 'active' : ''
+                }`}
               >
                 <div className="step-dot">{isDone ? step.icon : ''}</div>
                 <span>{step.label}</span>
@@ -156,18 +269,31 @@ export default function OrderPage({
       <div className="info-card">
         <h3>🧾 اقلام سفارش</h3>
         {order.table_number && (
-          <div style={{ fontSize: '13px', color: '#6b4f3a', marginBottom: '10px' }}>
+          <div
+            style={{
+              fontSize: '13px',
+              color: '#6b4f3a',
+              marginBottom: '10px',
+            }}
+          >
             📍 میز شماره {formatPrice(order.table_number)}
           </div>
         )}
-        
+
         {order.items.map((item, idx) => (
           <div key={idx} className="info-row">
             <span>
               {formatPrice(item.quantity)} × {item.product_name}
-              {item.option_name && <small style={{ color: '#766f64' }}> ({item.option_name})</small>}
+              {item.option_name && (
+                <small style={{ color: '#766f64' }}>
+                  {' '}
+                  ({item.option_name})
+                </small>
+              )}
             </span>
-            <strong>{formatPrice(item.unit_price * item.quantity)} تومان</strong>
+            <strong>
+              {formatPrice(item.unit_price * item.quantity)} تومان
+            </strong>
           </div>
         ))}
 
@@ -195,6 +321,103 @@ export default function OrderPage({
           </div>
         )}
       </div>
+
+      {/* ✅ دکمه لغو سفارش (فقط تا ۵ دقیقه) */}
+      {canCancel && (
+        <div className="order-cancel-section">
+          <button
+            type="button"
+            className="order-cancel-btn"
+            onClick={() => setShowCancelConfirm(true)}
+            disabled={cancelling}
+          >
+            ❌ لغو سفارش
+          </button>
+          <p className="order-cancel-hint">
+            ⏱ تا {formatCountdown(secondsLeft)} فرصت داری سفارشت رو لغو کنی
+          </p>
+        </div>
+      )}
+
+      {/* ✅ پیام موفقیت لغو */}
+      {cancelSuccess && (
+        <div className="order-cancel-success">
+          ✅ سفارش با موفقیت لغو شد
+        </div>
+      )}
+
+      {/* ✅ مودال تأیید لغو */}
+      {showCancelConfirm && (
+        <div
+          className="modal-overlay"
+          onClick={() => !cancelling && setShowCancelConfirm(false)}
+        >
+          <div
+            className="modal-container modal-sm"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-header">
+              <div className="modal-header-content">
+                <h2>لغو سفارش</h2>
+                <p>مطمئنی می‌خوای سفارش رو لغو کنی؟</p>
+              </div>
+              <button
+                type="button"
+                className="modal-close-btn"
+                onClick={() => setShowCancelConfirm(false)}
+                disabled={cancelling}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="modal-body">
+              <p
+                style={{
+                  fontSize: '13px',
+                  color: '#766f64',
+                  lineHeight: 1.8,
+                }}
+              >
+                بعد از لغو، سفارش از سیستم حذف می‌شه و قابل بازگشت نیست.
+              </p>
+
+              {cancelError && (
+                <div
+                  className="checkout-error"
+                  style={{ marginTop: '12px' }}
+                >
+                  ❌ {cancelError}
+                </div>
+              )}
+            </div>
+
+            <div className="modal-footer">
+              <button
+                type="button"
+                className="btn"
+                onClick={() => setShowCancelConfirm(false)}
+                disabled={cancelling}
+              >
+                انصراف
+              </button>
+              <button
+                type="button"
+                className="btn"
+                style={{
+                  background: '#9b3c32',
+                  color: '#fff',
+                  border: 0,
+                }}
+                onClick={handleCancelOrder}
+                disabled={cancelling}
+              >
+                {cancelling ? '...' : 'بله، لغو کن'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* دکمه ثابت پایین صفحه (واتساپ) */}
       <div className="sticky-action-bar">

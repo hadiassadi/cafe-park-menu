@@ -3,10 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+	"build:icons": "node scripts/build-icons.mjs",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
+    "icons": "node scripts/generate-icons.mjs",
+    "transparent": "node scripts/make-transparent.mjs",
     "backup": "node scripts/backup.mjs",
     "backup:clean": "node scripts/backup.mjs --clean",
     "backup:schedule": "node scripts/schedule-backup.mjs",

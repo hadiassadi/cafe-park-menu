@@ -1,246 +1,207 @@
-import { supabaseServer } from '@/lib/supabase/server'
+// app/admin/page.tsx
 import Link from 'next/link'
-import Image from 'next/image'
+import { getOrderStats } from '@/lib/stats'
 
 export const dynamic = 'force-dynamic'
+export const revalidate = 60
+
+const formatPrice = (price: number) =>
+  new Intl.NumberFormat('fa-IR').format(Math.round(price))
 
 export default async function AdminDashboard() {
-  const db = await supabaseServer()
+  const stats = await getOrderStats()
 
-  const [
-    categoriesRes,
-    productsRes,
-    quotesRes,
-    themesRes,
-    recentProductsRes,
-  ] = await Promise.all([
-    db
-      .from('categories')
-      .select('id', { count: 'exact', head: true }),
-
-    db.from('products').select('id, is_active, is_featured'),
-
-    db
-      .from('quotes')
-      .select('id', { count: 'exact', head: true }),
-
-    db
-      .from('themes')
-      .select('id', { count: 'exact', head: true }),
-
-    db
-      .from('products')
-      .select('id, name, price, image_url, is_active, created_at')
-      .order('created_at', { ascending: false })
-      .limit(5),
-  ])
-
-  const products = productsRes.data ?? []
-  const activeProducts = products.filter((p) => p.is_active).length
-  const featuredProducts = products.filter((p) => p.is_featured).length
-
-  const stats = [
-    {
-      label: 'دسته‌بندی‌ها',
-      value: categoriesRes.count ?? 0,
-      icon: '📂',
-      href: '/admin/categories',
-      color: '#6b4f3a',
-    },
-    {
-      label: 'محصولات',
-      value: products.length,
-      icon: '☕',
-      href: '/admin/products',
-      color: '#9a6b3f',
-    },
-    {
-      label: 'جملات',
-      value: quotesRes.count ?? 0,
-      icon: '💬',
-      href: '/admin/quotes',
-      color: '#477052',
-    },
-    {
-      label: 'قالب‌ها',
-      value: themesRes.count ?? 0,
-      icon: '🎨',
-      href: '/admin/themes',
-      color: '#66523c',
-    },
-  ]
-
-  const quickLinks = [
-    {
-      label: 'افزودن محصول',
-      icon: '➕',
-      href: '/admin/products',
-      desc: 'محصول جدید به منو اضافه کن',
-    },
-    {
-      label: 'ویرایش تنظیمات',
-      icon: '⚙️',
-      href: '/admin/settings',
-      desc: 'نام، شعار، تماس',
-    },
-    {
-      label: 'مدیریت جملات',
-      icon: '💬',
-      href: '/admin/quotes',
-      desc: 'جمله روز کافه',
-    },
-    {
-      label: 'ویرایش قالب',
-      icon: '🎨',
-      href: '/admin/themes',
-      desc: 'رنگ و فونت منو',
-    },
-  ]
-
-  const formatPrice = (price: number) =>
-    new Intl.NumberFormat('fa-IR').format(price)
+  // بالاترین فروش در ۷ روز اخیر (برای ارتفاع نمودار)
+  const maxRevenue = Math.max(...stats.dailyRevenue.map((d) => d.revenue), 1)
 
   return (
     <div className="dashboard">
       {/* خوش‌آمد */}
       <div className="dashboard-welcome">
-        <div>
-          <h1>سلام 👋</h1>
-          <p>به پنل مدیریت کافه پارک خوش اومدی</p>
-        </div>
+        <h1>👋 خوش آمدی</h1>
+        <p>خلاصه عملکرد کافه پارک در یک نگاه</p>
       </div>
 
       {/* کارت‌های آمار */}
       <section className="dashboard-section">
-        <h2>📊 آمار کلی</h2>
-
+        <h2>📊 آمار فروش</h2>
         <div className="stats-grid">
-          {stats.map((stat) => (
-            <Link
-              key={stat.label}
-              href={stat.href}
-              className="stat-card"
-            >
-              <span
-                className="stat-icon"
-                style={{ background: `${stat.color}15` }}
-              >
-                {stat.icon}
-              </span>
+          <div className="stat-card">
+            <div className="stat-icon" style={{ background: '#e5f0e6' }}>
+              🛒
+            </div>
+            <div className="stat-content">
+              <div className="stat-value">{formatPrice(stats.today.orders)}</div>
+              <div className="stat-label">سفارش امروز</div>
+            </div>
+          </div>
 
-              <div className="stat-content">
-                <div className="stat-value">{stat.value}</div>
-                <div className="stat-label">{stat.label}</div>
-              </div>
-            </Link>
-          ))}
+          <div className="stat-card">
+            <div className="stat-icon" style={{ background: '#eee6d9' }}>
+              💰
+            </div>
+            <div className="stat-content">
+              <div className="stat-value">{formatPrice(stats.today.revenue)}</div>
+              <div className="stat-label">فروش امروز (تومان)</div>
+            </div>
+          </div>
+
+          <div className="stat-card">
+            <div className="stat-icon" style={{ background: '#f0e6f0' }}>
+              📅
+            </div>
+            <div className="stat-content">
+              <div className="stat-value">{formatPrice(stats.week.orders)}</div>
+              <div className="stat-label">سفارش این هفته</div>
+            </div>
+          </div>
+
+          <div className="stat-card">
+            <div className="stat-icon" style={{ background: '#e6ecf0' }}>
+              📈
+            </div>
+            <div className="stat-content">
+              <div className="stat-value">{formatPrice(stats.week.revenue)}</div>
+              <div className="stat-label">فروش این هفته (تومان)</div>
+            </div>
+          </div>
+
+          <div className="stat-card">
+            <div className="stat-icon" style={{ background: '#f0eee6' }}>
+              🗓️
+            </div>
+            <div className="stat-content">
+              <div className="stat-value">{formatPrice(stats.month.orders)}</div>
+              <div className="stat-label">سفارش این ماه</div>
+            </div>
+          </div>
+
+          <div className="stat-card">
+            <div className="stat-icon" style={{ background: '#e6f0e5' }}>
+              💵
+            </div>
+            <div className="stat-content">
+              <div className="stat-value">{formatPrice(stats.month.revenue)}</div>
+              <div className="stat-label">فروش این ماه (تومان)</div>
+            </div>
+          </div>
         </div>
       </section>
 
-      {/* وضعیت محصولات */}
+      {/* نمودار فروش ۷ روز اخیر */}
       <section className="dashboard-section">
-        <h2>☕ وضعیت محصولات</h2>
-
-        <div className="status-grid">
-          <div className="status-card">
-            <div className="status-card-icon active">✅</div>
-            <div>
-              <div className="status-card-value">{activeProducts}</div>
-              <div className="status-card-label">محصول فعال</div>
-            </div>
-          </div>
-
-          <div className="status-card">
-            <div className="status-card-icon featured">⭐</div>
-            <div>
-              <div className="status-card-value">{featuredProducts}</div>
-              <div className="status-card-label">پیشنهاد کافه</div>
-            </div>
-          </div>
-
-          <div className="status-card">
-            <div className="status-card-icon inactive">⭕</div>
-            <div>
-              <div className="status-card-value">
-                {products.length - activeProducts}
-              </div>
-              <div className="status-card-label">غیرفعال</div>
-            </div>
+        <h2>📉 فروش ۷ روز اخیر</h2>
+        <div className="chart-card">
+          <div className="chart-bars">
+            {stats.dailyRevenue.map((day) => {
+              const height = maxRevenue > 0 ? (day.revenue / maxRevenue) * 100 : 0
+              return (
+                <div key={day.date} className="chart-col">
+                  <div className="chart-col-value">
+                    {day.revenue > 0 ? formatPrice(day.revenue) : ''}
+                  </div>
+                  <div className="chart-bar-wrapper">
+                    <div
+                      className="chart-bar"
+                      style={{ height: `${Math.max(height, 2)}%` }}
+                    />
+                  </div>
+                  <div className="chart-col-label">{day.label}</div>
+                </div>
+              )
+            })}
           </div>
         </div>
+      </section>
+
+      {/* پرفروش‌ترین محصولات */}
+      <section className="dashboard-section">
+        <h2>⭐ پرفروش‌ترین محصولات (۳۰ روز اخیر)</h2>
+        {stats.topProducts.length === 0 ? (
+          <div className="admin-card">
+            <p className="empty-admin">هنوز فروشی ثبت نشده است.</p>
+          </div>
+        ) : (
+          <div className="top-products-list">
+            {stats.topProducts.map((product, idx) => (
+              <div key={product.name} className="top-product-item">
+                <div className="top-product-rank">#{formatPrice(idx + 1)}</div>
+                <div className="top-product-info">
+                  <strong>{product.name}</strong>
+                  <small>
+                    {formatPrice(product.count)} عدد فروش ·{' '}
+                    {formatPrice(product.revenue)} تومان
+                  </small>
+                </div>
+                <div className="top-product-bar">
+                  <div
+                    className="top-product-bar-fill"
+                    style={{
+                      width: `${
+                        (product.count / stats.topProducts[0].count) * 100
+                      }%`,
+                    }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </section>
 
       {/* دسترسی سریع */}
       <section className="dashboard-section">
-        <h2>⚡ دسترسی سریع</h2>
-
+        <h2>🔗 دسترسی سریع</h2>
         <div className="quick-links-grid">
-          {quickLinks.map((link) => (
-            <Link
-              key={link.href}
-              href={link.href}
-              className="quick-link-card"
-            >
-              <span className="quick-link-icon">{link.icon}</span>
-              <div>
-                <strong>{link.label}</strong>
-                <small>{link.desc}</small>
-              </div>
-            </Link>
-          ))}
+          <Link href="/admin/orders" className="quick-link-card">
+            <div className="quick-link-icon">🛒</div>
+            <div>
+              <strong>سفارش‌ها</strong>
+              <small>مدیریت سفارش‌های در جریان</small>
+            </div>
+          </Link>
+
+          <Link href="/admin/products" className="quick-link-card">
+            <div className="quick-link-icon">🍽️</div>
+            <div>
+              <strong>محصولات</strong>
+              <small>افزودن و ویرایش منو</small>
+            </div>
+          </Link>
+
+          <Link href="/admin/categories" className="quick-link-card">
+            <div className="quick-link-icon">📂</div>
+            <div>
+              <strong>دسته‌ها</strong>
+              <small>دسته‌بندی محصولات</small>
+            </div>
+          </Link>
+
+          <Link href="/admin/tables" className="quick-link-card">
+            <div className="quick-link-icon">🪑</div>
+            <div>
+              <strong>میزها</strong>
+              <small>QR Code برای هر میز</small>
+            </div>
+          </Link>
+
+          <Link href="/admin/settings" className="quick-link-card">
+            <div className="quick-link-icon">⚙️</div>
+            <div>
+              <strong>تنظیمات</strong>
+              <small>اطلاعات کافه و ظاهر</small>
+            </div>
+          </Link>
+
+          <Link href="/" className="quick-link-card" target="_blank">
+            <div className="quick-link-icon">👁️</div>
+            <div>
+              <strong>مشاهده منو</strong>
+              <small>بازکردن منو در تب جدید</small>
+            </div>
+          </Link>
         </div>
       </section>
-
-      {/* آخرین محصولات */}
-      {recentProductsRes.data && recentProductsRes.data.length > 0 && (
-        <section className="dashboard-section">
-          <div className="section-header">
-            <h2>🆕 آخرین محصولات</h2>
-            <Link href="/admin/products" className="section-link">
-              مشاهده همه ←
-            </Link>
-          </div>
-
-          <div className="recent-products">
-            {recentProductsRes.data.map((product) => (
-              <div key={product.id} className="recent-product">
-                <div className="recent-product-image">
-                  {product.image_url ? (
-                    <Image
-                      src={product.image_url}
-                      alt={product.name}
-                      width={56}
-                      height={56}
-                    />
-                  ) : (
-                    <span>بدون عکس</span>
-                  )}
-                </div>
-
-                <div className="recent-product-info">
-                  <strong>{product.name}</strong>
-                  <small>{formatPrice(product.price)} تومان</small>
-                </div>
-
-                <span
-                  className={`recent-product-status ${
-                    product.is_active ? 'active' : 'inactive'
-                  }`}
-                >
-                  {product.is_active ? 'فعال' : 'غیرفعال'}
-                </span>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* مشاهده منو */}
-      <div className="dashboard-footer-link">
-        <Link href="/" target="_blank" className="btn primary-btn">
-          🌐 مشاهده منوی عمومی
-        </Link>
-      </div>
     </div>
   )
 }
