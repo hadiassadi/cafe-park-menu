@@ -11,6 +11,7 @@ type Category = {
   description: string | null
   sort_order: number | null
   is_active: boolean
+  coupon_eligible: boolean
 }
 
 type CategoriesManagerProps = {
@@ -38,6 +39,7 @@ export default function CategoriesManager({
   const [formDescription, setFormDescription] = useState('')
   const [formSortOrder, setFormSortOrder] = useState('0')
   const [formIsActive, setFormIsActive] = useState(true)
+  const [formCouponEligible, setFormCouponEligible] = useState(true)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
 
@@ -57,6 +59,7 @@ export default function CategoriesManager({
     setFormDescription('')
     setFormSortOrder('0')
     setFormIsActive(true)
+    setFormCouponEligible(true)
     setMessage(null)
     setIsModalOpen(true)
   }
@@ -68,6 +71,7 @@ export default function CategoriesManager({
     setFormDescription(category.description ?? '')
     setFormSortOrder(String(category.sort_order ?? 0))
     setFormIsActive(category.is_active)
+    setFormCouponEligible(category.coupon_eligible ?? true)
     setMessage(null)
     setIsModalOpen(true)
   }
@@ -92,6 +96,7 @@ export default function CategoriesManager({
       formData.append('description', formDescription)
       formData.append('sort_order', formSortOrder)
       if (formIsActive) formData.append('is_active', 'on')
+      if (formCouponEligible) formData.append('coupon_eligible', 'on')
 
       const result = editingCategory
         ? await updateCategory(formData)
@@ -191,6 +196,11 @@ export default function CategoriesManager({
                   >
                     {category.is_active ? 'فعال' : 'غیرفعال'}
                   </span>
+                  {category.coupon_eligible === false && (
+                    <span className="status coupon-off" title="این دسته از تخفیف مستثناست">
+                      🚫 تخفیف
+                    </span>
+                  )}
                 </div>
 
                 <div className="category-col-action">
@@ -315,8 +325,33 @@ export default function CategoriesManager({
             </div>
           </div>
 
+          {/* ✅ تنظیمات تخفیف */}
+          <div className="form-section-title" style={{ marginTop: 20 }}>
+            🎟️ تنظیمات تخفیف
+          </div>
+
+          <div className="coupon-toggle-card">
+            <div className="coupon-toggle-info">
+              <strong>شامل تخفیف شود</strong>
+              <small>
+                اگه فعال باشه، همه محصولات این دسته در کمپین‌های تخفیف شرکت
+                می‌کنن (مگر اینکه محصول استثنا شده باشه)
+              </small>
+            </div>
+            <label className="switch">
+              <input
+                type="checkbox"
+                checked={formCouponEligible}
+                onChange={(e) =>
+                  setFormCouponEligible(e.target.checked)
+                }
+              />
+              <span className="switch-track" />
+            </label>
+          </div>
+
           {editingCategory && (
-            <div className="check-row">
+            <div className="check-row" style={{ marginTop: 16 }}>
               <label className="check-label">
                 <input
                   type="checkbox"

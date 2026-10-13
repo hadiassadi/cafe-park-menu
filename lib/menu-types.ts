@@ -7,6 +7,7 @@ export type Category = {
   name: string
   icon: string | null
   sort_order: number
+  coupon_eligible?: boolean  // ✅ جدید: آیا این دسته شامل تخفیف می‌شه
 }
 
 /* ---------- واریانت‌ها ---------- */
@@ -48,6 +49,11 @@ export type Product = {
   allergens: string | null
   dietary_info: string | null
   variant_groups: VariantGroup[]
+  // ✅ جدید: تنظیم تخفیف محصول
+  // null   = از دسته‌بندی ارث ببر
+  // true   = همیشه شامل تخفیف
+  // false  = هرگز شامل تخفیف
+  coupon_eligible?: boolean | null
 }
 
 export type FontFile = {
@@ -159,4 +165,22 @@ export const DEFAULT_THEME: Theme = {
   font_black_url: null,
   font_metadata: null,
   border_radius: 10,
+}
+// ✅ کوپن تخفیف
+export type Coupon = {
+  id: string
+  code: string
+  description: string | null
+  discount_type: 'percent' | 'fixed'
+  discount_value: number
+  min_order_amount: number
+  max_order_amount: number | null  // ✅ جدید: حداکثر مبلغ سفارش
+  max_discount: number | null
+  max_uses: number | null
+  used_count: number
+  valid_from: string
+  valid_until: string | null
+  is_active: boolean
+  created_at: string
+  updated_at: string
 }

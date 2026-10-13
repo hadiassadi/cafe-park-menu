@@ -973,9 +973,9 @@ footer {
     min-height: 44px;
   }
 
-  .admin-mobile-nav {
+    .admin-mobile-nav {
     display: grid;
-    grid-template-columns: repeat(6, 1fr);
+    grid-template-columns: repeat(5, 1fr);
     position: fixed;
     bottom: 0;
     left: 0;
@@ -6133,11 +6133,13 @@ body {
 /* ردیف‌های اطلاعات با خط چین ملایم */
 .print-invoice-meta-row {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-start;
   align-items: center;
+  gap: 8px;
   padding: 6px 0;
   font-size: 11pt;
   border-bottom: 1px dotted #ddd;
+  direction: rtl;
 }
 
 .print-invoice-meta-row:last-child {
@@ -6160,6 +6162,7 @@ body {
   border-collapse: collapse;
   margin-top: 10px;
   font-size: 11pt;
+  direction: rtl;   /* ← اضافه کن اگه نیست */
 }
 
 .print-invoice-table th {
@@ -6725,4 +6728,845 @@ body {
   text-align: center;
   animation: toastIn 0.25s ease;
   margin-bottom: 12px;
+}
+/* ========================================
+   47. CLEANUP ORDERS (پاکسازی سفارش‌های قدیمی)
+   ======================================== */
+
+.cleanup-card {
+  background: #fffdf9;
+  border: 1px solid #e3ddd2;
+  border-radius: 14px;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.cleanup-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #ebe6de;
+}
+
+.cleanup-icon {
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #fde8e6;
+  border-radius: 10px;
+  font-size: 22px;
+}
+
+.cleanup-header-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.cleanup-header-content strong {
+  display: block;
+  font-size: 14px;
+  font-weight: 800;
+  color: #29251f;
+}
+
+.cleanup-header-content small {
+  display: block;
+  margin-top: 3px;
+  font-size: 11px;
+  color: #766f64;
+}
+
+.cleanup-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.cleanup-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: #4a443d;
+}
+
+.cleanup-select {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid #d8d0c4;
+  border-radius: 10px;
+  background: #fffdf9;
+  color: #29251f;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+
+.cleanup-select:focus {
+  outline: 0;
+  border-color: #6b4f3a;
+  box-shadow: 0 0 0 3px rgba(107, 79, 58, 0.1);
+}
+
+.cleanup-select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.cleanup-count {
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: #f5f0e9;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.cleanup-empty {
+  color: #477052;
+}
+
+.cleanup-has-data {
+  color: #9b3c32;
+}
+
+.cleanup-error {
+  color: #9b3c32;
+}
+
+.cleanup-success {
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: #e5f0e6;
+  color: #477052;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+  animation: toastIn 0.25s ease;
+}
+
+.cleanup-btn {
+  min-height: 48px;
+  padding: 12px 20px;
+  border: 0;
+  border-radius: 12px;
+  background: #9b3c32;
+  color: #fff;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.1s ease;
+  box-shadow: 0 4px 12px rgba(155, 60, 50, 0.2);
+}
+
+.cleanup-btn:hover:not(:disabled) {
+  background: #822f26;
+  transform: translateY(-1px);
+}
+
+.cleanup-btn:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.cleanup-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+/* ========================================
+   48. ADMIN COUPONS (کدهای تخفیف)
+   ======================================== */
+
+.coupons-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 16px;
+}
+
+.coupon-card {
+  background: #fffdf9;
+  border: 1px solid #e3ddd2;
+  border-radius: 14px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  transition: box-shadow 0.2s ease;
+}
+
+.coupon-card:hover {
+  box-shadow: 0 6px 16px rgba(107, 79, 58, 0.06);
+}
+
+.coupon-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px dashed #ebe6de;
+}
+
+.coupon-code {
+  font-family: 'Courier New', monospace;
+  font-size: 18px;
+  font-weight: 900;
+  color: #6b4f3a;
+  letter-spacing: 1.5px;
+  background: #f5f0e9;
+  padding: 6px 12px;
+  border-radius: 8px;
+  direction: ltr;
+}
+
+.coupon-badge {
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.coupon-badge.active {
+  background: #e5f0e6;
+  color: #477052;
+}
+.coupon-badge.inactive {
+  background: #eee9e4;
+  color: #766f64;
+}
+.coupon-badge.expired {
+  background: #fde8e6;
+  color: #9b3c32;
+}
+.coupon-badge.pending {
+  background: #fff4d9;
+  color: #9a6b3f;
+}
+.coupon-badge.used-up {
+  background: #f0e6f0;
+  color: #7a3a7a;
+}
+
+.coupon-description {
+  margin: 0;
+  font-size: 12px;
+  color: #766f64;
+  line-height: 1.7;
+  font-style: italic;
+}
+
+.coupon-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+}
+
+.coupon-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  color: #4a443d;
+  padding: 5px 0;
+  border-bottom: 1px dotted #ebe6de;
+}
+
+.coupon-row:last-child {
+  border-bottom: 0;
+}
+
+.coupon-row span {
+  color: #766f64;
+  font-weight: 500;
+}
+
+.coupon-row strong {
+  color: #29251f;
+  font-weight: 800;
+}
+
+.coupon-actions {
+  display: flex;
+  gap: 6px;
+  padding-top: 10px;
+  border-top: 1px solid #ebe6de;
+}
+
+.coupon-actions .btn {
+  flex: 1;
+  min-height: 38px;
+  font-size: 11px;
+  padding: 6px;
+}
+
+.coupon-actions .btn.danger {
+  flex: 0 0 44px;
+}
+
+@media (max-width: 650px) {
+  .coupons-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .coupon-code {
+    font-size: 16px;
+  }
+}
+/* ========================================
+   49. CHECKOUT COUPON (کد تخفیف در ثبت سفارش)
+   ======================================== */
+
+/* ردیف ورودی کد تخفیف */
+.coupon-input-row {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.coupon-input-row input {
+  flex: 1;
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid #d8d0c4;
+  border-radius: 10px;
+  background: #fffdf9;
+  color: #29251f;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  font-family: 'Courier New', monospace;
+  transition: border-color 0.15s ease;
+}
+
+.coupon-input-row input:focus {
+  outline: 0;
+  border-color: #6b4f3a;
+  box-shadow: 0 0 0 3px rgba(107, 79, 58, 0.1);
+}
+
+.coupon-input-row input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.coupon-apply-btn {
+  min-width: 90px;
+  padding: 0 20px;
+  border: 0;
+  border-radius: 10px;
+  background: #6b4f3a;
+  color: #fff;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s ease;
+  white-space: nowrap;
+}
+
+.coupon-apply-btn:hover:not(:disabled) {
+  background: #5a4230;
+}
+
+.coupon-apply-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* کوپن اعمال شده */
+.coupon-applied {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  background: #e5f0e6;
+  border: 1px solid #c8dfcb;
+  border-radius: 10px;
+}
+
+.coupon-applied-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.coupon-applied-code {
+  font-family: 'Courier New', monospace;
+  font-size: 14px;
+  font-weight: 900;
+  color: #2d5d3e;
+  letter-spacing: 1.5px;
+  direction: ltr;
+  text-align: right;
+}
+
+.coupon-applied-info small {
+  font-size: 11px;
+  color: #477052;
+}
+
+.coupon-remove-btn {
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.6);
+  color: #477052;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.coupon-remove-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.coupon-remove-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* پیام خطای کوپن */
+.coupon-error {
+  margin-top: 10px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: #fde8e6;
+  color: #9b3c32;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+  animation: toastIn 0.25s ease;
+}
+
+/* ردیف‌های خلاصه نهایی */
+.checkout-total-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 0;
+  font-size: 13px;
+  color: #4a443d;
+  border-bottom: 1px dotted #ebe6de;
+}
+
+.checkout-total-row:last-child {
+  border-bottom: 0;
+}
+
+.checkout-total-row strong {
+  font-weight: 800;
+  color: #29251f;
+}
+
+.checkout-total-row.discount {
+  color: #477052;
+}
+
+.checkout-total-row.discount strong {
+  color: #2d5d3e;
+  font-weight: 800;
+}
+
+.checkout-total-row.final {
+  padding-top: 14px;
+  margin-top: 6px;
+  border-top: 2px solid #ebe6de;
+  border-bottom: 0;
+  font-size: 15px;
+}
+
+.checkout-total-row.final strong {
+  font-size: 20px;
+  color: #6b4f3a;
+}
+
+.checkout-total-row.final small {
+  font-size: 12px;
+  font-weight: 500;
+}
+/* ========================================
+   50. COUPON ELIGIBILITY (تنظیمات تخفیف)
+   ======================================== */
+
+/* ─── کارت toggle در دسته‌بندی ─── */
+.coupon-toggle-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  border: 1px solid #e3ddd2;
+  border-radius: 12px;
+  background: #fbf9f5;
+}
+
+.coupon-toggle-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.coupon-toggle-info strong {
+  display: block;
+  font-size: 14px;
+  font-weight: 800;
+  color: #29251f;
+  margin-bottom: 4px;
+}
+
+.coupon-toggle-info small {
+  display: block;
+  font-size: 11px;
+  color: #766f64;
+  line-height: 1.7;
+}
+
+/* ─── بج در لیست دسته‌بندی ─── */
+.status.coupon-off {
+  background: #fde8e6;
+  color: #9b3c32;
+  margin-inline-start: 6px;
+  font-size: 9px;
+  padding: 3px 7px;
+}
+
+/* ─── انتخابگر سه‌گزینه‌ای در محصول ─── */
+.coupon-selector {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.coupon-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px;
+  border: 1.5px solid #e3ddd2;
+  border-radius: 12px;
+  background: #fffdf9;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.coupon-option:hover {
+  border-color: #d8d0c4;
+  background: #fbf9f5;
+}
+
+.coupon-option input[type='radio'] {
+  margin-top: 3px;
+  accent-color: #6b4f3a;
+  cursor: pointer;
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+}
+
+.coupon-option:has(input:checked) {
+  border-color: #6b4f3a;
+  background: #f5f0e9;
+  box-shadow: 0 0 0 3px rgba(107, 79, 58, 0.08);
+}
+
+.coupon-option-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.coupon-option-content strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 800;
+  color: #29251f;
+  margin-bottom: 4px;
+}
+
+.coupon-option-content small {
+  display: block;
+  font-size: 11px;
+  color: #766f64;
+  line-height: 1.7;
+}
+
+/* ─── بج در لیست محصولات ─── */
+.list-coupon-off {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: #fde8e6;
+  color: #9b3c32;
+  font-size: 10px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+/* ─── ریسپانسیو ─── */
+@media (max-width: 650px) {
+  .coupon-option {
+    padding: 12px;
+    gap: 10px;
+  }
+
+  .coupon-option-content strong {
+    font-size: 12px;
+  }
+
+  .coupon-toggle-card {
+    padding: 12px 14px;
+    gap: 12px;
+  }
+}
+/* ========================================
+   51. CHECKOUT ITEMS ELIGIBILITY (وضعیت تخفیف اقلام)
+   ======================================== */
+
+/* ─── ردیف‌های محصول با وضعیت تخفیف ─── */
+.checkout-item.item-eligible {
+  background: linear-gradient(
+    to left,
+    rgba(229, 240, 230, 0.5) 0%,
+    rgba(229, 240, 230, 0) 40%
+  );
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin: 0 -12px;
+  border-bottom: 1px dashed #c8dfcb;
+}
+
+.checkout-item.item-ineligible {
+  background: linear-gradient(
+    to left,
+    rgba(238, 233, 228, 0.6) 0%,
+    rgba(238, 233, 228, 0) 40%
+  );
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin: 0 -12px;
+  border-bottom: 1px dashed #e3ddd2;
+}
+
+/* ─── بج کوچیک کنار نام محصول ─── */
+.item-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 700;
+  white-space: nowrap;
+  margin-inline-start: 8px;
+  vertical-align: middle;
+}
+
+.badge-eligible {
+  background: #e5f0e6;
+  color: #477052;
+  border: 1px solid #c8dfcb;
+}
+
+.badge-ineligible {
+  background: #eee9e4;
+  color: #766f64;
+  border: 1px solid #d8d0c4;
+}
+
+/* ─── یادداشت تخفیف در خلاصه نهایی ─── */
+.checkout-discount-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  margin: 8px 0;
+  background: #fbf9f5;
+  border: 1px dashed #d8d0c4;
+  border-radius: 10px;
+  font-size: 11px;
+  color: #625b51;
+  line-height: 1.8;
+}
+
+.checkout-discount-note-icon {
+  font-size: 14px;
+  line-height: 1.5;
+  flex-shrink: 0;
+}
+
+/* ─── ریسپانسیو ─── */
+@media (max-width: 500px) {
+  .item-badge {
+    display: block;
+    margin: 4px 0 0 0;
+    width: fit-content;
+  }
+
+  /* ─── یادداشت تخفیف در خلاصه نهایی ─── */
+.checkout-discount-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  margin: 10px 0;
+  background: #fbf9f5;
+  border: 1px dashed #d8d0c4;
+  border-radius: 10px;
+  font-size: 11px;
+  color: #625b51;
+  line-height: 1.8;
+}
+
+.checkout-discount-note-icon {
+  font-size: 14px;
+  line-height: 1.5;
+  flex-shrink: 0;
+}
+}
+/* ========================================
+   52. ORDER DISCOUNT DISPLAY (نمایش تخفیف در سفارش)
+   ======================================== */
+
+/* ─── خلاصه پرداخت در صفحه جزئیات سفارش ─── */
+.order-payment-summary {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 2px solid #ebe6de;
+}
+
+/* ─── ردیف تخفیف ─── */
+.info-row.discount {
+  color: #477052;
+}
+
+.info-row.discount strong {
+  color: #2d5d3e !important;
+  font-weight: 800;
+}
+
+/* ─── در فاکتور چاپی ─── */
+@media print {
+  .print-invoice-table tfoot tr:first-child td {
+    border-top: 2px solid #333;
+  }
+}
+/* ========================================
+   53. PRINT INVOICE - IMPROVEMENTS
+   ======================================== */
+
+/* ─── در فاکتور چاپی ─── */
+@media print {
+  /* تکرار هدر جدول در صفحه جدید */
+  .print-invoice-table thead {
+    display: table-header-group;
+  }
+
+  /* جلوگیری از شکستن ردیف‌ها */
+  .print-invoice-table tbody tr,
+  .print-invoice-table tfoot tr {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  /* ─── ردیف‌های خلاصه (جمع، تخفیف، قابل پرداخت) ─── */
+  .invoice-summary-row td {
+    padding: 6px 8px !important;
+    font-size: 11pt;
+    font-weight: 700;
+    text-align: right;
+    direction: rtl;
+  }
+
+  /* ستون اول (عنوان): راست‌چین با عرض زیاد */
+  .invoice-summary-row td:first-child {
+    text-align: right;
+    width: auto;
+  }
+
+  /* ستون دوم (مقدار): راست‌چین با عرض مشخص */
+  .invoice-summary-row td:last-child {
+    text-align: right;
+    white-space: nowrap;
+    width: 130px;
+  }
+
+  /* تخفیف: سبز */
+  .invoice-discount-row td {
+    color: #2d5d3e;
+  }
+
+  /* جمع کل / قابل پرداخت: برجسته */
+  .invoice-total-row td {
+    font-size: 12pt !important;
+    font-weight: 900 !important;
+    border-top: 2px solid #333 !important;
+    padding-top: 8px !important;
+    background: #f5f5f5;
+  }
+}
+@media print {
+  /* ─── هدر فاکتور کم‌ارتفاع‌تر ─── */
+  .print-invoice-header {
+    padding-bottom: 8px !important;
+    margin-bottom: 12px !important;
+  }
+
+  .print-invoice-title {
+    font-size: 20pt !important;
+  }
+
+  .print-invoice-subtitle {
+    font-size: 10pt !important;
+    margin-top: 4px !important;
+  }
+
+  /* ─── اطلاعات فاکتور و مشتری: کم‌ارتفاع ─── */
+  .print-invoice-meta,
+  .print-invoice-customer {
+    margin-bottom: 10px !important;
+  }
+
+  .print-invoice-meta h3,
+  .print-invoice-customer h3,
+  .print-invoice-items h3 {
+    font-size: 11pt !important;
+    margin-bottom: 6px !important;
+    padding-bottom: 4px !important;
+  }
+
+  .print-invoice-meta-row {
+    padding: 3px 0 !important;
+    font-size: 10pt !important;
+  }
+
+  /* ─── جدول کم‌ارتفاع‌تر ─── */
+  .print-invoice-table th,
+  .print-invoice-table td {
+    padding: 5px 6px !important;
+    font-size: 9.5pt !important;
+  }
+
+  /* ─── فوتر ─── */
+  .print-invoice-footer {
+    margin-top: 16px !important;
+    padding-top: 8px !important;
+  }
 }

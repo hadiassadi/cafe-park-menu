@@ -51,15 +51,16 @@ export default function AdminLayout({
   }
 
   const menuItems = [
-  { href: '/admin', label: 'داشبورد', icon: '🏠' },
-  { href: '/admin/orders', label: 'سفارش‌ها', icon: '🛒' },
-  { href: '/admin/products', label: 'محصولات', icon: '☕' },
-  { href: '/admin/categories', label: 'دسته‌ها', icon: '📂' },
-  { href: '/admin/tables', label: 'میزها', icon: '🪑' },
-  { href: '/admin/themes', label: 'تم‌ها', icon: '🎨' },
-  { href: '/admin/quotes', label: 'جملات', icon: '💬' },
-  { href: '/admin/settings', label: 'تنظیمات', icon: '⚙️' },
-]
+    { href: '/admin', label: 'داشبورد', icon: '🏠' },
+    { href: '/admin/orders', label: 'سفارش‌ها', icon: '🛒' },
+    { href: '/admin/products', label: 'محصولات', icon: '☕' },
+    { href: '/admin/categories', label: 'دسته‌ها', icon: '📂' },
+    { href: '/admin/tables', label: 'میزها', icon: '🪑' },
+    { href: '/admin/themes', label: 'تم‌ها', icon: '🎨' },
+    { href: '/admin/quotes', label: 'جملات', icon: '💬' },
+    { href: '/admin/coupons', label: 'کد تخفیف', icon: '🎟️' },   // ← جدید
+    { href: '/admin/settings', label: 'تنظیمات', icon: '⚙️' },
+  ]
 
   const isActive = (href: string) => {
     if (href === '/admin') return pathname === '/admin'

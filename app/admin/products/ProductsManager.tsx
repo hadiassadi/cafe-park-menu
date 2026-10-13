@@ -46,6 +46,7 @@ type Product = {
   ingredients: string | null
   allergens: string | null
   dietary_info: string | null
+  coupon_eligible: boolean | null
   variant_groups?: VariantGroup[]
 }
 
@@ -81,6 +82,10 @@ export default function ProductsManager({
   const [formIngredients, setFormIngredients] = useState('')
   const [formAllergens, setFormAllergens] = useState('')
   const [formDietaryInfo, setFormDietaryInfo] = useState('')
+  // ✅ state کوپن
+  const [formCouponEligible, setFormCouponEligible] = useState<
+    'inherit' | 'always' | 'never'
+  >('inherit')
 
   // واریانت‌ها
   const [formVariantGroups, setFormVariantGroups] = useState<VariantGroup[]>([])
@@ -114,6 +119,7 @@ export default function ProductsManager({
     setFormIngredients('')
     setFormAllergens('')
     setFormDietaryInfo('')
+    setFormCouponEligible('inherit')
     setFormVariantGroups([])
     setMessage(null)
   }
@@ -143,7 +149,16 @@ export default function ProductsManager({
   )
   setFormIngredients(product.ingredients ?? '')
   setFormAllergens(product.allergens ?? '')
-  setFormDietaryInfo(product.dietary_info ?? '')
+    setFormDietaryInfo(product.dietary_info ?? '')
+
+  // ✅ مقدار کوپن
+  if (product.coupon_eligible === true) {
+    setFormCouponEligible('always')
+  } else if (product.coupon_eligible === false) {
+    setFormCouponEligible('never')
+  } else {
+    setFormCouponEligible('inherit')
+  }
 
   // ✅ تبدیل variant_options به options
   const groups = (product.variant_groups ?? []).map((g: any) => ({
@@ -279,6 +294,14 @@ export default function ProductsManager({
       if (formDietaryInfo)
         formData.append('dietary_info', formDietaryInfo)
 
+      // ✅ کوپن
+      if (formCouponEligible === 'always') {
+        formData.append('coupon_eligible', 'true')
+      } else if (formCouponEligible === 'never') {
+        formData.append('coupon_eligible', 'false')
+      }
+      // 'inherit' → هیچ مقداری فرستاده نمی‌شه (null)
+
       // ✅ واریانت‌ها رو به JSON تبدیل کن
       const validGroups = formVariantGroups.filter(
         (g) => g.name.trim() && g.options.length > 0
@@ -378,9 +401,9 @@ export default function ProductsManager({
                       {product.is_new && (
                         <span className="list-new">جدید</span>
                       )}
-                      {!product.is_available && (
-                        <span className="list-unavailable">
-                          ناموجود
+                                            {product.coupon_eligible === false && (
+                        <span className="list-coupon-off" title="بدون تخفیف">
+                          🚫
                         </span>
                       )}
                     </div>
@@ -606,7 +629,61 @@ export default function ProductsManager({
               />
             </div>
           </div>
+          {/* ============ تنظیمات تخفیف ============ */}
+          <div className="form-section-title">
+            🎟️ تنظیمات تخفیف
+          </div>
 
+          <div className="coupon-selector">
+            <label className="coupon-option">
+              <input
+                type="radio"
+                name="coupon_eligible"
+                value="inherit"
+                checked={formCouponEligible === 'inherit'}
+                onChange={() => setFormCouponEligible('inherit')}
+              />
+              <div className="coupon-option-content">
+                <strong>🔄 از دسته‌بندی ارث ببر</strong>
+                <small>
+                  اگه دسته‌بندی شامل تخفیف باشه، این محصول هم شامل می‌شه
+                </small>
+              </div>
+            </label>
+
+            <label className="coupon-option">
+              <input
+                type="radio"
+                name="coupon_eligible"
+                value="always"
+                checked={formCouponEligible === 'always'}
+                onChange={() => setFormCouponEligible('always')}
+              />
+              <div className="coupon-option-content">
+                <strong>✅ همیشه شامل تخفیف</strong>
+                <small>
+                  این محصول همیشه در کمپین‌های تخفیف شرکت می‌کنه (حتی اگه
+                  دسته غیرفعال باشه)
+                </small>
+              </div>
+            </label>
+
+            <label className="coupon-option">
+              <input
+                type="radio"
+                name="coupon_eligible"
+                value="never"
+                checked={formCouponEligible === 'never'}
+                onChange={() => setFormCouponEligible('never')}
+              />
+              <div className="coupon-option-content">
+                <strong>🚫 هرگز شامل تخفیف نباشه</strong>
+                <small>
+                  این محصول هیچ‌وقت تخفیف نمی‌گیره (مثلاً محصولات شرکتی)
+                </small>
+              </div>
+            </label>
+          </div>
           {/* ============ واریانت‌ها ============ */}
           <div className="form-section-title">
             🎛 گزینه‌های انتخابی (واریانت‌ها)

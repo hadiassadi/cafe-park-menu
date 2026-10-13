@@ -24,6 +24,7 @@ type OrderItem = {
   option_name: string | null
   unit_price: number
   quantity: number
+  discount_amount?: number   // ✅ جدید
 }
 
 type Order = {
@@ -35,6 +36,11 @@ type Order = {
   note: string | null
   items: OrderItem[]
   subtotal: number
+  original_subtotal: number | null
+  coupon_code: string | null
+  coupon_discount: number | null
+  eligible_subtotal: number | null
+  ineligible_subtotal: number | null
   status: string
   created_at: string
 }
@@ -388,26 +394,61 @@ export default function OrdersManager({ orders: initialOrders }: { orders: Order
                   )}
                 </div>
 
-                <div className="info-card" style={{ marginTop: '16px' }}>
-                  <h3>🧾 اقلام سفارش</h3>
-                  {selectedOrder.items.map((item, idx) => (
-                    <div key={idx} className="info-row">
-                      <span>
-                        {formatPrice(item.quantity)} × {item.product_name}
-                        {item.option_name && (
-                          <small> ({item.option_name})</small>
-                        )}
-                      </span>
+                              <div className="info-card" style={{ marginTop: '16px' }}>
+                <h3>🧾 اقلام سفارش</h3>
+                {selectedOrder.items.map((item, idx) => (
+                  <div key={idx} className="info-row">
+                    <span>
+                      {formatPrice(item.quantity)} × {item.product_name}
+                      {item.option_name && (
+                        <small> ({item.option_name})</small>
+                      )}
+                    </span>
+                    <strong>
+                      {formatPrice(item.unit_price * item.quantity)}
+                    </strong>
+                  </div>
+                ))}
+
+                {/* ✅ خلاصه پرداخت با تخفیف */}
+                {selectedOrder.coupon_code &&
+                selectedOrder.coupon_discount ? (
+                  <>
+                    <div
+                      className="info-row"
+                      style={{ marginTop: '10px' }}
+                    >
+                      <span>جمع اقلام:</span>
                       <strong>
-                        {formatPrice(item.unit_price * item.quantity)}
+                        {formatPrice(
+                          selectedOrder.original_subtotal ??
+                            selectedOrder.subtotal
+                        )}{' '}
+                        تومان
                       </strong>
                     </div>
-                  ))}
+                    <div className="info-row discount">
+                      <span>
+                        🎟️ تخفیف ({selectedOrder.coupon_code}):
+                      </span>
+                      <strong>
+                        − {formatPrice(selectedOrder.coupon_discount)} تومان
+                      </strong>
+                    </div>
+                    <div className="total-row">
+                      <span>قابل پرداخت</span>
+                      <span>
+                        {formatPrice(selectedOrder.subtotal)} تومان
+                      </span>
+                    </div>
+                  </>
+                ) : (
                   <div className="total-row">
                     <span>جمع کل</span>
                     <span>{formatPrice(selectedOrder.subtotal)} تومان</span>
                   </div>
-                </div>
+                )}
+              </div>
               </div>
 
               <div className="modal-footer">
@@ -498,24 +539,32 @@ export default function OrdersManager({ orders: initialOrders }: { orders: Order
               )}
             </div>
 
-            <div className="print-invoice-items">
-              <h3>اقلام سفارش</h3>
-              <table className="print-invoice-table">
-                <thead>
-                  <tr>
-                    <th style={{ width: '40px' }}>#</th>
-                    <th>نام محصول</th>
-                    <th style={{ width: '60px', textAlign: 'center' }}>
-                      تعداد
-                    </th>
-                    <th style={{ width: '120px', textAlign: 'left' }}>
-                      قیمت واحد
-                    </th>
-                    <th style={{ width: '120px', textAlign: 'left' }}>جمع</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {printOrder.items.map((item, idx) => (
+                                <div className="print-invoice-items">
+            <h3>اقلام سفارش</h3>
+            <table className="print-invoice-table">
+              <thead>
+                <tr>
+                  <th style={{ width: '36px' }}>#</th>
+                  <th>نام محصول</th>
+                  <th style={{ width: '50px', textAlign: 'center' }}>
+                    تعداد
+                  </th>
+                  <th style={{ width: '90px', textAlign: 'left' }}>
+                    قیمت واحد
+                  </th>
+                  <th style={{ width: '90px', textAlign: 'left' }}>
+                    تخفیف
+                  </th>
+                  <th style={{ width: '100px', textAlign: 'left' }}>جمع</th>
+                </tr>
+              </thead>
+              <tbody>
+                {printOrder.items.map((item: any, idx) => {
+                  const itemDiscount = item.discount_amount || 0
+                  const itemTotal = item.unit_price * item.quantity
+                  const finalItemTotal = itemTotal - itemDiscount
+
+                  return (
                     <tr key={idx}>
                       <td>{formatPrice(idx + 1)}</td>
                       <td>
@@ -534,33 +583,57 @@ export default function OrdersManager({ orders: initialOrders }: { orders: Order
                       <td style={{ textAlign: 'left' }}>
                         {formatPrice(item.unit_price)}
                       </td>
-                      <td style={{ textAlign: 'left' }}>
-                        {formatPrice(item.unit_price * item.quantity)}
+                      <td
+                        style={{
+                          textAlign: 'left',
+                          color: itemDiscount > 0 ? '#2d5d3e' : '#999',
+                          fontWeight: itemDiscount > 0 ? 700 : 400,
+                        }}
+                      >
+                        {itemDiscount > 0
+                          ? `− ${formatPrice(itemDiscount)}`
+                          : '—'}
+                      </td>
+                      <td style={{ textAlign: 'left', fontWeight: 700 }}>
+                        {formatPrice(finalItemTotal)}
                       </td>
                     </tr>
-                  ))}
-                </tbody>
-                <tfoot>
-                  <tr>
-                    <td
-                      colSpan={4}
-                      style={{ textAlign: 'left', fontWeight: 700 }}
-                    >
-                      جمع کل:
-                    </td>
-                    <td
-                      style={{
-                        textAlign: 'left',
-                        fontWeight: 800,
-                        fontSize: '16px',
-                      }}
-                    >
-                      {formatPrice(printOrder.subtotal)} تومان
-                    </td>
+                  )
+                })}
+              </tbody>
+                            <tfoot>
+                {printOrder.coupon_code && printOrder.coupon_discount ? (
+                  <>
+                    <tr className="invoice-summary-row">
+                      <td colSpan={5}>جمع اقلام:</td>
+                      <td>
+                        {formatPrice(
+                          printOrder.original_subtotal ??
+                            printOrder.subtotal
+                        )}{' '}
+                        تومان
+                      </td>
+                    </tr>
+                    <tr className="invoice-summary-row invoice-discount-row">
+                      <td colSpan={5}>
+                        🎟️ تخفیف ({printOrder.coupon_code}):
+                      </td>
+                      <td>− {formatPrice(printOrder.coupon_discount)} تومان</td>
+                    </tr>
+                    <tr className="invoice-summary-row invoice-total-row">
+                      <td colSpan={5}>قابل پرداخت:</td>
+                      <td>{formatPrice(printOrder.subtotal)} تومان</td>
+                    </tr>
+                  </>
+                ) : (
+                  <tr className="invoice-summary-row invoice-total-row">
+                    <td colSpan={5}>جمع کل:</td>
+                    <td>{formatPrice(printOrder.subtotal)} تومان</td>
                   </tr>
-                </tfoot>
-              </table>
-            </div>
+                )}
+              </tfoot>
+            </table>
+          </div>
 
             <div className="print-invoice-footer">
               <p>با تشکر از سفارش شما 🌹</p>

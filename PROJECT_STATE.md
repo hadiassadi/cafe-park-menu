@@ -4,7 +4,7 @@
 > بخش «۵. کارهای باقی‌مانده»، «۸. لاگ تغییرات» و «بالای فایل» رو آپدیت کن.
 > در چت جدید، فقط همین فایل را برای AI پیوست کن.
 
-**آخرین آپدیت:** ۱۴۰۵/۰۷/۱۹ (2026-10-11)
+**آخرین آپدیت:** ۱۴۰۵/۰۷/۲۱ (2026-10-13)
 
 ---
 
@@ -24,60 +24,76 @@
 ```
 Cofe-Park/
 ├── app/
-│   ├── page.tsx                    ← صفحه اصلی (SSR، getMenuData، revalidate: 300)
-│   ├── MenuClient.tsx              ← کلاینت منوی مشتری (جستجو، فیلتر، دسته، مودال)
-│   ├── layout.tsx                  ← Layout اصلی (فونت Vazirmatn)
-│   ├── globals.css                 ← ✅ تنها فایل استایل پروژه (۴۲ بخش)
-│   ├── cart/
-│   │   └── page.tsx                ← ✅ صفحه سبد خرید
-│   ├── checkout/
-│   │   └── page.tsx                ← ✅ صفحه ثبت سفارش (Suspense + CheckoutForm)
-│   ├── order/[id]/
-│   │   └── page.tsx                ← ✅ صفحه جزئیات سفارش مشتری (polling هر ۱۰ ثانیه)
-│   ├── api/orders/
-│   │   └── route.ts                ← API ثبت سفارش (POST)
+│   ├── page.tsx                    ← صفحه اصلی (SSR + JSON-LD)
+│   ├── MenuClient.tsx              ← کلاینت منوی مشتری
+│   ├── layout.tsx                  ← Layout اصلی (فونت + متادیتای SEO)
+│   ├── globals.css                 ← ✅ تنها فایل استایل پروژه (۵۳ بخش)
+│   ├── manifest.ts                 ← ✅ PWA Manifest
+│   ├── robots.ts                   ← ✅ robots.txt
+│   ├── sitemap.ts                  ← ✅ sitemap.xml
+│   ├── cart/page.tsx               ← ✅ صفحه سبد خرید
+│   ├── checkout/page.tsx           ← ✅ صفحه ثبت سفارش + کوپن
+│   ├── order/[id]/page.tsx         ← ✅ جزئیات سفارش مشتری + لغو با شمارش معکوس
+│   ├── api/
+│   │   ├── orders/route.ts         ← ✅ API ثبت سفارش + محاسبه کوپن
+│   │   └── coupons/validate/route.ts ← ✅ اعتبارسنجی کوپن
 │   ├── components/
 │   │   ├── ProductDetailModal.tsx  ← ✅ مودال جزئیات محصول
 │   │   ├── CartFloatingBar.tsx     ← ✅ نوار شناور سبد
+│   │   ├── ServiceWorkerRegister.tsx ← ✅ ثبت Service Worker
+│   │   ├── PWAInstallPrompt.tsx    ← ✅ دکمه نصب PWA
 │   │   └── Modal.tsx               ← مودال عمومی ادمین
 │   └── admin/
-│       ├── layout.tsx              ← Layout پنل ادمین (سایدبار دسکتاپ + منوی پایین موبایل)
-│       ├── login/page.tsx          ← ✅ صفحه لاگین
-│       ├── page.tsx                ← داشبورد
-│       ├── orders/
-│       │   ├── page.tsx            ← Server Component
-│       │   ├── OrdersManager.tsx   ← ✅ کلاینت (Realtime + فیلتر + مودال)
-│       │   └── actions.ts          ← updateOrderStatus
-│       ├── products/               ← مدیریت محصولات
-│       ├── categories/             ← مدیریت دسته‌ها
-│       ├── tables/
-│       │   ├── page.tsx            ← Server Component
-│       │   ├── TablesManager.tsx   ← ✅ کلاینت (QR Code + CRUD)
-│       │   └── actions.ts          ← addTable/updateTable/deleteTable
-│       ├── themes/                 ← تم‌ها (رنگ + فونت)
-│       ├── quotes/                 ← جملات انگیزشی
-│       └── settings/               ← تنظیمات کامل (لوگو، هدر، پس‌زمینه، اطلاعات تماس)
+│       ├── layout.tsx              ← سایدبار + منوی موبایل
+│       ├── login/page.tsx          ← ✅ لاگین
+│       ├── page.tsx                ← ✅ داشبورد با آمار فروش
+│       ├── orders/                 ← مدیریت سفارش‌ها (Realtime + فاکتور چاپی)
+│       ├── products/               ← مدیریت محصولات (+ coupon_eligible)
+│       ├── categories/             ← مدیریت دسته‌ها (+ coupon_eligible)
+│       ├── tables/                 ← مدیریت میزها + QR
+│       ├── themes/                 ← تم‌ها
+│       ├── quotes/                 ← جملات
+│       ├── coupons/                ← ✅ مدیریت کدهای تخفیف
+│       ├── components/
+│       │   └── CleanupOrdersCard.tsx ← ✅ پاکسازی سفارش‌های قدیمی
+│       └── settings/               ← تنظیمات کامل
 ├── lib/
-│   ├── menu-types.ts               ← ✅ همه type‌ها + DEFAULT_THEME
-│   ├── cart-context.tsx            ← ✅ CartProvider + useCart + CartItem
-│   ├── menu.ts                     ← ✅ getMenuData() + getSettings() (با React cache)
-│   ├── site.ts                     ← ✅ SITE_URL
+│   ├── menu-types.ts               ← تایپ‌ها + DEFAULT_THEME + Coupon
+│   ├── cart-context.tsx            ← Context سبد خرید
+│   ├── menu.ts                     ← getMenuData() + getSettings()
+│   ├── site.ts                     ← SITE_URL
+│   ├── stats.ts                    ← ✅ آمار فروش داشبورد
 │   └── supabase/
-│       ├── client.ts               ← ✅ supabaseBrowser()
-│       └── server.ts               ← ✅ supabaseServer() (با cookies)
+│       ├── client.ts               ← supabaseBrowser()
+│       └── server.ts               ← supabaseServer()
+├── public/
+│   ├── sw.js                       ← ✅ Service Worker
+│   ├── favicon.ico                 ← ✅ (در ریشه public)
+│   └── icons/
+│       ├── source-logo.png         ← منبع آیکون‌ها (شفاف)
+│       ├── icon-192.png
+│       ├── icon-512.png
+│       ├── android-chrome-512x512.png
+│       ├── apple-touch-icon.png
+│       ├── favicon-16x16.png
+│       └── favicon-32x32.png
 ├── scripts/
-│   ├── backup.mjs                  ← ✅ اسکریپت بکاپ (فقط فایل‌های سورس)
-│   └── schedule-backup.mjs         ← ✅ بکاپ خودکار هر ۲۴ ساعت
-├── middleware.ts                   ← محافظت از /admin
-├── schema.sql                      ← ساختار دیتابیس
+│   ├── backup.mjs                  ← بکاپ لوکال
+│   ├── backup-server.mjs           ← ✅ بکاپ کامل سرور
+│   ├── schedule-backup.mjs         ← بکاپ خودکار هر ۲۴ ساعت
+│   ├── generate-icons.mjs          ← ✅ ساخت آیکون‌های PWA
+│   ├── make-transparent.mjs        ← ✅ شفاف‌سازی آیکون‌ها
+│   └── build-icons.mjs             ← ✅ ساخت همه سایزها از یک منبع
+├── middleware.ts
+├── schema.sql
 ├── package.json
-├── PROJECT_STATE.md                ← همین فایل
-├── dev.bat                         ← ✅ منوی همه‌کاره توسعه (Interactive)
-├── end-of-day.bat                  ← ✅ اسکریپت پایان روز (بکاپ + pull + push)
-├── .gitignore                      ← ✅ نادیده گرفتن فایل‌های اضافی
-└── backups/                        ← پوشه بکاپ‌ها (git ignore)
-    └── YYYY-MM-DD/
-        └── cafe-park_YYYY-MM-DD_HH-MM.zip
+├── PROJECT_STATE.md
+├── dev.bat                         ← منوی توسعه
+├── end-of-day.bat                  ← اسکریپت پایان روز
+├── .gitattributes                  ← ✅ خط‌پایان‌های یکسان
+├── .gitignore
+├── backups/                        ← بکاپ‌های لوکال (git ignore)
+└── backups-server/                 ← بکاپ‌های سرور (git ignore)
 ```
 
 ---
@@ -96,54 +112,37 @@ Cofe-Park/
 | `--text-color` | `#29251f` | خاکستری تیره |
 | `--muted-text-color` | `#766f64` | خاکستری متوسط |
 | `--secondary-color` | `#f3eee7` (theme) / `#e3ddd2` (ادمین) | بوردها |
-
-⚠️ **توجه:** رنگ‌های تم مشتری از دیتابیس (جدول `themes`) می‌آیند. رنگ‌های ادمین hardcode شده‌اند در `globals.css`.
+| **رنگ تخفیف** | `#2d5d3e` | متن تخفیف‌ها (سبز) |
+| **رنگ کوپن غیرفعال** | `#9b3c32` | هشدارها و بج‌های منفی |
 
 ### فونت‌ها:
-- **پیش‌فرض:** `Vazirmatn` (از `next/font`، متغیر `--font-vazir`)
-- **سفارشی:** از دیتابیس (جدول `themes`، فیلد `font_metadata`) با `@font-face` داینامیک
+- **پیش‌فرض:** `Vazirmatn` (از `next/font/local`، متغیر `--font-vazir`)
+- **سفارشی:** از دیتابیس (جدول `themes`، فیلد `font_metadata`)
 
-### کلاس‌های کلیدی (حتماً در JSX استفاده شوند):
+### کلاس‌های کلیدی:
 
-**پنل ادمین:**
-- `.admin-shell` / `.admin-sidebar` / `.admin-main` / `.admin-mobile-nav`
-- `.admin-header` (h1 + subtitle)
-- `.admin-card` (کارت پایه)
-- `.btn` / `.btn.primary-btn` / `.btn.danger`
-- `.field` / `.field-wide` / `.form-grid`
-- `.info-card` / `.info-row`
+**پنل ادمین:** `.admin-shell` / `.admin-sidebar` / `.admin-main` / `.admin-mobile-nav` / `.admin-header` / `.admin-card` / `.btn` / `.field` / `.info-card` / `.info-row`
 
-**کارت‌های سفارش:**
-- `.orders-grid` (کانتینر)
-- `.order-card` / `.order-header` / `.order-id` / `.order-time`
-- `.order-body` / `.order-actions`
-- `.btn-approve` / `.btn-cancel`
+**کارت‌های سفارش:** `.orders-grid` / `.order-card` / `.order-header` / `.order-body` / `.order-actions` / `.btn-approve` / `.btn-cancel`
 
-**مودال‌ها:**
-- عمومی: `.modal-overlay` / `.modal-container` / `.modal-header` / `.modal-body` / `.modal-footer` / `.modal-close-btn`
-- محصول: `.product-modal-overlay` / `.product-modal` / `.product-modal-image` / `.product-modal-body`
+**مودال‌ها:** `.modal-overlay` / `.modal-container` / `.modal-body` / `.modal-footer` / `.product-modal-overlay` / `.product-modal-image`
 
-**منوی مشتری:**
-- `.theme-root` / `.hero` / `.hero-bg` / `.hero-content`
-- `.sticky-head` / `.toolbar` / `.search-box` / `.cats` / `.cat`
-- `.grid` / `.product` / `.photo` / `.product-info` / `.name` / `.desc` / `.meta` / `.price`
-- `.cart-floating-bar` / `.cart-floating-btn`
+**منوی مشتری:** `.theme-root` / `.hero` / `.sticky-head` / `.toolbar` / `.cats` / `.grid` / `.product` / `.cart-floating-bar`
 
-**سبد و ثبت سفارش:**
-- سبد: `.cart-page` / `.cart-item` / `.qty-selector` / `.cart-summary` / `.cart-actions` / `.cart-confirm-overlay`
-- ثبت: `.checkout-page` / `.checkout-card` / `.checkout-field` / `.checkout-btn` / `.checkout-error`
+**سبد و ثبت سفارش:** `.cart-page` / `.cart-item` / `.qty-selector` / `.checkout-page` / `.checkout-card` / `.checkout-field` / `.checkout-btn`
 
-**صفحه جزئیات سفارش:**
-- `.order-detail-container` / `.status-stepper` / `.step-item` / `.step-dot`
-- `.info-card` / `.info-row` / `.total-row` / `.sticky-action-bar` / `.btn-whatsapp`
+**صفحه جزئیات سفارش:** `.order-detail-container` / `.status-stepper` / `.step-item` / `.info-card` / `.sticky-action-bar` / `.btn-whatsapp` / `.order-cancel-section`
+
+**کوپن:** `.coupons-grid` / `.coupon-card` / `.coupon-code` / `.coupon-badge` / `.coupon-input-row` / `.coupon-applied` / `.coupon-selector` / `.coupon-option` / `.coupon-toggle-card` / `.item-badge.badge-eligible` / `.item-badge.badge-ineligible`
+
+**داشبورد:** `.chart-card` / `.chart-bars` / `.chart-col` / `.chart-bar` / `.top-products-list` / `.top-product-item` / `.cleanup-card`
 
 ### شماره‌گذاری بخش‌های `globals.css`:
 | بخش | عنوان |
 |---|---|
 | 1 | RESET & BASE |
 | 2-10 | PUBLIC MENU (Hero, Toolbar, Categories, Grid, Footer) |
-| 11-13 | ADMIN SHELL + BASE + MOBILE NAV |
-| 14-17 | ADMIN DASHBOARD + PRODUCTS + CATEGORIES |
+| 11-17 | ADMIN SHELL + DASHBOARD + PRODUCTS + CATEGORIES |
 | 18-21 | ADMIN QUOTES + SETTINGS + THEMES |
 | 22-27 | MODAL + IMAGE/FONT UPLOAD + ICON PICKER |
 | 28-32 | CATEGORY ICONS + PUBLIC MENU POLISH + ALL MENU SHEET |
@@ -154,48 +153,62 @@ Cofe-Park/
 | 40 | **PRODUCT MODAL + CART BAR + BADGES** |
 | 41 | **CART PAGE** |
 | 42 | **CHECKOUT PAGE** |
+| 43 | **PRINT INVOICE** |
+| 44 | **PWA INSTALL PROMPT** |
+| 45 | **ADMIN DASHBOARD - SALES STATS** |
+| 46 | **ORDER CANCEL (لغو سفارش توسط مشتری)** |
+| 47 | **CLEANUP ORDERS (پاکسازی سفارش‌های قدیمی)** |
+| 48 | **ADMIN COUPONS** |
+| 49 | **CHECKOUT COUPON** |
+| 50 | **COUPON ELIGIBILITY (تنظیمات تخفیف)** |
+| 51 | **CHECKOUT ITEMS ELIGIBILITY** |
+| 52 | **ORDER DISCOUNT DISPLAY** |
+| 53 | **PRINT INVOICE - IMPROVEMENTS** |
 
 ---
 
 ## ✅ ۴. کارهای انجام‌شده
-- [x] **دکمه چاپ فاکتور** در صفحه جزئیات سفارش ادمین (بخش ۴۳)
 
 ### منوی مشتری
-- [x] صفحه اصلی با هدر داینامیک (لوگو، عنوان، زیرعنوان، اطلاعات تماس)
+- [x] صفحه اصلی با هدر داینامیک + JSON-LD
 - [x] جستجوی فارسی (نرمال‌سازی ي/ك، ارقام، نیم‌فاصله)
 - [x] فیلتر «پیشنهاد کافه» + فیلتر دسته‌بندی (Sticky)
 - [x] شیت «کل منو» (Bottom Sheet روی موبایل)
-- [x] کارت محصول با عکس، قیمت، اندازه، بج‌ها (پیشنهاد، جدید، ناموجود)
-- [x] مودال جزئیات محصول (توضیحات، مواد، آلرژن، رژیمی، تنوع‌ها، تعداد)
+- [x] کارت محصول با عکس، قیمت، اندازه، بج‌ها
+- [x] مودال جزئیات محصول (تنوع‌ها، آلرژن‌ها، اطلاعات رژیمی)
 - [x] ارسال به سبد + نوار شناور سبد
-- [x] صفحه سبد خرید `/cart`
-- [x] صفحه ثبت سفارش `/checkout` + ارسال به `/api/orders`
-- [x] صفحه جزئیات سفارش مشتری `/order/[id]` با استپر وضعیت + polling هر ۱۰ ثانیه
+- [x] صفحه سبد خرید
+- [x] صفحه ثبت سفارش + ارسال به `/api/orders`
+- [x] صفحه جزئیات سفارش با استپر وضعیت + polling هر ۱۰ ثانیه
+- [x] **لغو سفارش توسط مشتری** با شمارش معکوس ۵ دقیقه‌ای
+- [x] **کد تخفیف (کوپن)** با تشخیص اقلام واجد/غیرواجد
 - [x] ارسال سفارش به واتساپ
 
 ### پنل ادمین
-- [x] Layout با سایدبار دسکتاپ + منوی پایین موبایل (۶ آیتم)
-- [x] صفحه لاگین + middleware محافظ
-- [x] داشبورد با آمار
-- [x] مدیریت سفارش‌ها + Realtime + فیلترها (جدید/در جریان/تمام‌شده/همه)
-- [x] تغییر وضعیت سفارش (pending → confirmed → preparing → ready → delivered)
-- [x] مدیریت محصولات (CRUD + تنوع‌ها + عکس + آپلود)
-- [x] مدیریت دسته‌ها (CRUD + آیکون)
+- [x] Layout با سایدبار دسکتاپ + منوی موبایل
+- [x] لاگین + middleware محافظ
+- [x] **داشبورد با آمار فروش** (۶ کارت + نمودار ۷ روزه + پرفروش‌ترین محصولات)
+- [x] **پاکسازی سفارش‌های قدیمی** (دستی با تأیید)
+- [x] مدیریت سفارش‌ها + Realtime + فیلتر + فاکتور چاپی
+- [x] مدیریت محصولات + تنوع‌ها + عکس + `coupon_eligible`
+- [x] مدیریت دسته‌ها + `coupon_eligible`
 - [x] مدیریت میزها + QR Code + دانلود PNG
-- [x] مدیریت تم‌ها (رنگ + فونت + آپلود فونت)
+- [x] مدیریت تم‌ها (رنگ + فونت)
 - [x] مدیریت جملات
-- [x] تنظیمات کامل (هدر، پس‌زمینه، اطلاعات تماس، لوگو، جای نمایش هر آیتم)
+- [x] **مدیریت کدهای تخفیف** (CRUD + toggle + وضعیت‌ها)
+- [x] تنظیمات کامل (هدر، پس‌زمینه، اطلاعات تماس، لوگو)
 
 ### زیرساخت و ابزارها
 - [x] سیستم تم داینامیک از دیتابیس
 - [x] Supabase Server + Browser Client
 - [x] Cart Context با localStorage
-- [x] اسکریپت بکاپ `scripts/backup.mjs`
-- [x] اسکریپت بکاپ خودکار `scripts/schedule-backup.mjs`
-- [x] `dev.bat` — منوی همه‌کاره توسعه (۱۶ گزینه)
-- [x] `end-of-day.bat` — اسکریپت پایان روز (۵ مرحله)
-- [x] `PROJECT_STATE.md` — سند زنده پروژه
-- [x] `.gitignore` — نادیده گرفتن `node_modules`, `.next`, `.env.local`, `backups`
+- [x] اسکریپت بکاپ لوکال + سرور
+- [x] بکاپ خودکار (`schedule-backup.mjs`)
+- [x] `dev.bat` + `end-of-day.bat` (UI انگلیسی + ایموجی)
+- [x] `PROJECT_STATE.md` + `.gitignore` + `.gitattributes`
+- [x] **PWA کامل** (manifest + service worker + install prompt)
+- [x] **بهبود SEO** (metadata داینامیک + OpenGraph + Twitter + Sitemap + robots.txt + JSON-LD)
+- [x] اسکریپت‌های ساخت/شفاف‌سازی آیکون (`generate-icons.mjs`, `make-transparent.mjs`, `build-icons.mjs`)
 
 ### رفع باگ‌ها
 - [x] رفع بزرگ شدن عکس محصول در مودال (بخش ۴۰)
@@ -206,6 +219,10 @@ Cofe-Park/
 - [x] رفع به‌هم‌ریختگی صفحه جزئیات سفارش (بخش ۳۸)
 - [x] رفع باگ بکاپ دوبل در `backup.mjs --clean`
 - [x] رفع مشکل Git (pull --rebase قبل از push)
+- [x] رفع RLS جدول `coupons` و `customers`
+- [x] رفع فونت و ظاهر فاکتور چاپی (بخش ۴۳)
+- [x] رفع مشکل Service Worker در dev (فقط production)
+- [x] رفع نمایش ستون تخفیف در فاکتور چاپی
 
 ---
 
@@ -214,34 +231,30 @@ Cofe-Park/
 > اولویت‌ها: 🔴 بالا / 🟡 متوسط / 🟢 پایین
 
 - [ ] 🔴 **تست کامل روی موبایل واقعی** (iOS Safari + Chrome Android)
-- [ ] 🔴 **تست کامل جریان سفارش** (ثبت → تأیید → آماده‌سازی → آماده → تحویل)
-- [ ] 🔴 **تست Realtime** (باز کردن دو تب همزمان، ثبت سفارش از یکی، دیدن فوری در دیگری)
-- [ ] 🟡 **دکمه چاپ فاکتور** در صفحه جزئیات سفارش ادمین
-- [ ] 🟡 **PWA** (قابل نصب روی موبایل با `next-pwa`)
-- [ ] 🟡 **بهبود SEO** (OpenGraph داینامیک، Twitter Card، Sitemap، robots.txt)
-- [ ] 🟡 **پاکسازی سفارش‌های قدیمی** (بیشتر از ۳۰ روز) — Cron job در Supabase
-- [ ] 🟡 **دکمه لغو سفارش برای مشتری** (تا زمانی که تأیید نشده)
+- [ ] 🔴 **تست کامل جریان سفارش** از ابتدا تا انتها
+- [ ] 🔴 **تست Realtime** (دو تب همزمان)
+- [ ] 🟡 **پاکسازی خودکار سفارش‌های قدیمی** با Cron Job در Supabase
+- [ ] 🟡 **داشبورد آمار پیشرفته** (نمودار فروش ماهانه، مقایسه دوره‌ها)
 - [ ] 🟢 **ایمیل/SMS اطلاع‌رسانی** برای سفارش‌های جدید
 - [ ] 🟢 **تست بار (Load Test)** روی Supabase Realtime
-- [ ] 🟢 **آمار فروش** در داشبورد ادمین (نمودار روزانه/هفتگی)
 - [ ] 🟢 **حالت شبانه (Dark Mode)** برای پنل ادمین
-- [ ] 🟢 **کد تخفیف / کوپن** برای مشتری‌ها
-- [ ] 🟡 **دکمه چاپ فاکتور** در صفحه جزئیات سفارش ادمین
+- [ ] 🟢 **گزارش‌گیری پیشرفته از کوپن‌ها** (کدوم کوپن بیشتر استفاده شده)
 
 ---
 
 ## 🔑 ۶. قوانین طلایی کدنویسی
 
-1. 🚨 **هر کلاس جدید در JSX باید حتماً در `globals.css` تعریف شود.** (بزرگ‌ترین اشتباه این پروژه)
+1. 🚨 **هر کلاس جدید در JSX باید حتماً در `globals.css` تعریف شود.**
 2. **نام کلاس‌ها با BEM-like:** `block-element` یا `block-element-modifier`
-3. **هیچ استایل inline نداشته باشیم**، مگر برای مقادیر داینامیک از theme (مثل `style={{ '--primary-color': ... }}`)
-4. **همه چیز از پالت رنگ بخش ۳ استفاده کند** — هیچ رنگ hex جدیدی خارج از این پالت
+3. **هیچ استایل inline نداشته باشیم**، مگر برای مقادیر داینامیک از theme
+4. **همه چیز از پالت رنگ بخش ۳ استفاده کند**
 5. **روی موبایل تست شود** — breakpoint‌ها: `650px`, `768px`, `640px`
 6. **برای همه مودال‌ها از `modal-overlay` + `modal-container` استفاده شود**
 7. **قبل از ارسال به چت جدید، فایل `PROJECT_STATE.md` را پیوست کن.**
-8. **بعد از هر تغییر مهم، `globals.css` را با `Ctrl+Shift+R` رفرش کن.**
+8. **بعد از هر تغییر مهم، `Ctrl+Shift+R` رفرش کن.**
 9. **همه متن‌های `.bat` به انگلیسی + ایموجی باشند** (CMD فارسی را RTL رندر نمی‌کند).
-10. **برای import داخل سرور از `supabaseServer()`، برای کلاینت از `supabaseBrowser()` استفاده شود.**
+10. **برای سرور از `supabaseServer()`، برای کلاینت از `supabaseBrowser()` استفاده شود.**
+11. **در کوئری‌های Supabase، همیشه ستون‌های جدید را به `select` اضافه کن.**
 
 ---
 
@@ -250,7 +263,7 @@ Cofe-Park/
 > هر بار که می‌خواهی چت جدید بزنی، این متن را کپی کن و فایل `PROJECT_STATE.md` را ضمیمه کن:
 
 ```
-سلام. من روی پروژه «کافه پارک» (Next.js + Supabase + globals.css) کار می‌کنم.
+سلام. من روی پروژه «کافه پارک» (Next.js 16 + Supabase + globals.css) کار می‌کنم.
 فایل PROJECT_STATE.md وضعیت کامل پروژه، سیستم طراحی، کلاس‌های CSS و کارهای باقی‌مانده را توضیح می‌دهد.
 لطفاً قبل از هر کاری، این فایل را کامل بخوان و بر اساس آن ادامه بده.
 
@@ -259,12 +272,13 @@ Cofe-Park/
 2. هر کلاس جدیدی که در JSX استفاده می‌شود، باید در globals.css تعریف شود.
 3. پالت رنگ از متغیرهای CSS می‌آید، نه رنگ hex مستقیم.
 4. مودال‌ها از کلاس‌های modal-overlay + modal-container استفاده کنند.
+5. بخش‌های globals.css شماره‌گذاری شده‌اند (۱ تا ۵۳).
 
 📁 ابزارهای موجود در پروژه:
 - dev.bat → منوی همه‌کاره توسعه (۱۶ گزینه)
 - end-of-day.bat → اسکریپت پایان روز (بکاپ + pull + push)
-- scripts/backup.mjs → اسکریپت بکاپ (npm run backup)
-- scripts/schedule-backup.mjs → بکاپ خودکار هر ۲۴ ساعت
+- npm run backup / backup:server / backup:clean
+- npm run build:icons / transparent
 
 درخواست فعلی من:
 [اینجا درخواستت را بنویس]
@@ -279,17 +293,20 @@ Cofe-Park/
 | 1405/07/19 | پیاده‌سازی کامل منوی مشتری + سبد خرید + ثبت سفارش |
 | 1405/07/19 | پیاده‌سازی پنل ادمین (سفارش‌ها، محصولات، دسته‌ها، میزها، تم‌ها، جملات، تنظیمات) |
 | 1405/07/19 | افزودن QR Code به میزها |
-| 1405/07/19 | رفع به‌هم‌ریختگی صفحه جزئیات سفارش (بخش ۳۸) |
-| 1405/07/19 | رفع به‌هم‌ریختگی لیست سفارش‌های ادمین (بخش ۳۷) |
-| 1405/07/19 | رفع به‌هم‌ریختگی صفحه مدیریت میزها (بخش ۳۹) |
-| 1405/07/19 | رفع بزرگ شدن عکس محصول در مودال (بخش ۴۰) |
-| 1405/07/19 | رفع به‌هم‌ریختگی صفحه سبد خرید (بخش ۴۱) |
-| 1405/07/19 | رفع به‌هم‌ریختگی صفحه ثبت سفارش (بخش ۴۲) |
-| 1405/07/19 | ایجاد PROJECT_STATE.md + scripts/backup.mjs + scripts/schedule-backup.mjs |
-| 1405/07/19 | افزودن dev.bat + end-of-day.bat (UI انگلیسی + ایموجی) |
-| 1405/07/19 | رفع باگ بکاپ دوبل در backup.mjs --clean |
-| 1405/07/19 | رفع مشکل Git (pull --rebase قبل از push) |
-| 1405/07/19 | افزودن دکمه چاپ فاکتور + رفع فونت و ظاهر فاکتور (بخش ۴۳) |
+| 1405/07/19 | رفع به‌هم‌ریختگی همه صفحات ادمین و منو (بخش‌های ۳۷-۴۲) |
+| 1405/07/19 | ایجاد PROJECT_STATE.md + اسکریپت‌های بکاپ |
+| 1405/07/19 | افزودن dev.bat + end-of-day.bat |
+| 1405/07/19 | رفع باگ بکاپ دوبل + مشکل Git |
+| 1405/07/20 | افزودن دکمه چاپ فاکتور + رفع فونت و ظاهر فاکتور (بخش ۴۳) |
+| 1405/07/20 | **افزودن PWA کامل** (manifest + Service Worker + install prompt) |
+| 1405/07/20 | **بهبود کامل SEO** (metadata + OpenGraph + Sitemap + robots.txt + JSON-LD) |
+| 1405/07/20 | شفاف‌سازی آیکون‌های PWA + انتقال favicon.ico |
+| 1405/07/20 | **افزودن آمار فروش در داشبورد ادمین** (بخش ۴۵) |
+| 1405/07/20 | **افزودن لغو سفارش توسط مشتری** با شمارش معکوس (بخش ۴۶) |
+| 1405/07/20 | **افزودن پاکسازی سفارش‌های قدیمی** (بخش ۴۷) |
+| 1405/07/21 | **افزودن سیستم کامل کد تخفیف (کوپن)** با تشخیص اقلام واجد/غیرواجد (بخش‌های ۴۸-۵۳) |
+| 1405/07/21 | **افزودن max_order_amount و coupon_eligible** به کوپن‌ها، دسته‌ها و محصولات |
+| 1405/07/21 | نمایش تخفیف در فاکتور چاپی + ستون تخفیف هر آیتم |
 
 ---
 
@@ -297,27 +314,35 @@ Cofe-Park/
 
 ### اسکریپت‌های npm:
 ```bash
+# توسعه
 npm run dev               # اجرای پروژه در حالت توسعه
 npm run build             # بیلد گرفتن
 npm start                 # اجرای نسخه Build شده
 npm run lint              # اجرای Linter
-npm run backup            # بکاپ دستی
-npm run backup:clean      # فقط پاکسازی بکاپ‌های قدیمی
-npm run backup:schedule   # بکاپ خودکار هر ۲۴ ساعت
+
+# بکاپ
+npm run backup            # بکاپ لوکال
+npm run backup:clean      # پاکسازی بکاپ‌های قدیمی لوکال
+npm run backup:schedule   # بکاپ خودکار لوکال (هر ۲۴ ساعت)
+npm run backup:server     # بکاپ کامل سرور (شامل node_modules)
+npm run backup:server:light # بکاپ سرور بدون node_modules
+npm run backup:server:test  # تست بکاپ سرور
+
+# ابزارهای تصویر
+npm run icons             # ساخت آیکون‌های PWA
+npm run transparent       # شفاف‌سازی آیکون‌ها
+npm run build:icons       # ساخت همه سایزها از source-logo.png
 ```
 
 ### فایل‌های `.bat`:
 ```bash
-dev.bat                   # منوی همه‌کاره توسعه (دوبار کلیک)
-end-of-day.bat            # اسکریپت پایان روز (دوبار کلیک)
+dev.bat                   # منوی همه‌کاره توسعه
+end-of-day.bat            # اسکریپت پایان روز
 ```
 
 ### Git:
 ```bash
-# قبل از push (برای جلوگیری از conflict)
-git pull origin main --rebase --autostash
-
-# ارسال تغییرات
+git pull origin main --rebase --autostash   # قبل از push
 git add . && git commit -m "پیام" && git push origin main
 ```
 
@@ -325,35 +350,37 @@ git add . && git commit -m "پیام" && git push origin main
 ```env
 NEXT_PUBLIC_SUPABASE_URL=https://xxx.supabase.co
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=eyJhbGciOi...
-SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOi...   # فقط برای عملیات سروری حساس
-NEXT_PUBLIC_SITE_URL=https://cafe-park-menu.vercel.app   # اختیاری
+SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOi...
+NEXT_PUBLIC_SITE_URL=https://cafe-park-menu.vercel.app
 ```
 
 ---
 
 ## 💾 ۱۰. سیستم بکاپ
 
-### ساختار پوشه بکاپ:
-```
-backups/
-└── 2026-10-11/
-    ├── cafe-park_2026-10-11_09-25.zip
-    └── cafe-park_2026-10-11_09-50.zip
-```
+### دو نوع بکاپ:
 
-### ویژگی‌ها:
-- فایل‌های سورس (tsx, ts, css, json, md, sql, env, ...) کپی می‌شوند
-- `node_modules`, `.next`, `.git`, `backups` نادیده گرفته می‌شوند
-- هر بکاپ به zip تبدیل می‌شود (~0.7MB)
-- بکاپ‌های بیشتر از ۳۰ روز خودکار پاک می‌شوند (با `--clean`)
+| نوع | دستور | مسیر | حجم | شامل | نگهداری |
+|---|---|---|---|---|---|
+| **لوکال** | `npm run backup` | `backups/` | ~0.7 MB | فقط سورس + .bat + .gitignore | ۳۰ روز |
+| **سرور** | `npm run backup:server` | `backups-server/` | ~67 MB | سورس + node_modules + .env.local | ۱۴ روز |
 
-### اسکریپت‌های مرتبط:
+### اسکریپت‌ها:
 | اسکریپت | کاربرد |
 |---|---|
-| `scripts/backup.mjs` | بکاپ کامل (فایل + zip) |
-| `scripts/backup.mjs --clean` | فقط پاکسازی بکاپ‌های قدیمی |
-| `scripts/backup.mjs --files` | فقط کپی فایل‌ها بدون zip |
-| `scripts/schedule-backup.mjs` | اجرای خودکار هر ۲۴ ساعت (باید ترمینال باز بماند) |
+| `scripts/backup.mjs` | بکاپ لوکال (فایل + zip) |
+| `scripts/backup.mjs --clean` | پاکسازی بکاپ‌های قدیمی |
+| `scripts/backup-server.mjs` | بکاپ کامل سرور (Flood-Fill) |
+| `scripts/backup-server.mjs --no-deps` | بدون node_modules |
+| `scripts/backup-server.mjs --dry-run` | فقط شمارش |
+| `scripts/schedule-backup.mjs` | اجرای خودکار هر ۲۴ ساعت |
+
+### اسکریپت‌های آیکون:
+| اسکریپت | کاربرد |
+|---|---|
+| `scripts/generate-icons.mjs` | ساخت آیکون از رنگ + متن |
+| `scripts/make-transparent.mjs` | حذف پس‌زمینه با Flood-Fill |
+| `scripts/build-icons.mjs` | ساخت همه سایزها از `source-logo.png` |
 
 ---
 
@@ -361,20 +388,30 @@ backups/
 
 | جدول | کاربرد | فیلدهای کلیدی |
 |---|---|---|
-| `categories` | دسته‌بندی محصولات | `id`, `name`, `icon`, `sort_order`, `is_active` |
-| `products` | محصولات | `id`, `category_id`, `name`, `price`, `image_url`, `is_featured`, `is_new`, `is_available`, `size`, `calories`, `prep_time_minutes`, `ingredients`, `allergens`, `dietary_info` |
-| `variant_groups` | گروه‌های تنوع محصول (نوع سرو، سایز) | `id`, `product_id`, `name`, `is_required`, `sort_order` |
+| `categories` | دسته‌بندی محصولات | `id`, `name`, `icon`, `sort_order`, `is_active`, **`coupon_eligible`** |
+| `products` | محصولات | `id`, `category_id`, `name`, `price`, `image_url`, `is_featured`, `is_new`, `is_available`, `size`, `calories`, `prep_time_minutes`, `ingredients`, `allergens`, `dietary_info`, **`coupon_eligible`** (nullable) |
+| `variant_groups` | گروه‌های تنوع | `id`, `product_id`, `name`, `is_required`, `sort_order` |
 | `variant_options` | گزینه‌های هر گروه | `id`, `group_id`, `name`, `price_modifier`, `is_default`, `is_available`, `sort_order` |
-| `orders` | سفارش‌ها | `id`, `order_number`, `customer_name`, `customer_phone`, `table_number`, `note`, `items` (JSONB), `subtotal`, `status`, `created_at`, `confirmed_at`, `preparing_at`, `ready_at`, `delivered_at`, `cancelled_at` |
-| `tables` | میزها | `id`, `number`, `name`, `description`, `capacity`, `location` (indoor/outdoor/terrace/vip), `sort_order`, `is_active`, `qr_token` |
-| `quotes` | جملات انگیزشی | `id`, `text`, `author`, `is_active` |
-| `themes` | تم‌ها | رنگ‌ها (primary/secondary/background/surface/text/muted/accent)، font_url‌ها (regular/medium/semibold/bold/extrabold/black)، `font_metadata` (JSONB)، `border_radius`, `is_active` |
-| `settings` | تنظیمات سایت (تک‌ردیفی، id=1) | `cafe_name`, `tagline`, `hero_*`, `footer_text`, `address`, `phone`, `instagram`, `working_hours`, `logo_url`, `maps_url`, `og_*`, `show_*` (نمایش/مخفی)، `*_in_header/footer/floating` |
+| `orders` | سفارش‌ها | `id`, `order_number`, `customer_name`, `customer_phone`, `table_number`, `note`, `items` (JSONB), `subtotal`, `status`, **`original_subtotal`**, **`coupon_code`**, **`coupon_discount`**, **`eligible_subtotal`**, **`ineligible_subtotal`**, `created_at`, `confirmed_at`, `preparing_at`, `ready_at`, `delivered_at`, `cancelled_at` |
+| `tables` | میزها | `id`, `number`, `name`, `description`, `capacity`, `location`, `sort_order`, `is_active`, `qr_token` |
+| `quotes` | جملات | `id`, `text`, `author`, `is_active` |
+| `themes` | تم‌ها | رنگ‌ها + font_url‌ها + `font_metadata` (JSONB), `border_radius`, `is_active` |
+| `settings` | تنظیمات سایت (تک‌ردیفی، id=1) | `cafe_name`, `tagline`, `hero_*`, `footer_text`, `address`, `phone`, `instagram`, `working_hours`, `logo_url`, `maps_url`, `og_*`, `show_*`, `*_in_header/footer/floating` |
+| **`coupons`** | **کدهای تخفیف** | `id`, `code`, `description`, `discount_type` ('percent'/'fixed'), `discount_value`, `min_order_amount`, **`max_order_amount`**, `max_discount`, `max_uses`, `used_count`, `valid_from`, `valid_until`, `is_active` |
+| **`customers`** | **مشتریان (خودکار از سفارش‌ها)** | اطلاعات مشتری برای CRM و تحلیل |
 
 ### وضعیت سفارش‌ها (status):
 ```
 pending    → confirmed  → preparing → ready → delivered
            ↘ cancelled
+```
+
+### نحوه استفاده از coupon_eligible:
+```
+محصول coupon_eligible = true      → همیشه شامل تخفیف
+محصول coupon_eligible = false     → هرگز شامل تخفیف
+محصول coupon_eligible = null      → از دسته ارث می‌برد
+دسته coupon_eligible = false      → پیش‌فرض غیرفعال (مگر override محصول)
 ```
 
 ---
@@ -383,14 +420,17 @@ pending    → confirmed  → preparing → ready → delivered
 
 | ابزار | مسیر | کاربرد |
 |---|---|---|
-| **منوی توسعه** | `dev.bat` | منوی ۱۶ گزینه‌ای (dev، build، backup، git، VS Code، ...) |
-| **پایان روز** | `end-of-day.bat` | بکاپ + پاکسازی + pull + push + باز کردن PROJECT_STATE.md |
-| **بکاپ** | `scripts/backup.mjs` | اسکریپت اصلی بکاپ (فقط سورس، بدون node_modules) |
-| **بکاپ خودکار** | `scripts/schedule-backup.mjs` | اجرای بکاپ هر ۲۴ ساعت (باید ترمینال باز بماند) |
+| **منوی توسعه** | `dev.bat` | ۱۶ گزینه (dev، build، backup، git، VS Code، ...) |
+| **پایان روز** | `end-of-day.bat` | بکاپ + پاکسازی + pull + push + PROJECT_STATE |
+| **بکاپ لوکال** | `scripts/backup.mjs` | فقط سورس |
+| **بکاپ سرور** | `scripts/backup-server.mjs` | کامل + node_modules |
+| **بکاپ خودکار** | `scripts/schedule-backup.mjs` | هر ۲۴ ساعت |
+| **آیکون PWA** | `scripts/build-icons.mjs` | ساخت همه سایزها |
+| **شفاف‌سازی** | `scripts/make-transparent.mjs` | حذف پس‌زمینه |
 
 ---
 
-## 📦 ۱۳. نسخه‌های نصب‌شده (package.json)
+## 📦 ۱۳. نسخه‌های نصب‌شده
 
 ### Dependencies:
 ```
@@ -418,8 +458,9 @@ typescript             ^5.6.3
 
 ---
 
-## 📄 ۱۴. `.gitignore` فعلی
+## 📄 ۱۴. `.gitignore` و `.gitattributes`
 
+### `.gitignore`:
 ```
 node_modules/
 .next/
@@ -430,13 +471,33 @@ node_modules/
 
 # بکاپ‌های محلی
 backups/
+backups-server/
+```
+
+### `.gitattributes`:
+```
+* text=auto eol=lf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.jfif binary
+*.webp binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary
+*.zip binary
 ```
 
 ---
 
 ## 🐛 ۱۵. باگ‌های شناخته‌شده
 
-> هیچ باگ باز فعلاً وجود ندارد. باگ‌های جدید را اینجا اضافه کن.
+> هیچ باگ باز فعلاً وجود ندارد.
 
 | تاریخ | توضیح | وضعیت |
 |---|---|---|
@@ -447,12 +508,52 @@ backups/
 ## 💡 ۱۶. تصمیمات فنی مهم
 
 1. **بدون Tailwind:** تمام استایل‌ها در `globals.css` برای سادگی و کنترل کامل.
-2. **Realtime Supabase:** برای آپدیت لحظه‌ای لیست سفارش‌ها در ادمین.
-3. **Polling در صفحه جزئیات سفارش مشتری:** هر ۱۰ ثانیه (سبک‌تر از Realtime برای این کاربرد).
+2. **Realtime Supabase:** برای آپدیت لحظه‌ای سفارش‌ها در ادمین.
+3. **Polling در صفحه جزئیات سفارش مشتری:** هر ۱۰ ثانیه.
 4. **QR Token برای میزها:** با اسکن QR، `?table=N` به URL اضافه می‌شود.
 5. **فونت داینامیک از دیتابیس:** ادمین می‌تواند فونت سفارشی آپلود کند.
 6. **localStorage برای سبد خرید:** بدون نیاز به ثبت‌نام.
-7. **واتساپ به عنوان کانال اطلاع‌رسانی:** نیازی به پنل پیامکی نیست.
-8. **متن‌های `.bat` به انگلیسی + ایموجی:** چون CMD فارسی RTL را درست رندر نمی‌کند.
-9. **همه متن‌های `.bat` با `chcp 65001`:** برای پشتیبانی از UTF-8.
-10. **در `end-of-day.bat` قبل از push، `git pull --rebase --autostash` اجرا می‌شود:** برای جلوگیری از conflict.
+7. **واتساپ برای اطلاع‌رسانی:** نیازی به پنل پیامکی نیست.
+8. **متن‌های `.bat` به انگلیسی + ایموجی:** چون CMD فارسی RTL رندر نمی‌کند.
+9. **`.gitattributes` برای خط‌پایان‌ها:** جلوگیری از conflict در ویندوز/لینوکس.
+10. **Service Worker فقط در production:** در `npm run dev` غیرفعال است.
+11. **کوپن با ارث‌بری:** محصول تنظیمات اختصاصی دارد یا از دسته ارث می‌برد.
+12. **محاسبه سهم تخفیف هر آیتم:** در API هنگام ثبت سفارش، برای نمایش در فاکتور.
+13. **RLS policy برای همه جداول عمومی:** با `true` on `insert/update/select` (برای شروع پروژه).
+14. **React Portal برای فاکتور چاپی:** تا خارج از `.admin-main` قرار بگیرد و در چاپ درست نمایش داده شود.
+```
+
+---
+
+## ✅ کارهای لازم تو بعد از جایگزینی:
+
+1. **فایل رو جایگزین کن**
+2. **کامیت کن:**
+   ```bash
+   git add .
+   git commit -m "docs: complete PROJECT_STATE with coupons, PWA, SEO, and dashboard"
+   git push origin main
+   ```
+
+---
+
+## 📊 خلاصه چیزی که در این نسخه آپدیت شد:
+
+| بخش | تغییرات |
+|---|---|
+| **۱** | تاریخ آپدیت |
+| **۲** | ساختار کامل با پوشه‌های جدید (coupons، components، scripts جدید) |
+| **۳** | پالت رنگ آپدیت شده + شماره‌گذاری CSS تا ۵۳ |
+| **۴** | ۱۵+ کار جدید (PWA، SEO، کوپن، لغو سفارش، آمار) |
+| **۵** | حذف کارهای انجام‌شده + اضافه کارهای جدید |
+| **۶** | قوانین تکمیل‌شده |
+| **۷** | متن چت با اطلاعات جدید |
+| **۸** | لاگ کامل با همه تغییرات اخیر |
+| **۹** | دستورات npm جدید (بکاپ سرور، آیکون‌ها) |
+| **۱۰** | دو نوع بکاپ + اسکریپت‌های آیکون |
+| **۱۱** | جداول `coupons` و `customers` + فیلدهای جدید |
+| **۱۲** | ابزارهای جدید |
+| **۱۴** | `.gitattributes` اضافه شد |
+| **۱۶** | تصمیمات فنی جدید |
+
+**بعد از جایگزینی، بگو «آماده‌ام برای کار بعدی» تا بریم سراغ Dark Mode یا هر چیزی که ترجیح می‌دی.** 🚀

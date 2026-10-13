@@ -1,20 +1,17 @@
 // public/sw.js — Service Worker برای کافه پارک
 
-const CACHE_NAME = 'cafe-park-v1'
+const CACHE_NAME = 'cafe-park-v2'
 const STATIC_ASSETS = [
-  '/',
   '/manifest.webmanifest',
   '/icons/icon-192.png',
   '/icons/icon-512.png',
 ]
 
-// ─── Install: cache کردن فایل‌های پایه ───
+// ─── Install ───
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(STATIC_ASSETS).catch(() => {
-        // اگه یکی از فایل‌ها نبود، بقیه رو ادامه بده
-      })
+      return cache.addAll(STATIC_ASSETS).catch(() => {})
     })
   )
   self.skipWaiting()
@@ -34,12 +31,12 @@ self.addEventListener('activate', (event) => {
   self.clients.claim()
 })
 
-// ─── Fetch: استراتژی Network First برای API، Cache First برای بقیه ───
+// ─── Fetch ───
 self.addEventListener('fetch', (event) => {
   const { request } = event
   const url = new URL(request.url)
 
-  // فقط GET رو کش کن
+  // فقط GET
   if (request.method !== 'GET') return
 
   // API و Supabase رو کش نکن
@@ -50,11 +47,12 @@ self.addEventListener('fetch', (event) => {
     return
   }
 
-  // فونت‌ها، تصاویر، CSS و JS: Cache First
-  if (
-    url.pathname.match(/\.(png|jpg|jpeg|svg|webp|woff2?|css|js)$/) ||
-    url.pathname.startsWith('/_next/static/')
-  ) {
+  // ⚠️ تصاویر و فونت‌ها: Cache First
+  const isStaticAsset = url.pathname.match(
+    /\.(png|jpg|jpeg|svg|webp|ico|woff2?|ttf|otf)$/
+  )
+
+  if (isStaticAsset) {
     event.respondWith(
       caches.match(request).then((cached) => {
         if (cached) return cached
@@ -70,16 +68,21 @@ self.addEventListener('fetch', (event) => {
     return
   }
 
-  // بقیه (HTML): Network First با fallback به cache
+  // ⚠️ HTML، JS، CSS: Network First (همیشه نسخه جدید)
   event.respondWith(
     fetch(request)
       .then((response) => {
-        if (response.ok && request.mode === 'navigate') {
+        if (response.ok) {
           const clone = response.clone()
           caches.open(CACHE_NAME).then((cache) => cache.put(request, clone))
         }
         return response
       })
-      .catch(() => caches.match(request).then((cached) => cached || caches.match('/')))
+      .catch(() => {
+        // حالت آفلاین
+        return caches.match(request).then((cached) => {
+          return cached || caches.match('/')
+        })
+      })
   )
 })

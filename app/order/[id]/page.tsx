@@ -30,6 +30,11 @@ type Order = {
   note: string | null
   items: OrderItem[]
   subtotal: number
+  original_subtotal: number | null
+  coupon_code: string | null
+  coupon_discount: number | null
+  eligible_subtotal: number | null
+  ineligible_subtotal: number | null
   status: string
   created_at: string
 }
@@ -265,7 +270,7 @@ export default function OrderPage({
         </div>
       )}
 
-      {/* باکس اقلام سفارش */}
+            {/* باکس اقلام سفارش */}
       <div className="info-card">
         <h3>🧾 اقلام سفارش</h3>
         {order.table_number && (
@@ -297,10 +302,30 @@ export default function OrderPage({
           </div>
         ))}
 
-        <div className="total-row">
-          <span>جمع کل</span>
-          <span>{formatPrice(order.subtotal)} تومان</span>
-        </div>
+        {/* ✅ خلاصه پرداخت با تخفیف */}
+        {order.coupon_code && order.coupon_discount ? (
+          <div className="order-payment-summary">
+            <div className="info-row">
+              <span>جمع اقلام:</span>
+              <strong>
+                {formatPrice(order.original_subtotal ?? order.subtotal)} تومان
+              </strong>
+            </div>
+            <div className="info-row discount">
+              <span>🎟️ تخفیف ({order.coupon_code}):</span>
+              <strong>− {formatPrice(order.coupon_discount)} تومان</strong>
+            </div>
+            <div className="total-row">
+              <span>قابل پرداخت</span>
+              <span>{formatPrice(order.subtotal)} تومان</span>
+            </div>
+          </div>
+        ) : (
+          <div className="total-row">
+            <span>جمع کل</span>
+            <span>{formatPrice(order.subtotal)} تومان</span>
+          </div>
+        )}
       </div>
 
       {/* باکس اطلاعات مشتری */}

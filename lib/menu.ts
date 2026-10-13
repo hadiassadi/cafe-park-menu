@@ -91,12 +91,13 @@ export async function getMenuData(): Promise<MenuData> {
       .order('sort_order', { ascending: true })
       .order('id', { ascending: true }),
 
-    db
+        db
   .from('products')
   .select(
     `id,category_id,name,description,price,size,image_url,
      is_featured,sort_order,is_available,is_new,
      calories,prep_time_minutes,ingredients,allergens,dietary_info,
+     coupon_eligible,
      variant_groups(
        id, product_id, name, is_required, sort_order,
        variant_options(id, group_id, name, price_modifier, is_default, is_available, sort_order)

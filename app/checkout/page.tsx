@@ -6,13 +6,20 @@ import Link from 'next/link'
 import { useCart } from '@/lib/cart-context'
 
 const formatPrice = (price: number) =>
-  new Intl.NumberFormat('fa-IR').format(price)
+  new Intl.NumberFormat('fa-IR').format(Math.round(price))
 
-// ارقام فارسی → انگلیسی
 const toLatinDigits = (s: string) =>
   s
     .replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06f0))
     .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660))
+
+type AppliedCoupon = {
+  id: string
+  code: string
+  description: string | null
+  discount_type: 'percent' | 'fixed'
+  discount_value: number
+}
 
 function CheckoutForm() {
   const router = useRouter()
@@ -24,21 +31,105 @@ function CheckoutForm() {
   const [tableNumber, setTableNumber] = useState('')
   const [note, setNote] = useState('')
   const [saving, setSaving] = useState(false)
-const [error, setError] = useState<string | null>(null)
-const [submitted, setSubmitted] = useState(false)   // ✅ جدید
+  const [error, setError] = useState<string | null>(null)
+  const [submitted, setSubmitted] = useState(false)
 
-// خوندن شماره میز از URL
-useEffect(() => {
-  const table = searchParams.get('table')
-  if (table) setTableNumber(table)
-}, [searchParams])
+  // کوپن
+  const [couponCode, setCouponCode] = useState('')
+  const [couponLoading, setCouponLoading] = useState(false)
+  const [couponError, setCouponError] = useState<string | null>(null)
+  const [appliedCoupon, setAppliedCoupon] = useState<AppliedCoupon | null>(null)
+  const [discount, setDiscount] = useState(0)
+  const [eligibleSubtotal, setEligibleSubtotal] = useState(0)
+  const [ineligibleSubtotal, setIneligibleSubtotal] = useState(0)
+  const [eligibleProductIds, setEligibleProductIds] = useState<string[]>([])
 
-// اگه سبد خالی بود برگرد (فقط اگه سفارش ثبت نشده باشه)
-useEffect(() => {
-  if (items.length === 0 && !submitted) {
-    router.replace('/cart')
+  const finalTotal = totalPrice - discount
+
+  // خوندن شماره میز از URL
+  useEffect(() => {
+    const table = searchParams.get('table')
+    if (table) setTableNumber(table)
+  }, [searchParams])
+
+  // اگه سبد خالی بود برگرد
+  useEffect(() => {
+    if (items.length === 0 && !submitted) {
+      router.replace('/cart')
+    }
+  }, [items.length, router, submitted])
+
+  // اگه سبد تغییر کرد، کوپن رو پاک کن
+  useEffect(() => {
+    if (appliedCoupon) {
+      setAppliedCoupon(null)
+      setDiscount(0)
+      setEligibleSubtotal(0)
+      setIneligibleSubtotal(0)
+      setEligibleProductIds([])
+      setCouponCode('')
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [totalPrice])
+
+  async function handleApplyCoupon() {
+    const code = couponCode.trim().toUpperCase()
+    if (!code) {
+      setCouponError('کد تخفیف رو وارد کن')
+      return
+    }
+
+    setCouponLoading(true)
+    setCouponError(null)
+
+    try {
+      const res = await fetch('/api/coupons/validate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          code,
+          subtotal: totalPrice,
+          items: items.map((item) => ({
+            product_id: item.productId,
+            quantity: item.quantity,
+            unit_price: item.unitPrice,
+          })),
+        }),
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        throw new Error(data.error || 'کد تخفیف معتبر نیست')
+      }
+
+      setAppliedCoupon(data.coupon)
+      setDiscount(data.discount)
+      setEligibleSubtotal(data.eligibleSubtotal)
+      setIneligibleSubtotal(data.ineligibleSubtotal)
+      setEligibleProductIds(data.eligibleProductIds || [])
+      setCouponError(null)
+    } catch (err) {
+      setCouponError(err instanceof Error ? err.message : 'خطا')
+      setAppliedCoupon(null)
+      setDiscount(0)
+      setEligibleSubtotal(0)
+      setIneligibleSubtotal(0)
+      setEligibleProductIds([])
+    } finally {
+      setCouponLoading(false)
+    }
   }
-}, [items.length, router, submitted])
+
+  function handleRemoveCoupon() {
+    setAppliedCoupon(null)
+    setDiscount(0)
+    setEligibleSubtotal(0)
+    setIneligibleSubtotal(0)
+    setEligibleProductIds([])
+    setCouponCode('')
+    setCouponError(null)
+  }
 
   if (items.length === 0) return null
 
@@ -48,12 +139,10 @@ useEffect(() => {
     setError(null)
 
     try {
-      // اعتبارسنجی
       if (!name.trim()) throw new Error('نام رو وارد کن')
       const cleanPhone = toLatinDigits(phone).replace(/\D/g, '')
       if (cleanPhone.length < 10) throw new Error('شماره تماس معتبر نیست')
 
-      // ارسال به API
       const res = await fetch('/api/orders', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -72,6 +161,7 @@ useEffect(() => {
             quantity: item.quantity,
           })),
           subtotal: totalPrice,
+          coupon_code: appliedCoupon?.code || null,
         }),
       })
 
@@ -81,7 +171,6 @@ useEffect(() => {
         throw new Error(data.error || 'خطا در ثبت سفارش')
       }
 
-            // ذخیره اطلاعات مشتری برای بار بعد
       try {
         localStorage.setItem(
           'cafe-park-customer',
@@ -92,11 +181,8 @@ useEffect(() => {
         )
       } catch {}
 
-      // ✅ پاک کردن سبد
+      setSubmitted(true)
       clearCart()
-
-      // ✅ استفاده از window.location.href (نه router.push)
-      // این باعث می‌شه صفحه کامل رفرش شه و race condition نداشته باشیم
       window.location.href = `/order/${data.order.id}`
     } catch (err) {
       setError(err instanceof Error ? err.message : 'خطا در ثبت سفارش')
@@ -107,7 +193,6 @@ useEffect(() => {
 
   return (
     <div className="checkout-page">
-      {/* هدر */}
       <header className="checkout-header">
         <Link href="/cart" className="cart-back">
           ← بازگشت به سبد
@@ -123,19 +208,44 @@ useEffect(() => {
             🧾 خلاصه سفارش ({formatPrice(totalItems)} قلم)
           </div>
           <ul className="checkout-items">
-            {items.map((item) => (
-              <li key={item.id} className="checkout-item">
-                <span className="checkout-item-name">
-                  {formatPrice(item.quantity)} × {item.productName}
-                  {item.selectedOptionName && (
-                    <small> ({item.selectedOptionName})</small>
-                  )}
-                </span>
-                <span className="checkout-item-price">
-                  {formatPrice(item.unitPrice * item.quantity)}
-                </span>
-              </li>
-            ))}
+            {items.map((item) => {
+              const isEligible = appliedCoupon
+                ? eligibleProductIds.includes(item.productId)
+                : null
+
+              return (
+                <li
+                  key={item.id}
+                  className={`checkout-item ${
+                    isEligible === true
+                      ? 'item-eligible'
+                      : isEligible === false
+                        ? 'item-ineligible'
+                        : ''
+                  }`}
+                >
+                  <span className="checkout-item-name">
+                    {formatPrice(item.quantity)} × {item.productName}
+                    {item.selectedOptionName && (
+                      <small> ({item.selectedOptionName})</small>
+                    )}
+                    {isEligible === true && (
+                      <span className="item-badge badge-eligible">
+                        ✅ شامل تخفیف
+                      </span>
+                    )}
+                    {isEligible === false && (
+                      <span className="item-badge badge-ineligible">
+                        🚫 بدون تخفیف
+                      </span>
+                    )}
+                  </span>
+                  <span className="checkout-item-price">
+                    {formatPrice(item.unitPrice * item.quantity)}
+                  </span>
+                </li>
+              )
+            })}
           </ul>
           <div className="checkout-total">
             <span>جمع کل</span>
@@ -143,6 +253,55 @@ useEffect(() => {
               {formatPrice(totalPrice)} <small>تومان</small>
             </strong>
           </div>
+        </div>
+
+        {/* کارت کد تخفیف */}
+        <div className="checkout-card">
+          <div className="checkout-card-title">🎟️ کد تخفیف</div>
+
+          {!appliedCoupon ? (
+            <div className="coupon-input-row">
+              <input
+                type="text"
+                value={couponCode}
+                onChange={(e) => {
+                  setCouponCode(e.target.value.toUpperCase())
+                  setCouponError(null)
+                }}
+                placeholder="مثلاً WELCOME10"
+                dir="ltr"
+                style={{ textAlign: 'left', textTransform: 'uppercase' }}
+                disabled={couponLoading || saving}
+              />
+              <button
+                type="button"
+                className="coupon-apply-btn"
+                onClick={handleApplyCoupon}
+                disabled={couponLoading || saving || !couponCode.trim()}
+              >
+                {couponLoading ? '...' : 'اعمال'}
+              </button>
+            </div>
+          ) : (
+            <div className="coupon-applied">
+              <div className="coupon-applied-info">
+                <span className="coupon-applied-code">{appliedCoupon.code}</span>
+                {appliedCoupon.description && (
+                  <small>{appliedCoupon.description}</small>
+                )}
+              </div>
+              <button
+                type="button"
+                className="coupon-remove-btn"
+                onClick={handleRemoveCoupon}
+                disabled={saving}
+              >
+                ✕
+              </button>
+            </div>
+          )}
+
+          {couponError && <div className="coupon-error">❌ {couponError}</div>}
         </div>
 
         {/* اطلاعات مشتری */}
@@ -205,15 +364,44 @@ useEffect(() => {
           </div>
         </div>
 
-        {/* خطا */}
+        {/* خلاصه نهایی */}
+        <div className="checkout-card">
+          <div className="checkout-card-title">💰 خلاصه نهایی</div>
+
+          <div className="checkout-total-row">
+            <span>جمع اقلام:</span>
+            <strong>{formatPrice(totalPrice)} تومان</strong>
+          </div>
+
+          {discount > 0 && (
+            <div className="checkout-total-row discount">
+              <span>🎟️ تخفیف ({appliedCoupon?.code}):</span>
+              <strong>− {formatPrice(discount)} تومان</strong>
+            </div>
+          )}
+
+          {discount > 0 && ineligibleSubtotal > 0 && (
+            <div className="checkout-discount-note">
+              <span className="checkout-discount-note-icon">💡</span>
+              <span>
+                تخفیف روی {formatPrice(eligibleSubtotal)} تومان از سفارش اعمال
+                شد. {formatPrice(ineligibleSubtotal)} تومان دیگر شامل تخفیف
+                نمی‌شن.
+              </span>
+            </div>
+          )}
+
+          <div className="checkout-total-row final">
+            <span>قابل پرداخت:</span>
+            <strong>
+              {formatPrice(finalTotal)} <small>تومان</small>
+            </strong>
+          </div>
+        </div>
+
         {error && <div className="checkout-error">❌ {error}</div>}
 
-        {/* دکمه ثبت */}
-        <button
-          type="submit"
-          className="checkout-btn"
-          disabled={saving}
-        >
+        <button type="submit" className="checkout-btn" disabled={saving}>
           {saving ? 'در حال ثبت...' : 'ثبت سفارش ✅'}
         </button>
 
@@ -227,7 +415,9 @@ useEffect(() => {
 
 export default function CheckoutPage() {
   return (
-    <Suspense fallback={<div className="checkout-page">در حال بارگذاری...</div>}>
+    <Suspense
+      fallback={<div className="checkout-page">در حال بارگذاری...</div>}
+    >
       <CheckoutForm />
     </Suspense>
   )

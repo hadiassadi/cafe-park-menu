@@ -10,6 +10,7 @@ export async function addCategory(formData: FormData) {
   const icon = String(formData.get('icon') || '').trim()
   const description = String(formData.get('description') || '').trim()
   const sortOrder = Number(formData.get('sort_order') || 0)
+  const couponEligible = formData.get('coupon_eligible') === 'on'
 
   if (!name) {
     return { error: 'نام دسته را وارد کن.' }
@@ -23,6 +24,7 @@ export async function addCategory(formData: FormData) {
       description: description || null,
       is_active: true,
       sort_order: sortOrder,
+      coupon_eligible: couponEligible,
     })
 
   if (error) {
@@ -42,6 +44,7 @@ export async function updateCategory(formData: FormData) {
   const description = String(formData.get('description') || '').trim()
   const sortOrder = Number(formData.get('sort_order') || 0)
   const isActive = formData.get('is_active') === 'on'
+  const couponEligible = formData.get('coupon_eligible') === 'on'
 
   if (!id) {
     return { error: 'شناسه دسته مشخص نیست.' }
@@ -59,6 +62,7 @@ export async function updateCategory(formData: FormData) {
       description: description || null,
       sort_order: sortOrder,
       is_active: isActive,
+      coupon_eligible: couponEligible,
       updated_at: new Date().toISOString(),
     })
     .eq('id', id)

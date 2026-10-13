@@ -20,6 +20,14 @@ type VariantGroup = {
   options: VariantOption[]
 }
 
+// ✅ تبدیل مقدار فرم به boolean | null
+function parseCouponEligible(value: FormDataEntryValue | null): boolean | null {
+  const v = String(value || '').trim()
+  if (v === 'true') return true
+  if (v === 'false') return false
+  return null // inherit
+}
+
 async function uploadProductImage(
   db: Awaited<ReturnType<typeof supabaseServer>>,
   file: FormDataEntryValue | null
@@ -65,19 +73,16 @@ async function uploadProductImage(
   return { url: data.publicUrl, error: null }
 }
 
-// ✅ ذخیره واریانت‌ها
 async function saveVariantGroups(
   db: Awaited<ReturnType<typeof supabaseServer>>,
   productId: string,
   groups: VariantGroup[]
 ) {
-  // پاک کردن گروه‌های قبلی
   await db
     .from('variant_groups')
     .delete()
     .eq('product_id', productId)
 
-  // اضافه کردن گروه‌های جدید
   for (const group of groups) {
     const { data: groupData, error: groupError } = await db
       .from('variant_groups')
@@ -121,6 +126,9 @@ export async function addProduct(formData: FormData) {
   const isFeatured = formData.get('is_featured') === 'on'
   const isNew = formData.get('is_new') === 'on'
   const isAvailable = formData.get('is_available') !== 'off'
+
+  // ✅ جدید
+  const couponEligible = parseCouponEligible(formData.get('coupon_eligible'))
 
   const calories = formData.get('calories')
     ? Number(formData.get('calories'))
@@ -171,6 +179,7 @@ export async function addProduct(formData: FormData) {
       allergens,
       dietary_info: dietaryInfo,
       sort_order: sortOrder,
+      coupon_eligible: couponEligible, // ✅ جدید
     })
     .select()
     .single()
@@ -202,6 +211,9 @@ export async function updateProduct(formData: FormData) {
   const isFeatured = formData.get('is_featured') === 'on'
   const isNew = formData.get('is_new') === 'on'
   const isAvailable = formData.get('is_available') !== 'off'
+
+  // ✅ جدید
+  const couponEligible = parseCouponEligible(formData.get('coupon_eligible'))
 
   const calories = formData.get('calories')
     ? Number(formData.get('calories'))
@@ -253,6 +265,7 @@ export async function updateProduct(formData: FormData) {
       ingredients,
       allergens,
       dietary_info: dietaryInfo,
+      coupon_eligible: couponEligible, // ✅ جدید
       updated_at: new Date().toISOString(),
     })
     .eq('id', id)

@@ -1,6 +1,7 @@
 // app/admin/page.tsx
 import Link from 'next/link'
 import { getOrderStats } from '@/lib/stats'
+import CleanupOrdersCard from './components/CleanupOrdersCard'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 60
@@ -11,7 +12,6 @@ const formatPrice = (price: number) =>
 export default async function AdminDashboard() {
   const stats = await getOrderStats()
 
-  // بالاترین فروش در ۷ روز اخیر (برای ارتفاع نمودار)
   const maxRevenue = Math.max(...stats.dailyRevenue.map((d) => d.revenue), 1)
 
   return (
@@ -201,6 +201,12 @@ export default async function AdminDashboard() {
             </div>
           </Link>
         </div>
+      </section>
+
+      {/* 🧹 پاکسازی سفارش‌های قدیمی */}
+      <section className="dashboard-section">
+        <h2>🧹 نگهداری دیتابیس</h2>
+        <CleanupOrdersCard />
       </section>
     </div>
   )
