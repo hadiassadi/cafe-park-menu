@@ -8216,3 +8216,321 @@ body {
 .admin-shell.dark-mode ::-webkit-scrollbar-thumb:hover {
   background: #5a5247;
 }
+/* ========================================
+   56. ADMIN ORDER NOTIFICATIONS (اعلان سفارش)
+   ======================================== */
+
+/* ─── Badge در سایدبار دسکتاپ ─── */
+.admin-nav-badge {
+  margin-inline-start: auto;
+  min-width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: #dc2626;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+  box-shadow: 0 2px 6px rgba(220, 38, 38, 0.35);
+}
+
+.admin-nav-badge.flash {
+  animation: badgeFlash 0.5s ease-in-out 6;
+}
+
+@keyframes badgeFlash {
+  0%,
+  100% {
+    transform: scale(1);
+    box-shadow: 0 2px 6px rgba(220, 38, 38, 0.35);
+  }
+  50% {
+    transform: scale(1.15);
+    box-shadow: 0 4px 16px rgba(220, 38, 38, 0.7);
+  }
+}
+
+/* ─── Badge در منوی موبایل ─── */
+.admin-mobile-icon-wrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.admin-mobile-badge {
+  position: absolute;
+  top: -6px;
+  inset-inline-end: -10px;
+  min-width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #dc2626;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 1;
+  box-shadow: 0 1px 4px rgba(220, 38, 38, 0.4);
+}
+
+.admin-mobile-badge.flash {
+  animation: badgeFlash 0.5s ease-in-out 6;
+}
+
+/* ─── Dark Mode ─── */
+.admin-shell.dark-mode .admin-nav-badge,
+.admin-shell.dark-mode .admin-mobile-badge {
+  background: #ef4444;
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.5);
+}
+
+/* ─── احترام به reduced motion ─── */
+@media (prefers-reduced-motion: reduce) {
+  .admin-nav-badge.flash,
+  .admin-mobile-badge.flash {
+    animation: none;
+  }
+}
+/* ========================================
+   57. NEW ORDER ALERT (هشدار سفارش جدید)
+   ======================================== */
+
+.new-order-alert-container {
+  position: fixed;
+  top: 20px;
+  inset-inline-start: 20px;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 360px;
+  pointer-events: none;
+}
+
+.new-order-alert-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 14px;
+  background: #dc2626;
+  color: #fff;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 800;
+  box-shadow: 0 6px 24px rgba(220, 38, 38, 0.4);
+  pointer-events: auto;
+  animation: alertSlideIn 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.new-order-alert-dismiss-all {
+  border: 0;
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.new-order-alert-dismiss-all:hover {
+  background: rgba(255, 255, 255, 0.35);
+}
+
+.new-order-alert {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  background: #fff;
+  border: 2px solid #dc2626;
+  border-radius: 14px;
+  box-shadow: 0 12px 40px rgba(220, 38, 38, 0.25);
+  pointer-events: auto;
+  animation: alertSlideIn 0.35s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+@keyframes alertSlideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-30px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+.new-order-alert-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.new-order-alert-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 800;
+  color: #29251f;
+}
+
+.new-order-alert-icon {
+  font-size: 20px;
+  line-height: 1;
+  animation: bellRing 1s ease-in-out infinite;
+}
+
+@keyframes bellRing {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  10%,
+  30%,
+  50% {
+    transform: rotate(-12deg);
+  }
+  20%,
+  40% {
+    transform: rotate(12deg);
+  }
+  60% {
+    transform: rotate(0deg);
+  }
+}
+
+.new-order-alert-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: #4a443d;
+  padding-inline-start: 28px;
+}
+
+.new-order-alert-info strong {
+  color: #29251f;
+  font-weight: 800;
+}
+
+.new-order-alert-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.new-order-alert-view {
+  flex: 1;
+  min-height: 40px;
+  padding: 8px 14px;
+  border: 0;
+  border-radius: 10px;
+  background: #dc2626;
+  color: #fff;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.new-order-alert-view:hover {
+  background: #b91c1c;
+}
+
+.new-order-alert-close {
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #e3ddd2;
+  border-radius: 10px;
+  background: #fffdf9;
+  color: #766f64;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.new-order-alert-close:hover {
+  background: #f5f0e9;
+}
+
+.new-order-alert-more {
+  padding: 8px 14px;
+  background: #f5f0e9;
+  color: #625b51;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+  pointer-events: auto;
+}
+
+/* ─── Dark Mode ─── */
+.admin-shell.dark-mode .new-order-alert {
+  background: #2d2924;
+  border-color: #ef4444;
+}
+
+.admin-shell.dark-mode .new-order-alert-title {
+  color: #f0e9df;
+}
+
+.admin-shell.dark-mode .new-order-alert-info {
+  color: #b8b0a6;
+}
+
+.admin-shell.dark-mode .new-order-alert-info strong {
+  color: #f0e9df;
+}
+
+.admin-shell.dark-mode .new-order-alert-close {
+  background: #24211c;
+  border-color: #3a352c;
+  color: #9a9287;
+}
+
+.admin-shell.dark-mode .new-order-alert-close:hover {
+  background: #2d2924;
+}
+
+.admin-shell.dark-mode .new-order-alert-more {
+  background: #24211c;
+  color: #9a9287;
+}
+
+/* ─── موبایل ─── */
+@media (max-width: 650px) {
+  .new-order-alert-container {
+    top: 10px;
+    inset-inline-start: 10px;
+    inset-inline-end: 10px;
+    max-width: none;
+  }
+}
+
+/* ─── Reduced motion ─── */
+@media (prefers-reduced-motion: reduce) {
+  .new-order-alert,
+  .new-order-alert-header,
+  .new-order-alert-icon {
+    animation: none;
+  }
+}

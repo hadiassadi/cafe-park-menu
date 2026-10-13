@@ -5,6 +5,8 @@ import { usePathname, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabaseBrowser } from '@/lib/supabase/client'
 import AdminThemeToggle from './components/AdminThemeToggle'
+import NewOrderAlert from './components/NewOrderAlert'
+import { useOrderNotifications } from '@/lib/use-order-notifications'
 
 export default function AdminLayout({
   children,
@@ -14,9 +16,17 @@ export default function AdminLayout({
   const pathname = usePathname()
   const router = useRouter()
   const [checking, setChecking] = useState(true)
+  const isLoginPage = pathname === '/admin/login'
+
+  const {
+    pendingCount,
+    newOrders,
+    flash,
+    dismissOrder,
+    dismissAll,
+  } = useOrderNotifications(!isLoginPage)
 
   useEffect(() => {
-    // ✅ اعمال تم ذخیره‌شده قبل از هر چیز
     try {
       if (localStorage.getItem('cafe-park-admin-theme') === 'dark') {
         document.querySelector('.admin-shell')?.classList.add('dark-mode')
@@ -37,25 +47,24 @@ export default function AdminLayout({
         return
       }
 
+      try {
+        if (
+          'Notification' in window &&
+          Notification.permission === 'default'
+        ) {
+          setTimeout(() => {
+            Notification.requestPermission().catch(() => {})
+          }, 3000)
+        }
+      } catch {}
+
       setChecking(false)
     }
 
     checkUser()
-  }, [pathname, router])
-
-  // ✅ اعمال تم بعد از mount (برای صفحه‌های بعدی)
-  useEffect(() => {
-    try {
-      const isDark =
-        localStorage.getItem('cafe-park-admin-theme') === 'dark'
-      const shell = document.querySelector('.admin-shell')
-      if (shell) {
-        shell.classList.toggle('dark-mode', isDark)
-      }
-    } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname])
 
-  // صفحه لاگین منو نداره
   if (pathname === '/admin/login') {
     return <main>{children}</main>
   }
@@ -89,7 +98,6 @@ export default function AdminLayout({
 
   return (
     <div className="admin-shell">
-      {/* سایدبار */}
       <aside className="admin-sidebar">
         <div className="admin-sidebar-header">
           <div className="admin-logo">☕ کافه پارک</div>
@@ -97,18 +105,30 @@ export default function AdminLayout({
         </div>
 
         <nav className="admin-nav">
-          {menuItems.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`admin-nav-item ${
-                isActive(item.href) ? 'active' : ''
-              }`}
-            >
-              <span className="admin-nav-icon">{item.icon}</span>
-              <span>{item.label}</span>
-            </Link>
-          ))}
+          {menuItems.map((item) => {
+            const isOrders = item.href === '/admin/orders'
+            const hasBadge = isOrders && pendingCount > 0
+
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`admin-nav-item ${
+                  isActive(item.href) ? 'active' : ''
+                }`}
+              >
+                <span className="admin-nav-icon">{item.icon}</span>
+                <span>{item.label}</span>
+                {hasBadge && (
+                  <span
+                    className={`admin-nav-badge ${flash ? 'flash' : ''}`}
+                  >
+                    {pendingCount.toLocaleString('fa-IR')}
+                  </span>
+                )}
+              </Link>
+            )
+          })}
         </nav>
 
         <div className="admin-sidebar-footer">
@@ -122,7 +142,6 @@ export default function AdminLayout({
             <span>مشاهده منو</span>
           </Link>
 
-          {/* ✅ دکمه تغییر تم */}
           <AdminThemeToggle />
 
           <button onClick={handleLogout} className="admin-logout-btn">
@@ -132,24 +151,43 @@ export default function AdminLayout({
         </div>
       </aside>
 
-      {/* محتوا */}
       <main className="admin-main">{children}</main>
 
-      {/* منوی موبایل */}
       <nav className="admin-mobile-nav">
-        {menuItems.map((item) => (
-          <Link
-            key={item.href}
-            href={item.href}
-            className={`admin-mobile-item ${
-              isActive(item.href) ? 'active' : ''
-            }`}
-          >
-            <span>{item.icon}</span>
-            <small>{item.label}</small>
-          </Link>
-        ))}
+        {menuItems.map((item) => {
+          const isOrders = item.href === '/admin/orders'
+          const hasBadge = isOrders && pendingCount > 0
+
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={`admin-mobile-item ${
+                isActive(item.href) ? 'active' : ''
+              }`}
+            >
+              <span className="admin-mobile-icon-wrapper">
+                {item.icon}
+                {hasBadge && (
+                  <span
+                    className={`admin-mobile-badge ${flash ? 'flash' : ''}`}
+                  >
+                    {pendingCount.toLocaleString('fa-IR')}
+                  </span>
+                )}
+              </span>
+              <small>{item.label}</small>
+            </Link>
+          )
+        })}
       </nav>
+
+      {/* ✅ هشدار سفارش‌های جدید */}
+      <NewOrderAlert
+        orders={newOrders}
+        onDismiss={dismissOrder}
+        onDismissAll={dismissAll}
+      />
     </div>
   )
 }
