@@ -13,7 +13,7 @@
 - **نام پکیج:** `cafe-park-menu` (پوشه پروژه: `Cofe-Park`)
 - **تکنولوژی:** Next.js 16 (App Router) + React 19 + TypeScript + Supabase + `globals.css` (بدون Tailwind)
 - **هدف:** مشتری‌ها با اسکن QR روی میز، منو را باز می‌کنند، سفارش می‌دهند و از طریق واتساپ به کافه می‌فرستند. صاحب کافه هم از پنل ادمین، سفارش‌ها، منو، میزها، تم‌ها و تنظیمات را مدیریت می‌کند.
-- **دیتابیس:** Supabase (PostgreSQL) + Realtime برای آپدیت لحظه‌ای سفارش‌ها
+- **دیتابیس:** Supabase (PostgreSQL) + Realtime برای لیست سفارش‌ها + **Polling برای اعلان‌ها**
 - **ریپازیتوری:** `https://github.com/hadiassadi/cafe-park-menu.git` (branch: `main`)
 - **مسیر لوکال:** `D:\Cafe Park\Menu\New Menu\CafePark-Menu\Cofe-Park`
 
@@ -26,49 +26,53 @@ Cofe-Park/
 ├── app/
 │   ├── page.tsx                    ← صفحه اصلی (SSR + JSON-LD)
 │   ├── MenuClient.tsx              ← کلاینت منوی مشتری
-│   ├── layout.tsx                  ← Layout اصلی (فونت + متادیتای SEO)
-│   ├── globals.css                 ← ✅ تنها فایل استایل پروژه (۵۳ بخش)
-│   ├── manifest.ts                 ← ✅ PWA Manifest
-│   ├── robots.ts                   ← ✅ robots.txt
-│   ├── sitemap.ts                  ← ✅ sitemap.xml
-│   ├── cart/page.tsx               ← ✅ صفحه سبد خرید
-│   ├── checkout/page.tsx           ← ✅ صفحه ثبت سفارش + کوپن
-│   ├── order/[id]/page.tsx         ← ✅ جزئیات سفارش مشتری + لغو با شمارش معکوس
+│   ├── layout.tsx                  ← Root Layout (فونت + متادیتای SEO)
+│   ├── globals.css                 ← ✅ تنها فایل استایل پروژه (۵۸ بخش)
+│   ├── manifest.ts                 ← PWA Manifest
+│   ├── robots.ts                   ← robots.txt
+│   ├── sitemap.ts                  ← sitemap.xml
+│   ├── cart/page.tsx               ← صفحه سبد خرید
+│   ├── checkout/page.tsx           ← صفحه ثبت سفارش + کوپن
+│   ├── order/[id]/page.tsx         ← جزئیات سفارش مشتری + لغو با شمارش معکوس
 │   ├── api/
-│   │   ├── orders/route.ts         ← ✅ API ثبت سفارش + محاسبه کوپن
-│   │   └── coupons/validate/route.ts ← ✅ اعتبارسنجی کوپن
+│   │   ├── orders/route.ts         ← API ثبت سفارش + محاسبه کوپن
+│   │   └── coupons/validate/route.ts ← اعتبارسنجی کوپن
 │   ├── components/
-│   │   ├── ProductDetailModal.tsx  ← ✅ مودال جزئیات محصول
-│   │   ├── CartFloatingBar.tsx     ← ✅ نوار شناور سبد
-│   │   ├── ServiceWorkerRegister.tsx ← ✅ ثبت Service Worker
-│   │   ├── PWAInstallPrompt.tsx    ← ✅ دکمه نصب PWA
+│   │   ├── ProductDetailModal.tsx  ← مودال جزئیات محصول
+│   │   ├── CartFloatingBar.tsx     ← نوار شناور سبد
+│   │   ├── ServiceWorkerRegister.tsx ← ثبت Service Worker
+│   │   ├── PWAInstallPrompt.tsx    ← دکمه نصب PWA
 │   │   └── Modal.tsx               ← مودال عمومی ادمین
 │   └── admin/
-│       ├── layout.tsx              ← سایدبار + منوی موبایل
-│       ├── login/page.tsx          ← ✅ لاگین
-│       ├── page.tsx                ← ✅ داشبورد با آمار فروش
-│       ├── orders/                 ← مدیریت سفارش‌ها (Realtime + فاکتور چاپی)
+│       ├── layout.tsx              ← سایدبار + منوی موبایل + اعلان سفارش جدید
+│       ├── login/page.tsx          ← لاگین
+│       ├── page.tsx                ← داشبورد با آمار فروش
+│       ├── orders/                 ← مدیریت سفارش‌ها + فاکتور چاپی
 │       ├── products/               ← مدیریت محصولات (+ coupon_eligible)
 │       ├── categories/             ← مدیریت دسته‌ها (+ coupon_eligible)
 │       ├── tables/                 ← مدیریت میزها + QR
 │       ├── themes/                 ← تم‌ها
 │       ├── quotes/                 ← جملات
-│       ├── coupons/                ← ✅ مدیریت کدهای تخفیف
+│       ├── coupons/                ← مدیریت کدهای تخفیف
 │       ├── components/
-│       │   └── CleanupOrdersCard.tsx ← ✅ پاکسازی سفارش‌های قدیمی
+│       │   ├── CleanupOrdersCard.tsx ← پاکسازی سفارش‌های قدیمی
+│       │   ├── AdminThemeToggle.tsx  ← ✅ دکمه تغییر تم شبانه/روز
+│       │   └── NewOrderAlert.tsx     ← ✅ کارت هشدار سفارش جدید
 │       └── settings/               ← تنظیمات کامل
 ├── lib/
 │   ├── menu-types.ts               ← تایپ‌ها + DEFAULT_THEME + Coupon
 │   ├── cart-context.tsx            ← Context سبد خرید
 │   ├── menu.ts                     ← getMenuData() + getSettings()
 │   ├── site.ts                     ← SITE_URL
-│   ├── stats.ts                    ← ✅ آمار فروش داشبورد
+│   ├── stats.ts                    ← آمار فروش داشبورد
+│   ├── use-order-notifications.ts  ← ✅ هوک اعلان سفارش (Polling)
+│   ├── use-document-title.ts       ← ✅ هوک تایتل + favicon داینامیک
 │   └── supabase/
 │       ├── client.ts               ← supabaseBrowser()
 │       └── server.ts               ← supabaseServer()
 ├── public/
-│   ├── sw.js                       ← ✅ Service Worker
-│   ├── favicon.ico                 ← ✅ (در ریشه public)
+│   ├── sw.js                       ← Service Worker
+│   ├── favicon.ico                 ← (در ریشه public)
 │   └── icons/
 │       ├── source-logo.png         ← منبع آیکون‌ها (شفاف)
 │       ├── icon-192.png
@@ -79,18 +83,18 @@ Cofe-Park/
 │       └── favicon-32x32.png
 ├── scripts/
 │   ├── backup.mjs                  ← بکاپ لوکال
-│   ├── backup-server.mjs           ← ✅ بکاپ کامل سرور
+│   ├── backup-server.mjs           ← بکاپ کامل سرور
 │   ├── schedule-backup.mjs         ← بکاپ خودکار هر ۲۴ ساعت
-│   ├── generate-icons.mjs          ← ✅ ساخت آیکون‌های PWA
-│   ├── make-transparent.mjs        ← ✅ شفاف‌سازی آیکون‌ها
-│   └── build-icons.mjs             ← ✅ ساخت همه سایزها از یک منبع
+│   ├── generate-icons.mjs          ← ساخت آیکون‌های PWA
+│   ├── make-transparent.mjs        ← شفاف‌سازی آیکون‌ها
+│   └── build-icons.mjs             ← ساخت همه سایزها از یک منبع
 ├── middleware.ts
 ├── schema.sql
 ├── package.json
 ├── PROJECT_STATE.md
 ├── dev.bat                         ← منوی توسعه
 ├── end-of-day.bat                  ← اسکریپت پایان روز
-├── .gitattributes                  ← ✅ خط‌پایان‌های یکسان
+├── .gitattributes                  ← خط‌پایان‌های یکسان
 ├── .gitignore
 ├── backups/                        ← بکاپ‌های لوکال (git ignore)
 └── backups-server/                 ← بکاپ‌های سرور (git ignore)
@@ -114,6 +118,18 @@ Cofe-Park/
 | `--secondary-color` | `#f3eee7` (theme) / `#e3ddd2` (ادمین) | بوردها |
 | **رنگ تخفیف** | `#2d5d3e` | متن تخفیف‌ها (سبز) |
 | **رنگ کوپن غیرفعال** | `#9b3c32` | هشدارها و بج‌های منفی |
+| **رنگ اعلان** | `#dc2626` / `#ef4444` (dark) | Badge و Alert سفارش جدید |
+
+### رنگ‌های Dark Mode (پنل ادمین):
+```css
+--admin-bg: #1a1815;
+--admin-surface: #24211c;
+--admin-surface-2: #2d2924;
+--admin-border: #3a352c;
+--admin-text: #f0e9df;
+--admin-text-muted: #9a9287;
+--admin-primary: #a88264;
+```
 
 ### فونت‌ها:
 - **پیش‌فرض:** `Vazirmatn` (از `next/font/local`، متغیر `--font-vazir`)
@@ -137,6 +153,10 @@ Cofe-Park/
 
 **داشبورد:** `.chart-card` / `.chart-bars` / `.chart-col` / `.chart-bar` / `.top-products-list` / `.top-product-item` / `.cleanup-card`
 
+**دارک مود:** `.admin-shell.dark-mode` + تمام کلاس‌های override شده
+
+**اعلان سفارش:** `.admin-nav-badge` / `.admin-mobile-badge` / `.new-order-alert-container` / `.new-order-alert` / `.new-order-alert-view` / `.new-order-alert-close`
+
 ### شماره‌گذاری بخش‌های `globals.css`:
 | بخش | عنوان |
 |---|---|
@@ -147,25 +167,28 @@ Cofe-Park/
 | 22-27 | MODAL + IMAGE/FONT UPLOAD + ICON PICKER |
 | 28-32 | CATEGORY ICONS + PUBLIC MENU POLISH + ALL MENU SHEET |
 | 33-36 | ADMIN LOGIN + SETTINGS + HERO IMAGE + CONTACT |
-| 37 | **ADMIN ORDERS LIST** |
-| 38 | **ORDER DETAILS PAGE** |
-| 39 | **ADMIN TABLES** |
-| 40 | **PRODUCT MODAL + CART BAR + BADGES** |
-| 41 | **CART PAGE** |
-| 42 | **CHECKOUT PAGE** |
-| 43 | **PRINT INVOICE** |
-| 44 | **PWA INSTALL PROMPT** |
-| 45 | **ADMIN DASHBOARD - SALES STATS** |
-| 46 | **ORDER CANCEL (لغو سفارش توسط مشتری)** |
-| 47 | **CLEANUP ORDERS (پاکسازی سفارش‌های قدیمی)** |
-| 48 | **ADMIN COUPONS** |
-| 49 | **CHECKOUT COUPON** |
-| 50 | **COUPON ELIGIBILITY (تنظیمات تخفیف)** |
-| 51 | **CHECKOUT ITEMS ELIGIBILITY** |
-| 52 | **ORDER DISCOUNT DISPLAY** |
-| 53 | **PRINT INVOICE - IMPROVEMENTS** |
-| 54 | **ADMIN DARK MODE** |
-| 55 | **ADMIN DARK MODE - FIXES** |
+| 37 | ADMIN ORDERS LIST |
+| 38 | ORDER DETAILS PAGE |
+| 39 | ADMIN TABLES |
+| 40 | PRODUCT MODAL + CART BAR + BADGES |
+| 41 | CART PAGE |
+| 42 | CHECKOUT PAGE |
+| 43 | PRINT INVOICE |
+| 44 | PWA INSTALL PROMPT |
+| 45 | ADMIN DASHBOARD - SALES STATS |
+| 46 | ORDER CANCEL (لغو سفارش توسط مشتری) |
+| 47 | CLEANUP ORDERS (پاکسازی سفارش‌های قدیمی) |
+| 48 | ADMIN COUPONS |
+| 49 | CHECKOUT COUPON |
+| 50 | COUPON ELIGIBILITY (تنظیمات تخفیف) |
+| 51 | CHECKOUT ITEMS ELIGIBILITY |
+| 52 | ORDER DISCOUNT DISPLAY |
+| 53 | PRINT INVOICE - IMPROVEMENTS |
+| 54 | ADMIN DARK MODE |
+| 55 | ADMIN DARK MODE - FIXES |
+| 56 | ADMIN ORDER NOTIFICATIONS |
+| 57 | NEW ORDER ALERT |
+| 58 | DYNAMIC DOCUMENT TITLE + FAVICON |
 
 ---
 
@@ -200,6 +223,8 @@ Cofe-Park/
 - [x] **مدیریت کدهای تخفیف** (CRUD + toggle + وضعیت‌ها)
 - [x] تنظیمات کامل (هدر، پس‌زمینه، اطلاعات تماس، لوگو)
 - [x] **دارک مود پنل ادمین** — با ذخیره در localStorage + بدون flash (بخش‌های ۵۴-۵۵)
+- [x] **اعلان سفارش جدید** — Badge + صدا + Toast + Browser Notification + Polling هر ۱۰ ثانیه (بخش‌های ۵۶-۵۷)
+- [x] **تایتل داینامیک + favicon** با شمارش سفارش‌ها (بخش ۵۸)
 
 ### زیرساخت و ابزارها
 - [x] سیستم تم داینامیک از دیتابیس
@@ -226,6 +251,8 @@ Cofe-Park/
 - [x] رفع فونت و ظاهر فاکتور چاپی (بخش ۴۳)
 - [x] رفع مشکل Service Worker در dev (فقط production)
 - [x] رفع نمایش ستون تخفیف در فاکتور چاپی
+- [x] رفع کارت‌های تیره مونده در دارک مود (بخش ۵۵)
+- [x] **جایگزینی Realtime با Polling** برای اعلان سفارش (به دلیل تحریم WebSocket در ایران)
 
 ---
 
@@ -235,12 +262,14 @@ Cofe-Park/
 
 - [ ] 🔴 **تست کامل روی موبایل واقعی** (iOS Safari + Chrome Android)
 - [ ] 🔴 **تست کامل جریان سفارش** از ابتدا تا انتها
-- [ ] 🔴 **تست Realtime** (دو تب همزمان)
 - [ ] 🟡 **پاکسازی خودکار سفارش‌های قدیمی** با Cron Job در Supabase
 - [ ] 🟡 **داشبورد آمار پیشرفته** (نمودار فروش ماهانه، مقایسه دوره‌ها)
-- [ ] 🟢 **ایمیل/SMS اطلاع‌رسانی** برای سفارش‌های جدید
-- [ ] 🟢 **تست بار (Load Test)** روی Supabase Realtime
 - [ ] 🟢 **گزارش‌گیری پیشرفته از کوپن‌ها** (کدوم کوپن بیشتر استفاده شده)
+- [ ] 🟢 **گزارش فروش روزانه Excel/CSV** برای مالیات
+- [ ] 🟢 **سیستم یادداشت مشتری (CRM)** — یادداشت روی مشتریان ثابت
+- [ ] 🟢 **ایمیل/SMS اطلاع‌رسانی** برای سفارش‌های جدید
+- [ ] 🟢 **تست بار (Load Test)** روی Supabase
+- [ ] 🟢 **آیکون و عنوان PWA** با badge (مشتری)
 
 ---
 
@@ -257,6 +286,7 @@ Cofe-Park/
 9. **همه متن‌های `.bat` به انگلیسی + ایموجی باشند** (CMD فارسی را RTL رندر نمی‌کند).
 10. **برای سرور از `supabaseServer()`، برای کلاینت از `supabaseBrowser()` استفاده شود.**
 11. **در کوئری‌های Supabase، همیشه ستون‌های جدید را به `select` اضافه کن.**
+12. **برای اعلان‌ها، از Polling استفاده شود (نه Realtime)** — به دلیل تحریم ایران.
 
 ---
 
@@ -274,7 +304,8 @@ Cofe-Park/
 2. هر کلاس جدیدی که در JSX استفاده می‌شود، باید در globals.css تعریف شود.
 3. پالت رنگ از متغیرهای CSS می‌آید، نه رنگ hex مستقیم.
 4. مودال‌ها از کلاس‌های modal-overlay + modal-container استفاده کنند.
-5. بخش‌های globals.css شماره‌گذاری شده‌اند (۱ تا ۵۳).
+5. بخش‌های globals.css شماره‌گذاری شده‌اند (۱ تا ۵۸).
+6. برای اعلان‌ها از Polling استفاده شود، نه Realtime (تحریم ایران).
 
 📁 ابزارهای موجود در پروژه:
 - dev.bat → منوی همه‌کاره توسعه (۱۶ گزینه)
@@ -309,7 +340,10 @@ Cofe-Park/
 | 1405/07/21 | **افزودن سیستم کامل کد تخفیف (کوپن)** با تشخیص اقلام واجد/غیرواجد (بخش‌های ۴۸-۵۳) |
 | 1405/07/21 | **افزودن max_order_amount و coupon_eligible** به کوپن‌ها، دسته‌ها و محصولات |
 | 1405/07/21 | نمایش تخفیف در فاکتور چاپی + ستون تخفیف هر آیتم |
-| 1405/07/21 | افزودن دارک مود برای پنل ادمین (بخش‌های ۵۴-۵۵) |
+| 1405/07/21 | **افزودن دارک مود برای پنل ادمین** (بخش‌های ۵۴-۵۵) |
+| 1405/07/21 | **افزودن اعلان سفارش جدید** (Badge + صدا + Toast + Browser Notification) (بخش‌های ۵۶-۵۷) |
+| 1405/07/21 | **افزودن تایتل و favicon داینامیک** با شمارش سفارش‌های جدید (بخش ۵۸) |
+| 1405/07/21 | **جایگزینی Realtime با Polling** برای اعلان‌ها (به دلیل تحریم ایران) |
 
 ---
 
@@ -417,6 +451,16 @@ pending    → confirmed  → preparing → ready → delivered
 دسته coupon_eligible = false      → پیش‌فرض غیرفعال (مگر override محصول)
 ```
 
+### Realtime Publications:
+```sql
+-- جدول orders برای Realtime و Polling
+alter publication supabase_realtime add table public.orders;
+
+-- RLS policy برای اعلان‌ها
+create policy "Enable realtime for orders"
+  on public.orders for select using (true);
+```
+
 ---
 
 ## 🛠️ ۱۲. ابزارهای توسعه
@@ -430,7 +474,10 @@ pending    → confirmed  → preparing → ready → delivered
 | **بکاپ خودکار** | `scripts/schedule-backup.mjs` | هر ۲۴ ساعت |
 | **آیکون PWA** | `scripts/build-icons.mjs` | ساخت همه سایزها |
 | **شفاف‌سازی** | `scripts/make-transparent.mjs` | حذف پس‌زمینه |
-| **تغییر تم** | `app/admin/components/AdminThemeToggle.tsx` | toggle بین روز/شب + localStorage |
+| **تغییر تم** | `app/admin/components/AdminThemeToggle.tsx` | toggle روز/شب + localStorage |
+| **اعلان سفارش** | `lib/use-order-notifications.ts` | Polling هر ۱۰ ثانیه + صدا + نوتیفیکیشن |
+| **کارت هشدار** | `app/admin/components/NewOrderAlert.tsx` | Toast قرمز با دکمه مشاهده |
+| **تایتل داینامیک** | `lib/use-document-title.ts` | عنوان + favicon تب مرورگر |
 
 ---
 
@@ -512,52 +559,21 @@ backups-server/
 ## 💡 ۱۶. تصمیمات فنی مهم
 
 1. **بدون Tailwind:** تمام استایل‌ها در `globals.css` برای سادگی و کنترل کامل.
-2. **Realtime Supabase:** برای آپدیت لحظه‌ای سفارش‌ها در ادمین.
-3. **Polling در صفحه جزئیات سفارش مشتری:** هر ۱۰ ثانیه.
-4. **QR Token برای میزها:** با اسکن QR، `?table=N` به URL اضافه می‌شود.
-5. **فونت داینامیک از دیتابیس:** ادمین می‌تواند فونت سفارشی آپلود کند.
-6. **localStorage برای سبد خرید:** بدون نیاز به ثبت‌نام.
-7. **واتساپ برای اطلاع‌رسانی:** نیازی به پنل پیامکی نیست.
-8. **متن‌های `.bat` به انگلیسی + ایموجی:** چون CMD فارسی RTL رندر نمی‌کند.
-9. **`.gitattributes` برای خط‌پایان‌ها:** جلوگیری از conflict در ویندوز/لینوکس.
-10. **Service Worker فقط در production:** در `npm run dev` غیرفعال است.
-11. **کوپن با ارث‌بری:** محصول تنظیمات اختصاصی دارد یا از دسته ارث می‌برد.
-12. **محاسبه سهم تخفیف هر آیتم:** در API هنگام ثبت سفارش، برای نمایش در فاکتور.
-13. **RLS policy برای همه جداول عمومی:** با `true` on `insert/update/select` (برای شروع پروژه).
-14. **React Portal برای فاکتور چاپی:** تا خارج از `.admin-main` قرار بگیرد و در چاپ درست نمایش داده شود.
-```
-
----
-
-## ✅ کارهای لازم تو بعد از جایگزینی:
-
-1. **فایل رو جایگزین کن**
-2. **کامیت کن:**
-   ```bash
-   git add .
-   git commit -m "docs: complete PROJECT_STATE with coupons, PWA, SEO, and dashboard"
-   git push origin main
-   ```
-
----
-
-## 📊 خلاصه چیزی که در این نسخه آپدیت شد:
-
-| بخش | تغییرات |
-|---|---|
-| **۱** | تاریخ آپدیت |
-| **۲** | ساختار کامل با پوشه‌های جدید (coupons، components، scripts جدید) |
-| **۳** | پالت رنگ آپدیت شده + شماره‌گذاری CSS تا ۵۳ |
-| **۴** | ۱۵+ کار جدید (PWA، SEO، کوپن، لغو سفارش، آمار) |
-| **۵** | حذف کارهای انجام‌شده + اضافه کارهای جدید |
-| **۶** | قوانین تکمیل‌شده |
-| **۷** | متن چت با اطلاعات جدید |
-| **۸** | لاگ کامل با همه تغییرات اخیر |
-| **۹** | دستورات npm جدید (بکاپ سرور، آیکون‌ها) |
-| **۱۰** | دو نوع بکاپ + اسکریپت‌های آیکون |
-| **۱۱** | جداول `coupons` و `customers` + فیلدهای جدید |
-| **۱۲** | ابزارهای جدید |
-| **۱۴** | `.gitattributes` اضافه شد |
-| **۱۶** | تصمیمات فنی جدید |
-
-**بعد از جایگزینی، بگو «آماده‌ام برای کار بعدی» تا بریم سراغ Dark Mode یا هر چیزی که ترجیح می‌دی.** 🚀
+2. **Realtime Supabase:** برای لیست سفارش‌ها در ادمین.
+3. **Polling برای اعلان سفارش‌ها:** به جای Realtime (به دلیل ناپایداری WebSocket در ایران) — هر ۱۰ ثانیه.
+4. **Polling در صفحه جزئیات سفارش مشتری:** هر ۱۰ ثانیه.
+5. **QR Token برای میزها:** با اسکن QR، `?table=N` به URL اضافه می‌شود.
+6. **فونت داینامیک از دیتابیس:** ادمین می‌تواند فونت سفارشی آپلود کند.
+7. **localStorage برای سبد خرید:** بدون نیاز به ثبت‌نام.
+8. **واتساپ برای اطلاع‌رسانی:** نیازی به پنل پیامکی نیست.
+9. **متن‌های `.bat` به انگلیسی + ایموجی:** چون CMD فارسی RTL رندر نمی‌کند.
+10. **`.gitattributes` برای خط‌پایان‌ها:** جلوگیری از conflict در ویندوز/لینوکس.
+11. **Service Worker فقط در production:** در `npm run dev` غیرفعال است.
+12. **کوپن با ارث‌بری:** محصول تنظیمات اختصاصی دارد یا از دسته ارث می‌برد.
+13. **محاسبه سهم تخفیف هر آیتم:** در API هنگام ثبت سفارش، برای نمایش در فاکتور.
+14. **RLS policy برای همه جداول عمومی:** با `true` on `insert/update/select`.
+15. **React Portal برای فاکتور چاپی:** تا خارج از `.admin-main` قرار بگیرد.
+16. **دارک مود در localStorage:** با کلید `cafe-park-admin-theme`.
+17. **صدا با AudioContext:** با اولین کلیک کاربر unlock می‌شود (محدودیت Chrome).
+18. **تایتل داینامیک:** با شمارش سفارش‌های pending در `document.title`.
+19. **آیکون داینامیک با canvas:** ساخت favicon با badge قرمز.
