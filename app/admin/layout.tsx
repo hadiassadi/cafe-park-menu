@@ -1,5 +1,7 @@
 'use client'
-
+import AdminThemeToggle from './components/AdminThemeToggle'
+import AdminMobileThemeToggle from './components/AdminMobileThemeToggle'  // ← جدید
+import NewOrderAlert from './components/NewOrderAlert'
 import { useEffect, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -136,6 +138,18 @@ export default function AdminLayout({
             )
           })}
         </nav>
+		{/* ✅ دکمه شناور حالت شبانه برای موبایل */}
+      <AdminMobileThemeToggle />
+
+      {/* ✅ هشدار سفارش‌های جدید */}
+      <NewOrderAlert
+        orders={newOrders}
+        onDismiss={dismissOrder}
+        onDismissAll={dismissAll}
+      />
+    </div>
+  )
+}
 
         <div className="admin-sidebar-footer">
           <Link
