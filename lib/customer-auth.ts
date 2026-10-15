@@ -18,9 +18,6 @@ export type CustomerSession = {
   verified_at: string
 }
 
-/**
- * خواندن session فعلی از cookie و برگرداندن اطلاعات مشتری
- */
 export async function getCurrentCustomer(): Promise<CustomerSession | null> {
   try {
     const cookieStore = await cookies()
@@ -37,7 +34,6 @@ export async function getCurrentCustomer(): Promise<CustomerSession | null> {
 
     if (error || !data) return null
 
-    // بررسی انقضا (۳۰ روز)
     const verifiedAt = new Date(data.verified_at)
     const daysSince = (Date.now() - verifiedAt.getTime()) / (1000 * 60 * 60 * 24)
     if (daysSince > SESSION_DAYS) return null
@@ -48,9 +44,6 @@ export async function getCurrentCustomer(): Promise<CustomerSession | null> {
   }
 }
 
-/**
- * پاک کردن session فعلی
- */
 export async function clearCustomerSession(): Promise<void> {
   try {
     const cookieStore = await cookies()
@@ -69,17 +62,11 @@ export async function clearCustomerSession(): Promise<void> {
   }
 }
 
-/**
- * اعتبارسنجی شماره موبایل ایرانی
- */
 export function isValidIranianMobile(phone: string): boolean {
   const cleaned = phone.replace(/[^\d]/g, '')
   return /^09\d{9}$/.test(cleaned)
 }
 
-/**
- * نرمال‌سازی شماره (پاک کردن فاصله، خط تیره، +98 → 0)
- */
 export function normalizePhone(phone: string): string {
   let cleaned = phone.replace(/[^\d]/g, '')
   if (cleaned.startsWith('98') && cleaned.length === 12) {
@@ -91,16 +78,10 @@ export function normalizePhone(phone: string): string {
   return cleaned
 }
 
-/**
- * تولید کد ۴ رقمی
- */
 export function generateOtpCode(): string {
   return Math.floor(1000 + Math.random() * 9000).toString()
 }
 
-/**
- * تولید session token امن
- */
 export function generateSessionToken(): string {
   const bytes = new Uint8Array(32)
   crypto.getRandomValues(bytes)
