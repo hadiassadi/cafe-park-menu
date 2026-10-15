@@ -7,7 +7,30 @@ export type OrderStats = {
   week: { orders: number; revenue: number }
   month: { orders: number; revenue: number }
   topProducts: Array<{ name: string; count: number; revenue: number }>
-  dailyRevenue: Array<{ date: string; label: string; revenue: number; orders: number }>
+  dailyRevenue: Array<{
+    date: string
+    label: string
+    revenue: number
+    orders: number
+  }>
+  // ✅ آمار پیشرفته
+  monthlyRevenue: Array<{
+    month: string
+    label: string
+    revenue: number
+    orders: number
+  }>
+  peakHours: Array<{
+    hour: number
+    label: string
+    orders: number
+  }>
+  comparison: {
+    revenueChange: number   // درصد تغییر نسبت به ماه قبل
+    ordersChange: number
+    avgOrderChange: number
+  }
+  avgOrderValue: number
 }
 
 function createDb() {
@@ -26,10 +49,8 @@ function getStartOfDay(date: Date): Date {
 }
 
 function getStartOfWeek(date: Date): Date {
-  // شنبه شروع هفته در ایران
   const d = new Date(date)
-  const dayOfWeek = d.getDay() // 0=Sunday, 6=Saturday
-  // شنبه = 6 در getDay
+  const dayOfWeek = d.getDay()
   const diff = dayOfWeek === 6 ? 0 : dayOfWeek + 1
   d.setDate(d.getDate() - diff)
   d.setHours(0, 0, 0, 0)
@@ -46,12 +67,12 @@ function getStartOfMonth(date: Date): Date {
 export const getOrderStats = cache(async (): Promise<OrderStats> => {
   const db = createDb()
   const now = new Date()
-  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+  const oneYearAgo = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000)
 
   const { data: orders, error } = await db
     .from('orders')
     .select('created_at, subtotal, status, items')
-    .gte('created_at', thirtyDaysAgo.toISOString())
+    .gte('created_at', oneYearAgo.toISOString())
     .neq('status', 'cancelled')
     .order('created_at', { ascending: false })
 
@@ -61,6 +82,10 @@ export const getOrderStats = cache(async (): Promise<OrderStats> => {
     month: { orders: 0, revenue: 0 },
     topProducts: [],
     dailyRevenue: [],
+    monthlyRevenue: [],
+    peakHours: [],
+    comparison: { revenueChange: 0, ordersChange: 0, avgOrderChange: 0 },
+    avgOrderValue: 0,
   }
 
   if (error || !orders) {
@@ -72,15 +97,23 @@ export const getOrderStats = cache(async (): Promise<OrderStats> => {
   const weekStart = getStartOfWeek(now)
   const monthStart = getStartOfMonth(now)
 
+  // محاسبه ماه قبل
+  const prevMonthEnd = new Date(monthStart.getTime() - 1)
+  const prevMonthStart = getStartOfMonth(prevMonthEnd)
+
   let todayOrders = 0
   let todayRevenue = 0
   let weekOrders = 0
   let weekRevenue = 0
   let monthOrders = 0
   let monthRevenue = 0
+  let prevMonthOrders = 0
+  let prevMonthRevenue = 0
 
   const productMap = new Map<string, { count: number; revenue: number }>()
   const dailyMap = new Map<string, { revenue: number; orders: number }>()
+  const monthlyMap = new Map<string, { revenue: number; orders: number }>()
+  const hourMap = new Map<number, number>()
 
   for (const order of orders) {
     const orderDate = new Date(order.created_at)
@@ -102,26 +135,50 @@ export const getOrderStats = cache(async (): Promise<OrderStats> => {
     if (orderDate >= monthStart) {
       monthOrders++
       monthRevenue += revenue
+    } else if (orderDate >= prevMonthStart && orderDate < monthStart) {
+      // ماه قبل
+      prevMonthOrders++
+      prevMonthRevenue += revenue
     }
 
-    // پرفروش‌ترین محصولات
-    const items = Array.isArray(order.items) ? order.items : []
-    for (const item of items) {
-      const name = item?.product_name || 'نامشخص'
-      const count = Number(item?.quantity) || 0
-      const price = Number(item?.unit_price) || 0
-      const existing = productMap.get(name) || { count: 0, revenue: 0 }
-      existing.count += count
-      existing.revenue += price * count
-      productMap.set(name, existing)
+    // پرفروش‌ترین محصولات (فقط ۳۰ روز اخیر)
+    if (orderDate >= new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)) {
+      const items = Array.isArray(order.items) ? order.items : []
+      for (const item of items) {
+        const name = item?.product_name || 'نامشخص'
+        const count = Number(item?.quantity) || 0
+        const price = Number(item?.unit_price) || 0
+        const existing = productMap.get(name) || { count: 0, revenue: 0 }
+        existing.count += count
+        existing.revenue += price * count
+        productMap.set(name, existing)
+      }
     }
 
-    // فروش روزانه
+    // فروش روزانه (۷ روز اخیر)
     const dayKey = orderDate.toISOString().split('T')[0]
     const existingDay = dailyMap.get(dayKey) || { revenue: 0, orders: 0 }
     existingDay.revenue += revenue
     existingDay.orders++
     dailyMap.set(dayKey, existingDay)
+
+    // فروش ماهانه (۶ ماه اخیر)
+    const monthKey = `${orderDate.getFullYear()}-${String(
+      orderDate.getMonth() + 1
+    ).padStart(2, '0')}`
+    const existingMonth = monthlyMap.get(monthKey) || {
+      revenue: 0,
+      orders: 0,
+    }
+    existingMonth.revenue += revenue
+    existingMonth.orders++
+    monthlyMap.set(monthKey, existingMonth)
+
+    // ساعات پرترافیک (فقط ۳۰ روز اخیر)
+    if (orderDate >= new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)) {
+      const hour = orderDate.getHours()
+      hourMap.set(hour, (hourMap.get(hour) || 0) + 1)
+    }
   }
 
   // پرفروش‌ترین ۵ محصول
@@ -131,8 +188,8 @@ export const getOrderStats = cache(async (): Promise<OrderStats> => {
     .slice(0, 5)
 
   // فروش ۷ روز اخیر
-    const dailyRevenue: OrderStats['dailyRevenue'] = []
-  for (let i = 0; i <= 6; i++) {   // ← i از 0 به 6 (امروز اولین)
+  const dailyRevenue: OrderStats['dailyRevenue'] = []
+  for (let i = 6; i >= 0; i--) {
     const d = new Date(now)
     d.setDate(d.getDate() - i)
     d.setHours(0, 0, 0, 0)
@@ -146,14 +203,83 @@ export const getOrderStats = cache(async (): Promise<OrderStats> => {
     })
   }
 
+  // فروش ۶ ماه اخیر
+  const monthlyRevenue: OrderStats['monthlyRevenue'] = []
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(
+      2,
+      '0'
+    )}`
+    const data = monthlyMap.get(key) || { revenue: 0, orders: 0 }
+    monthlyRevenue.push({
+      month: key,
+      label: d.toLocaleDateString('fa-IR', { month: 'short' }),
+      revenue: data.revenue,
+      orders: data.orders,
+    })
+  }
+
+  // ساعات پرترافیک
+  const peakHours: OrderStats['peakHours'] = []
+  for (let h = 8; h <= 23; h++) {
+    // ساعات کاری کافه
+    peakHours.push({
+      hour: h,
+      label: `${h}:00`,
+      orders: hourMap.get(h) || 0,
+    })
+  }
+
+  // محاسبه درصد تغییرات
+  const revenueChange =
+    prevMonthRevenue > 0
+      ? Math.round(
+          ((monthRevenue - prevMonthRevenue) / prevMonthRevenue) * 100
+        )
+      : monthRevenue > 0
+        ? 100
+        : 0
+
+  const ordersChange =
+    prevMonthOrders > 0
+      ? Math.round(
+          ((monthOrders - prevMonthOrders) / prevMonthOrders) * 100
+        )
+      : monthOrders > 0
+        ? 100
+        : 0
+
+  const monthAvg = monthOrders > 0 ? monthRevenue / monthOrders : 0
+  const prevMonthAvg =
+    prevMonthOrders > 0 ? prevMonthRevenue / prevMonthOrders : 0
+
+  const avgOrderChange =
+    prevMonthAvg > 0
+      ? Math.round(((monthAvg - prevMonthAvg) / prevMonthAvg) * 100)
+      : monthAvg > 0
+        ? 100
+        : 0
+
+  const avgOrderValue = monthOrders > 0 ? Math.round(monthRevenue / monthOrders) : 0
+
   return {
     today: { orders: todayOrders, revenue: todayRevenue },
     week: { orders: weekOrders, revenue: weekRevenue },
     month: { orders: monthOrders, revenue: monthRevenue },
     topProducts,
     dailyRevenue,
+    monthlyRevenue,
+    peakHours,
+    comparison: {
+      revenueChange,
+      ordersChange,
+      avgOrderChange,
+    },
+    avgOrderValue,
   }
 })
+
 // ─── آمار کوپن‌ها ───
 
 export type CouponStats = {
@@ -186,7 +312,6 @@ export const getCouponStats = cache(
     const db = createDb()
     const now = new Date()
 
-    // محاسبه بازه زمانی
     let since: Date | null = null
     if (filter === 'today') {
       since = getStartOfDay(now)
@@ -196,7 +321,6 @@ export const getCouponStats = cache(
       since = getStartOfMonth(now)
     }
 
-    // ─── خواندن کوپن‌ها ───
     const { data: coupons, error: couponsError } = await db
       .from('coupons')
       .select(
@@ -217,7 +341,6 @@ export const getCouponStats = cache(
       }
     }
 
-    // ─── خواندن سفارش‌های دارای کوپن ───
     let ordersQuery = db
       .from('orders')
       .select('coupon_code, coupon_discount, subtotal, status, created_at')
@@ -234,7 +357,6 @@ export const getCouponStats = cache(
       console.error('[coupon stats] orders error:', ordersError)
     }
 
-    // ─── تجمیع داده‌ها ───
     const statsMap = new Map<
       string,
       {
@@ -261,7 +383,6 @@ export const getCouponStats = cache(
       statsMap.set(code, existing)
     }
 
-    // ─── ساخت خروجی نهایی ───
     const stats: CouponStats[] = coupons.map((c) => {
       const agg = statsMap.get(c.code) ?? {
         order_count: 0,
@@ -286,10 +407,8 @@ export const getCouponStats = cache(
       }
     })
 
-    // مرتب‌سازی بر اساس مبلغ تخفیف کل
     stats.sort((a, b) => b.total_discount - a.total_discount)
 
-    // ─── خلاصه کل ───
     const totalOrdersWithCoupon = stats.reduce(
       (sum, s) => sum + s.order_count,
       0
