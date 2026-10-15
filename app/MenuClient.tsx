@@ -545,8 +545,7 @@ export default function MenuClient({ initial }: { initial: MenuData }) {
               </div>
             )}
 
-                                    <div className="hero-actions">
-  <div className="hero-actions">
+   <div className="hero-actions">
   {show.shareButton && (
     <button type="button" className="share-btn" onClick={handleShare}>
       اشتراک‌گذاری منو
@@ -556,10 +555,6 @@ export default function MenuClient({ initial }: { initial: MenuData }) {
     👤 سفارش‌های من
   </Link>
 </div>
-  <Link href="/my-orders" className="share-btn hero-my-orders-btn">
-    👤 سفارش‌های من
-  </Link>
-</div>	
           </div>
         </header>
 

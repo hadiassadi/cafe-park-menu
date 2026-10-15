@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { getCurrentCustomer } from '@/lib/customer-auth'
+import { getCurrentCustomer, normalizePhone } from '@/lib/customer-auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,29 +15,33 @@ export async function GET() {
   const customer = await getCurrentCustomer()
 
   if (!customer) {
-    return NextResponse.json(
-      { error: 'unauthorized' },
-      { status: 401 }
-    )
+    return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }
 
   const db = createDb()
+
+  // ✅ ساخت همه فرمت‌های ممکن شماره (چون در orders ممکنه فرمت متفاوتی ذخیره شده باشه)
+  const base = normalizePhone(customer.phone) // 09301817098
+  const without0 = base.slice(1)              // 9301817098
+  const withPlus98 = '+98' + without0         // +989301817098
+  const with98 = '98' + without0              // 989301817098
+
+  const variants = Array.from(
+    new Set([base, without0, withPlus98, with98])
+  )
 
   const { data, error } = await db
     .from('orders')
     .select(
       'id, order_number, items, subtotal, original_subtotal, coupon_code, coupon_discount, status, created_at, cancelled_by, cancellation_reason_label'
     )
-    .eq('customer_phone', customer.phone)
+    .in('customer_phone', variants)
     .order('created_at', { ascending: false })
     .limit(50)
 
   if (error) {
     console.error('[customer orders] error:', error)
-    return NextResponse.json(
-      { error: error.message },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
   return NextResponse.json(
