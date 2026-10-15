@@ -25,6 +25,16 @@ const FILTER_LABELS: Record<CustomerFilter, string> = {
   problematic: '⚠️ مشکل‌دار',
 }
 
+// ✅ فیلتر تعداد لغو
+type CancelFilter = 'all' | '1+' | '3+' | '5+'
+
+const CANCEL_FILTER_LABELS: Record<CancelFilter, string> = {
+  all: 'همه',
+  '1+': '❌ ۱+ لغو',
+  '3+': '⚠️ ۳+ لغو',
+  '5+': '🚨 ۵+ لغو',
+}
+
 function timeAgo(iso: string | null): string {
   if (!iso) return '—'
   const date = new Date(iso)
@@ -50,6 +60,8 @@ export default function CustomersManager() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<CustomerFilter>('all')
+  // ✅ State جدید فیلتر لغو
+  const [cancelFilter, setCancelFilter] = useState<CancelFilter>('all')
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerData | null>(
     null
   )
@@ -81,6 +93,16 @@ export default function CustomersManager() {
     }
   }, [])
 
+  // ✅ شمارش زنده بر اساس فیلتر لغو (برای نشان دادن روی چیپ‌ها)
+  const cancelCounts = useMemo(() => {
+    return {
+      all: customers.length,
+      '1+': customers.filter((c) => c.cancelled_count >= 1).length,
+      '3+': customers.filter((c) => c.cancelled_count >= 3).length,
+      '5+': customers.filter((c) => c.cancelled_count >= 5).length,
+    }
+  }, [customers])
+
   // فیلتر
   const filteredCustomers = useMemo(() => {
     const thirtyDaysAgo = new Date()
@@ -102,6 +124,15 @@ export default function CustomersManager() {
       list = list.filter((c) => c.cancelled_count >= 2)
     }
 
+    // ✅ فیلتر تعداد لغو
+    if (cancelFilter === '1+') {
+      list = list.filter((c) => c.cancelled_count >= 1)
+    } else if (cancelFilter === '3+') {
+      list = list.filter((c) => c.cancelled_count >= 3)
+    } else if (cancelFilter === '5+') {
+      list = list.filter((c) => c.cancelled_count >= 5)
+    }
+
     // جستجو
     if (search.trim()) {
       const q = search.trim().toLowerCase()
@@ -112,8 +143,15 @@ export default function CustomersManager() {
       )
     }
 
+    // مرتب‌سازی: اگه فیلتر لغو فعاله، اول پرلغوترین‌ها
+    if (cancelFilter !== 'all') {
+      list = [...list].sort(
+        (a, b) => b.cancelled_count - a.cancelled_count
+      )
+    }
+
     return list
-  }, [customers, filter, search])
+  }, [customers, filter, cancelFilter, search])
 
   function openCustomer(customer: CustomerData) {
     setSelectedCustomer(customer)
@@ -201,6 +239,8 @@ export default function CustomersManager() {
       'سلام، از کافه پارک تماس می‌گیریم.'
     )}`
   }
+
+  const cancelFilterActive = cancelFilter !== 'all'
 
   return (
     <div className="admin-main">
@@ -309,6 +349,30 @@ export default function CustomersManager() {
             </button>
           ))}
         </div>
+
+        {/* ✅ فیلتر تعداد لغو */}
+        <div className="customers-cancel-filters">
+          <span className="customers-cancel-label">
+            🚫 فیلتر لغو:
+          </span>
+          <div className="customers-cancel-chips">
+            {(Object.keys(CANCEL_FILTER_LABELS) as CancelFilter[]).map((f) => (
+              <button
+                key={f}
+                type="button"
+                className={`filter-chip cancel-chip ${
+                  cancelFilter === f ? 'active' : ''
+                } ${f !== 'all' ? 'chip-danger' : ''}`}
+                onClick={() => setCancelFilter(f)}
+              >
+                {CANCEL_FILTER_LABELS[f]}
+                <span className="chip-count">
+                  {formatPrice(cancelCounts[f])}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
       </section>
 
       {/* لیست مشتریان */}
@@ -321,98 +385,122 @@ export default function CustomersManager() {
           <p className="empty-admin">
             {search.trim()
               ? 'مشتری‌ای با این مشخصات پیدا نشد.'
-              : 'هنوز مشتری‌ای ثبت نشده است.'}
+              : cancelFilterActive
+                ? 'مشتری‌ای با این تعداد لغو پیدا نشد.'
+                : 'هنوز مشتری‌ای ثبت نشده است.'}
           </p>
         </div>
       ) : (
-        <div className="customers-grid">
-          {filteredCustomers.map((customer) => (
-            <div
-              key={customer.phone}
-              className="customer-card"
-              onClick={() => openCustomer(customer)}
-            >
-              <div className="customer-card-header">
-                <div className="customer-avatar">
-                  {customer.name.charAt(0)}
-                </div>
-                <div className="customer-info">
-                  <strong>{customer.name}</strong>
-                  <small dir="ltr">{customer.phone}</small>
-                </div>
-                {customer.order_count >= 5 && (
-                  <span className="customer-badge loyal">⭐ وفادار</span>
-                )}
-                {customer.cancelled_count >= 2 && (
-                  <span className="customer-badge problem">⚠️</span>
-                )}
-              </div>
+        <>
+          {cancelFilterActive && (
+            <div className="customers-filter-result">
+              🎯 {formatPrice(filteredCustomers.length)} مشتری با فیلتر
+              «{CANCEL_FILTER_LABELS[cancelFilter]}» پیدا شد
+            </div>
+          )}
 
-                            <div className="customer-card-body">
-                <div className="customer-stat">
-                  <span>🛒</span>
-                  <span>{formatPrice(customer.order_count)} سفارش موفق</span>
-                </div>
-                {customer.cancelled_count > 0 && (
-                  <div className="customer-stat customer-stat-cancelled">
-                    <span>❌</span>
-                    <span>
-                      {formatPrice(customer.cancelled_count)} سفارش لغو
-                    </span>
+          <div className="customers-grid">
+            {filteredCustomers.map((customer) => (
+              <div
+                key={customer.phone}
+                className={`customer-card ${
+                  cancelFilterActive && customer.cancelled_count > 0
+                    ? 'customer-card-highlight'
+                    : ''
+                }`}
+                onClick={() => openCustomer(customer)}
+              >
+                <div className="customer-card-header">
+                  <div className="customer-avatar">
+                    {customer.name.charAt(0)}
                   </div>
-                )}
-                <div className="customer-stat">
-                  <span>💰</span>
-                  <span>{formatPrice(customer.total_spent)} تومان</span>
-                </div>
-                <div className="customer-stat">
-                  <span>🕐</span>
-                  <span>آخرین: {timeAgo(customer.last_order_at)}</span>
-                </div>
-              </div>
-
-              {customer.tags && customer.tags.length > 0 && (
-                <div className="customer-tags-preview">
-                  {customer.tags.slice(0, 3).map((tag) => (
-                    <span key={tag} className="customer-tag-pill">
-                      {tag}
-                    </span>
-                  ))}
-                  {customer.tags.length > 3 && (
-                    <span className="customer-tag-pill more">
-                      +{customer.tags.length - 3}
-                    </span>
+                  <div className="customer-info">
+                    <strong>{customer.name}</strong>
+                    <small dir="ltr">{customer.phone}</small>
+                  </div>
+                  {customer.order_count >= 5 && (
+                    <span className="customer-badge loyal">⭐ وفادار</span>
+                  )}
+                  {customer.cancelled_count >= 2 && (
+                    <span className="customer-badge problem">⚠️</span>
                   )}
                 </div>
-              )}
 
-              {customer.notes && (
-                <div className="customer-notes-preview">
-                  📝 {customer.notes}
+                <div className="customer-card-body">
+                  <div className="customer-stat">
+                    <span>🛒</span>
+                    <span>
+                      {formatPrice(customer.order_count)} سفارش موفق
+                    </span>
+                  </div>
+                  {customer.cancelled_count > 0 && (
+                    <div
+                      className={`customer-stat customer-stat-cancelled ${
+                        cancelFilterActive ? 'cancelled-emphasis' : ''
+                      }`}
+                    >
+                      <span>❌</span>
+                      <span>
+                        <strong>
+                          {formatPrice(customer.cancelled_count)}
+                        </strong>{' '}
+                        سفارش لغو
+                      </span>
+                    </div>
+                  )}
+                  <div className="customer-stat">
+                    <span>💰</span>
+                    <span>{formatPrice(customer.total_spent)} تومان</span>
+                  </div>
+                  <div className="customer-stat">
+                    <span>🕐</span>
+                    <span>آخرین: {timeAgo(customer.last_order_at)}</span>
+                  </div>
                 </div>
-              )}
 
-              <div className="customer-actions">
-                <a
-                  href={`tel:${customer.phone}`}
-                  className="customer-action-btn"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  📞 تماس
-                </a>
-                <a
-                  href={whatsappLink(customer.phone)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="customer-action-btn whatsapp"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  💬 واتساپ
-                </a>
+                {customer.tags && customer.tags.length > 0 && (
+                  <div className="customer-tags-preview">
+                    {customer.tags.slice(0, 3).map((tag) => (
+                      <span key={tag} className="customer-tag-pill">
+                        {tag}
+                      </span>
+                    ))}
+                    {customer.tags.length > 3 && (
+                      <span className="customer-tag-pill more">
+                        +{customer.tags.length - 3}
+                      </span>
+                    )}
+                  </div>
+                )}
+
+                {customer.notes && (
+                  <div className="customer-notes-preview">
+                    📝 {customer.notes}
+                  </div>
+                )}
+
+                <div className="customer-actions">
+                  <a
+                    href={`tel:${customer.phone}`}
+                    className="customer-action-btn"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    📞 تماس
+                  </a>
+                  <a
+                    href={whatsappLink(customer.phone)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="customer-action-btn whatsapp"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    💬 واتساپ
+                  </a>
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        </>
       )}
 
       {/* مودال جزئیات مشتری */}
@@ -441,7 +529,6 @@ export default function CustomersManager() {
             </div>
 
             <div className="modal-body">
-              {/* اطلاعات مشتری */}
               <div className="info-card">
                 <h3>📊 آمار</h3>
                 <div className="info-row">
@@ -456,7 +543,15 @@ export default function CustomersManager() {
                 </div>
                 <div className="info-row">
                   <span>سفارش لغو شده:</span>
-                  <strong>{formatPrice(selectedCustomer.cancelled_count)}</strong>
+                  <strong
+                    className={
+                      selectedCustomer.cancelled_count >= 3
+                        ? 'cancelled-emphasis'
+                        : ''
+                    }
+                  >
+                    {formatPrice(selectedCustomer.cancelled_count)}
+                  </strong>
                 </div>
                 <div className="info-row">
                   <span>آخرین سفارش:</span>
@@ -464,7 +559,6 @@ export default function CustomersManager() {
                 </div>
               </div>
 
-              {/* تگ‌های آماده */}
               <div className="info-card" style={{ marginTop: '16px' }}>
                 <h3>🏷️ تگ‌ها</h3>
 
@@ -531,7 +625,6 @@ export default function CustomersManager() {
                 </div>
               </div>
 
-              {/* یادداشت */}
               <div className="info-card" style={{ marginTop: '16px' }}>
                 <h3>📝 یادداشت</h3>
                 <textarea

@@ -13,7 +13,6 @@ export type OrderStats = {
     revenue: number
     orders: number
   }>
-  // ✅ آمار پیشرفته
   monthlyRevenue: Array<{
     month: string
     label: string
@@ -26,7 +25,7 @@ export type OrderStats = {
     orders: number
   }>
   comparison: {
-    revenueChange: number   // درصد تغییر نسبت به ماه قبل
+    revenueChange: number
     ordersChange: number
     avgOrderChange: number
   }
@@ -97,7 +96,6 @@ export const getOrderStats = cache(async (): Promise<OrderStats> => {
   const weekStart = getStartOfWeek(now)
   const monthStart = getStartOfMonth(now)
 
-  // محاسبه ماه قبل
   const prevMonthEnd = new Date(monthStart.getTime() - 1)
   const prevMonthStart = getStartOfMonth(prevMonthEnd)
 
@@ -119,29 +117,24 @@ export const getOrderStats = cache(async (): Promise<OrderStats> => {
     const orderDate = new Date(order.created_at)
     const revenue = Number(order.subtotal) || 0
 
-    // امروز
     if (orderDate >= todayStart) {
       todayOrders++
       todayRevenue += revenue
     }
 
-    // این هفته
     if (orderDate >= weekStart) {
       weekOrders++
       weekRevenue += revenue
     }
 
-    // این ماه
     if (orderDate >= monthStart) {
       monthOrders++
       monthRevenue += revenue
     } else if (orderDate >= prevMonthStart && orderDate < monthStart) {
-      // ماه قبل
       prevMonthOrders++
       prevMonthRevenue += revenue
     }
 
-    // پرفروش‌ترین محصولات (فقط ۳۰ روز اخیر)
     if (orderDate >= new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)) {
       const items = Array.isArray(order.items) ? order.items : []
       for (const item of items) {
@@ -155,14 +148,12 @@ export const getOrderStats = cache(async (): Promise<OrderStats> => {
       }
     }
 
-    // فروش روزانه (۷ روز اخیر)
     const dayKey = orderDate.toISOString().split('T')[0]
     const existingDay = dailyMap.get(dayKey) || { revenue: 0, orders: 0 }
     existingDay.revenue += revenue
     existingDay.orders++
     dailyMap.set(dayKey, existingDay)
 
-    // فروش ماهانه (۶ ماه اخیر)
     const monthKey = `${orderDate.getFullYear()}-${String(
       orderDate.getMonth() + 1
     ).padStart(2, '0')}`
@@ -174,20 +165,17 @@ export const getOrderStats = cache(async (): Promise<OrderStats> => {
     existingMonth.orders++
     monthlyMap.set(monthKey, existingMonth)
 
-    // ساعات پرترافیک (فقط ۳۰ روز اخیر)
     if (orderDate >= new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)) {
       const hour = orderDate.getHours()
       hourMap.set(hour, (hourMap.get(hour) || 0) + 1)
     }
   }
 
-  // پرفروش‌ترین ۵ محصول
   const topProducts = Array.from(productMap.entries())
     .map(([name, data]) => ({ name, ...data }))
     .sort((a, b) => b.count - a.count)
-	.slice(0, 20)
+    .slice(0, 20)
 
-  // فروش ۷ روز اخیر
   const dailyRevenue: OrderStats['dailyRevenue'] = []
   for (let i = 6; i >= 0; i--) {
     const d = new Date(now)
@@ -203,7 +191,6 @@ export const getOrderStats = cache(async (): Promise<OrderStats> => {
     })
   }
 
-  // فروش ۶ ماه اخیر
   const monthlyRevenue: OrderStats['monthlyRevenue'] = []
   for (let i = 5; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
@@ -220,10 +207,8 @@ export const getOrderStats = cache(async (): Promise<OrderStats> => {
     })
   }
 
-  // ساعات پرترافیک
   const peakHours: OrderStats['peakHours'] = []
   for (let h = 8; h <= 23; h++) {
-    // ساعات کاری کافه
     peakHours.push({
       hour: h,
       label: `${h}:00`,
@@ -231,7 +216,6 @@ export const getOrderStats = cache(async (): Promise<OrderStats> => {
     })
   }
 
-  // محاسبه درصد تغییرات
   const revenueChange =
     prevMonthRevenue > 0
       ? Math.round(
@@ -261,7 +245,8 @@ export const getOrderStats = cache(async (): Promise<OrderStats> => {
         ? 100
         : 0
 
-  const avgOrderValue = monthOrders > 0 ? Math.round(monthRevenue / monthOrders) : 0
+  const avgOrderValue =
+    monthOrders > 0 ? Math.round(monthRevenue / monthOrders) : 0
 
   return {
     today: { orders: todayOrders, revenue: todayRevenue },
@@ -455,10 +440,10 @@ export type CustomersReport = {
   customers: CustomerData[]
   summary: {
     total: number
-    loyal: number       // ۵+ سفارش
-    new: number         // ۱ سفارش
-    inactive: number    // ۳۰+ روز غیرفعال
-    problematic: number // ۲+ لغو
+    loyal: number
+    new: number
+    inactive: number
+    problematic: number
   }
 }
 
@@ -467,7 +452,6 @@ export const getCustomersData = cache(async (): Promise<CustomersReport> => {
   const now = new Date()
   const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
 
-  // خواندن همه سفارش‌ها (برای محاسبه آمار)
   const { data: orders, error: ordersError } = await db
     .from('orders')
     .select('customer_phone, customer_name, subtotal, status, created_at')
@@ -481,7 +465,6 @@ export const getCustomersData = cache(async (): Promise<CustomersReport> => {
     }
   }
 
-  // خواندن یادداشت‌ها و تگ‌ها
   const { data: metaCustomers, error: metaError } = await db
     .from('customers')
     .select('phone, notes, tags')
@@ -501,7 +484,6 @@ export const getCustomersData = cache(async (): Promise<CustomersReport> => {
     })
   }
 
-  // تجمیع داده‌های هر مشتری
   const customerMap = new Map<
     string,
     {
@@ -529,7 +511,6 @@ export const getCustomersData = cache(async (): Promise<CustomersReport> => {
       last_order_at: order.created_at,
     }
 
-    // آپدیت نام (آخرین نام)
     if (order.customer_name) existing.name = order.customer_name
 
     if (order.status !== 'cancelled') {
@@ -539,7 +520,6 @@ export const getCustomersData = cache(async (): Promise<CustomersReport> => {
       existing.cancelled_count++
     }
 
-    // آپدیت تاریخ‌ها
     if (!existing.first_order_at || order.created_at < existing.first_order_at) {
       existing.first_order_at = order.created_at
     }
@@ -550,7 +530,6 @@ export const getCustomersData = cache(async (): Promise<CustomersReport> => {
     customerMap.set(phone, existing)
   }
 
-  // تبدیل به آرایه و اضافه کردن متادیتا
   const customers: CustomerData[] = Array.from(customerMap.values()).map(
     (c) => {
       const meta = metaMap.get(c.phone) ?? { notes: null, tags: [] }
@@ -562,14 +541,12 @@ export const getCustomersData = cache(async (): Promise<CustomersReport> => {
     }
   )
 
-  // مرتب‌سازی بر اساس آخرین سفارش
   customers.sort((a, b) => {
     const aTime = a.last_order_at ? new Date(a.last_order_at).getTime() : 0
     const bTime = b.last_order_at ? new Date(b.last_order_at).getTime() : 0
     return bTime - aTime
   })
 
-  // محاسبه summary
   const summary = {
     total: customers.length,
     loyal: customers.filter((c) => c.order_count >= 5).length,
@@ -623,7 +600,7 @@ export type CancellationStats = {
     by_customer: number
     by_admin: number
     total_orders: number
-    cancel_rate: number  // درصد
+    cancel_rate: number
   }
   topReasons: Array<{
     reason: string
@@ -636,7 +613,6 @@ export type CancellationStats = {
     label: string
     count: number
   }>
-  // ✅ آمار پیشرفته جدید
   byHour: Array<{
     hour: number
     label: string
@@ -743,11 +719,9 @@ export const getCancellationStats = cache(
 
     const orders = cancelledOrders ?? []
 
-    // ─── محاسبه آمار ───
     const byCustomer = orders.filter((o) => o.cancelled_by === 'customer').length
     const byAdmin = orders.filter((o) => o.cancelled_by === 'admin').length
 
-    // ─── دلایل پرتکرار ───
     const reasonMap = new Map<
       string,
       { icon: string | null; count: number; reasonId: string | null }
@@ -766,7 +740,6 @@ export const getCancellationStats = cache(
       reasonMap.set(reasonLabel, existing)
     }
 
-    // ─── گرفتن آیکون دلایل ───
     const reasonIds = Array.from(reasonMap.values())
       .map((r) => r.reasonId)
       .filter((id): id is string => !!id)
@@ -806,7 +779,6 @@ export const getCancellationStats = cache(
       .sort((a, b) => b.count - a.count)
       .slice(0, 5)
 
-    // ─── لغوها به تفکیک روز (۷ روز اخیر) ───
     const dailyMap = new Map<string, number>()
     const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
 
@@ -831,7 +803,6 @@ export const getCancellationStats = cache(
       })
     }
 
-    // ─── ✅ آمار پیشرفته: لغوها بر اساس ساعت شبانه‌روز ───
     const hourMap = new Map<number, number>()
     for (const order of orders) {
       const dateStr = order.cancelled_at || order.created_at
@@ -855,7 +826,6 @@ export const getCancellationStats = cache(
       })
     }
 
-    // ─── ✅ آمار پیشرفته: لغوها بر اساس روز هفته ───
     const PERSIAN_WEEKDAYS = [
       'شنبه',
       'یکشنبه',
@@ -869,8 +839,8 @@ export const getCancellationStats = cache(
     for (const order of orders) {
       const dateStr = order.cancelled_at || order.created_at
       if (!dateStr) continue
-      const jsDay = new Date(dateStr).getDay() // Sunday=0 ... Saturday=6
-      const persianDay = (jsDay + 1) % 7 // Saturday=0 ... Friday=6
+      const jsDay = new Date(dateStr).getDay()
+      const persianDay = (jsDay + 1) % 7
       weekdayMap.set(persianDay, (weekdayMap.get(persianDay) || 0) + 1)
     }
 
@@ -888,7 +858,6 @@ export const getCancellationStats = cache(
       })
     }
 
-    // ─── ✅ آمار پیشرفته: لغوها بر اساس دسته‌بندی محصولات ───
     const [productsResult, categoriesResult] = await Promise.all([
       db.from('products').select('name, category_id'),
       db.from('categories').select('id, name, icon'),
@@ -953,7 +922,6 @@ export const getCancellationStats = cache(
       .sort((a, b) => b.count - a.count)
       .slice(0, 6)
 
-    // ─── ۲۰ لغو اخیر ───
     const recentCancellations = orders.slice(0, 20).map((o: any) => ({
       id: o.id,
       order_number: o.order_number,
@@ -972,7 +940,6 @@ export const getCancellationStats = cache(
       cancellation_note: o.cancellation_note,
     }))
 
-    // ─── محاسبه نرخ لغو ───
     const cancelRate =
       (totalOrders ?? 0) > 0
         ? Math.round((orders.length / (totalOrders ?? 1)) * 100)
@@ -992,6 +959,289 @@ export const getCancellationStats = cache(
       byWeekday,
       byCategory,
       recentCancellations,
+    }
+  }
+)
+
+// ─── گزارش فروش (برای مالیات و حسابداری) ───
+
+export type SalesReportFilter =
+  | 'today'
+  | 'week'
+  | 'month'
+  | 'last_month'
+  | 'quarter'
+  | 'all'
+
+export type SalesReportData = {
+  summary: {
+    total_revenue: number
+    total_orders: number
+    total_discount: number
+    avg_order_value: number
+    cancelled_count: number
+    cancelled_amount: number
+    period_label: string
+  }
+  daily: Array<{
+    date: string
+    label: string
+    orders: number
+    revenue: number
+    discount: number
+    net: number
+    avg: number
+  }>
+  products: Array<{
+    product_name: string
+    quantity: number
+    revenue: number
+    percentage: number
+  }>
+  categories: Array<{
+    category_name: string
+    category_icon: string | null
+    quantity: number
+    revenue: number
+    percentage: number
+  }>
+}
+
+function getFilterRange(filter: SalesReportFilter): {
+  since: Date | null
+  until: Date | null
+  label: string
+} {
+  const now = new Date()
+
+  if (filter === 'today') {
+    return {
+      since: getStartOfDay(now),
+      until: null,
+      label: 'امروز',
+    }
+  }
+  if (filter === 'week') {
+    return {
+      since: getStartOfWeek(now),
+      until: null,
+      label: 'این هفته',
+    }
+  }
+  if (filter === 'month') {
+    return {
+      since: getStartOfMonth(now),
+      until: null,
+      label: 'این ماه',
+    }
+  }
+  if (filter === 'last_month') {
+    const firstOfThisMonth = getStartOfMonth(now)
+    const lastMonthEnd = new Date(firstOfThisMonth.getTime() - 1)
+    const lastMonthStart = getStartOfMonth(lastMonthEnd)
+    return {
+      since: lastMonthStart,
+      until: firstOfThisMonth,
+      label: lastMonthEnd.toLocaleDateString('fa-IR', {
+        month: 'long',
+        year: 'numeric',
+      }),
+    }
+  }
+  if (filter === 'quarter') {
+    const threeMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 2, 1)
+    threeMonthsAgo.setHours(0, 0, 0, 0)
+    return {
+      since: threeMonthsAgo,
+      until: null,
+      label: '۳ ماه اخیر',
+    }
+  }
+  return { since: null, until: null, label: 'همه' }
+}
+
+export const getSalesReport = cache(
+  async (filter: SalesReportFilter = 'month'): Promise<SalesReportData> => {
+    const db = createDb()
+    const { since, until, label } = getFilterRange(filter)
+
+    let summaryQuery = db
+      .from('orders')
+      .select('subtotal, original_subtotal, coupon_discount, status, created_at, items')
+
+    if (since) {
+      summaryQuery = summaryQuery.gte('created_at', since.toISOString())
+    }
+    if (until) {
+      summaryQuery = summaryQuery.lt('created_at', until.toISOString())
+    }
+
+    const { data: allOrders, error: summaryError } = await summaryQuery
+
+    if (summaryError || !allOrders) {
+      console.error('[sales report] summary error:', summaryError)
+      return {
+        summary: {
+          total_revenue: 0,
+          total_orders: 0,
+          total_discount: 0,
+          avg_order_value: 0,
+          cancelled_count: 0,
+          cancelled_amount: 0,
+          period_label: label,
+        },
+        daily: [],
+        products: [],
+        categories: [],
+      }
+    }
+
+    const validOrders = allOrders.filter((o) => o.status !== 'cancelled')
+    const cancelled = allOrders.filter((o) => o.status === 'cancelled')
+
+    const totalRevenue = validOrders.reduce(
+      (sum, o) => sum + (Number(o.subtotal) || 0),
+      0
+    )
+    const totalDiscount = validOrders.reduce(
+      (sum, o) => sum + (Number(o.coupon_discount) || 0),
+      0
+    )
+    const cancelledAmount = cancelled.reduce(
+      (sum, o) => sum + (Number(o.subtotal) || 0),
+      0
+    )
+
+    const dayMap = new Map<
+      string,
+      { orders: number; revenue: number; discount: number }
+    >()
+
+    for (const order of validOrders) {
+      const date = new Date(order.created_at)
+      const key = date.toISOString().split('T')[0]
+      const existing = dayMap.get(key) ?? {
+        orders: 0,
+        revenue: 0,
+        discount: 0,
+      }
+      existing.orders += 1
+      existing.revenue += Number(order.subtotal) || 0
+      existing.discount += Number(order.coupon_discount) || 0
+      dayMap.set(key, existing)
+    }
+
+    const daily = Array.from(dayMap.entries())
+      .map(([date, data]) => ({
+        date,
+        label: new Date(date).toLocaleDateString('fa-IR', {
+          weekday: 'short',
+          day: 'numeric',
+          month: 'short',
+        }),
+        orders: data.orders,
+        revenue: data.revenue,
+        discount: data.discount,
+        net: data.revenue,
+        avg: data.orders > 0 ? Math.round(data.revenue / data.orders) : 0,
+      }))
+      .sort((a, b) => b.date.localeCompare(a.date))
+
+    const productMap = new Map<string, { quantity: number; revenue: number }>()
+    let totalQty = 0
+
+    for (const order of validOrders) {
+      const items = Array.isArray(order.items) ? order.items : []
+      for (const item of items) {
+        const name = item?.product_name || 'نامشخص'
+        const qty = Number(item?.quantity) || 0
+        const price = Number(item?.unit_price) || 0
+        if (!qty) continue
+        const existing = productMap.get(name) ?? { quantity: 0, revenue: 0 }
+        existing.quantity += qty
+        existing.revenue += price * qty
+        productMap.set(name, existing)
+        totalQty += qty
+      }
+    }
+
+    const products = Array.from(productMap.entries())
+      .map(([name, data]) => ({
+        product_name: name,
+        quantity: data.quantity,
+        revenue: data.revenue,
+        percentage:
+          totalQty > 0 ? Math.round((data.quantity / totalQty) * 100) : 0,
+      }))
+      .sort((a, b) => b.revenue - a.revenue)
+
+    const [productsResult, categoriesResult] = await Promise.all([
+      db.from('products').select('name, category_id'),
+      db.from('categories').select('id, name, icon'),
+    ])
+
+    const productToCatMap = new Map<string, string>()
+    for (const p of productsResult.data ?? []) {
+      if (p.category_id && p.name) {
+        productToCatMap.set(p.name, p.category_id)
+      }
+    }
+
+    const catInfoMap = new Map<string, { name: string; icon: string | null }>()
+    for (const c of categoriesResult.data ?? []) {
+      catInfoMap.set(c.id, { name: c.name, icon: c.icon ?? null })
+    }
+
+    const catCountMap = new Map<
+      string,
+      { quantity: number; revenue: number; icon: string | null }
+    >()
+    let totalCatQty = 0
+
+    for (const [name, data] of productMap.entries()) {
+      const catId = productToCatMap.get(name)
+      if (!catId) continue
+      const catInfo = catInfoMap.get(catId)
+      if (!catInfo) continue
+
+      const existing = catCountMap.get(catInfo.name) ?? {
+        quantity: 0,
+        revenue: 0,
+        icon: catInfo.icon,
+      }
+      existing.quantity += data.quantity
+      existing.revenue += data.revenue
+      catCountMap.set(catInfo.name, existing)
+      totalCatQty += data.quantity
+    }
+
+    const categories = Array.from(catCountMap.entries())
+      .map(([name, data]) => ({
+        category_name: name,
+        category_icon: data.icon,
+        quantity: data.quantity,
+        revenue: data.revenue,
+        percentage:
+          totalCatQty > 0 ? Math.round((data.quantity / totalCatQty) * 100) : 0,
+      }))
+      .sort((a, b) => b.revenue - a.revenue)
+
+    return {
+      summary: {
+        total_revenue: totalRevenue,
+        total_orders: validOrders.length,
+        total_discount: totalDiscount,
+        avg_order_value:
+          validOrders.length > 0
+            ? Math.round(totalRevenue / validOrders.length)
+            : 0,
+        cancelled_count: cancelled.length,
+        cancelled_amount: cancelledAmount,
+        period_label: label,
+      },
+      daily,
+      products,
+      categories,
     }
   }
 )

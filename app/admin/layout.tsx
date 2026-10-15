@@ -93,6 +93,7 @@ export default function AdminLayout({
     { href: '/admin/coupons', label: 'کد تخفیف', icon: '🎟️' },
     { href: '/admin/cancellation-reasons', label: 'دلایل لغو', icon: '🚫' },
     { href: '/admin/cancellations', label: 'آمار لغوها', icon: '📊' },
+    { href: '/admin/reports/sales', label: 'گزارش فروش', icon: '💰' },
     { href: '/admin/settings', label: 'تنظیمات', icon: '⚙️' },
   ]
 

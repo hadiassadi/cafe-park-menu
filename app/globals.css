@@ -11229,3 +11229,644 @@ body {
     width: 100%;
   }
 }
+/* ========================================
+   73. SALES REPORTS (گزارش فروش و مالیات)
+   ======================================== */
+
+/* ─── دکمه‌های خروجی در هدر ─── */
+.report-export-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* ─── کارت‌های خلاصه ─── */
+.sales-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.sales-summary-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  background: #fffdf9;
+  border: 1px solid #e3ddd2;
+  border-radius: 14px;
+  transition: all 0.15s ease;
+}
+
+.sales-summary-card:hover {
+  border-color: #6b4f3a;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(107, 79, 58, 0.08);
+}
+
+.sales-summary-card.primary {
+  background: linear-gradient(135deg, #6b4f3a 0%, #9a6b3f 100%);
+  color: #fff;
+  border-color: #6b4f3a;
+}
+
+.sales-summary-card.primary .sales-summary-label {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.sales-summary-card.primary .sales-summary-value {
+  color: #fff;
+}
+
+.sales-summary-card.primary .sales-summary-icon {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.sales-summary-card.danger {
+  border-color: #f2c9c5;
+  background: #fdf9f4;
+}
+
+.sales-summary-card.danger .sales-summary-icon {
+  background: #fde8e6;
+}
+
+.sales-summary-card.danger .sales-summary-value {
+  color: #9b3c32;
+}
+
+.sales-summary-icon {
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  background: #f5f0e9;
+  font-size: 22px;
+}
+
+.sales-summary-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.sales-summary-value {
+  font-size: 20px;
+  font-weight: 800;
+  color: #29251f;
+  line-height: 1.2;
+  word-break: break-word;
+}
+
+.sales-summary-label {
+  margin-top: 4px;
+  font-size: 11px;
+  color: #766f64;
+  font-weight: 600;
+}
+
+/* ─── تب‌ها ─── */
+.sales-view-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid #e3ddd2;
+  padding-bottom: 0;
+  flex-wrap: wrap;
+}
+
+.sales-view-tab {
+  padding: 10px 20px;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  background: transparent;
+  color: #766f64;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  margin-bottom: -1px;
+  white-space: nowrap;
+}
+
+.sales-view-tab:hover {
+  color: #6b4f3a;
+}
+
+.sales-view-tab.active {
+  color: #6b4f3a;
+  border-bottom-color: #6b4f3a;
+}
+
+/* ─── جدول گزارش ─── */
+.sales-table-wrapper {
+  background: #fffdf9;
+  border: 1px solid #e3ddd2;
+  border-radius: 14px;
+  overflow-x: auto;
+}
+
+.sales-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  min-width: 640px;
+}
+
+.sales-table thead {
+  background: #f5f0e9;
+}
+
+.sales-table th {
+  padding: 12px 14px;
+  text-align: right;
+  font-weight: 800;
+  color: #625b51;
+  font-size: 12px;
+  white-space: nowrap;
+  border-bottom: 1px solid #e3ddd2;
+}
+
+.sales-table td {
+  padding: 14px;
+  color: #4a443d;
+  border-bottom: 1px solid #ebe6de;
+  vertical-align: middle;
+}
+
+.sales-table tbody tr:hover {
+  background: #faf7f2;
+}
+
+.sales-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.sales-table td strong {
+  color: #29251f;
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.sales-table td small {
+  display: block;
+  margin-top: 3px;
+  font-size: 11px;
+  color: #9a9287;
+}
+
+.sales-table-num {
+  text-align: center;
+  font-weight: 700;
+  color: #4a443d;
+  white-space: nowrap;
+}
+
+.sales-table-amount {
+  font-weight: 800;
+  color: #6b4f3a !important;
+  white-space: nowrap;
+}
+
+.sales-table-discount {
+  color: #9b3c32 !important;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.sales-table-rank {
+  font-family: 'Courier New', monospace;
+  font-weight: 800;
+  color: #6b4f3a;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.sales-table-percent {
+  min-width: 130px;
+}
+
+.sales-table-percent small {
+  display: block;
+  margin-top: 4px;
+  font-size: 11px;
+  color: #766f64;
+  font-weight: 700;
+}
+
+/* ─── نوار سهم درصدی ─── */
+.sales-bar-mini {
+  height: 8px;
+  background: #f5f0e9;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.sales-bar-mini-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #9a6b3f 0%, #6b4f3a 100%);
+  border-radius: 999px;
+  transition: width 0.5s ease;
+  min-width: 3px;
+}
+
+.sales-cat-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  font-size: 16px;
+  margin-inline-end: 8px;
+  background: #f5f0e9;
+  border-radius: 7px;
+  vertical-align: middle;
+}
+
+/* ─── ردیف جمع کل ─── */
+.sales-table tfoot td {
+  background: #f5f0e9;
+  border-top: 2px solid #d8d0c4;
+  padding-top: 14px;
+  padding-bottom: 14px;
+}
+
+.sales-table tfoot td strong {
+  font-size: 14px;
+}
+
+/* ─── راهنما ─── */
+.sales-report-hint {
+  padding: 12px 16px;
+  background: #fbf9f5;
+  border: 1px dashed #d8d0c4;
+  border-radius: 10px;
+  font-size: 12px;
+  color: #625b51;
+  line-height: 1.9;
+  text-align: center;
+}
+
+.sales-report-hint strong {
+  color: #6b4f3a;
+}
+
+/* ─── Dark Mode ─── */
+.admin-shell.dark-mode .sales-summary-card {
+  background: var(--admin-surface);
+  border-color: var(--admin-border);
+}
+
+.admin-shell.dark-mode .sales-summary-card.primary {
+  background: linear-gradient(135deg, #5a4230 0%, #7a5735 100%);
+  border-color: #5a4230;
+}
+
+.admin-shell.dark-mode .sales-summary-card.danger {
+  background: rgba(155, 60, 50, 0.1);
+  border-color: rgba(155, 60, 50, 0.4);
+}
+
+.admin-shell.dark-mode .sales-summary-value {
+  color: var(--admin-text);
+}
+
+.admin-shell.dark-mode .sales-summary-label {
+  color: var(--admin-text-muted);
+}
+
+.admin-shell.dark-mode .sales-summary-icon {
+  background: var(--admin-surface-2);
+}
+
+.admin-shell.dark-mode .sales-view-tabs {
+  border-bottom-color: var(--admin-border);
+}
+
+.admin-shell.dark-mode .sales-view-tab {
+  color: var(--admin-text-muted);
+}
+
+.admin-shell.dark-mode .sales-view-tab:hover,
+.admin-shell.dark-mode .sales-view-tab.active {
+  color: var(--admin-primary);
+}
+
+.admin-shell.dark-mode .sales-view-tab.active {
+  border-bottom-color: var(--admin-primary);
+}
+
+.admin-shell.dark-mode .sales-table-wrapper {
+  background: var(--admin-surface);
+  border-color: var(--admin-border);
+}
+
+.admin-shell.dark-mode .sales-table thead,
+.admin-shell.dark-mode .sales-table tfoot td {
+  background: var(--admin-surface-2);
+}
+
+.admin-shell.dark-mode .sales-table th {
+  color: var(--admin-text-muted);
+  border-bottom-color: var(--admin-border);
+}
+
+.admin-shell.dark-mode .sales-table td {
+  color: var(--admin-text-muted);
+  border-bottom-color: var(--admin-border);
+}
+
+.admin-shell.dark-mode .sales-table tbody tr:hover {
+  background: var(--admin-hover);
+}
+
+.admin-shell.dark-mode .sales-table td strong {
+  color: var(--admin-text);
+}
+
+.admin-shell.dark-mode .sales-table-amount {
+  color: var(--admin-primary) !important;
+}
+
+.admin-shell.dark-mode .sales-table-discount {
+  color: #d97a6c !important;
+}
+
+.admin-shell.dark-mode .sales-table-rank {
+  color: var(--admin-primary);
+}
+
+.admin-shell.dark-mode .sales-bar-mini {
+  background: var(--admin-surface-2);
+}
+
+.admin-shell.dark-mode .sales-cat-icon {
+  background: var(--admin-surface-2);
+}
+
+.admin-shell.dark-mode .sales-report-hint {
+  background: var(--admin-surface-2);
+  border-color: var(--admin-border);
+  color: var(--admin-text-muted);
+}
+
+.admin-shell.dark-mode .sales-report-hint strong {
+  color: var(--admin-primary);
+}
+
+/* ─── موبایل ─── */
+@media (max-width: 650px) {
+  .report-export-actions {
+    width: 100%;
+  }
+
+  .report-export-actions .btn {
+    flex: 1;
+    min-height: 44px;
+  }
+
+  .sales-summary-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .sales-summary-card {
+    padding: 12px;
+    gap: 10px;
+  }
+
+  .sales-summary-icon {
+    width: 38px;
+    height: 38px;
+    flex-basis: 38px;
+    font-size: 18px;
+  }
+
+  .sales-summary-value {
+    font-size: 16px;
+  }
+
+  .sales-view-tabs {
+    gap: 4px;
+  }
+
+  .sales-view-tab {
+    padding: 8px 12px;
+    font-size: 12px;
+    flex: 1;
+    text-align: center;
+  }
+
+  .sales-table {
+    font-size: 12px;
+    min-width: 560px;
+  }
+
+  .sales-table th,
+  .sales-table td {
+    padding: 10px 8px;
+  }
+}
+/* ========================================
+   74. CUSTOMERS CANCEL FILTER (فیلتر لغو در CRM)
+   ======================================== */
+
+/* ─── ردیف فیلتر لغو ─── */
+.customers-cancel-filters {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 12px 14px;
+  background: #fdf9f4;
+  border: 1px dashed #f2d5c5;
+  border-radius: 12px;
+  flex-wrap: wrap;
+}
+
+.customers-cancel-label {
+  font-size: 12px;
+  font-weight: 800;
+  color: #9b3c32;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.customers-cancel-chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  flex: 1;
+}
+
+/* ─── چیپ لغو ─── */
+.filter-chip.cancel-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  border-radius: 999px;
+  transition: all 0.15s ease;
+}
+
+.filter-chip.cancel-chip.chip-danger {
+  color: #9b3c32;
+  border-color: #f2c9c5;
+  background: #fff;
+}
+
+.filter-chip.cancel-chip.chip-danger:hover {
+  background: #fde8e6;
+  border-color: #e8d0cd;
+}
+
+.filter-chip.cancel-chip.chip-danger.active {
+  background: #9b3c32;
+  border-color: #9b3c32;
+  color: #fff;
+}
+
+.filter-chip.cancel-chip.active .chip-count {
+  background: rgba(255, 255, 255, 0.25);
+  color: #fff;
+}
+
+/* ─── شمارنده داخل چیپ ─── */
+.chip-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #f5f0e9;
+  color: #625b51;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.filter-chip.active .chip-count {
+  background: rgba(255, 255, 255, 0.2);
+  color: inherit;
+}
+
+/* ─── ردیف نتیجه فیلتر ─── */
+.customers-filter-result {
+  padding: 10px 16px;
+  margin-bottom: 12px;
+  border-radius: 10px;
+  background: #fde8e6;
+  color: #9b3c32;
+  font-size: 13px;
+  font-weight: 700;
+  text-align: center;
+  animation: toastIn 0.25s ease;
+}
+
+/* ─── هایلایت کارت مشتری وقتی فیلتر فعاله ─── */
+.customer-card.customer-card-highlight {
+  border-color: #f2c9c5;
+  background: linear-gradient(180deg, #fefaf8 0%, #fffdf9 100%);
+}
+
+.customer-card.customer-card-highlight:hover {
+  border-color: #e8b0a6;
+  box-shadow: 0 6px 16px rgba(155, 60, 50, 0.1);
+}
+
+/* ─── هایلایت عدد لغو ─── */
+.customer-stat-cancelled.cancelled-emphasis {
+  background: #fde8e6;
+  padding: 6px 10px;
+  border-radius: 8px;
+  margin: 2px -4px;
+  font-weight: 700;
+}
+
+.customer-stat-cancelled.cancelled-emphasis strong {
+  font-size: 15px;
+  color: #9b3c32;
+}
+
+/* ─── Dark Mode ─── */
+.admin-shell.dark-mode .customers-cancel-filters {
+  background: var(--admin-surface-2);
+  border-color: var(--admin-border);
+}
+
+.admin-shell.dark-mode .customers-cancel-label {
+  color: #d97a6c;
+}
+
+.admin-shell.dark-mode .filter-chip.cancel-chip.chip-danger {
+  background: var(--admin-surface);
+  border-color: rgba(155, 60, 50, 0.4);
+  color: #d97a6c;
+}
+
+.admin-shell.dark-mode .filter-chip.cancel-chip.chip-danger:hover {
+  background: rgba(155, 60, 50, 0.15);
+}
+
+.admin-shell.dark-mode .filter-chip.cancel-chip.chip-danger.active {
+  background: #9b3c32;
+  border-color: #9b3c32;
+  color: #fff;
+}
+
+.admin-shell.dark-mode .chip-count {
+  background: var(--admin-surface-2);
+  color: var(--admin-text-muted);
+}
+
+.admin-shell.dark-mode .customers-filter-result {
+  background: rgba(155, 60, 50, 0.2);
+  color: #d97a6c;
+}
+
+.admin-shell.dark-mode .customer-card.customer-card-highlight {
+  background: var(--admin-surface);
+  border-color: rgba(155, 60, 50, 0.4);
+}
+
+.admin-shell.dark-mode .customer-stat-cancelled.cancelled-emphasis {
+  background: rgba(155, 60, 50, 0.2);
+}
+
+.admin-shell.dark-mode .customer-stat-cancelled.cancelled-emphasis strong {
+  color: #d97a6c;
+}
+
+/* ─── موبایل ─── */
+@media (max-width: 650px) {
+  .customers-cancel-filters {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .customers-cancel-chips {
+    width: 100%;
+  }
+
+  .filter-chip.cancel-chip {
+    flex: 1;
+    justify-content: center;
+    min-width: 0;
+    padding: 8px 10px;
+    font-size: 11px;
+  }
+
+  .chip-count {
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    font-size: 9px;
+  }
+}

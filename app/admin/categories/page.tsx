@@ -7,7 +7,7 @@ export default async function CategoriesPage() {
   const { data: categories, error } = await db
     .from('categories')
     .select(
-      'id,name,icon,description,sort_order,is_active'
+      'id,name,icon,description,sort_order,is_active,coupon_eligible'
     )
     .order('sort_order', { ascending: true })
 
