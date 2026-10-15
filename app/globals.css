@@ -9229,3 +9229,100 @@ body {
   border-color: var(--admin-primary);
   color: #1a1815;
 }
+/* ========================================
+   62. EXPORT ORDERS (خروجی Excel)
+   ======================================== */
+
+/* ─── دکمه‌های انتخاب در مودال Export ─── */
+.export-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.export-field label {
+  font-size: 13px;
+  font-weight: 700;
+  color: #4a443d;
+}
+
+.export-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.export-option {
+  padding: 10px 12px;
+  border: 1.5px solid #d8d0c4;
+  border-radius: 10px;
+  background: #fffdf9;
+  color: #4a443d;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: center;
+}
+
+.export-option:hover {
+  border-color: #b8ad9c;
+  background: #fbf9f5;
+}
+
+.export-option.active {
+  background: #6b4f3a;
+  border-color: #6b4f3a;
+  color: #fff;
+}
+
+.export-hint {
+  margin: 16px 0 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #f5f0e9;
+  color: #625b51;
+  font-size: 11px;
+  line-height: 1.7;
+  text-align: center;
+}
+
+/* ─── Dark Mode ─── */
+.admin-shell.dark-mode .export-field label {
+  color: var(--admin-text);
+}
+
+.admin-shell.dark-mode .export-option {
+  background: var(--admin-surface);
+  border-color: var(--admin-border);
+  color: var(--admin-text);
+}
+
+.admin-shell.dark-mode .export-option:hover {
+  background: var(--admin-hover);
+  border-color: #5a5247;
+}
+
+.admin-shell.dark-mode .export-option.active {
+  background: var(--admin-primary);
+  border-color: var(--admin-primary);
+  color: #1a1815;
+}
+
+.admin-shell.dark-mode .export-hint {
+  background: var(--admin-surface-2);
+  color: var(--admin-text-muted);
+}
+
+/* ─── موبایل ─── */
+@media (max-width: 500px) {
+  .export-options {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-header .btn {
+    width: 100%;
+    margin-top: 12px;
+  }
+}

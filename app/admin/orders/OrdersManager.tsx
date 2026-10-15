@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
-import { createPortal } from 'react-dom'  // ← اضافه شد
+import { createPortal } from 'react-dom'
 import { createClient } from '@supabase/supabase-js'
 import { updateOrderStatus } from './actions'
 
@@ -24,7 +24,7 @@ type OrderItem = {
   option_name: string | null
   unit_price: number
   quantity: number
-  discount_amount?: number   // ✅ جدید
+  discount_amount?: number
 }
 
 type Order = {
@@ -81,13 +81,40 @@ const NEXT_LABEL: Record<string, string> = {
 
 type Filter = 'all' | 'pending' | 'active' | 'done'
 
-export default function OrdersManager({ orders: initialOrders }: { orders: Order[] }) {
+type ExportFilter = 'today' | 'week' | 'month' | 'all'
+type ExportStatus = 'all' | 'delivered' | 'active' | 'cancelled'
+
+const EXPORT_FILTER_LABELS: Record<ExportFilter, string> = {
+  today: 'امروز',
+  week: 'این هفته',
+  month: 'این ماه',
+  all: 'همه',
+}
+
+const EXPORT_STATUS_LABELS: Record<ExportStatus, string> = {
+  all: 'همه وضعیت‌ها',
+  delivered: 'فقط تحویل‌شده',
+  active: 'فقط در جریان',
+  cancelled: 'فقط لغو‌شده',
+}
+
+export default function OrdersManager({
+  orders: initialOrders,
+}: {
+  orders: Order[]
+}) {
   const [orders, setOrders] = useState<Order[]>(initialOrders)
   const [filter, setFilter] = useState<Filter>('pending')
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
   const [loading, setLoading] = useState(false)
   const [printOrder, setPrintOrder] = useState<Order | null>(null)
-  const [mounted, setMounted] = useState(false)  // ← برای Portal
+  const [mounted, setMounted] = useState(false)
+
+  // ✅ State های Export
+  const [exportOpen, setExportOpen] = useState(false)
+  const [exportFilter, setExportFilter] = useState<ExportFilter>('month')
+  const [exportStatus, setExportStatus] = useState<ExportStatus>('all')
+  const [exporting, setExporting] = useState(false)
 
   // اطمینان از اینکه فقط سمت کلاینت رندر می‌شه
   useEffect(() => {
@@ -150,6 +177,45 @@ export default function OrdersManager({ orders: initialOrders }: { orders: Order
       window.removeEventListener('afterprint', handleAfterPrint)
     }
   }, [printOrder])
+
+  // ✅ Export به CSV
+    async function handleExport() {
+    setExporting(true)
+    try {
+      const url = `/api/export/orders?filter=${exportFilter}&status=${exportStatus}`
+      const res = await fetch(url)
+
+      if (!res.ok) {
+        throw new Error('خطا در ساخت فایل')
+      }
+
+      const blob = await res.blob()
+      const downloadUrl = URL.createObjectURL(blob)
+
+      // ✅ اسم فایل با تاریخ میلادی (ASCII-safe)
+      const now = new Date()
+      const y = now.getFullYear()
+      const m = String(now.getMonth() + 1).padStart(2, '0')
+      const d = String(now.getDate()).padStart(2, '0')
+      const hh = String(now.getHours()).padStart(2, '0')
+      const mm = String(now.getMinutes()).padStart(2, '0')
+
+      const a = document.createElement('a')
+      a.href = downloadUrl
+      a.download = `cafe-park-orders-${y}-${m}-${d}_${hh}-${mm}.csv`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(downloadUrl)
+
+      setExportOpen(false)
+    } catch (err) {
+      alert('❌ خطا در دانلود فایل')
+      console.error(err)
+    } finally {
+      setExporting(false)
+    }
+  }
 
   const counts = useMemo(() => {
     return {
@@ -232,6 +298,16 @@ export default function OrdersManager({ orders: initialOrders }: { orders: Order
               )}
             </p>
           </div>
+
+          {/* ✅ دکمه خروجی Excel */}
+          <button
+            type="button"
+            className="btn"
+            onClick={() => setExportOpen(true)}
+            title="خروجی Excel (CSV)"
+          >
+            📥 خروجی Excel
+          </button>
         </div>
 
         {/* فیلترها */}
@@ -394,61 +470,63 @@ export default function OrdersManager({ orders: initialOrders }: { orders: Order
                   )}
                 </div>
 
-                              <div className="info-card" style={{ marginTop: '16px' }}>
-                <h3>🧾 اقلام سفارش</h3>
-                {selectedOrder.items.map((item, idx) => (
-                  <div key={idx} className="info-row">
-                    <span>
-                      {formatPrice(item.quantity)} × {item.product_name}
-                      {item.option_name && (
-                        <small> ({item.option_name})</small>
-                      )}
-                    </span>
-                    <strong>
-                      {formatPrice(item.unit_price * item.quantity)}
-                    </strong>
-                  </div>
-                ))}
-
-                {/* ✅ خلاصه پرداخت با تخفیف */}
-                {selectedOrder.coupon_code &&
-                selectedOrder.coupon_discount ? (
-                  <>
-                    <div
-                      className="info-row"
-                      style={{ marginTop: '10px' }}
-                    >
-                      <span>جمع اقلام:</span>
-                      <strong>
-                        {formatPrice(
-                          selectedOrder.original_subtotal ??
-                            selectedOrder.subtotal
-                        )}{' '}
-                        تومان
-                      </strong>
-                    </div>
-                    <div className="info-row discount">
+                <div className="info-card" style={{ marginTop: '16px' }}>
+                  <h3>🧾 اقلام سفارش</h3>
+                  {selectedOrder.items.map((item, idx) => (
+                    <div key={idx} className="info-row">
                       <span>
-                        🎟️ تخفیف ({selectedOrder.coupon_code}):
+                        {formatPrice(item.quantity)} × {item.product_name}
+                        {item.option_name && (
+                          <small> ({item.option_name})</small>
+                        )}
                       </span>
                       <strong>
-                        − {formatPrice(selectedOrder.coupon_discount)} تومان
+                        {formatPrice(item.unit_price * item.quantity)}
                       </strong>
                     </div>
+                  ))}
+
+                  {selectedOrder.coupon_code &&
+                  selectedOrder.coupon_discount ? (
+                    <>
+                      <div
+                        className="info-row"
+                        style={{ marginTop: '10px' }}
+                      >
+                        <span>جمع اقلام:</span>
+                        <strong>
+                          {formatPrice(
+                            selectedOrder.original_subtotal ??
+                              selectedOrder.subtotal
+                          )}{' '}
+                          تومان
+                        </strong>
+                      </div>
+                      <div className="info-row discount">
+                        <span>
+                          🎟️ تخفیف ({selectedOrder.coupon_code}):
+                        </span>
+                        <strong>
+                          − {formatPrice(selectedOrder.coupon_discount)}{' '}
+                          تومان
+                        </strong>
+                      </div>
+                      <div className="total-row">
+                        <span>قابل پرداخت</span>
+                        <span>
+                          {formatPrice(selectedOrder.subtotal)} تومان
+                        </span>
+                      </div>
+                    </>
+                  ) : (
                     <div className="total-row">
-                      <span>قابل پرداخت</span>
+                      <span>جمع کل</span>
                       <span>
                         {formatPrice(selectedOrder.subtotal)} تومان
                       </span>
                     </div>
-                  </>
-                ) : (
-                  <div className="total-row">
-                    <span>جمع کل</span>
-                    <span>{formatPrice(selectedOrder.subtotal)} تومان</span>
-                  </div>
-                )}
-              </div>
+                  )}
+                </div>
               </div>
 
               <div className="modal-footer">
@@ -487,6 +565,100 @@ export default function OrdersManager({ orders: initialOrders }: { orders: Order
           </div>
         )}
       </div>
+
+      {/* ✅ Modal خروجی Excel */}
+      {exportOpen && (
+        <div
+          className="modal-overlay"
+          onClick={() => !exporting && setExportOpen(false)}
+        >
+          <div
+            className="modal-container modal-sm"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-header">
+              <div className="modal-header-content">
+                <h2>📥 خروجی Excel</h2>
+                <p>فایل CSV برای اکسل و حسابداری</p>
+              </div>
+              <button
+                type="button"
+                className="modal-close-btn"
+                onClick={() => setExportOpen(false)}
+                disabled={exporting}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="modal-body">
+              <div className="export-field">
+                <label>بازه زمانی</label>
+                <div className="export-options">
+                  {(Object.keys(EXPORT_FILTER_LABELS) as ExportFilter[]).map(
+                    (f) => (
+                      <button
+                        key={f}
+                        type="button"
+                        className={`export-option ${
+                          exportFilter === f ? 'active' : ''
+                        }`}
+                        onClick={() => setExportFilter(f)}
+                      >
+                        {EXPORT_FILTER_LABELS[f]}
+                      </button>
+                    )
+                  )}
+                </div>
+              </div>
+
+              <div className="export-field" style={{ marginTop: '16px' }}>
+                <label>وضعیت سفارش</label>
+                <div className="export-options">
+                  {(Object.keys(EXPORT_STATUS_LABELS) as ExportStatus[]).map(
+                    (s) => (
+                      <button
+                        key={s}
+                        type="button"
+                        className={`export-option ${
+                          exportStatus === s ? 'active' : ''
+                        }`}
+                        onClick={() => setExportStatus(s)}
+                      >
+                        {EXPORT_STATUS_LABELS[s]}
+                      </button>
+                    )
+                  )}
+                </div>
+              </div>
+
+              <p className="export-hint">
+                📌 فایل با فرمت CSV دانلود می‌شود که در Excel، Google Sheets
+                و WPS Office باز می‌شود.
+              </p>
+            </div>
+
+            <div className="modal-footer">
+              <button
+                type="button"
+                className="btn"
+                onClick={() => setExportOpen(false)}
+                disabled={exporting}
+              >
+                انصراف
+              </button>
+              <button
+                type="button"
+                className="btn primary-btn"
+                onClick={handleExport}
+                disabled={exporting}
+              >
+                {exporting ? '...' : '📥 دانلود فایل'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ─── فاکتور چاپی — با Portal به body منتقل می‌شه ─── */}
       {mounted &&
@@ -539,101 +711,105 @@ export default function OrdersManager({ orders: initialOrders }: { orders: Order
               )}
             </div>
 
-                                <div className="print-invoice-items">
-            <h3>اقلام سفارش</h3>
-            <table className="print-invoice-table">
-              <thead>
-                <tr>
-                  <th style={{ width: '36px' }}>#</th>
-                  <th>نام محصول</th>
-                  <th style={{ width: '50px', textAlign: 'center' }}>
-                    تعداد
-                  </th>
-                  <th style={{ width: '90px', textAlign: 'left' }}>
-                    قیمت واحد
-                  </th>
-                  <th style={{ width: '90px', textAlign: 'left' }}>
-                    تخفیف
-                  </th>
-                  <th style={{ width: '100px', textAlign: 'left' }}>جمع</th>
-                </tr>
-              </thead>
-              <tbody>
-                {printOrder.items.map((item: any, idx) => {
-                  const itemDiscount = item.discount_amount || 0
-                  const itemTotal = item.unit_price * item.quantity
-                  const finalItemTotal = itemTotal - itemDiscount
+            <div className="print-invoice-items">
+              <h3>اقلام سفارش</h3>
+              <table className="print-invoice-table">
+                <thead>
+                  <tr>
+                    <th style={{ width: '36px' }}>#</th>
+                    <th>نام محصول</th>
+                    <th style={{ width: '50px', textAlign: 'center' }}>
+                      تعداد
+                    </th>
+                    <th style={{ width: '90px', textAlign: 'left' }}>
+                      قیمت واحد
+                    </th>
+                    <th style={{ width: '90px', textAlign: 'left' }}>
+                      تخفیف
+                    </th>
+                    <th style={{ width: '100px', textAlign: 'left' }}>
+                      جمع
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {printOrder.items.map((item: any, idx) => {
+                    const itemDiscount = item.discount_amount || 0
+                    const itemTotal = item.unit_price * item.quantity
+                    const finalItemTotal = itemTotal - itemDiscount
 
-                  return (
-                    <tr key={idx}>
-                      <td>{formatPrice(idx + 1)}</td>
-                      <td>
-                        {item.product_name}
-                        {item.option_name && (
-                          <small
-                            style={{ color: '#666', display: 'block' }}
-                          >
-                            ({item.option_name})
-                          </small>
-                        )}
-                      </td>
-                      <td style={{ textAlign: 'center' }}>
-                        {formatPrice(item.quantity)}
-                      </td>
-                      <td style={{ textAlign: 'left' }}>
-                        {formatPrice(item.unit_price)}
-                      </td>
-                      <td
-                        style={{
-                          textAlign: 'left',
-                          color: itemDiscount > 0 ? '#2d5d3e' : '#999',
-                          fontWeight: itemDiscount > 0 ? 700 : 400,
-                        }}
-                      >
-                        {itemDiscount > 0
-                          ? `− ${formatPrice(itemDiscount)}`
-                          : '—'}
-                      </td>
-                      <td style={{ textAlign: 'left', fontWeight: 700 }}>
-                        {formatPrice(finalItemTotal)}
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-                            <tfoot>
-                {printOrder.coupon_code && printOrder.coupon_discount ? (
-                  <>
-                    <tr className="invoice-summary-row">
-                      <td colSpan={5}>جمع اقلام:</td>
-                      <td>
-                        {formatPrice(
-                          printOrder.original_subtotal ??
-                            printOrder.subtotal
-                        )}{' '}
-                        تومان
-                      </td>
-                    </tr>
-                    <tr className="invoice-summary-row invoice-discount-row">
-                      <td colSpan={5}>
-                        🎟️ تخفیف ({printOrder.coupon_code}):
-                      </td>
-                      <td>− {formatPrice(printOrder.coupon_discount)} تومان</td>
-                    </tr>
+                    return (
+                      <tr key={idx}>
+                        <td>{formatPrice(idx + 1)}</td>
+                        <td>
+                          {item.product_name}
+                          {item.option_name && (
+                            <small
+                              style={{ color: '#666', display: 'block' }}
+                            >
+                              ({item.option_name})
+                            </small>
+                          )}
+                        </td>
+                        <td style={{ textAlign: 'center' }}>
+                          {formatPrice(item.quantity)}
+                        </td>
+                        <td style={{ textAlign: 'left' }}>
+                          {formatPrice(item.unit_price)}
+                        </td>
+                        <td
+                          style={{
+                            textAlign: 'left',
+                            color: itemDiscount > 0 ? '#2d5d3e' : '#999',
+                            fontWeight: itemDiscount > 0 ? 700 : 400,
+                          }}
+                        >
+                          {itemDiscount > 0
+                            ? `− ${formatPrice(itemDiscount)}`
+                            : '—'}
+                        </td>
+                        <td style={{ textAlign: 'left', fontWeight: 700 }}>
+                          {formatPrice(finalItemTotal)}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+                <tfoot>
+                  {printOrder.coupon_code && printOrder.coupon_discount ? (
+                    <>
+                      <tr className="invoice-summary-row">
+                        <td colSpan={5}>جمع اقلام:</td>
+                        <td>
+                          {formatPrice(
+                            printOrder.original_subtotal ??
+                              printOrder.subtotal
+                          )}{' '}
+                          تومان
+                        </td>
+                      </tr>
+                      <tr className="invoice-summary-row invoice-discount-row">
+                        <td colSpan={5}>
+                          🎟️ تخفیف ({printOrder.coupon_code}):
+                        </td>
+                        <td>
+                          − {formatPrice(printOrder.coupon_discount)} تومان
+                        </td>
+                      </tr>
+                      <tr className="invoice-summary-row invoice-total-row">
+                        <td colSpan={5}>قابل پرداخت:</td>
+                        <td>{formatPrice(printOrder.subtotal)} تومان</td>
+                      </tr>
+                    </>
+                  ) : (
                     <tr className="invoice-summary-row invoice-total-row">
-                      <td colSpan={5}>قابل پرداخت:</td>
+                      <td colSpan={5}>جمع کل:</td>
                       <td>{formatPrice(printOrder.subtotal)} تومان</td>
                     </tr>
-                  </>
-                ) : (
-                  <tr className="invoice-summary-row invoice-total-row">
-                    <td colSpan={5}>جمع کل:</td>
-                    <td>{formatPrice(printOrder.subtotal)} تومان</td>
-                  </tr>
-                )}
-              </tfoot>
-            </table>
-          </div>
+                  )}
+                </tfoot>
+              </table>
+            </div>
 
             <div className="print-invoice-footer">
               <p>با تشکر از سفارش شما 🌹</p>
