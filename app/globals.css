@@ -12317,3 +12317,446 @@ body {
     animation: none;
   }
 }
+/* ========================================
+   77. CUSTOMER PANEL (پنل مشتری)
+   ======================================== */
+
+/* ─── دکمه سفارش‌های من در هدر منو ─── */
+.hero-my-orders-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-inline-start: 8px;
+  text-decoration: none;
+}
+
+.hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  align-items: center;
+}
+
+/* ─── صفحه سفارش‌های من ─── */
+.my-orders-page {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 16px 14px 100px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 100vh;
+  background: #f7f3eb;
+}
+
+.my-orders-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 0;
+  border-bottom: 1px solid #e3ddd2;
+}
+
+.my-orders-header h1 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 800;
+  color: #29251f;
+  flex: 1;
+  text-align: center;
+}
+
+.my-orders-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: #fffdf9;
+  border: 1px solid #e3ddd2;
+  color: #4a443d;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.my-orders-logout {
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid #f2c9c5;
+  background: #fffdf9;
+  color: #9b3c32;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.my-orders-logout:hover {
+  background: #fde8e6;
+}
+
+/* ─── کارت ورود ─── */
+.customer-login-card {
+  max-width: 400px;
+  margin: 40px auto 0;
+  padding: 28px 24px;
+  background: #fffdf9;
+  border: 1px solid #e3ddd2;
+  border-radius: 16px;
+  box-shadow: 0 10px 40px rgba(41, 37, 31, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  text-align: center;
+}
+
+.customer-login-icon {
+  width: 64px;
+  height: 64px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #6b4f3a 0%, #9a6b3f 100%);
+  font-size: 30px;
+}
+
+.customer-login-card h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 800;
+  color: #29251f;
+}
+
+.customer-login-hint {
+  margin: 0;
+  font-size: 13px;
+  color: #766f64;
+  line-height: 1.9;
+}
+
+.customer-login-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  text-align: right;
+}
+
+.customer-login-field label {
+  font-size: 13px;
+  font-weight: 700;
+  color: #4a443d;
+}
+
+.customer-login-field input {
+  width: 100%;
+  min-height: 48px;
+  padding: 12px 14px;
+  border: 1px solid #d8d0c4;
+  border-radius: 10px;
+  background: #fff;
+  color: #29251f;
+  font: inherit;
+  font-size: 16px;
+  transition: all 0.15s ease;
+}
+
+.customer-login-field input:focus {
+  outline: 0;
+  border-color: #6b4f3a;
+  box-shadow: 0 0 0 3px rgba(107, 79, 58, 0.12);
+}
+
+.customer-login-btn {
+  min-height: 48px;
+  padding: 12px 20px;
+  border: 0;
+  border-radius: 12px;
+  background: #6b4f3a;
+  color: #fff;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.customer-login-btn:hover:not(:disabled) {
+  background: #5a4230;
+  transform: translateY(-1px);
+}
+
+.customer-login-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.customer-login-link {
+  border: 0;
+  background: transparent;
+  color: #766f64;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px;
+}
+
+.customer-login-link:hover {
+  color: #6b4f3a;
+}
+
+.customer-login-error {
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: #fde8e6;
+  color: #9b3c32;
+  font-size: 13px;
+  font-weight: 700;
+  text-align: center;
+  animation: toastIn 0.25s ease;
+}
+
+/* ─── نمایش کد (فقط برای دمو) ─── */
+.customer-login-code-display {
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: #fff4d9;
+  border: 1px dashed #d99f59;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  font-size: 12px;
+  color: #9a6b3f;
+}
+
+.customer-login-code-display strong {
+  font-size: 22px;
+  font-weight: 900;
+  letter-spacing: 4px;
+  color: #6b4f3a;
+  font-family: 'Courier New', monospace;
+}
+
+/* ─── بخش کاربر لاگین‌شده ─── */
+.my-orders-user {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  background: #fffdf9;
+  border: 1px solid #e3ddd2;
+  border-radius: 14px;
+}
+
+.my-orders-user-icon {
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #9a6b3f 0%, #6b4f3a 100%);
+  color: #fff;
+  font-size: 20px;
+}
+
+.my-orders-user strong {
+  display: block;
+  font-size: 15px;
+  font-weight: 800;
+  color: #29251f;
+  margin-bottom: 3px;
+}
+
+.my-orders-user small {
+  display: block;
+  font-size: 11px;
+  color: #766f64;
+}
+
+/* ─── فیلترها ─── */
+.my-orders-filters {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+/* ─── لیست سفارش‌ها ─── */
+.my-orders-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.my-orders-empty {
+  padding: 60px 20px;
+  text-align: center;
+  color: #766f64;
+  font-size: 14px;
+  background: #fffdf9;
+  border: 1px solid #e3ddd2;
+  border-radius: 16px;
+}
+
+.my-order-card {
+  padding: 16px;
+  background: #fffdf9;
+  border: 1px solid #e3ddd2;
+  border-radius: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  transition: all 0.15s ease;
+}
+
+.my-order-card:hover {
+  border-color: #d8d0c4;
+  box-shadow: 0 6px 16px rgba(107, 79, 58, 0.06);
+}
+
+.my-order-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px dashed #ebe6de;
+}
+
+.my-order-num {
+  font-size: 14px;
+  font-weight: 800;
+  color: #6b4f3a;
+}
+
+.my-order-status {
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.my-order-date {
+  font-size: 11px;
+  color: #766f64;
+}
+
+.my-order-items {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.my-order-item {
+  font-size: 12px;
+  color: #4a443d;
+  line-height: 1.7;
+}
+
+.my-order-item small {
+  color: #766f64;
+}
+
+.my-order-item-more {
+  font-size: 11px;
+  color: #9a9287;
+  font-style: italic;
+}
+
+.my-order-total {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 10px;
+  margin-top: 4px;
+  border-top: 1px solid #ebe6de;
+  font-size: 13px;
+  color: #766f64;
+}
+
+.my-order-total strong {
+  font-size: 15px;
+  font-weight: 800;
+  color: #6b4f3a;
+}
+
+.my-order-cancel-reason {
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: #fde8e6;
+  color: #9b3c32;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.my-order-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding-top: 8px;
+}
+
+.my-order-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 8px 14px;
+  border: 1px solid #d8d0c4;
+  border-radius: 10px;
+  background: #fffdf9;
+  color: #4a443d;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.my-order-btn:hover {
+  background: #f5f0e9;
+  border-color: #b8ad9c;
+}
+
+.my-order-btn.primary {
+  background: #6b4f3a;
+  border-color: #6b4f3a;
+  color: #fff;
+}
+
+.my-order-btn.primary:hover {
+  background: #5a4230;
+}
+
+/* ─── موبایل ─── */
+@media (max-width: 500px) {
+  .my-orders-page {
+    padding: 12px 12px 80px;
+  }
+
+  .my-orders-header h1 {
+    font-size: 17px;
+  }
+
+  .customer-login-card {
+    padding: 22px 18px;
+    margin-top: 20px;
+  }
+
+  .customer-login-code-display strong {
+    font-size: 20px;
+  }
+
+  .my-order-actions {
+    grid-template-columns: 1fr;
+  }
+}
