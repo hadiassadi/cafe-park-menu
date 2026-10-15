@@ -1,12 +1,11 @@
 'use client'
-import AdminThemeToggle from './components/AdminThemeToggle'
-import AdminMobileThemeToggle from './components/AdminMobileThemeToggle'  // ← جدید
-import NewOrderAlert from './components/NewOrderAlert'
+
 import { useEffect, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabaseBrowser } from '@/lib/supabase/client'
 import AdminThemeToggle from './components/AdminThemeToggle'
+import AdminMobileThemeToggle from './components/AdminMobileThemeToggle'
 import NewOrderAlert from './components/NewOrderAlert'
 import { useOrderNotifications } from '@/lib/use-order-notifications'
 import { useDocumentTitle } from '@/lib/use-document-title'
@@ -28,7 +27,7 @@ export default function AdminLayout({
     dismissOrder,
     dismissAll,
   } = useOrderNotifications(!isLoginPage)
-    useDocumentTitle(pendingCount)
+  useDocumentTitle(pendingCount)
 
   useEffect(() => {
     try {
@@ -83,7 +82,7 @@ export default function AdminLayout({
     router.replace('/admin/login')
   }
 
-      const menuItems = [
+  const menuItems = [
     { href: '/admin', label: 'داشبورد', icon: '🏠' },
     { href: '/admin/orders', label: 'سفارش‌ها', icon: '🛒' },
     { href: '/admin/customers', label: 'مشتریان', icon: '👥' },
@@ -138,18 +137,6 @@ export default function AdminLayout({
             )
           })}
         </nav>
-		{/* ✅ دکمه شناور حالت شبانه برای موبایل */}
-      <AdminMobileThemeToggle />
-
-      {/* ✅ هشدار سفارش‌های جدید */}
-      <NewOrderAlert
-        orders={newOrders}
-        onDismiss={dismissOrder}
-        onDismissAll={dismissAll}
-      />
-    </div>
-  )
-}
 
         <div className="admin-sidebar-footer">
           <Link
@@ -201,6 +188,9 @@ export default function AdminLayout({
           )
         })}
       </nav>
+
+      {/* ✅ دکمه شناور حالت شبانه برای موبایل */}
+      <AdminMobileThemeToggle />
 
       {/* ✅ هشدار سفارش‌های جدید */}
       <NewOrderAlert
