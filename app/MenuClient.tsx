@@ -1,6 +1,6 @@
 'use client'
-import Link from 'next/link'
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
+import Link from 'next/link'
 import Image from 'next/image'
 import { DEFAULT_THEME } from '@/lib/menu-types'
 import type { MenuData, Quote, Settings } from '@/lib/menu-types'
@@ -546,11 +546,16 @@ export default function MenuClient({ initial }: { initial: MenuData }) {
             )}
 
                                     <div className="hero-actions">
+  <div className="hero-actions">
   {show.shareButton && (
     <button type="button" className="share-btn" onClick={handleShare}>
       اشتراک‌گذاری منو
     </button>
   )}
+  <Link href="/my-orders" className="share-btn hero-my-orders-btn">
+    👤 سفارش‌های من
+  </Link>
+</div>
   <Link href="/my-orders" className="share-btn hero-my-orders-btn">
     👤 سفارش‌های من
   </Link>
