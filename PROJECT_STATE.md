@@ -4,7 +4,7 @@
 > بخش «۵. کارهای باقی‌مانده»، «۸. لاگ تغییرات» و «بالای فایل» رو آپدیت کن.
 > در چت جدید، فقط همین فایل را برای AI پیوست کن.
 
-**آخرین آپدیت:** ۱۴۰۵/۰۷/۲۱ (2026-10-13)
+**آخرین آپدیت:** ۱۴۰۵/۰۷/۲۲ (2026-10-15)
 
 ---
 
@@ -27,7 +27,7 @@ Cofe-Park/
 │   ├── page.tsx                    ← صفحه اصلی (SSR + JSON-LD)
 │   ├── MenuClient.tsx              ← کلاینت منوی مشتری
 │   ├── layout.tsx                  ← Root Layout (فونت + متادیتای SEO)
-│   ├── globals.css                 ← ✅ تنها فایل استایل پروژه (۵۸ بخش)
+│   ├── globals.css                 ← ✅ تنها فایل استایل پروژه (۶۱ بخش)
 │   ├── manifest.ts                 ← PWA Manifest
 │   ├── robots.ts                   ← robots.txt
 │   ├── sitemap.ts                  ← sitemap.xml
@@ -36,7 +36,10 @@ Cofe-Park/
 │   ├── order/[id]/page.tsx         ← جزئیات سفارش مشتری + لغو با شمارش معکوس
 │   ├── api/
 │   │   ├── orders/route.ts         ← API ثبت سفارش + محاسبه کوپن
-│   │   └── coupons/validate/route.ts ← اعتبارسنجی کوپن
+│   │   └── coupons/
+│   │       ├── validate/route.ts   ← اعتبارسنجی کوپن
+│   │       ├── stats/route.ts      ← ✅ آمار کوپن‌ها (برای گزارش)
+│   │       └── orders/route.ts     ← ✅ سفارش‌های هر کوپن
 │   ├── components/
 │   │   ├── ProductDetailModal.tsx  ← مودال جزئیات محصول
 │   │   ├── CartFloatingBar.tsx     ← نوار شناور سبد
@@ -45,7 +48,7 @@ Cofe-Park/
 │   │   └── Modal.tsx               ← مودال عمومی ادمین
 │   └── admin/
 │       ├── layout.tsx              ← سایدبار + منوی موبایل + اعلان سفارش جدید
-│       ├── login/page.tsx          ← لاگین
+│       ├── login/                  ← لاگین (LoginForm + page با metadata)
 │       ├── page.tsx                ← داشبورد با آمار فروش
 │       ├── orders/                 ← مدیریت سفارش‌ها + فاکتور چاپی
 │       ├── products/               ← مدیریت محصولات (+ coupon_eligible)
@@ -54,19 +57,23 @@ Cofe-Park/
 │       ├── themes/                 ← تم‌ها
 │       ├── quotes/                 ← جملات
 │       ├── coupons/                ← مدیریت کدهای تخفیف
+│       │   └── reports/            ← ✅ گزارش پیشرفته کوپن‌ها
+│       │       ├── page.tsx
+│       │       └── CouponReports.tsx
 │       ├── components/
 │       │   ├── CleanupOrdersCard.tsx ← پاکسازی سفارش‌های قدیمی
-│       │   ├── AdminThemeToggle.tsx  ← ✅ دکمه تغییر تم شبانه/روز
-│       │   └── NewOrderAlert.tsx     ← ✅ کارت هشدار سفارش جدید
+│       │   ├── AdminThemeToggle.tsx  ← دکمه تغییر تم شبانه/روز
+│       │   ├── NewOrderAlert.tsx     ← کارت هشدار سفارش جدید
+│       │   └── PrintInvoice.tsx      ← ✅ کامپوننت چاپ قابل استفاده مجدد
 │       └── settings/               ← تنظیمات کامل
 ├── lib/
 │   ├── menu-types.ts               ← تایپ‌ها + DEFAULT_THEME + Coupon
 │   ├── cart-context.tsx            ← Context سبد خرید
 │   ├── menu.ts                     ← getMenuData() + getSettings()
 │   ├── site.ts                     ← SITE_URL
-│   ├── stats.ts                    ← آمار فروش داشبورد
-│   ├── use-order-notifications.ts  ← ✅ هوک اعلان سفارش (Polling)
-│   ├── use-document-title.ts       ← ✅ هوک تایتل + favicon داینامیک
+│   ├── stats.ts                    ← آمار فروش + ✅ getCouponStats
+│   ├── use-order-notifications.ts  ← هوک اعلان سفارش (Polling)
+│   ├── use-document-title.ts       ← هوک تایتل + favicon داینامیک
 │   └── supabase/
 │       ├── client.ts               ← supabaseBrowser()
 │       └── server.ts               ← supabaseServer()
@@ -88,9 +95,10 @@ Cofe-Park/
 │   ├── generate-icons.mjs          ← ساخت آیکون‌های PWA
 │   ├── make-transparent.mjs        ← شفاف‌سازی آیکون‌ها
 │   └── build-icons.mjs             ← ساخت همه سایزها از یک منبع
-├── middleware.ts
+├── proxy.ts                        ← ✅ محافظت سرور-side از /admin (جایگزین middleware در Next.js 16)
 ├── schema.sql
 ├── package.json
+├── next.config.ts                  ← ✅ poweredByHeader: false
 ├── PROJECT_STATE.md
 ├── dev.bat                         ← منوی توسعه
 ├── end-of-day.bat                  ← اسکریپت پایان روز
@@ -157,6 +165,8 @@ Cofe-Park/
 
 **اعلان سفارش:** `.admin-nav-badge` / `.admin-mobile-badge` / `.new-order-alert-container` / `.new-order-alert` / `.new-order-alert-view` / `.new-order-alert-close`
 
+**گزارش کوپن:** `.coupon-report-summary` / `.coupon-report-stat` / `.coupon-report-table` / `.coupon-report-table-header` / `.coupon-report-search` / `.coupon-report-row-clickable` / `.coupon-chart` / `.coupon-chart-row` / `.coupon-chart-bar` / `.coupon-orders-list` / `.coupon-order-item` / `.coupon-order-items` / `.coupon-order-actions`
+
 ### شماره‌گذاری بخش‌های `globals.css`:
 | بخش | عنوان |
 |---|---|
@@ -189,6 +199,9 @@ Cofe-Park/
 | 56 | ADMIN ORDER NOTIFICATIONS |
 | 57 | NEW ORDER ALERT |
 | 58 | DYNAMIC DOCUMENT TITLE + FAVICON |
+| 59 | COUPON REPORTS (کارت‌های خلاصه + جدول + نمودار) |
+| 60 | COUPON REPORTS - DETAILS (جستجو + ردیف‌های کلیک) |
+| 61 | COUPON ORDER DETAILS (ریز اقلام + دکمه‌های اقدام) |
 
 ---
 
@@ -211,7 +224,7 @@ Cofe-Park/
 
 ### پنل ادمین
 - [x] Layout با سایدبار دسکتاپ + منوی موبایل
-- [x] لاگین + middleware محافظ
+- [x] لاگین + **محافظت سرور-side با `proxy.ts`** + متادیتای `noindex`
 - [x] **داشبورد با آمار فروش** (۶ کارت + نمودار ۷ روزه + پرفروش‌ترین محصولات)
 - [x] **پاکسازی سفارش‌های قدیمی** (دستی با تأیید)
 - [x] مدیریت سفارش‌ها + Realtime + فیلتر + فاکتور چاپی
@@ -221,6 +234,7 @@ Cofe-Park/
 - [x] مدیریت تم‌ها (رنگ + فونت)
 - [x] مدیریت جملات
 - [x] **مدیریت کدهای تخفیف** (CRUD + toggle + وضعیت‌ها)
+- [x] **گزارش پیشرفته کوپن‌ها** — کارت‌های خلاصه + جدول جستجوپذیر + نمودار + مودال سفارش‌ها + ریز اقلام + پرینت تک سفارش
 - [x] تنظیمات کامل (هدر، پس‌زمینه، اطلاعات تماس، لوگو)
 - [x] **دارک مود پنل ادمین** — با ذخیره در localStorage + بدون flash (بخش‌های ۵۴-۵۵)
 - [x] **اعلان سفارش جدید** — Badge + صدا + Toast + Browser Notification + Polling هر ۱۰ ثانیه (بخش‌های ۵۶-۵۷)
@@ -237,6 +251,7 @@ Cofe-Park/
 - [x] **PWA کامل** (manifest + service worker + install prompt)
 - [x] **بهبود SEO** (metadata داینامیک + OpenGraph + Twitter + Sitemap + robots.txt + JSON-LD)
 - [x] اسکریپت‌های ساخت/شفاف‌سازی آیکون (`generate-icons.mjs`, `make-transparent.mjs`, `build-icons.mjs`)
+- [x] **امنیت:** `poweredByHeader: false` + `proxy.ts` (محافظت ادمین) + `noindex` روی صفحات ادمین
 
 ### رفع باگ‌ها
 - [x] رفع بزرگ شدن عکس محصول در مودال (بخش ۴۰)
@@ -253,6 +268,7 @@ Cofe-Park/
 - [x] رفع نمایش ستون تخفیف در فاکتور چاپی
 - [x] رفع کارت‌های تیره مونده در دارک مود (بخش ۵۵)
 - [x] **جایگزینی Realtime با Polling** برای اعلان سفارش (به دلیل تحریم WebSocket در ایران)
+- [x] **جایگزینی `middleware.ts` با `proxy.ts`** (تغییر convention در Next.js 16)
 
 ---
 
@@ -264,12 +280,14 @@ Cofe-Park/
 - [ ] 🔴 **تست کامل جریان سفارش** از ابتدا تا انتها
 - [ ] 🟡 **پاکسازی خودکار سفارش‌های قدیمی** با Cron Job در Supabase
 - [ ] 🟡 **داشبورد آمار پیشرفته** (نمودار فروش ماهانه، مقایسه دوره‌ها)
-- [ ] 🟢 **گزارش‌گیری پیشرفته از کوپن‌ها** (کدوم کوپن بیشتر استفاده شده)
 - [ ] 🟢 **گزارش فروش روزانه Excel/CSV** برای مالیات
 - [ ] 🟢 **سیستم یادداشت مشتری (CRM)** — یادداشت روی مشتریان ثابت
 - [ ] 🟢 **ایمیل/SMS اطلاع‌رسانی** برای سفارش‌های جدید
 - [ ] 🟢 **تست بار (Load Test)** روی Supabase
 - [ ] 🟢 **آیکون و عنوان PWA** با badge (مشتری)
+- [ ] 🟢 **اتصال به درگاه پرداخت** (زرین‌پال / آیدی‌پی)
+- [ ] 🟢 **اتصال به نرم‌افزار حسابداری پارسیان** (با واسط محلی)
+- [ ] 🟢 **سیستم پیامک (SMS)** برای OTP و اطلاع‌رسانی
 
 ---
 
@@ -304,8 +322,9 @@ Cofe-Park/
 2. هر کلاس جدیدی که در JSX استفاده می‌شود، باید در globals.css تعریف شود.
 3. پالت رنگ از متغیرهای CSS می‌آید، نه رنگ hex مستقیم.
 4. مودال‌ها از کلاس‌های modal-overlay + modal-container استفاده کنند.
-5. بخش‌های globals.css شماره‌گذاری شده‌اند (۱ تا ۵۸).
+5. بخش‌های globals.css شماره‌گذاری شده‌اند (۱ تا ۶۱).
 6. برای اعلان‌ها از Polling استفاده شود، نه Realtime (تحریم ایران).
+7. محافظت ادمین با proxy.ts (نه middleware.ts در Next.js 16).
 
 📁 ابزارهای موجود در پروژه:
 - dev.bat → منوی همه‌کاره توسعه (۱۶ گزینه)
@@ -344,6 +363,9 @@ Cofe-Park/
 | 1405/07/21 | **افزودن اعلان سفارش جدید** (Badge + صدا + Toast + Browser Notification) (بخش‌های ۵۶-۵۷) |
 | 1405/07/21 | **افزودن تایتل و favicon داینامیک** با شمارش سفارش‌های جدید (بخش ۵۸) |
 | 1405/07/21 | **جایگزینی Realtime با Polling** برای اعلان‌ها (به دلیل تحریم ایران) |
+| 1405/07/21 | **افزودن proxy.ts + حذف X-Powered-By + متادیتای صفحات ادمین** (امنیت) |
+| 1405/07/22 | **افزودن گزارش پیشرفته کوپن‌ها** (بخش‌های ۵۹-۶۱): کارت‌های خلاصه، جدول جستجوپذیر، نمودار، مودال سفارش‌ها، ریز اقلام، پرینت تک سفارش |
+| 1405/07/22 | **استخراج `PrintInvoice.tsx`** به عنوان کامپوننت قابل استفاده مجدد |
 
 ---
 
@@ -453,10 +475,8 @@ pending    → confirmed  → preparing → ready → delivered
 
 ### Realtime Publications:
 ```sql
--- جدول orders برای Realtime و Polling
 alter publication supabase_realtime add table public.orders;
 
--- RLS policy برای اعلان‌ها
 create policy "Enable realtime for orders"
   on public.orders for select using (true);
 ```
@@ -478,6 +498,9 @@ create policy "Enable realtime for orders"
 | **اعلان سفارش** | `lib/use-order-notifications.ts` | Polling هر ۱۰ ثانیه + صدا + نوتیفیکیشن |
 | **کارت هشدار** | `app/admin/components/NewOrderAlert.tsx` | Toast قرمز با دکمه مشاهده |
 | **تایتل داینامیک** | `lib/use-document-title.ts` | عنوان + favicon تب مرورگر |
+| **کامپوننت چاپ** | `app/admin/components/PrintInvoice.tsx` | فاکتور قابل استفاده مجدد (مودال + صفحه سفارش) |
+| **گزارش کوپن** | `app/admin/coupons/reports/CouponReports.tsx` | صفحه گزارش با نمودار و مودال سفارش‌ها |
+| **محافظت ادمین** | `proxy.ts` | ریدایرکت سرور-side برای /admin |
 
 ---
 
@@ -577,3 +600,8 @@ backups-server/
 17. **صدا با AudioContext:** با اولین کلیک کاربر unlock می‌شود (محدودیت Chrome).
 18. **تایتل داینامیک:** با شمارش سفارش‌های pending در `document.title`.
 19. **آیکون داینامیک با canvas:** ساخت favicon با badge قرمز.
+20. **`proxy.ts` به جای `middleware.ts`:** در Next.js 16 convention عوض شده. محافظت سرور-side از `/admin`.
+21. **محافظت دو لایه (Defense in Depth):** `proxy.ts` (سرور) + `admin/layout.tsx` (کلاینت).
+22. **`noindex, nofollow` روی صفحات ادمین:** جلوگیری از ایندکس شدن در گوگل.
+23. **کامپوننت چاپ مشترک:** `PrintInvoice.tsx` در صفحه سفارش + گزارش کوپن‌ها استفاده می‌شود.
+24. **گزارش کوپن‌ها با API جداگانه:** `/api/coupons/stats` و `/api/coupons/orders` برای دسترسی از Client Component.
