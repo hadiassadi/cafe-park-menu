@@ -1,5 +1,5 @@
 'use client'
-
+import Link from 'next/link'
 import { useState } from 'react'
 import Modal from '../components/Modal'
 import {
@@ -192,13 +192,21 @@ export default function CouponsManager({ coupons }: Props) {
               : `${formatPrice(coupons.length)} کد تخفیف`}
           </p>
         </div>
-        <button
-          type="button"
-          className="btn primary-btn"
-          onClick={openAddModal}
-        >
-          + کد تخفیف جدید
-        </button>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          <Link
+            href="/admin/coupons/reports"
+            className="btn"
+          >
+            📊 گزارش
+          </Link>
+          <button
+            type="button"
+            className="btn primary-btn"
+            onClick={openAddModal}
+          >
+            + کد تخفیف جدید
+          </button>
+        </div>
       </div>
 
       {coupons.length === 0 ? (

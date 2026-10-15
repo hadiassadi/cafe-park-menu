@@ -8534,3 +8534,698 @@ body {
     animation: none;
   }
 }
+/* ========================================
+   59. COUPON REPORTS (گزارش کوپن‌ها)
+   ======================================== */
+
+/* ─── کارت‌های خلاصه ─── */
+.coupon-report-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.coupon-report-stat {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  background: #fffdf9;
+  border: 1px solid #e3ddd2;
+  border-radius: 14px;
+  transition: all 0.15s ease;
+}
+
+.coupon-report-stat:hover {
+  border-color: #6b4f3a;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(107, 79, 58, 0.08);
+}
+
+.coupon-report-stat-icon {
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  font-size: 22px;
+}
+
+.coupon-report-stat-value {
+  font-size: 20px;
+  font-weight: 800;
+  color: #29251f;
+  line-height: 1;
+}
+
+.coupon-report-stat-label {
+  margin-top: 6px;
+  font-size: 11px;
+  color: #766f64;
+  font-weight: 600;
+}
+
+/* ─── جدول کوپن‌ها ─── */
+.coupon-report-table-wrapper {
+  background: #fffdf9;
+  border: 1px solid #e3ddd2;
+  border-radius: 14px;
+  overflow-x: auto;
+}
+
+.coupon-report-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  min-width: 700px;
+}
+
+.coupon-report-table thead {
+  background: #f5f0e9;
+}
+
+.coupon-report-table th {
+  padding: 12px 14px;
+  text-align: right;
+  font-weight: 800;
+  color: #625b51;
+  font-size: 12px;
+  white-space: nowrap;
+  border-bottom: 1px solid #e3ddd2;
+}
+
+.coupon-report-table td {
+  padding: 14px;
+  color: #4a443d;
+  border-bottom: 1px solid #ebe6de;
+  white-space: nowrap;
+}
+
+.coupon-report-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.coupon-report-table tbody tr:hover {
+  background: #faf7f2;
+}
+
+.coupon-report-code {
+  display: inline-block;
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+  font-weight: 800;
+  color: #6b4f3a;
+  letter-spacing: 1px;
+  background: #f5f0e9;
+  padding: 4px 10px;
+  border-radius: 7px;
+  direction: ltr;
+}
+
+.coupon-report-inactive {
+  display: inline-block;
+  margin-inline-start: 6px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: #eee9e4;
+  color: #766f64;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.coupon-report-discount {
+  color: #9b3c32 !important;
+  font-weight: 700;
+}
+
+.coupon-report-revenue {
+  color: #2d5d3e !important;
+  font-weight: 700;
+}
+
+/* ─── نمودار میله‌ای ─── */
+.coupon-chart {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px;
+  background: #fffdf9;
+  border: 1px solid #e3ddd2;
+  border-radius: 14px;
+}
+
+.coupon-chart-row {
+  display: grid;
+  grid-template-columns: 120px 1fr 130px;
+  align-items: center;
+  gap: 12px;
+}
+
+.coupon-chart-label {
+  min-width: 0;
+}
+
+.coupon-chart-bar-wrapper {
+  height: 24px;
+  background: #f5f0e9;
+  border-radius: 999px;
+  overflow: hidden;
+  position: relative;
+}
+
+.coupon-chart-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #9a6b3f 0%, #6b4f3a 100%);
+  border-radius: 999px;
+  transition: width 0.6s ease;
+  min-width: 4px;
+}
+
+.coupon-chart-value {
+  font-size: 12px;
+  font-weight: 800;
+  color: #6b4f3a;
+  text-align: end;
+  white-space: nowrap;
+}
+
+/* ─── موبایل ─── */
+@media (max-width: 650px) {
+  .coupon-report-stat {
+    padding: 12px;
+    gap: 10px;
+  }
+
+  .coupon-report-stat-icon {
+    width: 38px;
+    height: 38px;
+    flex-basis: 38px;
+    font-size: 18px;
+  }
+
+  .coupon-report-stat-value {
+    font-size: 16px;
+  }
+
+  .coupon-report-table {
+    font-size: 12px;
+    min-width: 600px;
+  }
+
+  .coupon-report-table th,
+  .coupon-report-table td {
+    padding: 10px 8px;
+  }
+
+  .coupon-chart {
+    padding: 14px;
+  }
+
+  .coupon-chart-row {
+    grid-template-columns: 90px 1fr;
+    gap: 8px;
+  }
+
+  .coupon-chart-value {
+    grid-column: 1 / -1;
+    text-align: start;
+    margin-top: -4px;
+    font-size: 11px;
+  }
+
+  .coupon-chart-bar-wrapper {
+    height: 18px;
+  }
+}
+
+/* ─── Dark Mode ─── */
+.admin-shell.dark-mode .coupon-report-stat {
+  background: var(--admin-surface);
+  border-color: var(--admin-border);
+}
+
+.admin-shell.dark-mode .coupon-report-stat-value {
+  color: var(--admin-text);
+}
+
+.admin-shell.dark-mode .coupon-report-stat-label {
+  color: var(--admin-text-muted);
+}
+
+.admin-shell.dark-mode .coupon-report-table-wrapper {
+  background: var(--admin-surface);
+  border-color: var(--admin-border);
+}
+
+.admin-shell.dark-mode .coupon-report-table thead {
+  background: var(--admin-surface-2);
+}
+
+.admin-shell.dark-mode .coupon-report-table th {
+  color: var(--admin-text-muted);
+  border-bottom-color: var(--admin-border);
+}
+
+.admin-shell.dark-mode .coupon-report-table td {
+  color: var(--admin-text);
+  border-bottom-color: var(--admin-border);
+}
+
+.admin-shell.dark-mode .coupon-report-table tbody tr:hover {
+  background: var(--admin-hover);
+}
+
+.admin-shell.dark-mode .coupon-report-code {
+  background: var(--admin-surface-2);
+  color: var(--admin-primary);
+}
+
+.admin-shell.dark-mode .coupon-report-discount {
+  color: #d97a6c !important;
+}
+
+.admin-shell.dark-mode .coupon-report-revenue {
+  color: #8cc79a !important;
+}
+
+.admin-shell.dark-mode .coupon-chart {
+  background: var(--admin-surface);
+  border-color: var(--admin-border);
+}
+
+.admin-shell.dark-mode .coupon-chart-bar-wrapper {
+  background: var(--admin-surface-2);
+}
+
+.admin-shell.dark-mode .coupon-chart-value {
+  color: var(--admin-primary);
+}
+/* ========================================
+   60. COUPON REPORTS - DETAILS (جزئیات گزارش کوپن)
+   ======================================== */
+
+/* ─── هدر جدول با جستجو ─── */
+.coupon-report-table-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+
+.coupon-report-table-header h2 {
+  margin: 0;
+}
+
+.coupon-report-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  min-height: 40px;
+  background: #fffdf9;
+  border: 1px solid #e3ddd2;
+  border-radius: 10px;
+  min-width: 240px;
+  flex: 1;
+  max-width: 320px;
+}
+
+.coupon-report-search span {
+  font-size: 14px;
+  color: #766f64;
+}
+
+.coupon-report-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  color: #29251f;
+}
+
+.coupon-report-search input::placeholder {
+  color: #aaa297;
+}
+
+/* ─── ردیف قابل کلیک ─── */
+.coupon-report-row-clickable {
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+.coupon-report-row-clickable:hover {
+  background: #faf7f2;
+}
+
+/* ─── لیست سفارش‌های کوپن در مودال ─── */
+.coupon-orders-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.coupon-order-item {
+  padding: 14px;
+  background: #fffdf9;
+  border: 1px solid #e3ddd2;
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.coupon-order-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px dashed #ebe6de;
+}
+
+.coupon-order-number {
+  font-size: 14px;
+  font-weight: 800;
+  color: #6b4f3a;
+}
+
+.coupon-order-status {
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.coupon-order-status.status-pending {
+  background: #fde8e6;
+  color: #9b3c32;
+}
+.coupon-order-status.status-confirmed {
+  background: #fff4d9;
+  color: #9a6b3f;
+}
+.coupon-order-status.status-preparing {
+  background: #e6ecf0;
+  color: #4a7c9b;
+}
+.coupon-order-status.status-ready {
+  background: #e5f0e6;
+  color: #477052;
+}
+.coupon-order-status.status-delivered {
+  background: #eee9e4;
+  color: #766f64;
+}
+.coupon-order-status.status-cancelled {
+  background: #fde8e6;
+  color: #9b3c32;
+  opacity: 0.7;
+}
+
+.coupon-order-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  color: #4a443d;
+}
+
+.coupon-order-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.coupon-order-row strong {
+  color: #29251f;
+  font-weight: 700;
+}
+
+/* ─── خلاصه قیمت ─── */
+.coupon-order-pricing {
+  padding-top: 10px;
+  border-top: 1px solid #ebe6de;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.coupon-order-price-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: #4a443d;
+}
+
+.coupon-order-price-row.discount {
+  color: #9b3c32;
+}
+
+.coupon-order-price-row.discount span:last-child {
+  font-weight: 700;
+}
+
+.coupon-order-price-row.total {
+  padding-top: 8px;
+  margin-top: 4px;
+  border-top: 2px solid #ebe6de;
+  font-size: 14px;
+  color: #29251f;
+}
+
+.coupon-order-price-row.total strong {
+  color: #6b4f3a;
+  font-weight: 800;
+  font-size: 15px;
+}
+
+/* ─── Dark Mode ─── */
+.admin-shell.dark-mode .coupon-report-search {
+  background: var(--admin-surface);
+  border-color: var(--admin-border);
+}
+
+.admin-shell.dark-mode .coupon-report-search input {
+  color: var(--admin-text);
+}
+
+.admin-shell.dark-mode .coupon-report-search input::placeholder {
+  color: #6a6259;
+}
+
+.admin-shell.dark-mode .coupon-report-row-clickable:hover {
+  background: var(--admin-hover);
+}
+
+.admin-shell.dark-mode .coupon-order-item {
+  background: var(--admin-surface);
+  border-color: var(--admin-border);
+}
+
+.admin-shell.dark-mode .coupon-order-header {
+  border-bottom-color: var(--admin-border);
+}
+
+.admin-shell.dark-mode .coupon-order-number {
+  color: var(--admin-primary);
+}
+
+.admin-shell.dark-mode .coupon-order-body {
+  color: var(--admin-text-muted);
+}
+
+.admin-shell.dark-mode .coupon-order-row strong {
+  color: var(--admin-text);
+}
+
+.admin-shell.dark-mode .coupon-order-pricing {
+  border-top-color: var(--admin-border);
+}
+
+.admin-shell.dark-mode .coupon-order-price-row {
+  color: var(--admin-text-muted);
+}
+
+.admin-shell.dark-mode .coupon-order-price-row.discount {
+  color: #d97a6c;
+}
+
+.admin-shell.dark-mode .coupon-order-price-row.total {
+  border-top-color: var(--admin-border);
+  color: var(--admin-text);
+}
+
+.admin-shell.dark-mode .coupon-order-price-row.total strong {
+  color: var(--admin-primary);
+}
+
+/* ─── موبایل ─── */
+@media (max-width: 650px) {
+  .coupon-report-table-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .coupon-report-search {
+    max-width: none;
+    min-width: 0;
+  }
+
+  .coupon-order-item {
+    padding: 12px;
+  }
+}
+/* ========================================
+   61. COUPON ORDER DETAILS (ریز اقلام سفارش کوپن)
+   ======================================== */
+
+/* ─── بخش اقلام بازشده ─── */
+.coupon-order-items {
+  padding: 12px;
+  background: #fbf9f5;
+  border: 1px dashed #d8d0c4;
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.coupon-order-items-title {
+  font-size: 12px;
+  font-weight: 800;
+  color: #6b4f3a;
+  padding-bottom: 6px;
+  margin-bottom: 2px;
+  border-bottom: 1px dashed #d8d0c4;
+}
+
+.coupon-order-item-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: #4a443d;
+}
+
+.coupon-order-item-name {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.coupon-order-item-name small {
+  color: #766f64;
+  font-size: 11px;
+}
+
+.coupon-order-item-price {
+  font-weight: 700;
+  color: #6b4f3a;
+  white-space: nowrap;
+}
+
+.coupon-order-note {
+  padding-top: 8px;
+  margin-top: 4px;
+  border-top: 1px dashed #d8d0c4;
+  font-size: 11px;
+  color: #766f64;
+  line-height: 1.8;
+}
+
+/* ─── دکمه‌های اقدام سفارش ─── */
+.coupon-order-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding-top: 10px;
+  margin-top: 4px;
+  border-top: 1px solid #ebe6de;
+}
+
+.coupon-order-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 38px;
+  padding: 8px 12px;
+  border: 1px solid #d8d0c4;
+  border-radius: 9px;
+  background: #fffdf9;
+  color: #4a443d;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.coupon-order-action-btn:hover {
+  background: #f5f0e9;
+  border-color: #b8ad9c;
+}
+
+.coupon-order-action-btn.primary {
+  background: #6b4f3a;
+  border-color: #6b4f3a;
+  color: #fff;
+}
+
+.coupon-order-action-btn.primary:hover {
+  background: #5a4230;
+}
+
+/* ─── Dark Mode ─── */
+.admin-shell.dark-mode .coupon-order-items {
+  background: var(--admin-surface-2);
+  border-color: var(--admin-border);
+}
+
+.admin-shell.dark-mode .coupon-order-items-title {
+  color: var(--admin-primary);
+  border-bottom-color: var(--admin-border);
+}
+
+.admin-shell.dark-mode .coupon-order-item-row {
+  color: var(--admin-text-muted);
+}
+
+.admin-shell.dark-mode .coupon-order-item-price {
+  color: var(--admin-primary);
+}
+
+.admin-shell.dark-mode .coupon-order-note {
+  color: var(--admin-text-muted);
+  border-top-color: var(--admin-border);
+}
+
+.admin-shell.dark-mode .coupon-order-actions {
+  border-top-color: var(--admin-border);
+}
+
+.admin-shell.dark-mode .coupon-order-action-btn {
+  background: var(--admin-surface);
+  border-color: var(--admin-border);
+  color: var(--admin-text);
+}
+
+.admin-shell.dark-mode .coupon-order-action-btn:hover {
+  background: var(--admin-hover);
+}
+
+.admin-shell.dark-mode .coupon-order-action-btn.primary {
+  background: var(--admin-primary);
+  border-color: var(--admin-primary);
+  color: #1a1815;
+}

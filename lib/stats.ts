@@ -154,3 +154,166 @@ export const getOrderStats = cache(async (): Promise<OrderStats> => {
     dailyRevenue,
   }
 })
+// ─── آمار کوپن‌ها ───
+
+export type CouponStats = {
+  code: string
+  description: string | null
+  discount_type: 'percent' | 'fixed'
+  discount_value: number
+  used_count: number
+  total_discount: number
+  total_revenue: number
+  avg_discount: number
+  order_count: number
+  is_active: boolean
+}
+
+export type CouponReportData = {
+  stats: CouponStats[]
+  summary: {
+    total_orders_with_coupon: number
+    total_discount_given: number
+    total_revenue_with_coupon: number
+    avg_discount_per_order: number
+  }
+}
+
+type TimeFilter = 'today' | 'week' | 'month' | 'all'
+
+export const getCouponStats = cache(
+  async (filter: TimeFilter = 'all'): Promise<CouponReportData> => {
+    const db = createDb()
+    const now = new Date()
+
+    // محاسبه بازه زمانی
+    let since: Date | null = null
+    if (filter === 'today') {
+      since = getStartOfDay(now)
+    } else if (filter === 'week') {
+      since = getStartOfWeek(now)
+    } else if (filter === 'month') {
+      since = getStartOfMonth(now)
+    }
+
+    // ─── خواندن کوپن‌ها ───
+    const { data: coupons, error: couponsError } = await db
+      .from('coupons')
+      .select(
+        'code, description, discount_type, discount_value, used_count, is_active'
+      )
+      .order('used_count', { ascending: false })
+
+    if (couponsError || !coupons) {
+      console.error('[coupon stats] error:', couponsError)
+      return {
+        stats: [],
+        summary: {
+          total_orders_with_coupon: 0,
+          total_discount_given: 0,
+          total_revenue_with_coupon: 0,
+          avg_discount_per_order: 0,
+        },
+      }
+    }
+
+    // ─── خواندن سفارش‌های دارای کوپن ───
+    let ordersQuery = db
+      .from('orders')
+      .select('coupon_code, coupon_discount, subtotal, status, created_at')
+      .not('coupon_code', 'is', null)
+      .neq('status', 'cancelled')
+
+    if (since) {
+      ordersQuery = ordersQuery.gte('created_at', since.toISOString())
+    }
+
+    const { data: orders, error: ordersError } = await ordersQuery
+
+    if (ordersError) {
+      console.error('[coupon stats] orders error:', ordersError)
+    }
+
+    // ─── تجمیع داده‌ها ───
+    const statsMap = new Map<
+      string,
+      {
+        order_count: number
+        total_discount: number
+        total_revenue: number
+      }
+    >()
+
+    for (const order of orders ?? []) {
+      const code = order.coupon_code
+      if (!code) continue
+
+      const existing = statsMap.get(code) ?? {
+        order_count: 0,
+        total_discount: 0,
+        total_revenue: 0,
+      }
+
+      existing.order_count += 1
+      existing.total_discount += Number(order.coupon_discount) || 0
+      existing.total_revenue += Number(order.subtotal) || 0
+
+      statsMap.set(code, existing)
+    }
+
+    // ─── ساخت خروجی نهایی ───
+    const stats: CouponStats[] = coupons.map((c) => {
+      const agg = statsMap.get(c.code) ?? {
+        order_count: 0,
+        total_discount: 0,
+        total_revenue: 0,
+      }
+
+      return {
+        code: c.code,
+        description: c.description,
+        discount_type: c.discount_type,
+        discount_value: c.discount_value,
+        used_count: c.used_count || 0,
+        total_discount: agg.total_discount,
+        total_revenue: agg.total_revenue,
+        avg_discount:
+          agg.order_count > 0
+            ? Math.round(agg.total_discount / agg.order_count)
+            : 0,
+        order_count: agg.order_count,
+        is_active: c.is_active,
+      }
+    })
+
+    // مرتب‌سازی بر اساس مبلغ تخفیف کل
+    stats.sort((a, b) => b.total_discount - a.total_discount)
+
+    // ─── خلاصه کل ───
+    const totalOrdersWithCoupon = stats.reduce(
+      (sum, s) => sum + s.order_count,
+      0
+    )
+    const totalDiscountGiven = stats.reduce(
+      (sum, s) => sum + s.total_discount,
+      0
+    )
+    const totalRevenueWithCoupon = stats.reduce(
+      (sum, s) => sum + s.total_revenue,
+      0
+    )
+
+    return {
+      stats,
+      summary: {
+        total_orders_with_coupon: totalOrdersWithCoupon,
+        total_discount_given: totalDiscountGiven,
+        total_revenue_with_coupon: totalRevenueWithCoupon,
+        avg_discount_per_order:
+          totalOrdersWithCoupon > 0
+            ? Math.round(totalDiscountGiven / totalOrdersWithCoupon)
+            : 0,
+      },
+    }
+  }
+)
