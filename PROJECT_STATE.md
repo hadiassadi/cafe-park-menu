@@ -4,7 +4,7 @@
 > بخش «۵. کارهای باقی‌مانده»، «۸. لاگ تغییرات» و «بالای فایل» رو آپدیت کن.
 > در چت جدید، فقط همین فایل را برای AI پیوست کن.
 
-**آخرین آپدیت:** ۱۴۰۵/۰۷/۲۲ (2026-10-15)
+**آخرین آپدیت:** ۱۴۰۵/۰۷/۲۳ (2026-10-16)
 
 ---
 
@@ -27,19 +27,27 @@ Cofe-Park/
 │   ├── page.tsx                    ← صفحه اصلی (SSR + JSON-LD)
 │   ├── MenuClient.tsx              ← کلاینت منوی مشتری
 │   ├── layout.tsx                  ← Root Layout (فونت + متادیتای SEO)
-│   ├── globals.css                 ← ✅ تنها فایل استایل پروژه (۶۱ بخش)
+│   ├── globals.css                 ← ✅ تنها فایل استایل پروژه (۶۹ بخش)
 │   ├── manifest.ts                 ← PWA Manifest
 │   ├── robots.ts                   ← robots.txt
 │   ├── sitemap.ts                  ← sitemap.xml
 │   ├── cart/page.tsx               ← صفحه سبد خرید
 │   ├── checkout/page.tsx           ← صفحه ثبت سفارش + کوپن
-│   ├── order/[id]/page.tsx         ← جزئیات سفارش مشتری + لغو با شمارش معکوس
+│   ├── order/[id]/page.tsx         ← جزئیات سفارش مشتری + لغو با دلیل
 │   ├── api/
-│   │   ├── orders/route.ts         ← API ثبت سفارش + محاسبه کوپن
-│   │   └── coupons/
-│   │       ├── validate/route.ts   ← اعتبارسنجی کوپن
-│   │       ├── stats/route.ts      ← ✅ آمار کوپن‌ها (برای گزارش)
-│   │       └── orders/route.ts     ← ✅ سفارش‌های هر کوپن
+│   │   ├── orders/
+│   │   │   ├── route.ts            ← API ثبت سفارش + محاسبه کوپن
+│   │   │   └── cancel/route.ts     ← API لغو سفارش (مشتری) + ثبت دلیل
+│   │   ├── coupons/
+│   │   │   ├── validate/route.ts   ← اعتبارسنجی کوپن
+│   │   │   ├── stats/route.ts      ← آمار کوپن‌ها
+│   │   │   └── orders/route.ts     ← سفارش‌های هر کوپن
+│   │   ├── cancellation-reasons/
+│   │   │   └── route.ts            ← ✅ لیست دلایل لغو فعال
+│   │   ├── cancellations/
+│   │   │   └── stats/route.ts      ← ✅ آمار لغوها
+│   │   └── export/
+│   │       └── orders/route.ts     ← خروجی CSV سفارش‌ها
 │   ├── components/
 │   │   ├── ProductDetailModal.tsx  ← مودال جزئیات محصول
 │   │   ├── CartFloatingBar.tsx     ← نوار شناور سبد
@@ -47,31 +55,36 @@ Cofe-Park/
 │   │   ├── PWAInstallPrompt.tsx    ← دکمه نصب PWA
 │   │   └── Modal.tsx               ← مودال عمومی ادمین
 │   └── admin/
-│       ├── layout.tsx              ← سایدبار + منوی موبایل + اعلان سفارش جدید
+│       ├── layout.tsx              ← سایدبار + منوی موبایل + اعلان سفارش
 │       ├── login/                  ← لاگین (LoginForm + page با metadata)
-│       ├── page.tsx                ← داشبورد با آمار فروش
-│       ├── orders/                 ← مدیریت سفارش‌ها + فاکتور چاپی
+│       ├── page.tsx                ← داشبورد با آمار فروش پیشرفته
+│       ├── orders/                 ← مدیریت سفارش‌ها + لغو با دلیل + فاکتور
 │       ├── products/               ← مدیریت محصولات (+ coupon_eligible)
 │       ├── categories/             ← مدیریت دسته‌ها (+ coupon_eligible)
 │       ├── tables/                 ← مدیریت میزها + QR
 │       ├── themes/                 ← تم‌ها
 │       ├── quotes/                 ← جملات
 │       ├── coupons/                ← مدیریت کدهای تخفیف
-│       │   └── reports/            ← ✅ گزارش پیشرفته کوپن‌ها
-│       │       ├── page.tsx
-│       │       └── CouponReports.tsx
+│       │   └── reports/            ← گزارش پیشرفته کوپن‌ها
+│       ├── cancellation-reasons/   ← ✅ مدیریت دلایل لغو
+│       │   ├── page.tsx
+│       │   ├── CancellationReasonsManager.tsx
+│       │   └── actions.ts
+│       ├── cancellations/          ← ✅ آمار و گزارش لغوها
+│       │   ├── page.tsx
+│       │   └── CancellationsManager.tsx
 │       ├── components/
 │       │   ├── CleanupOrdersCard.tsx ← پاکسازی سفارش‌های قدیمی
 │       │   ├── AdminThemeToggle.tsx  ← دکمه تغییر تم شبانه/روز
 │       │   ├── NewOrderAlert.tsx     ← کارت هشدار سفارش جدید
-│       │   └── PrintInvoice.tsx      ← ✅ کامپوننت چاپ قابل استفاده مجدد
+│       │   └── PrintInvoice.tsx      ← کامپوننت چاپ قابل استفاده مجدد
 │       └── settings/               ← تنظیمات کامل
 ├── lib/
 │   ├── menu-types.ts               ← تایپ‌ها + DEFAULT_THEME + Coupon
 │   ├── cart-context.tsx            ← Context سبد خرید
 │   ├── menu.ts                     ← getMenuData() + getSettings()
 │   ├── site.ts                     ← SITE_URL
-│   ├── stats.ts                    ← آمار فروش + ✅ getCouponStats
+│   ├── stats.ts                    ← آمار فروش + کوپن + ✅ لغوها + دلایل
 │   ├── use-order-notifications.ts  ← هوک اعلان سفارش (Polling)
 │   ├── use-document-title.ts       ← هوک تایتل + favicon داینامیک
 │   └── supabase/
@@ -95,10 +108,10 @@ Cofe-Park/
 │   ├── generate-icons.mjs          ← ساخت آیکون‌های PWA
 │   ├── make-transparent.mjs        ← شفاف‌سازی آیکون‌ها
 │   └── build-icons.mjs             ← ساخت همه سایزها از یک منبع
-├── proxy.ts                        ← ✅ محافظت سرور-side از /admin (جایگزین middleware در Next.js 16)
+├── proxy.ts                        ← محافظت سرور-side از /admin
 ├── schema.sql
 ├── package.json
-├── next.config.ts                  ← ✅ poweredByHeader: false
+├── next.config.ts                  ← poweredByHeader: false
 ├── PROJECT_STATE.md
 ├── dev.bat                         ← منوی توسعه
 ├── end-of-day.bat                  ← اسکریپت پایان روز
@@ -125,7 +138,7 @@ Cofe-Park/
 | `--muted-text-color` | `#766f64` | خاکستری متوسط |
 | `--secondary-color` | `#f3eee7` (theme) / `#e3ddd2` (ادمین) | بوردها |
 | **رنگ تخفیف** | `#2d5d3e` | متن تخفیف‌ها (سبز) |
-| **رنگ کوپن غیرفعال** | `#9b3c32` | هشدارها و بج‌های منفی |
+| **رنگ کوپن غیرفعال / لغو** | `#9b3c32` | هشدارها، بج‌های منفی، لغو |
 | **رنگ اعلان** | `#dc2626` / `#ef4444` (dark) | Badge و Alert سفارش جدید |
 
 ### رنگ‌های Dark Mode (پنل ادمین):
@@ -159,13 +172,23 @@ Cofe-Park/
 
 **کوپن:** `.coupons-grid` / `.coupon-card` / `.coupon-code` / `.coupon-badge` / `.coupon-input-row` / `.coupon-applied` / `.coupon-selector` / `.coupon-option` / `.coupon-toggle-card` / `.item-badge.badge-eligible` / `.item-badge.badge-ineligible`
 
-**داشبورد:** `.chart-card` / `.chart-bars` / `.chart-col` / `.chart-bar` / `.top-products-list` / `.top-product-item` / `.cleanup-card`
+**داشبورد:** `.chart-card` / `.chart-bars` / `.chart-col` / `.chart-bar` / `.top-products-list` / `.top-product-item` / `.cleanup-card` / `.comparison-grid` / `.comparison-card` / `.peak-hours`
 
 **دارک مود:** `.admin-shell.dark-mode` + تمام کلاس‌های override شده
 
 **اعلان سفارش:** `.admin-nav-badge` / `.admin-mobile-badge` / `.new-order-alert-container` / `.new-order-alert` / `.new-order-alert-view` / `.new-order-alert-close`
 
 **گزارش کوپن:** `.coupon-report-summary` / `.coupon-report-stat` / `.coupon-report-table` / `.coupon-report-table-header` / `.coupon-report-search` / `.coupon-report-row-clickable` / `.coupon-chart` / `.coupon-chart-row` / `.coupon-chart-bar` / `.coupon-orders-list` / `.coupon-order-item` / `.coupon-order-items` / `.coupon-order-actions`
+
+**دلایل لغو:** `.reasons-grid` / `.reason-card` / `.reason-icon` / `.reason-target` / `.reason-status` / `.reason-card-actions`
+
+**مودال لغو:** `.cancel-reasons-list` / `.cancel-reason-item` / `.cancel-reason-icon` / `.cancel-reason-label` / `.cancel-reason-check` / `.cancel-note-field` / `.cancel-warning`
+
+**نمایش دلیل لغو:** `.cancellation-info-box` / `.cancellation-info-label` / `.cancellation-info-note` / `.cancellation-info-by`
+
+**آمار لغوها:** `.cancellation-summary-grid` / `.cancellation-summary-card` / `.cancellation-summary-icon` / `.cancellation-reasons-chart` / `.cancellation-chart-row` / `.cancellation-chart-bar` / `.cancellation-table` / `.cancellation-reason-badge` / `.cancellation-by.by-customer` / `.cancellation-by.by-admin` / `.cancellation-row-clickable`
+
+**مشتریان (CRM):** `.customers-summary-grid` / `.customers-summary-card` / `.customers-grid` / `.customer-card` / `.customer-avatar` / `.customer-badge` / `.customer-action-btn` / `.preset-tag-btn` / `.custom-tag` / `.customer-notes-input`
 
 ### شماره‌گذاری بخش‌های `globals.css`:
 | بخش | عنوان |
@@ -202,6 +225,14 @@ Cofe-Park/
 | 59 | COUPON REPORTS (کارت‌های خلاصه + جدول + نمودار) |
 | 60 | COUPON REPORTS - DETAILS (جستجو + ردیف‌های کلیک) |
 | 61 | COUPON ORDER DETAILS (ریز اقلام + دکمه‌های اقدام) |
+| 62 | EXPORT ORDERS (خروجی Excel) |
+| 63 | ADMIN DASHBOARD - ADVANCED STATS |
+| 64 | ADMIN CUSTOMERS (CRM) |
+| 65 | ADMIN CANCELLATION REASONS (دلایل لغو) |
+| 66 | CANCEL REASONS (دلایل لغو در مودال) |
+| 67 | CANCELLATION INFO (نمایش دلیل لغو) |
+| 68 | CANCELLATION STATS (آمار لغوها) |
+| 69 | CANCELLATION ROW CLICKABLE + PRINT |
 
 ---
 
@@ -218,16 +249,16 @@ Cofe-Park/
 - [x] صفحه سبد خرید
 - [x] صفحه ثبت سفارش + ارسال به `/api/orders`
 - [x] صفحه جزئیات سفارش با استپر وضعیت + polling هر ۱۰ ثانیه
-- [x] **لغو سفارش توسط مشتری** با شمارش معکوس ۵ دقیقه‌ای
+- [x] **لغو سفارش توسط مشتری** با شمارش معکوس ۵ دقیقه‌ای + **انتخاب دلیل**
 - [x] **کد تخفیف (کوپن)** با تشخیص اقلام واجد/غیرواجد
 - [x] ارسال سفارش به واتساپ
 
 ### پنل ادمین
 - [x] Layout با سایدبار دسکتاپ + منوی موبایل
 - [x] لاگین + **محافظت سرور-side با `proxy.ts`** + متادیتای `noindex`
-- [x] **داشبورد با آمار فروش** (۶ کارت + نمودار ۷ روزه + پرفروش‌ترین محصولات)
+- [x] **داشبورد با آمار پیشرفته** (۶ کارت + نمودار ۷ روزه + ۶ ماهه + ساعات پرترافیک + مقایسه ماه قبل + پرفروش‌ترین محصولات)
 - [x] **پاکسازی سفارش‌های قدیمی** (دستی با تأیید)
-- [x] مدیریت سفارش‌ها + Realtime + فیلتر + فاکتور چاپی
+- [x] مدیریت سفارش‌ها + Realtime + فیلتر + فاکتور چاپی + **لغو با دلیل**
 - [x] مدیریت محصولات + تنوع‌ها + عکس + `coupon_eligible`
 - [x] مدیریت دسته‌ها + `coupon_eligible`
 - [x] مدیریت میزها + QR Code + دانلود PNG
@@ -235,10 +266,14 @@ Cofe-Park/
 - [x] مدیریت جملات
 - [x] **مدیریت کدهای تخفیف** (CRUD + toggle + وضعیت‌ها)
 - [x] **گزارش پیشرفته کوپن‌ها** — کارت‌های خلاصه + جدول جستجوپذیر + نمودار + مودال سفارش‌ها + ریز اقلام + پرینت تک سفارش
+- [x] **خروجی Excel/CSV از سفارش‌ها** با فیلتر زمانی و وضعیت + پشتیبانی Excel فارسی
+- [x] **CRM (مشتریان)** — گرید مشتریان + آمار + تگ + یادداشت + تماس/واتساپ
+- [x] **مدیریت دلایل لغو** — CRUD با هدف (مشتری/ادمین/هر دو) + آیکون + ترتیب
+- [x] **آمار و گزارش لغوها** — کارت‌های خلاصه + نمودار دلایل + نمودار ۷ روزه + جدول لغوهای اخیر + مودال جزئیات + پرینت فاکتور لغو
 - [x] تنظیمات کامل (هدر، پس‌زمینه، اطلاعات تماس، لوگو)
-- [x] **دارک مود پنل ادمین** — با ذخیره در localStorage + بدون flash (بخش‌های ۵۴-۵۵)
-- [x] **اعلان سفارش جدید** — Badge + صدا + Toast + Browser Notification + Polling هر ۱۰ ثانیه (بخش‌های ۵۶-۵۷)
-- [x] **تایتل داینامیک + favicon** با شمارش سفارش‌ها (بخش ۵۸)
+- [x] **دارک مود پنل ادمین** — با ذخیره در localStorage + بدون flash
+- [x] **اعلان سفارش جدید** — Badge + صدا + Toast + Browser Notification + Polling هر ۱۰ ثانیه
+- [x] **تایتل داینامیک + favicon** با شمارش سفارش‌ها
 
 ### زیرساخت و ابزارها
 - [x] سیستم تم داینامیک از دیتابیس
@@ -262,13 +297,15 @@ Cofe-Park/
 - [x] رفع به‌هم‌ریختگی صفحه جزئیات سفارش (بخش ۳۸)
 - [x] رفع باگ بکاپ دوبل در `backup.mjs --clean`
 - [x] رفع مشکل Git (pull --rebase قبل از push)
-- [x] رفع RLS جدول `coupons` و `customers`
+- [x] رفع RLS جدول `coupons`، `customers` و `cancellation_reasons`
 - [x] رفع فونت و ظاهر فاکتور چاپی (بخش ۴۳)
 - [x] رفع مشکل Service Worker در dev (فقط production)
 - [x] رفع نمایش ستون تخفیف در فاکتور چاپی
 - [x] رفع کارت‌های تیره مونده در دارک مود (بخش ۵۵)
 - [x] **جایگزینی Realtime با Polling** برای اعلان سفارش (به دلیل تحریم WebSocket در ایران)
 - [x] **جایگزینی `middleware.ts` با `proxy.ts`** (تغییر convention در Next.js 16)
+- [x] رفع باگ تایپی `/* } */` در CSS (باعث خراب شدن بخش CRM شده بود)
+- [x] رفع خطای `updated_at` در جدول `customers`
 
 ---
 
@@ -279,15 +316,16 @@ Cofe-Park/
 - [ ] 🔴 **تست کامل روی موبایل واقعی** (iOS Safari + Chrome Android)
 - [ ] 🔴 **تست کامل جریان سفارش** از ابتدا تا انتها
 - [ ] 🟡 **پاکسازی خودکار سفارش‌های قدیمی** با Cron Job در Supabase
-- [ ] 🟡 **داشبورد آمار پیشرفته** (نمودار فروش ماهانه، مقایسه دوره‌ها)
-- [ ] 🟢 **گزارش فروش روزانه Excel/CSV** برای مالیات
-- [ ] 🟢 **سیستم یادداشت مشتری (CRM)** — یادداشت روی مشتریان ثابت
+- [ ] 🟢 **گزارش فروش روزانه Excel/CSV** (نسخه پیشرفته‌تر برای مالیات)
+- [ ] 🟢 **فیلتر تعداد لغو** در صفحه مشتریان (۱+، ۳+، ۵+)
+- [ ] 🟢 **پنل مشتری** — ثبت‌نام با شماره و مشاهده تاریخچه سفارش‌ها
 - [ ] 🟢 **ایمیل/SMS اطلاع‌رسانی** برای سفارش‌های جدید
 - [ ] 🟢 **تست بار (Load Test)** روی Supabase
 - [ ] 🟢 **آیکون و عنوان PWA** با badge (مشتری)
 - [ ] 🟢 **اتصال به درگاه پرداخت** (زرین‌پال / آیدی‌پی)
 - [ ] 🟢 **اتصال به نرم‌افزار حسابداری پارسیان** (با واسط محلی)
-- [ ] 🟢 **سیستم پیامک (SMS)** برای OTP و اطلاع‌رسانی
+- [ ] 🟢 **سیستم پیامک (SMS)** برای OTP و اطلاع‌رسانی لغو
+- [ ] 🟢 **آمار پیشرفته لغوها** (درصد لغو بر اساس ساعت/روز/دسته)
 
 ---
 
@@ -297,7 +335,7 @@ Cofe-Park/
 2. **نام کلاس‌ها با BEM-like:** `block-element` یا `block-element-modifier`
 3. **هیچ استایل inline نداشته باشیم**، مگر برای مقادیر داینامیک از theme
 4. **همه چیز از پالت رنگ بخش ۳ استفاده کند**
-5. **روی موبایل تست شود** — breakpoint‌ها: `650px`, `768px`, `640px`
+5. **روی موبایل تست شود** — breakpoint‌ها: `650px`, `768px`, `640px`, `500px`
 6. **برای همه مودال‌ها از `modal-overlay` + `modal-container` استفاده شود**
 7. **قبل از ارسال به چت جدید، فایل `PROJECT_STATE.md` را پیوست کن.**
 8. **بعد از هر تغییر مهم، `Ctrl+Shift+R` رفرش کن.**
@@ -305,6 +343,7 @@ Cofe-Park/
 10. **برای سرور از `supabaseServer()`، برای کلاینت از `supabaseBrowser()` استفاده شود.**
 11. **در کوئری‌های Supabase، همیشه ستون‌های جدید را به `select` اضافه کن.**
 12. **برای اعلان‌ها، از Polling استفاده شود (نه Realtime)** — به دلیل تحریم ایران.
+13. **متن‌های کامنت CSS رو کپی نکن** — فقط کد ناب رو در `globals.css` بذار.
 
 ---
 
@@ -322,7 +361,7 @@ Cofe-Park/
 2. هر کلاس جدیدی که در JSX استفاده می‌شود، باید در globals.css تعریف شود.
 3. پالت رنگ از متغیرهای CSS می‌آید، نه رنگ hex مستقیم.
 4. مودال‌ها از کلاس‌های modal-overlay + modal-container استفاده کنند.
-5. بخش‌های globals.css شماره‌گذاری شده‌اند (۱ تا ۶۱).
+5. بخش‌های globals.css شماره‌گذاری شده‌اند (۱ تا ۶۹).
 6. برای اعلان‌ها از Polling استفاده شود، نه Realtime (تحریم ایران).
 7. محافظت ادمین با proxy.ts (نه middleware.ts در Next.js 16).
 
@@ -364,8 +403,13 @@ Cofe-Park/
 | 1405/07/21 | **افزودن تایتل و favicon داینامیک** با شمارش سفارش‌های جدید (بخش ۵۸) |
 | 1405/07/21 | **جایگزینی Realtime با Polling** برای اعلان‌ها (به دلیل تحریم ایران) |
 | 1405/07/21 | **افزودن proxy.ts + حذف X-Powered-By + متادیتای صفحات ادمین** (امنیت) |
-| 1405/07/22 | **افزودن گزارش پیشرفته کوپن‌ها** (بخش‌های ۵۹-۶۱): کارت‌های خلاصه، جدول جستجوپذیر، نمودار، مودال سفارش‌ها، ریز اقلام، پرینت تک سفارش |
+| 1405/07/22 | **افزودن گزارش پیشرفته کوپن‌ها** (بخش‌های ۵۹-۶۱) |
 | 1405/07/22 | **استخراج `PrintInvoice.tsx`** به عنوان کامپوننت قابل استفاده مجدد |
+| 1405/07/22 | **افزودن خروجی Excel/CSV از سفارش‌ها** برای حسابداری (بخش ۶۲) |
+| 1405/07/22 | **افزودن داشبورد پیشرفته** (نمودار ۶ ماهه + ساعات پرترافیک + مقایسه ماه قبل) (بخش ۶۳) |
+| 1405/07/22 | **افزودن CRM (مشتریان)** — گرید + آمار + تگ + یادداشت (بخش ۶۴) |
+| 1405/07/23 | **افزودن سیستم کامل لغو سفارش** — دلایل قابل مدیریت + UI مشتری/ادمین + نمایش دلیل + آمار + فاکتور لغو (بخش‌های ۶۵-۶۹) |
+| 1405/07/23 | **افزودن مودال جزئیات سفارش لغو شده** با پرینت فاکتور اختصاصی |
 
 ---
 
@@ -447,22 +491,23 @@ NEXT_PUBLIC_SITE_URL=https://cafe-park-menu.vercel.app
 
 | جدول | کاربرد | فیلدهای کلیدی |
 |---|---|---|
-| `categories` | دسته‌بندی محصولات | `id`, `name`, `icon`, `sort_order`, `is_active`, **`coupon_eligible`** |
-| `products` | محصولات | `id`, `category_id`, `name`, `price`, `image_url`, `is_featured`, `is_new`, `is_available`, `size`, `calories`, `prep_time_minutes`, `ingredients`, `allergens`, `dietary_info`, **`coupon_eligible`** (nullable) |
+| `categories` | دسته‌بندی محصولات | `id`, `name`, `icon`, `sort_order`, `is_active`, `coupon_eligible` |
+| `products` | محصولات | `id`, `category_id`, `name`, `price`, `image_url`, `is_featured`, `is_new`, `is_available`, `size`, `calories`, `prep_time_minutes`, `ingredients`, `allergens`, `dietary_info`, `coupon_eligible` (nullable) |
 | `variant_groups` | گروه‌های تنوع | `id`, `product_id`, `name`, `is_required`, `sort_order` |
 | `variant_options` | گزینه‌های هر گروه | `id`, `group_id`, `name`, `price_modifier`, `is_default`, `is_available`, `sort_order` |
-| `orders` | سفارش‌ها | `id`, `order_number`, `customer_name`, `customer_phone`, `table_number`, `note`, `items` (JSONB), `subtotal`, `status`, **`original_subtotal`**, **`coupon_code`**, **`coupon_discount`**, **`eligible_subtotal`**, **`ineligible_subtotal`**, `created_at`, `confirmed_at`, `preparing_at`, `ready_at`, `delivered_at`, `cancelled_at` |
+| `orders` | سفارش‌ها | `id`, `order_number`, `customer_name`, `customer_phone`, `table_number`, `note`, `items` (JSONB), `subtotal`, `status`, `original_subtotal`, `coupon_code`, `coupon_discount`, `eligible_subtotal`, `ineligible_subtotal`, **`cancellation_reason_id`**, **`cancellation_reason_label`**, **`cancellation_note`**, **`cancelled_by`** ('customer'/'admin'/'system'), `created_at`, `confirmed_at`, `preparing_at`, `ready_at`, `delivered_at`, `cancelled_at` |
 | `tables` | میزها | `id`, `number`, `name`, `description`, `capacity`, `location`, `sort_order`, `is_active`, `qr_token` |
 | `quotes` | جملات | `id`, `text`, `author`, `is_active` |
 | `themes` | تم‌ها | رنگ‌ها + font_url‌ها + `font_metadata` (JSONB), `border_radius`, `is_active` |
 | `settings` | تنظیمات سایت (تک‌ردیفی، id=1) | `cafe_name`, `tagline`, `hero_*`, `footer_text`, `address`, `phone`, `instagram`, `working_hours`, `logo_url`, `maps_url`, `og_*`, `show_*`, `*_in_header/footer/floating` |
-| **`coupons`** | **کدهای تخفیف** | `id`, `code`, `description`, `discount_type` ('percent'/'fixed'), `discount_value`, `min_order_amount`, **`max_order_amount`**, `max_discount`, `max_uses`, `used_count`, `valid_from`, `valid_until`, `is_active` |
-| **`customers`** | **مشتریان (خودکار از سفارش‌ها)** | اطلاعات مشتری برای CRM و تحلیل |
+| `coupons` | کدهای تخفیف | `id`, `code`, `description`, `discount_type` ('percent'/'fixed'), `discount_value`, `min_order_amount`, `max_order_amount`, `max_discount`, `max_uses`, `used_count`, `valid_from`, `valid_until`, `is_active` |
+| `customers` | مشتریان (خودکار از سفارش‌ها) | `phone`, `notes`, `tags`, `updated_at` |
+| **`cancellation_reasons`** | **دلایل لغو سفارش** | `id`, `label`, `target` ('customer'/'admin'/'both'), `icon`, `sort_order`, `is_active`, `created_at`, `updated_at` |
 
 ### وضعیت سفارش‌ها (status):
 ```
 pending    → confirmed  → preparing → ready → delivered
-           ↘ cancelled
+           ↘ cancelled  (با دلیل و cancelled_by)
 ```
 
 ### نحوه استفاده از coupon_eligible:
@@ -471,6 +516,14 @@ pending    → confirmed  → preparing → ready → delivered
 محصول coupon_eligible = false     → هرگز شامل تخفیف
 محصول coupon_eligible = null      → از دسته ارث می‌برد
 دسته coupon_eligible = false      → پیش‌فرض غیرفعال (مگر override محصول)
+```
+
+### نحوه استفاده از cancellation_reasons:
+```
+target = 'customer'  → فقط در مودال لغو مشتری نمایش داده می‌شه
+target = 'admin'     → فقط در مودال لغو ادمین نمایش داده می‌شه
+target = 'both'      → در هر دو مودال
+is_active = true     → فقط فعال‌ها نمایش داده می‌شن
 ```
 
 ### Realtime Publications:
@@ -498,8 +551,10 @@ create policy "Enable realtime for orders"
 | **اعلان سفارش** | `lib/use-order-notifications.ts` | Polling هر ۱۰ ثانیه + صدا + نوتیفیکیشن |
 | **کارت هشدار** | `app/admin/components/NewOrderAlert.tsx` | Toast قرمز با دکمه مشاهده |
 | **تایتل داینامیک** | `lib/use-document-title.ts` | عنوان + favicon تب مرورگر |
-| **کامپوننت چاپ** | `app/admin/components/PrintInvoice.tsx` | فاکتور قابل استفاده مجدد (مودال + صفحه سفارش) |
+| **کامپوننت چاپ** | `app/admin/components/PrintInvoice.tsx` | فاکتور قابل استفاده مجدد |
 | **گزارش کوپن** | `app/admin/coupons/reports/CouponReports.tsx` | صفحه گزارش با نمودار و مودال سفارش‌ها |
+| **دلایل لغو** | `app/admin/cancellation-reasons/` | مدیریت دلایل لغو |
+| **آمار لغو** | `app/admin/cancellations/` | گزارش و تحلیل لغوها |
 | **محافظت ادمین** | `proxy.ts` | ریدایرکت سرور-side برای /admin |
 
 ---
@@ -605,3 +660,9 @@ backups-server/
 22. **`noindex, nofollow` روی صفحات ادمین:** جلوگیری از ایندکس شدن در گوگل.
 23. **کامپوننت چاپ مشترک:** `PrintInvoice.tsx` در صفحه سفارش + گزارش کوپن‌ها استفاده می‌شود.
 24. **گزارش کوپن‌ها با API جداگانه:** `/api/coupons/stats` و `/api/coupons/orders` برای دسترسی از Client Component.
+25. **لغو با دلیل از دیتابیس:** دلایل در جدول `cancellation_reasons` قابل مدیریت از پنل ادمین هستن.
+26. **لغو بدون دلیل مجاز:** فیلد دلیل اختیاریه ولی برای بهبود سرویس توصیه می‌شه.
+27. **نمایش دلیل لغو به مشتری:** فقط وقتی `cancelled_by = 'admin'` باشه.
+28. **لغو با تاریخچه:** هر لغو، تاریخ (`cancelled_at`) و لغوکننده (`cancelled_by`) و دلیل رو ثبت می‌کنه.
+29. **CSV با فرمول `=""`:** برای جلوگیری از Scientific notation در Excel (شماره تلفن).
+30. **پشتیبانی Excel فارسی:** BOM (`\uFEFF`) در ابتدای CSV.
