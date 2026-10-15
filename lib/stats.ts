@@ -185,7 +185,7 @@ export const getOrderStats = cache(async (): Promise<OrderStats> => {
   const topProducts = Array.from(productMap.entries())
     .map(([name, data]) => ({ name, ...data }))
     .sort((a, b) => b.count - a.count)
-    .slice(0, 5)
+	.slice(0, 20)
 
   // فروش ۷ روز اخیر
   const dailyRevenue: OrderStats['dailyRevenue'] = []
@@ -436,6 +436,7 @@ export const getCouponStats = cache(
     }
   }
 )
+
 // ─── آمار مشتریان (CRM) ───
 
 export type CustomerData = {
@@ -582,6 +583,7 @@ export const getCustomersData = cache(async (): Promise<CustomersReport> => {
 
   return { customers, summary }
 })
+
 // ─── دلایل لغو فعال ───
 
 export type CancellationReason = {
@@ -612,6 +614,7 @@ export const getActiveReasons = cache(
     return data ?? []
   }
 )
+
 // ─── آمار لغو سفارش‌ها ───
 
 export type CancellationStats = {
@@ -633,7 +636,26 @@ export type CancellationStats = {
     label: string
     count: number
   }>
-    recentCancellations: Array<{
+  // ✅ آمار پیشرفته جدید
+  byHour: Array<{
+    hour: number
+    label: string
+    count: number
+    percentage: number
+  }>
+  byWeekday: Array<{
+    weekday: number
+    label: string
+    count: number
+    percentage: number
+  }>
+  byCategory: Array<{
+    category_name: string
+    category_icon: string | null
+    count: number
+    percentage: number
+  }>
+  recentCancellations: Array<{
     id: string
     order_number: number
     customer_name: string
@@ -675,13 +697,15 @@ export const getCancellationStats = cache(
     }
 
     // ─── آمار کلی سفارش‌ها ───
-    let totalOrdersQuery = db.from('orders').select('*', { count: 'exact', head: true })
+    let totalOrdersQuery = db
+      .from('orders')
+      .select('*', { count: 'exact', head: true })
     if (since) {
       totalOrdersQuery = totalOrdersQuery.gte('created_at', since.toISOString())
     }
     const { count: totalOrders } = await totalOrdersQuery
 
-        // ─── آمار لغوها ───
+    // ─── آمار لغوها ───
     let cancelQuery = db
       .from('orders')
       .select(
@@ -710,6 +734,9 @@ export const getCancellationStats = cache(
         },
         topReasons: [],
         dailyCancellations: [],
+        byHour: [],
+        byWeekday: [],
+        byCategory: [],
         recentCancellations: [],
       }
     }
@@ -804,7 +831,129 @@ export const getCancellationStats = cache(
       })
     }
 
-        // ─── ۲۰ لغو اخیر ───
+    // ─── ✅ آمار پیشرفته: لغوها بر اساس ساعت شبانه‌روز ───
+    const hourMap = new Map<number, number>()
+    for (const order of orders) {
+      const dateStr = order.cancelled_at || order.created_at
+      if (!dateStr) continue
+      const hour = new Date(dateStr).getHours()
+      hourMap.set(hour, (hourMap.get(hour) || 0) + 1)
+    }
+
+    const totalForDistribution = orders.length
+    const byHour: CancellationStats['byHour'] = []
+    for (let h = 8; h <= 23; h++) {
+      const count = hourMap.get(h) || 0
+      byHour.push({
+        hour: h,
+        label: `${h}:00`,
+        count,
+        percentage:
+          totalForDistribution > 0
+            ? Math.round((count / totalForDistribution) * 100)
+            : 0,
+      })
+    }
+
+    // ─── ✅ آمار پیشرفته: لغوها بر اساس روز هفته ───
+    const PERSIAN_WEEKDAYS = [
+      'شنبه',
+      'یکشنبه',
+      'دوشنبه',
+      'سه‌شنبه',
+      'چهارشنبه',
+      'پنجشنبه',
+      'جمعه',
+    ]
+    const weekdayMap = new Map<number, number>()
+    for (const order of orders) {
+      const dateStr = order.cancelled_at || order.created_at
+      if (!dateStr) continue
+      const jsDay = new Date(dateStr).getDay() // Sunday=0 ... Saturday=6
+      const persianDay = (jsDay + 1) % 7 // Saturday=0 ... Friday=6
+      weekdayMap.set(persianDay, (weekdayMap.get(persianDay) || 0) + 1)
+    }
+
+    const byWeekday: CancellationStats['byWeekday'] = []
+    for (let d = 0; d < 7; d++) {
+      const count = weekdayMap.get(d) || 0
+      byWeekday.push({
+        weekday: d,
+        label: PERSIAN_WEEKDAYS[d],
+        count,
+        percentage:
+          totalForDistribution > 0
+            ? Math.round((count / totalForDistribution) * 100)
+            : 0,
+      })
+    }
+
+    // ─── ✅ آمار پیشرفته: لغوها بر اساس دسته‌بندی محصولات ───
+    const [productsResult, categoriesResult] = await Promise.all([
+      db.from('products').select('name, category_id'),
+      db.from('categories').select('id, name, icon'),
+    ])
+
+    const productToCategoryId = new Map<string, string>()
+    for (const p of productsResult.data ?? []) {
+      if (p.category_id && p.name) {
+        productToCategoryId.set(p.name, p.category_id)
+      }
+    }
+
+    const categoryInfoMap = new Map<
+      string,
+      { name: string; icon: string | null }
+    >()
+    for (const c of categoriesResult.data ?? []) {
+      categoryInfoMap.set(c.id, { name: c.name, icon: c.icon ?? null })
+    }
+
+    const categoryCountMap = new Map<
+      string,
+      { count: number; icon: string | null }
+    >()
+    let totalCategoryItems = 0
+
+    for (const order of orders) {
+      const items = Array.isArray(order.items) ? order.items : []
+      for (const item of items) {
+        const productName = item?.product_name || ''
+        const quantity = Number(item?.quantity) || 0
+        if (!quantity) continue
+
+        const catId = productToCategoryId.get(productName)
+        if (!catId) continue
+
+        const catInfo = categoryInfoMap.get(catId)
+        if (!catInfo) continue
+
+        const existing = categoryCountMap.get(catInfo.name) ?? {
+          count: 0,
+          icon: catInfo.icon,
+        }
+        existing.count += quantity
+        categoryCountMap.set(catInfo.name, existing)
+        totalCategoryItems += quantity
+      }
+    }
+
+    const byCategory: CancellationStats['byCategory'] = Array.from(
+      categoryCountMap.entries()
+    )
+      .map(([name, data]) => ({
+        category_name: name,
+        category_icon: data.icon,
+        count: data.count,
+        percentage:
+          totalCategoryItems > 0
+            ? Math.round((data.count / totalCategoryItems) * 100)
+            : 0,
+      }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 6)
+
+    // ─── ۲۰ لغو اخیر ───
     const recentCancellations = orders.slice(0, 20).map((o: any) => ({
       id: o.id,
       order_number: o.order_number,
@@ -823,6 +972,7 @@ export const getCancellationStats = cache(
       cancellation_note: o.cancellation_note,
     }))
 
+    // ─── محاسبه نرخ لغو ───
     const cancelRate =
       (totalOrders ?? 0) > 0
         ? Math.round((orders.length / (totalOrders ?? 1)) * 100)
@@ -838,6 +988,9 @@ export const getCancellationStats = cache(
       },
       topReasons,
       dailyCancellations,
+      byHour,
+      byWeekday,
+      byCategory,
       recentCancellations,
     }
   }

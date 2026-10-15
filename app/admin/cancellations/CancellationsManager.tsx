@@ -9,6 +9,13 @@ const formatPrice = (n: number) =>
   new Intl.NumberFormat('fa-IR').format(Math.round(n))
 
 type TimeFilter = 'today' | 'week' | 'month' | 'all'
+type ReportType =
+  | 'reasons'
+  | 'daily'
+  | 'hourly'
+  | 'weekday'
+  | 'category'
+  | 'recent'
 
 const FILTER_LABELS: Record<TimeFilter, string> = {
   today: 'امروز',
@@ -27,12 +34,53 @@ function formatDateTime(iso: string | null): string {
   })
 }
 
+// ─── کامپوننت مودال گزارش ───
+function ReportModal({
+  title,
+  subtitle,
+  onClose,
+  children,
+}: {
+  title: string
+  subtitle?: string
+  onClose: () => void
+  children: React.ReactNode
+}) {
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div
+        className="modal-container modal-lg"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="modal-header">
+          <div className="modal-header-content">
+            <h2>{title}</h2>
+            {subtitle && <p>{subtitle}</p>}
+          </div>
+          <button
+            type="button"
+            className="modal-close-btn"
+            onClick={onClose}
+          >
+            ✕
+          </button>
+        </div>
+        <div className="modal-body report-modal-body">{children}</div>
+        <div className="modal-footer">
+          <button type="button" className="btn" onClick={onClose}>
+            بستن
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function CancellationsManager() {
   const [filter, setFilter] = useState<TimeFilter>('month')
   const [data, setData] = useState<CancellationStats | null>(null)
   const [loading, setLoading] = useState(true)
-
-  // ✅ State های مودال جزئیات
+  const [openModal, setOpenModal] = useState<ReportType | null>(null)
   const [selectedOrder, setSelectedOrder] = useState<CancelledOrder | null>(
     null
   )
@@ -47,7 +95,7 @@ export default function CancellationsManager() {
     let cancelled = false
     setLoading(true)
 
-    fetch(`/api/cancellations/stats?filter=${filter}`)
+    fetch(`/api/cancellations/stats?filter=${filter}`, { cache: 'no-store' })
       .then((res) => res.json())
       .then((result: CancellationStats) => {
         if (!cancelled) {
@@ -65,19 +113,13 @@ export default function CancellationsManager() {
     }
   }, [filter])
 
-  // ✅ چاپ فاکتور
   useEffect(() => {
     if (!printOrder) return
 
-    const handleAfterPrint = () => {
-      setPrintOrder(null)
-    }
-
+    const handleAfterPrint = () => setPrintOrder(null)
     window.addEventListener('afterprint', handleAfterPrint)
 
-    const timer = setTimeout(() => {
-      window.print()
-    }, 400)
+    const timer = setTimeout(() => window.print(), 400)
 
     return () => {
       clearTimeout(timer)
@@ -85,9 +127,39 @@ export default function CancellationsManager() {
     }
   }, [printOrder])
 
-  const maxDailyCount = data?.dailyCancellations.length
-    ? Math.max(...data.dailyCancellations.map((d) => d.count), 1)
+  // ✅ Fallback امن
+  const byHour = data?.byHour ?? []
+  const byWeekday = data?.byWeekday ?? []
+  const byCategory = data?.byCategory ?? []
+  const dailyCancellations = data?.dailyCancellations ?? []
+  const topReasons = data?.topReasons ?? []
+  const recentCancellations = data?.recentCancellations ?? []
+
+  const maxDailyCount = dailyCancellations.length
+    ? Math.max(...dailyCancellations.map((d) => d.count), 1)
     : 1
+  const maxHourCount = byHour.length
+    ? Math.max(...byHour.map((h) => h.count), 1)
+    : 1
+  const maxWeekdayCount = byWeekday.length
+    ? Math.max(...byWeekday.map((w) => w.count), 1)
+    : 1
+  const maxCategoryCount = byCategory.length
+    ? Math.max(...byCategory.map((c) => c.count), 1)
+    : 1
+
+  // ─── خلاصه‌های کارت گزارش ───
+  const topReason = topReasons[0]
+  const peakHour = byHour.length
+    ? byHour.reduce((a, b) => (a.count >= b.count ? a : b))
+    : null
+  const peakWeekday = byWeekday.length
+    ? byWeekday.reduce((a, b) => (a.count >= b.count ? a : b))
+    : null
+  const peakDay = dailyCancellations.length
+    ? dailyCancellations.reduce((a, b) => (a.count >= b.count ? a : b))
+    : null
+  const topCategory = byCategory[0]
 
   return (
     <div className="admin-main">
@@ -96,7 +168,7 @@ export default function CancellationsManager() {
         <div>
           <h1>📊 آمار لغو سفارش‌ها</h1>
           <p className="admin-subtitle">
-            تحلیل دلایل لغو و روند آن در بازه انتخاب‌شده
+            خلاصه گزارش‌ها — برای دیدن جزئیات روی هر کارت کلیک کنید
           </p>
         </div>
         <Link href="/admin/cancellation-reasons" className="btn">
@@ -204,161 +276,513 @@ export default function CancellationsManager() {
             </div>
           </section>
 
-          {/* دلایل پرتکرار */}
+          {/* کارت‌های گزارش */}
           <section className="dashboard-section">
-            <h2>🎯 پرتکرارترین دلایل لغو</h2>
-            {data.topReasons.length === 0 ? (
-              <div className="admin-card">
-                <p className="empty-admin">
-                  در این بازه، لغوی با دلیل ثبت نشده است.
-                </p>
-              </div>
-            ) : (
-              <div className="cancellation-reasons-chart">
-                {data.topReasons.map((reason, idx) => (
-                  <div key={reason.reason} className="cancellation-chart-row">
-                    <div className="cancellation-chart-rank">
-                      #{formatPrice(idx + 1)}
-                    </div>
-                    <div className="cancellation-chart-icon">
-                      {reason.icon || '📝'}
-                    </div>
-                    <div className="cancellation-chart-info">
-                      <div className="cancellation-chart-label">
-                        {reason.reason}
-                      </div>
-                      <div className="cancellation-chart-bar-wrapper">
-                        <div
-                          className="cancellation-chart-bar"
-                          style={{ width: `${reason.percentage}%` }}
-                        />
-                      </div>
-                    </div>
-                    <div className="cancellation-chart-stats">
-                      <strong>{formatPrice(reason.count)}</strong>
-                      <small>
-                        {reason.percentage.toLocaleString('fa-IR')}٪
-                      </small>
-                    </div>
+            <h2>📊 گزارش‌های تفصیلی</h2>
+            <div className="report-cards-grid">
+              {/* دلایل */}
+              <button
+                type="button"
+                className="report-card"
+                onClick={() => setOpenModal('reasons')}
+              >
+                <div
+                  className="report-card-icon"
+                  style={{ background: '#fde8e6' }}
+                >
+                  🎯
+                </div>
+                <div className="report-card-body">
+                  <div className="report-card-title">
+                    پرتکرارترین دلایل لغو
                   </div>
-                ))}
-              </div>
-            )}
-          </section>
+                  <div className="report-card-value">
+                    {topReason ? topReason.reason : 'داده‌ای نیست'}
+                  </div>
+                  <div className="report-card-hint">
+                    {topReason
+                      ? `${formatPrice(topReason.count)} لغو · ${topReason.percentage.toLocaleString('fa-IR')}٪`
+                      : 'در این بازه لغویی ثبت نشده'}
+                  </div>
+                </div>
+                <span className="report-card-arrow">←</span>
+              </button>
 
-          {/* نمودار روزانه */}
-          <section className="dashboard-section">
-            <h2>📉 لغوها در ۷ روز اخیر</h2>
-            <div className="chart-card">
-              <div className="chart-bars">
-                {data.dailyCancellations.map((day) => {
-                  const height =
-                    maxDailyCount > 0
-                      ? (day.count / maxDailyCount) * 100
-                      : 0
-                  return (
-                    <div key={day.date} className="chart-col">
-                      <div className="chart-col-value">
-                        {day.count > 0 ? formatPrice(day.count) : ''}
-                      </div>
-                      <div className="chart-bar-wrapper">
-                        <div
-                          className="chart-bar"
-                          style={{
-                            height: `${Math.max(height, 2)}%`,
-                            background:
-                              'linear-gradient(180deg, #d97a6c 0%, #9b3c32 100%)',
-                          }}
-                        />
-                      </div>
-                      <div className="chart-col-label">{day.label}</div>
-                    </div>
-                  )
-                })}
-              </div>
+              {/* ۷ روز اخیر */}
+              <button
+                type="button"
+                className="report-card"
+                onClick={() => setOpenModal('daily')}
+              >
+                <div
+                  className="report-card-icon"
+                  style={{ background: '#e6ecf0' }}
+                >
+                  📉
+                </div>
+                <div className="report-card-body">
+                  <div className="report-card-title">لغوها در ۷ روز اخیر</div>
+                  <div className="report-card-value">
+                    {peakDay && peakDay.count > 0
+                      ? `${peakDay.label}`
+                      : 'داده‌ای نیست'}
+                  </div>
+                  <div className="report-card-hint">
+                    {peakDay && peakDay.count > 0
+                      ? `پرلغوترین روز — ${formatPrice(peakDay.count)} لغو`
+                      : 'در ۷ روز اخیر لغویی ثبت نشده'}
+                  </div>
+                </div>
+                <span className="report-card-arrow">←</span>
+              </button>
+
+              {/* ساعتی */}
+              <button
+                type="button"
+                className="report-card"
+                onClick={() => setOpenModal('hourly')}
+              >
+                <div
+                  className="report-card-icon"
+                  style={{ background: '#eee6d9' }}
+                >
+                  🕐
+                </div>
+                <div className="report-card-body">
+                  <div className="report-card-title">
+                    لغوها بر اساس ساعت شبانه‌روز
+                  </div>
+                  <div className="report-card-value">
+                    {peakHour && peakHour.count > 0
+                      ? `ساعت ${peakHour.label}`
+                      : 'داده‌ای نیست'}
+                  </div>
+                  <div className="report-card-hint">
+                    {peakHour && peakHour.count > 0
+                      ? `ساعت پرلغو — ${formatPrice(peakHour.count)} لغو`
+                      : 'لغویی با ساعت مشخص ثبت نشده'}
+                  </div>
+                </div>
+                <span className="report-card-arrow">←</span>
+              </button>
+
+              {/* روز هفته */}
+              <button
+                type="button"
+                className="report-card"
+                onClick={() => setOpenModal('weekday')}
+              >
+                <div
+                  className="report-card-icon"
+                  style={{ background: '#f0e6f0' }}
+                >
+                  📅
+                </div>
+                <div className="report-card-body">
+                  <div className="report-card-title">
+                    لغوها بر اساس روز هفته
+                  </div>
+                  <div className="report-card-value">
+                    {peakWeekday && peakWeekday.count > 0
+                      ? peakWeekday.label
+                      : 'داده‌ای نیست'}
+                  </div>
+                  <div className="report-card-hint">
+                    {peakWeekday && peakWeekday.count > 0
+                      ? `پرلغوترین روز — ${formatPrice(peakWeekday.count)} لغو`
+                      : 'لغویی ثبت نشده'}
+                  </div>
+                </div>
+                <span className="report-card-arrow">←</span>
+              </button>
+
+              {/* دسته‌بندی */}
+              <button
+                type="button"
+                className="report-card"
+                onClick={() => setOpenModal('category')}
+              >
+                <div
+                  className="report-card-icon"
+                  style={{ background: '#e5f0e6' }}
+                >
+                  📂
+                </div>
+                <div className="report-card-body">
+                  <div className="report-card-title">
+                    لغوها بر اساس دسته‌بندی
+                  </div>
+                  <div className="report-card-value">
+                    {topCategory
+                      ? `${topCategory.category_icon || '📂'} ${topCategory.category_name}`
+                      : 'داده‌ای نیست'}
+                  </div>
+                  <div className="report-card-hint">
+                    {topCategory
+                      ? `${formatPrice(topCategory.count)} آیتم · ${topCategory.percentage.toLocaleString('fa-IR')}٪`
+                      : 'آیتمی لغو نشده'}
+                  </div>
+                </div>
+                <span className="report-card-arrow">←</span>
+              </button>
+
+              {/* لغوهای اخیر */}
+              <button
+                type="button"
+                className="report-card"
+                onClick={() => setOpenModal('recent')}
+              >
+                <div
+                  className="report-card-icon"
+                  style={{ background: '#f5f0e9' }}
+                >
+                  📋
+                </div>
+                <div className="report-card-body">
+                  <div className="report-card-title">لغوهای اخیر</div>
+                  <div className="report-card-value">
+                    {formatPrice(data.summary.total)} لغو
+                  </div>
+                  <div className="report-card-hint">
+                    {recentCancellations.length > 0
+                      ? `آخرین مورد: ${recentCancellations[0].customer_name}`
+                      : 'لغویی ثبت نشده'}
+                  </div>
+                </div>
+                <span className="report-card-arrow">←</span>
+              </button>
             </div>
-          </section>
-
-          {/* جدول لغوهای اخیر */}
-          <section className="dashboard-section">
-            <h2>📋 لغوهای اخیر</h2>
-            {data.recentCancellations.length === 0 ? (
-              <div className="admin-card">
-                <p className="empty-admin">لغوی ثبت نشده است.</p>
-              </div>
-            ) : (
-              <div className="cancellation-table-wrapper">
-                <table className="cancellation-table">
-                  <thead>
-                    <tr>
-                      <th>#</th>
-                      <th>مشتری</th>
-                      <th>مبلغ</th>
-                      <th>دلیل</th>
-                      <th>لغو کننده</th>
-                      <th>تاریخ</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {data.recentCancellations.map((order) => (
-                      <tr
-                        key={order.id}
-                        className="cancellation-row-clickable"
-                        onClick={() => setSelectedOrder(order)}
-                      >
-                        <td>
-                          <span className="cancellation-order-num">
-                            #{formatPrice(order.order_number)}
-                          </span>
-                        </td>
-                        <td>
-                          <strong>{order.customer_name}</strong>
-                          <small dir="ltr">{order.customer_phone}</small>
-                        </td>
-                        <td className="cancellation-amount">
-                          {formatPrice(order.subtotal)} تومان
-                        </td>
-                        <td>
-                          {order.cancellation_reason_label ? (
-                            <span className="cancellation-reason-badge">
-                              {order.cancellation_reason_label}
-                            </span>
-                          ) : (
-                            <span className="cancellation-no-reason">
-                              بدون دلیل
-                            </span>
-                          )}
-                        </td>
-                        <td>
-                          {order.cancelled_by === 'customer' ? (
-                            <span className="cancellation-by by-customer">
-                              👤 مشتری
-                            </span>
-                          ) : order.cancelled_by === 'admin' ? (
-                            <span className="cancellation-by by-admin">
-                              🛠️ کافه
-                            </span>
-                          ) : (
-                            <span className="cancellation-by">—</span>
-                          )}
-                        </td>
-                        <td className="cancellation-date">
-                          {formatDateTime(order.cancelled_at)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
           </section>
         </>
       )}
 
-      {/* ─── Modal جزئیات سفارش لغو شده ─── */}
+      {/* ─── مودال‌های گزارش ─── */}
+
+      {/* دلایل پرتکرار */}
+      {openModal === 'reasons' && data && (
+        <ReportModal
+          title="🎯 پرتکرارترین دلایل لغو"
+          subtitle="لیست کامل دلایل به ترتیب فراوانی"
+          onClose={() => setOpenModal(null)}
+        >
+          {topReasons.length === 0 ? (
+            <p className="empty-admin">در این بازه لغویی با دلیل ثبت نشده.</p>
+          ) : (
+            <div className="cancellation-reasons-chart">
+              {topReasons.map((reason, idx) => (
+                <div key={reason.reason} className="cancellation-chart-row">
+                  <div className="cancellation-chart-rank">
+                    #{formatPrice(idx + 1)}
+                  </div>
+                  <div className="cancellation-chart-icon">
+                    {reason.icon || '📝'}
+                  </div>
+                  <div className="cancellation-chart-info">
+                    <div className="cancellation-chart-label">
+                      {reason.reason}
+                    </div>
+                    <div className="cancellation-chart-bar-wrapper">
+                      <div
+                        className="cancellation-chart-bar"
+                        style={{ width: `${reason.percentage}%` }}
+                      />
+                    </div>
+                  </div>
+                  <div className="cancellation-chart-stats">
+                    <strong>{formatPrice(reason.count)}</strong>
+                    <small>{reason.percentage.toLocaleString('fa-IR')}٪</small>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </ReportModal>
+      )}
+
+      {/* ۷ روز اخیر */}
+      {openModal === 'daily' && data && (
+        <ReportModal
+          title="📉 لغوها در ۷ روز اخیر"
+          subtitle="روند لغو در هفته گذشته"
+          onClose={() => setOpenModal(null)}
+        >
+          <div className="chart-card">
+            <div className="chart-bars">
+              {dailyCancellations.map((day) => {
+                const height =
+                  maxDailyCount > 0 ? (day.count / maxDailyCount) * 100 : 0
+                const isPeak = day.count === maxDailyCount && day.count > 0
+                return (
+                  <div key={day.date} className="chart-col">
+                    <div className="chart-col-value">
+                      {day.count > 0 ? formatPrice(day.count) : ''}
+                    </div>
+                    <div className="chart-bar-wrapper">
+                      <div
+                        className={`chart-bar ${
+                          isPeak ? 'cancel-peak-bar' : ''
+                        }`}
+                        style={{
+                          height: `${Math.max(height, 2)}%`,
+                          background: isPeak
+                            ? 'linear-gradient(180deg, #d97a6c 0%, #9b3c32 100%)'
+                            : 'linear-gradient(180deg, #e8b0a6 0%, #c97a6c 100%)',
+                        }}
+                      />
+                    </div>
+                    <div className="chart-col-label">{day.label}</div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+          {peakDay && peakDay.count > 0 && (
+            <p className="cancel-chart-hint">
+              💡 پرلغوترین روز:{' '}
+              <strong>{peakDay.label}</strong> —{' '}
+              {formatPrice(peakDay.count)} لغو
+            </p>
+          )}
+        </ReportModal>
+      )}
+
+      {/* ساعتی */}
+      {openModal === 'hourly' && data && (
+        <ReportModal
+          title="🕐 لغوها بر اساس ساعت شبانه‌روز"
+          subtitle="توزیع لغوها در ساعات کاری کافه (۸ تا ۲۳)"
+          onClose={() => setOpenModal(null)}
+        >
+          {byHour.every((h) => h.count === 0) ? (
+            <p className="empty-admin">لغویی با ساعت مشخص ثبت نشده.</p>
+          ) : (
+            <>
+              <div className="chart-card">
+                <div className="chart-bars cancel-wide-chart">
+                  {byHour.map((h) => {
+                    const height =
+                      maxHourCount > 0 ? (h.count / maxHourCount) * 100 : 0
+                    const isPeak = h.count === maxHourCount && h.count > 0
+                    return (
+                      <div key={h.hour} className="chart-col">
+                        <div className="chart-col-value">
+                          {h.count > 0 ? formatPrice(h.count) : ''}
+                        </div>
+                        <div className="chart-bar-wrapper">
+                          <div
+                            className={`chart-bar ${
+                              isPeak ? 'cancel-peak-bar' : ''
+                            }`}
+                            style={{
+                              height: `${Math.max(height, 2)}%`,
+                              background: isPeak
+                                ? 'linear-gradient(180deg, #d97a6c 0%, #9b3c32 100%)'
+                                : 'linear-gradient(180deg, #e8b0a6 0%, #c97a6c 100%)',
+                            }}
+                          />
+                        </div>
+                        <div className="chart-col-label">{h.label}</div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+              {peakHour && peakHour.count > 0 && (
+                <p className="cancel-chart-hint">
+                  💡 ساعت پرلغو: <strong>{peakHour.label}</strong> —{' '}
+                  {formatPrice(peakHour.count)} لغو
+                </p>
+              )}
+            </>
+          )}
+        </ReportModal>
+      )}
+
+      {/* روز هفته */}
+      {openModal === 'weekday' && data && (
+        <ReportModal
+          title="📅 لغوها بر اساس روز هفته"
+          subtitle="توزیع لغوها در روزهای هفته"
+          onClose={() => setOpenModal(null)}
+        >
+          {byWeekday.every((w) => w.count === 0) ? (
+            <p className="empty-admin">لغویی ثبت نشده.</p>
+          ) : (
+            <>
+              <div className="chart-card">
+                <div className="chart-bars cancel-wide-chart">
+                  {byWeekday.map((w) => {
+                    const height =
+                      maxWeekdayCount > 0
+                        ? (w.count / maxWeekdayCount) * 100
+                        : 0
+                    const isPeak = w.count === maxWeekdayCount && w.count > 0
+                    return (
+                      <div key={w.weekday} className="chart-col">
+                        <div className="chart-col-value">
+                          {w.count > 0 ? formatPrice(w.count) : ''}
+                        </div>
+                        <div className="chart-bar-wrapper">
+                          <div
+                            className={`chart-bar ${
+                              isPeak ? 'cancel-peak-bar' : ''
+                            }`}
+                            style={{
+                              height: `${Math.max(height, 2)}%`,
+                              background: isPeak
+                                ? 'linear-gradient(180deg, #d97a6c 0%, #9b3c32 100%)'
+                                : 'linear-gradient(180deg, #e8b0a6 0%, #c97a6c 100%)',
+                            }}
+                          />
+                        </div>
+                        <div className="chart-col-label">{w.label}</div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+              {peakWeekday && peakWeekday.count > 0 && (
+                <p className="cancel-chart-hint">
+                  💡 پرلغوترین روز: <strong>{peakWeekday.label}</strong> —{' '}
+                  {formatPrice(peakWeekday.count)} لغو
+                </p>
+              )}
+            </>
+          )}
+        </ReportModal>
+      )}
+
+      {/* دسته‌بندی */}
+      {openModal === 'category' && data && (
+        <ReportModal
+          title="📂 لغوها بر اساس دسته‌بندی محصولات"
+          subtitle="بر اساس تعداد آیتم‌های لغوشده در هر دسته"
+          onClose={() => setOpenModal(null)}
+        >
+          {byCategory.length === 0 ? (
+            <p className="empty-admin">آیتمی لغو نشده.</p>
+          ) : (
+            <div className="cancellation-reasons-chart">
+              {byCategory.map((cat, idx) => {
+                const barWidth =
+                  maxCategoryCount > 0
+                    ? (cat.count / maxCategoryCount) * 100
+                    : 0
+                return (
+                  <div
+                    key={cat.category_name}
+                    className="cancellation-chart-row"
+                  >
+                    <div className="cancellation-chart-rank">
+                      #{formatPrice(idx + 1)}
+                    </div>
+                    <div className="cancellation-chart-icon">
+                      {cat.category_icon || '📂'}
+                    </div>
+                    <div className="cancellation-chart-info">
+                      <div className="cancellation-chart-label">
+                        {cat.category_name}
+                      </div>
+                      <div className="cancellation-chart-bar-wrapper">
+                        <div
+                          className="cancellation-chart-bar"
+                          style={{ width: `${Math.max(barWidth, 3)}%` }}
+                        />
+                      </div>
+                    </div>
+                    <div className="cancellation-chart-stats">
+                      <strong>{formatPrice(cat.count)}</strong>
+                      <small>{cat.percentage.toLocaleString('fa-IR')}٪</small>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </ReportModal>
+      )}
+
+      {/* لغوهای اخیر */}
+      {openModal === 'recent' && data && (
+        <ReportModal
+          title="📋 لغوهای اخیر"
+          subtitle="برای دیدن جزئیات، روی هر ردیف کلیک کنید"
+          onClose={() => setOpenModal(null)}
+        >
+          {recentCancellations.length === 0 ? (
+            <p className="empty-admin">لغویی ثبت نشده است.</p>
+          ) : (
+            <div className="cancellation-table-wrapper">
+              <table className="cancellation-table">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>مشتری</th>
+                    <th>مبلغ</th>
+                    <th>دلیل</th>
+                    <th>لغو کننده</th>
+                    <th>تاریخ</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {recentCancellations.map((order) => (
+                    <tr
+                      key={order.id}
+                      className="cancellation-row-clickable"
+                      onClick={() => setSelectedOrder(order)}
+                    >
+                      <td>
+                        <span className="cancellation-order-num">
+                          #{formatPrice(order.order_number)}
+                        </span>
+                      </td>
+                      <td>
+                        <strong>{order.customer_name}</strong>
+                        <small dir="ltr">{order.customer_phone}</small>
+                      </td>
+                      <td className="cancellation-amount">
+                        {formatPrice(order.subtotal)} تومان
+                      </td>
+                      <td>
+                        {order.cancellation_reason_label ? (
+                          <span className="cancellation-reason-badge">
+                            {order.cancellation_reason_label}
+                          </span>
+                        ) : (
+                          <span className="cancellation-no-reason">
+                            بدون دلیل
+                          </span>
+                        )}
+                      </td>
+                      <td>
+                        {order.cancelled_by === 'customer' ? (
+                          <span className="cancellation-by by-customer">
+                            👤 مشتری
+                          </span>
+                        ) : order.cancelled_by === 'admin' ? (
+                          <span className="cancellation-by by-admin">
+                            🛠️ کافه
+                          </span>
+                        ) : (
+                          <span className="cancellation-by">—</span>
+                        )}
+                      </td>
+                      <td className="cancellation-date">
+                        {formatDateTime(order.cancelled_at)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </ReportModal>
+      )}
+
+      {/* ─── مودال جزئیات سفارش (nested) ─── */}
       {selectedOrder && (
         <div
-          className="modal-overlay"
+          className="modal-overlay nested-modal"
           onClick={() => setSelectedOrder(null)}
         >
           <div
@@ -382,7 +806,6 @@ export default function CancellationsManager() {
             </div>
 
             <div className="modal-body">
-              {/* اطلاعات لغو */}
               <div className="cancellation-info-box" style={{ marginTop: 0 }}>
                 <div className="cancellation-info-label">
                   {selectedOrder.cancellation_reason_label || 'بدون دلیل مشخص'}
@@ -403,7 +826,6 @@ export default function CancellationsManager() {
                 </div>
               </div>
 
-              {/* اطلاعات مشتری */}
               <div className="info-card" style={{ marginTop: '16px' }}>
                 <h3>👤 اطلاعات مشتری</h3>
                 <div className="info-row">
@@ -428,7 +850,6 @@ export default function CancellationsManager() {
                 )}
               </div>
 
-              {/* اقلام */}
               <div className="info-card" style={{ marginTop: '16px' }}>
                 <h3>🧾 اقلام سفارش</h3>
                 {selectedOrder.items.length === 0 ? (
@@ -511,7 +932,7 @@ export default function CancellationsManager() {
         </div>
       )}
 
-      {/* ─── فاکتور چاپی ─── */}
+      {/* فاکتور چاپی */}
       {mounted &&
         printOrder &&
         createPortal(

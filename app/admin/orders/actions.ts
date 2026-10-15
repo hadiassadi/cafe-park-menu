@@ -2,7 +2,8 @@
 
 import { supabaseServer } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
-
+// اگه این import قبلاً نیست، اضافه کن:
+// import { supabaseServer } from '@/lib/supabase/server'
 // ─────────────────────────────────────────────
 // تغییر وضعیت سفارش (با پشتیبانی از دلایل لغو)
 // ─────────────────────────────────────────────
@@ -121,4 +122,66 @@ export async function countOldOrders(days: number = 30) {
   }
 
   return { count: count ?? 0 }
+}
+// ═══════════════════════════════════════════════════════════
+// Server Actions برای پاکسازی خودکار (Auto Cleanup)
+// ═══════════════════════════════════════════════════════════
+
+export type CleanupStatus = {
+  enabled: boolean
+  days_kept: number
+  job_active: boolean
+  last_run: {
+    status: string
+    return_message: string
+    start_time: string
+    end_time: string
+  } | null
+}
+
+export async function getCleanupStatus(): Promise<{
+  data?: CleanupStatus
+  error?: string
+}> {
+  try {
+    const supabase = await supabaseServer()
+    const { data, error } = await supabase.rpc('get_cleanup_status')
+
+    if (error) {
+      console.error('[getCleanupStatus]', error)
+      return { error: error.message }
+    }
+
+    return { data: data as CleanupStatus }
+  } catch (err: any) {
+    console.error('[getCleanupStatus] unexpected:', err)
+    return { error: err?.message || 'خطای غیرمنتظره' }
+  }
+}
+
+export async function updateCleanupSettings(
+  enabled: boolean,
+  daysKept: number
+): Promise<{ data?: CleanupStatus; error?: string }> {
+  try {
+    if (daysKept < 7 || daysKept > 365) {
+      return { error: 'بازه نگهداری باید بین ۷ تا ۳۶۵ روز باشه' }
+    }
+
+    const supabase = await supabaseServer()
+    const { data, error } = await supabase.rpc('update_cleanup_settings', {
+      p_enabled: enabled,
+      p_days: daysKept,
+    })
+
+    if (error) {
+      console.error('[updateCleanupSettings]', error)
+      return { error: error.message }
+    }
+
+    return { data: data as CleanupStatus }
+  } catch (err: any) {
+    console.error('[updateCleanupSettings] unexpected:', err)
+    return { error: err?.message || 'خطای غیرمنتظره' }
+  }
 }

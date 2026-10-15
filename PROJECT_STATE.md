@@ -4,7 +4,7 @@
 > بخش «۵. کارهای باقی‌مانده»، «۸. لاگ تغییرات» و «بالای فایل» رو آپدیت کن.
 > در چت جدید، فقط همین فایل را برای AI پیوست کن.
 
-**آخرین آپدیت:** ۱۴۰۵/۰۷/۲۳ (2026-10-16)
+**آخرین آپدیت:** ۱۴۰۵/۰۷/۲۴ (2026-10-17)
 
 ---
 
@@ -27,7 +27,7 @@ Cofe-Park/
 │   ├── page.tsx                    ← صفحه اصلی (SSR + JSON-LD)
 │   ├── MenuClient.tsx              ← کلاینت منوی مشتری
 │   ├── layout.tsx                  ← Root Layout (فونت + متادیتای SEO)
-│   ├── globals.css                 ← ✅ تنها فایل استایل پروژه (۶۹ بخش)
+│   ├── globals.css                 ← ✅ تنها فایل استایل پروژه (۷۱ بخش)
 │   ├── manifest.ts                 ← PWA Manifest
 │   ├── robots.ts                   ← robots.txt
 │   ├── sitemap.ts                  ← sitemap.xml
@@ -45,7 +45,7 @@ Cofe-Park/
 │   │   ├── cancellation-reasons/
 │   │   │   └── route.ts            ← ✅ لیست دلایل لغو فعال
 │   │   ├── cancellations/
-│   │   │   └── stats/route.ts      ← ✅ آمار لغوها
+│   │   │   └── stats/route.ts      ← ✅ آمار لغوها (شامل byHour/byWeekday/byCategory)
 │   │   └── export/
 │   │       └── orders/route.ts     ← خروجی CSV سفارش‌ها
 │   ├── components/
@@ -70,7 +70,7 @@ Cofe-Park/
 │       │   ├── page.tsx
 │       │   ├── CancellationReasonsManager.tsx
 │       │   └── actions.ts
-│       ├── cancellations/          ← ✅ آمار و گزارش لغوها
+│       ├── cancellations/          ← ✅ آمار و گزارش لغوها (کارت‌های کلیک‌پذیر + مودال)
 │       │   ├── page.tsx
 │       │   └── CancellationsManager.tsx
 │       ├── components/
@@ -84,7 +84,7 @@ Cofe-Park/
 │   ├── cart-context.tsx            ← Context سبد خرید
 │   ├── menu.ts                     ← getMenuData() + getSettings()
 │   ├── site.ts                     ← SITE_URL
-│   ├── stats.ts                    ← آمار فروش + کوپن + ✅ لغوها + دلایل
+│   ├── stats.ts                    ← آمار فروش + کوپن + ✅ لغوها (شامل byHour/byWeekday/byCategory) + دلایل
 │   ├── use-order-notifications.ts  ← هوک اعلان سفارش (Polling)
 │   ├── use-document-title.ts       ← هوک تایتل + favicon داینامیک
 │   └── supabase/
@@ -188,6 +188,10 @@ Cofe-Park/
 
 **آمار لغوها:** `.cancellation-summary-grid` / `.cancellation-summary-card` / `.cancellation-summary-icon` / `.cancellation-reasons-chart` / `.cancellation-chart-row` / `.cancellation-chart-bar` / `.cancellation-table` / `.cancellation-reason-badge` / `.cancellation-by.by-customer` / `.cancellation-by.by-admin` / `.cancellation-row-clickable`
 
+**آمار پیشرفته لغو:** `.cancel-wide-chart` / `.cancel-peak-bar` / `.cancel-chart-hint`
+
+**کارت‌های گزارش:** `.report-cards-grid` / `.report-card` / `.report-card-icon` / `.report-card-body` / `.report-card-title` / `.report-card-value` / `.report-card-hint` / `.report-card-arrow`
+
 **مشتریان (CRM):** `.customers-summary-grid` / `.customers-summary-card` / `.customers-grid` / `.customer-card` / `.customer-avatar` / `.customer-badge` / `.customer-action-btn` / `.preset-tag-btn` / `.custom-tag` / `.customer-notes-input`
 
 ### شماره‌گذاری بخش‌های `globals.css`:
@@ -233,6 +237,8 @@ Cofe-Park/
 | 67 | CANCELLATION INFO (نمایش دلیل لغو) |
 | 68 | CANCELLATION STATS (آمار لغوها) |
 | 69 | CANCELLATION ROW CLICKABLE + PRINT |
+| 70 | CANCELLATION STATS - ADVANCED (آمار پیشرفته لغوها) |
+| 71 | REPORT CARDS (کارت‌های گزارش تفصیلی) |
 
 ---
 
@@ -270,6 +276,8 @@ Cofe-Park/
 - [x] **CRM (مشتریان)** — گرید مشتریان + آمار + تگ + یادداشت + تماس/واتساپ
 - [x] **مدیریت دلایل لغو** — CRUD با هدف (مشتری/ادمین/هر دو) + آیکون + ترتیب
 - [x] **آمار و گزارش لغوها** — کارت‌های خلاصه + نمودار دلایل + نمودار ۷ روزه + جدول لغوهای اخیر + مودال جزئیات + پرینت فاکتور لغو
+- [x] **آمار پیشرفته لغوها** — نمودار ساعت شبانه‌روز + روز هفته + دسته‌بندی محصولات (با هایلایت پرلغوترین)
+- [x] **بازطراحی صفحه آمار لغوها** — خلاصه + کارت‌های گزارش کلیک‌پذیر + مودال جزئیات
 - [x] تنظیمات کامل (هدر، پس‌زمینه، اطلاعات تماس، لوگو)
 - [x] **دارک مود پنل ادمین** — با ذخیره در localStorage + بدون flash
 - [x] **اعلان سفارش جدید** — Badge + صدا + Toast + Browser Notification + Polling هر ۱۰ ثانیه
@@ -306,6 +314,8 @@ Cofe-Park/
 - [x] **جایگزینی `middleware.ts` با `proxy.ts`** (تغییر convention در Next.js 16)
 - [x] رفع باگ تایپی `/* } */` در CSS (باعث خراب شدن بخش CRM شده بود)
 - [x] رفع خطای `updated_at` در جدول `customers`
+- [x] **رفع خطای `Expression expected` در `stats.ts`** (به‌خاطر return تکراری)
+- [x] **رفع خطای `Cannot read properties of undefined` در `CancellationsManager`** — استفاده از fallback برای دیتای قدیمی + `cache: 'no-store'` در fetch
 
 ---
 
@@ -325,7 +335,6 @@ Cofe-Park/
 - [ ] 🟢 **اتصال به درگاه پرداخت** (زرین‌پال / آیدی‌پی)
 - [ ] 🟢 **اتصال به نرم‌افزار حسابداری پارسیان** (با واسط محلی)
 - [ ] 🟢 **سیستم پیامک (SMS)** برای OTP و اطلاع‌رسانی لغو
-- [ ] 🟢 **آمار پیشرفته لغوها** (درصد لغو بر اساس ساعت/روز/دسته)
 
 ---
 
@@ -344,6 +353,7 @@ Cofe-Park/
 11. **در کوئری‌های Supabase، همیشه ستون‌های جدید را به `select` اضافه کن.**
 12. **برای اعلان‌ها، از Polling استفاده شود (نه Realtime)** — به دلیل تحریم ایران.
 13. **متن‌های کامنت CSS رو کپی نکن** — فقط کد ناب رو در `globals.css` بذار.
+14. **در fetch های API از `cache: 'no-store'` استفاده کن** — برای جلوگیری از کش شدن دیتای قدیمی.
 
 ---
 
@@ -361,9 +371,10 @@ Cofe-Park/
 2. هر کلاس جدیدی که در JSX استفاده می‌شود، باید در globals.css تعریف شود.
 3. پالت رنگ از متغیرهای CSS می‌آید، نه رنگ hex مستقیم.
 4. مودال‌ها از کلاس‌های modal-overlay + modal-container استفاده کنند.
-5. بخش‌های globals.css شماره‌گذاری شده‌اند (۱ تا ۶۹).
+5. بخش‌های globals.css شماره‌گذاری شده‌اند (۱ تا ۷۱).
 6. برای اعلان‌ها از Polling استفاده شود، نه Realtime (تحریم ایران).
 7. محافظت ادمین با proxy.ts (نه middleware.ts در Next.js 16).
+8. در fetch های API از cache: 'no-store' استفاده شود.
 
 📁 ابزارهای موجود در پروژه:
 - dev.bat → منوی همه‌کاره توسعه (۱۶ گزینه)
@@ -410,6 +421,10 @@ Cofe-Park/
 | 1405/07/22 | **افزودن CRM (مشتریان)** — گرید + آمار + تگ + یادداشت (بخش ۶۴) |
 | 1405/07/23 | **افزودن سیستم کامل لغو سفارش** — دلایل قابل مدیریت + UI مشتری/ادمین + نمایش دلیل + آمار + فاکتور لغو (بخش‌های ۶۵-۶۹) |
 | 1405/07/23 | **افزودن مودال جزئیات سفارش لغو شده** با پرینت فاکتور اختصاصی |
+| 1405/07/24 | **افزودن آمار پیشرفته لغوها** — نمودار ساعت شبانه‌روز + روز هفته + دسته‌بندی محصولات (بخش ۷۰) |
+| 1405/07/24 | **بازطراحی صفحه آمار لغوها** — کارت‌های گزارش کلیک‌پذیر + مودال‌های جزئیات (بخش ۷۱) |
+| 1405/07/24 | **رفع خطای `Expression expected` در `stats.ts`** (return تکراری) |
+| 1405/07/24 | **رفع خطای `Cannot read properties of undefined` در `CancellationsManager`** (fallback + `cache: 'no-store'`) |
 
 ---
 
@@ -554,7 +569,7 @@ create policy "Enable realtime for orders"
 | **کامپوننت چاپ** | `app/admin/components/PrintInvoice.tsx` | فاکتور قابل استفاده مجدد |
 | **گزارش کوپن** | `app/admin/coupons/reports/CouponReports.tsx` | صفحه گزارش با نمودار و مودال سفارش‌ها |
 | **دلایل لغو** | `app/admin/cancellation-reasons/` | مدیریت دلایل لغو |
-| **آمار لغو** | `app/admin/cancellations/` | گزارش و تحلیل لغوها |
+| **آمار لغو** | `app/admin/cancellations/` | گزارش و تحلیل لغوها (شامل آمار پیشرفته) |
 | **محافظت ادمین** | `proxy.ts` | ریدایرکت سرور-side برای /admin |
 
 ---
@@ -666,3 +681,10 @@ backups-server/
 28. **لغو با تاریخچه:** هر لغو، تاریخ (`cancelled_at`) و لغوکننده (`cancelled_by`) و دلیل رو ثبت می‌کنه.
 29. **CSV با فرمول `=""`:** برای جلوگیری از Scientific notation در Excel (شماره تلفن).
 30. **پشتیبانی Excel فارسی:** BOM (`\uFEFF`) در ابتدای CSV.
+31. **آمار لغو با نگاشت نام محصول به دسته:** چون در `orders.items` فقط `product_name` ذخیره می‌شه، برای دسته‌بندی از جدول `products` نگاشت می‌گیریم. اگه اسم محصول عوض بشه، لغوهای قبلی ممکنه نگاشت نشن.
+32. **هایلایت ستون پرلغو:** با کلاس `.cancel-peak-bar` (box-shadow قرمز) برای دیده شدن سریع‌تر.
+33. **نمودار عریض با اسکرول افقی:** `.cancel-wide-chart` با `min-width: 620px` تا در موبایل به‌هم نریزه.
+34. **صفحه گزارش با کارت‌های کلیک‌پذیر:** به جای سکشن‌های طولانی، کارت‌های خلاصه + مودال برای جزئیات (سرعت بالاتر، DOM سبک‌تر).
+35. **مودال تودرتو با z-index بالاتر:** `.nested-modal` برای باز شدن جزئیات سفارش روی گزارش.
+36. **فچ API با `cache: 'no-store'`:** جلوگیری از کش شدن دیتای قدیمی در مرورگر.
+37. **Fallback در کامپوننت‌های Client:** استفاده از `data?.byHour ?? []` برای جلوگیری از کرش در صورت قدیمی بودن دیتای API.

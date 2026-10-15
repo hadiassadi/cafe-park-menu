@@ -10726,3 +10726,506 @@ body {
     padding: 10px 8px;
   }
 }
+/* ========================================
+   70. CANCELLATION STATS - ADVANCED (آمار پیشرفته لغوها)
+   ======================================== */
+
+/* ─── نمودار عریض (ساعت / روز هفته) ─── */
+.cancel-wide-chart {
+  min-width: 620px;
+}
+
+/* ─── هایلایت ستون پرلغو ─── */
+.cancel-peak-bar {
+  box-shadow: 0 0 0 2px #9b3c32, 0 0 12px rgba(155, 60, 50, 0.35);
+}
+
+/* ─── راهنمای زیر نمودار ─── */
+.cancel-chart-hint {
+  margin: 14px 0 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #fdf9f4;
+  border: 1px dashed #f2d5c5;
+  color: #625b51;
+  font-size: 12px;
+  line-height: 1.9;
+  text-align: center;
+}
+
+.cancel-chart-hint strong {
+  color: #9b3c32;
+  font-weight: 800;
+}
+
+/* ─── Dark Mode ─── */
+.admin-shell.dark-mode .cancel-chart-hint {
+  background: var(--admin-surface-2);
+  border-color: var(--admin-border);
+  color: var(--admin-text-muted);
+}
+
+.admin-shell.dark-mode .cancel-chart-hint strong {
+  color: #d97a6c;
+}
+
+.admin-shell.dark-mode .cancel-peak-bar {
+  box-shadow: 0 0 0 2px #d97a6c, 0 0 14px rgba(217, 122, 108, 0.5);
+}
+
+/* ─── موبایل: چارت کوچک‌تر با اسکرول افقی ─── */
+@media (max-width: 650px) {
+  .cancel-wide-chart {
+    min-width: 560px;
+  }
+
+  .cancel-chart-hint {
+    font-size: 11px;
+    padding: 8px 10px;
+  }
+}
+/* ========================================
+   71. REPORT CARDS (کارت‌های گزارش تفصیلی)
+   ======================================== */
+
+.report-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+}
+
+.report-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px;
+  background: #fffdf9;
+  border: 1px solid #e3ddd2;
+  border-radius: 14px;
+  text-align: right;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.report-card:hover {
+  border-color: #6b4f3a;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(107, 79, 58, 0.08);
+}
+
+.report-card:active {
+  transform: translateY(0);
+}
+
+.report-card:focus-visible {
+  outline: 2px solid #9a6b3f;
+  outline-offset: 2px;
+}
+
+.report-card-icon {
+  width: 48px;
+  height: 48px;
+  flex: 0 0 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  font-size: 22px;
+}
+
+.report-card-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.report-card-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #766f64;
+  margin-bottom: 4px;
+}
+
+.report-card-value {
+  font-size: 15px;
+  font-weight: 800;
+  color: #29251f;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.report-card-hint {
+  margin-top: 4px;
+  font-size: 11px;
+  color: #766f64;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.report-card-arrow {
+  font-size: 18px;
+  color: #b8ad9c;
+  flex-shrink: 0;
+  transition: transform 0.2s ease, color 0.2s ease;
+}
+
+.report-card:hover .report-card-arrow {
+  transform: translateX(-4px);
+  color: #6b4f3a;
+}
+
+/* ─── بدنه مودال گزارش: اسکرول افقی برای چارت‌های عریض ─── */
+.modal-body.report-modal-body {
+  overflow: auto;
+}
+
+/* ─── مودال تودرتو (جزئیات سفارش روی گزارش) ─── */
+.modal-overlay.nested-modal {
+  z-index: 10000;
+}
+
+/* ─── Dark Mode ─── */
+.admin-shell.dark-mode .report-card {
+  background: var(--admin-surface);
+  border-color: var(--admin-border);
+}
+
+.admin-shell.dark-mode .report-card:hover {
+  border-color: var(--admin-primary);
+  box-shadow: 0 8px 20px rgba(168, 130, 100, 0.12);
+}
+
+.admin-shell.dark-mode .report-card-title,
+.admin-shell.dark-mode .report-card-hint {
+  color: var(--admin-text-muted);
+}
+
+.admin-shell.dark-mode .report-card-value {
+  color: var(--admin-text);
+}
+
+.admin-shell.dark-mode .report-card-arrow {
+  color: #5a5247;
+}
+
+.admin-shell.dark-mode .report-card:hover .report-card-arrow {
+  color: var(--admin-primary);
+}
+
+/* ─── موبایل ─── */
+@media (max-width: 650px) {
+  .report-cards-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .report-card {
+    padding: 14px;
+    gap: 12px;
+  }
+
+  .report-card-icon {
+    width: 42px;
+    height: 42px;
+    flex-basis: 42px;
+    font-size: 20px;
+  }
+
+  .report-card-value {
+    font-size: 14px;
+  }
+}
+/* ========================================
+   72. AUTO CLEANUP (پاکسازی خودکار Cron)
+   ======================================== */
+
+.cleanup-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* ─── کارت پاکسازی خودکار ─── */
+.auto-cleanup-card {
+  border-color: #c8dfcb;
+  background: linear-gradient(180deg, #fbfdfb 0%, #fffdf9 100%);
+}
+
+.auto-icon {
+  background: #e5f0e6 !important;
+}
+
+.auto-status-badge {
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.auto-status-badge.active {
+  background: #e5f0e6;
+  color: #2d5d3e;
+}
+
+.auto-status-badge.inactive {
+  background: #eee9e4;
+  color: #766f64;
+}
+
+/* ─── ردیف toggle ─── */
+.auto-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  background: #fbf9f5;
+  border: 1px solid #ebe6de;
+  border-radius: 10px;
+}
+
+.auto-toggle-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.auto-toggle-info strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 800;
+  color: #29251f;
+  margin-bottom: 3px;
+}
+
+.auto-toggle-info small {
+  display: block;
+  font-size: 11px;
+  color: #766f64;
+  line-height: 1.7;
+}
+
+/* ─── سوییچ ─── */
+.auto-switch {
+  flex-shrink: 0;
+  width: 48px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  border-radius: 999px;
+}
+
+.auto-switch:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.auto-switch-track {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 999px;
+  background: #d8d0c4;
+  transition: background 0.2s ease;
+}
+
+.auto-switch.on .auto-switch-track {
+  background: #2d5d3e;
+}
+
+.auto-switch-thumb {
+  position: absolute;
+  top: 3px;
+  inset-inline-start: 3px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  transition: inset-inline-start 0.2s ease;
+}
+
+.auto-switch.on .auto-switch-thumb {
+  inset-inline-start: 23px;
+}
+
+.auto-switch:focus-visible .auto-switch-track {
+  outline: 2px solid #9a6b3f;
+  outline-offset: 2px;
+}
+
+/* ─── ردیف انتخاب روز ─── */
+.auto-days-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.auto-days-row .cleanup-label {
+  flex-shrink: 0;
+  margin: 0;
+}
+
+.auto-days-row .cleanup-select {
+  flex: 1;
+}
+
+/* ─── آخرین اجرا ─── */
+.auto-last-run {
+  padding: 12px 14px;
+  background: #fbf9f5;
+  border: 1px solid #ebe6de;
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.auto-last-run-title {
+  font-size: 12px;
+  font-weight: 800;
+  color: #6b4f3a;
+  padding-bottom: 8px;
+  border-bottom: 1px dashed #d8d0c4;
+}
+
+.auto-last-run-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  font-size: 12px;
+  color: #625b51;
+}
+
+.auto-last-run-row span {
+  color: #766f64;
+  font-weight: 500;
+}
+
+.auto-last-run-row strong {
+  color: #29251f;
+  font-weight: 700;
+}
+
+.auto-last-run-row strong.run-success {
+  color: #2d5d3e;
+}
+
+.auto-last-run-row strong.run-failed {
+  color: #9b3c32;
+}
+
+.auto-last-run-message strong {
+  font-family: 'Courier New', monospace;
+  font-size: 10.5px;
+  direction: ltr;
+  text-align: left;
+  word-break: break-all;
+  background: #fffdf9;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid #ebe6de;
+}
+
+.auto-last-run-empty {
+  font-size: 12px;
+  color: #9a9287;
+  font-style: italic;
+  text-align: center;
+  padding: 8px;
+}
+
+/* ─── Dark Mode ─── */
+.admin-shell.dark-mode .auto-cleanup-card {
+  background: var(--admin-surface);
+  border-color: rgba(71, 112, 82, 0.4);
+}
+
+.admin-shell.dark-mode .auto-status-badge.active {
+  background: rgba(71, 112, 82, 0.25);
+  color: #8cc79a;
+}
+
+.admin-shell.dark-mode .auto-status-badge.inactive {
+  background: var(--admin-surface-2);
+  color: var(--admin-text-muted);
+}
+
+.admin-shell.dark-mode .auto-toggle-row,
+.admin-shell.dark-mode .auto-last-run {
+  background: var(--admin-surface-2);
+  border-color: var(--admin-border);
+}
+
+.admin-shell.dark-mode .auto-toggle-info strong {
+  color: var(--admin-text);
+}
+
+.admin-shell.dark-mode .auto-toggle-info small {
+  color: var(--admin-text-muted);
+}
+
+.admin-shell.dark-mode .auto-switch-track {
+  background: var(--admin-border);
+}
+
+.admin-shell.dark-mode .auto-switch.on .auto-switch-track {
+  background: #8cc79a;
+}
+
+.admin-shell.dark-mode .auto-last-run-title {
+  color: var(--admin-primary);
+  border-bottom-color: var(--admin-border);
+}
+
+.admin-shell.dark-mode .auto-last-run-row {
+  color: var(--admin-text-muted);
+}
+
+.admin-shell.dark-mode .auto-last-run-row strong {
+  color: var(--admin-text);
+}
+
+.admin-shell.dark-mode .auto-last-run-row strong.run-success {
+  color: #8cc79a;
+}
+
+.admin-shell.dark-mode .auto-last-run-row strong.run-failed {
+  color: #d97a6c;
+}
+
+.admin-shell.dark-mode .auto-last-run-message strong {
+  background: var(--admin-surface);
+  border-color: var(--admin-border);
+}
+
+/* ─── موبایل ─── */
+@media (max-width: 500px) {
+  .auto-toggle-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .auto-days-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .auto-last-run-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+
+  .auto-last-run-message strong {
+    width: 100%;
+  }
+}
