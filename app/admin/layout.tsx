@@ -5,7 +5,6 @@ import { usePathname, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabaseBrowser } from '@/lib/supabase/client'
 import AdminThemeToggle from './components/AdminThemeToggle'
-import AdminMobileThemeToggle from './components/AdminMobileThemeToggle'
 import NewOrderAlert from './components/NewOrderAlert'
 import { useOrderNotifications } from '@/lib/use-order-notifications'
 import { useDocumentTitle } from '@/lib/use-document-title'
@@ -18,6 +17,7 @@ export default function AdminLayout({
   const pathname = usePathname()
   const router = useRouter()
   const [checking, setChecking] = useState(true)
+  const [drawerOpen, setDrawerOpen] = useState(false)
   const isLoginPage = pathname === '/admin/login'
 
   const {
@@ -28,6 +28,33 @@ export default function AdminLayout({
     dismissAll,
   } = useOrderNotifications(!isLoginPage)
   useDocumentTitle(pendingCount)
+
+  // ✅ بستن drawer در تغییر مسیر
+  useEffect(() => {
+    setDrawerOpen(false)
+  }, [pathname])
+
+  // ✅ بستن drawer با ESC
+  useEffect(() => {
+    if (!drawerOpen) return
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setDrawerOpen(false)
+    }
+    window.addEventListener('keydown', handleKey)
+    return () => window.removeEventListener('keydown', handleKey)
+  }, [drawerOpen])
+
+  // ✅ قفل اسکرول body وقتی drawer بازه
+  useEffect(() => {
+    if (drawerOpen) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+    }
+    return () => {
+      document.body.style.overflow = ''
+    }
+  }, [drawerOpen])
 
   useEffect(() => {
     try {
@@ -105,6 +132,27 @@ export default function AdminLayout({
 
   return (
     <div className="admin-shell">
+      {/* ═══════════ هدر موبایل (فقط < 768px) ═══════════ */}
+      <header className="admin-mobile-header">
+        <button
+          type="button"
+          className="admin-mobile-menu-btn"
+          onClick={() => setDrawerOpen(true)}
+          aria-label="باز کردن منو"
+        >
+          <span></span>
+          <span></span>
+          <span></span>
+        </button>
+        <div className="admin-mobile-logo">☕ کافه پارک</div>
+        {pendingCount > 0 && (
+          <span className="admin-mobile-header-badge">
+            {pendingCount.toLocaleString('fa-IR')}
+          </span>
+        )}
+      </header>
+
+      {/* ═══════════ سایدبار دسکتاپ (فقط ≥ 768px) ═══════════ */}
       <aside className="admin-sidebar">
         <div className="admin-sidebar-header">
           <div className="admin-logo">☕ کافه پارک</div>
@@ -158,39 +206,83 @@ export default function AdminLayout({
         </div>
       </aside>
 
+      {/* ═══════════ محتوای اصلی ═══════════ */}
       <main className="admin-main">{children}</main>
 
-      <nav className="admin-mobile-nav">
-        {menuItems.map((item) => {
-          const isOrders = item.href === '/admin/orders'
-          const hasBadge = isOrders && pendingCount > 0
+      {/* ═══════════ Drawer موبایل ═══════════ */}
+      {drawerOpen && (
+        <>
+          <div
+            className="admin-drawer-overlay"
+            onClick={() => setDrawerOpen(false)}
+            aria-hidden="true"
+          />
+          <aside className="admin-drawer" role="navigation">
+            <div className="admin-drawer-header">
+              <div>
+                <div className="admin-drawer-logo">☕ کافه پارک</div>
+                <div className="admin-drawer-logo-sub">پنل مدیریت</div>
+              </div>
+              <button
+                type="button"
+                className="admin-drawer-close"
+                onClick={() => setDrawerOpen(false)}
+                aria-label="بستن منو"
+              >
+                ✕
+              </button>
+            </div>
 
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`admin-mobile-item ${
-                isActive(item.href) ? 'active' : ''
-              }`}
-            >
-              <span className="admin-mobile-icon-wrapper">
-                {item.icon}
-                {hasBadge && (
-                  <span
-                    className={`admin-mobile-badge ${flash ? 'flash' : ''}`}
+            <nav className="admin-drawer-nav">
+              {menuItems.map((item) => {
+                const isOrders = item.href === '/admin/orders'
+                const hasBadge = isOrders && pendingCount > 0
+
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={`admin-drawer-item ${
+                      isActive(item.href) ? 'active' : ''
+                    }`}
+                    onClick={() => setDrawerOpen(false)}
                   >
-                    {pendingCount.toLocaleString('fa-IR')}
-                  </span>
-                )}
-              </span>
-              <small>{item.label}</small>
-            </Link>
-          )
-        })}
-      </nav>
+                    <span className="admin-drawer-icon">{item.icon}</span>
+                    <span className="admin-drawer-label">{item.label}</span>
+                    {hasBadge && (
+                      <span className="admin-drawer-badge">
+                        {pendingCount.toLocaleString('fa-IR')}
+                      </span>
+                    )}
+                  </Link>
+                )
+              })}
+            </nav>
 
-      {/* ✅ دکمه شناور حالت شبانه برای موبایل */}
-      <AdminMobileThemeToggle />
+            <div className="admin-drawer-footer">
+              <Link
+                href="/"
+                target="_blank"
+                className="admin-drawer-item"
+                onClick={() => setDrawerOpen(false)}
+              >
+                <span className="admin-drawer-icon">🌐</span>
+                <span className="admin-drawer-label">مشاهده منو</span>
+              </Link>
+
+              <AdminThemeToggle />
+
+              <button
+                onClick={handleLogout}
+                className="admin-drawer-logout"
+              >
+                <span className="admin-drawer-icon">🚪</span>
+                <span className="admin-drawer-label">خروج</span>
+              </button>
+            </div>
+          </aside>
+        </>
+      )}
 
       {/* ✅ هشدار سفارش‌های جدید */}
       <NewOrderAlert

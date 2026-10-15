@@ -11922,3 +11922,400 @@ body {
     box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
   }
 }
+/* ========================================
+   76. ADMIN MOBILE HEADER + DRAWER
+   (هدر موبایل + drawer سه‌خطی)
+   ======================================== */
+
+/* ─── پیش‌فرض: مخفی روی دسکتاپ ─── */
+.admin-mobile-header,
+.admin-drawer-overlay,
+.admin-drawer {
+  display: none;
+}
+
+/* ═══════════════════════════════════════
+   موبایل < 768px
+   ═══════════════════════════════════════ */
+@media (max-width: 768px) {
+  /* ─── هدر موبایل ─── */
+  .admin-mobile-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    position: sticky;
+    top: 0;
+    z-index: 90;
+    height: 56px;
+    padding: 0 14px;
+    background: #fffdf9;
+    border-bottom: 1px solid #e3ddd2;
+    box-shadow: 0 2px 8px rgba(41, 37, 31, 0.06);
+  }
+
+  .admin-mobile-logo {
+    flex: 1;
+    font-size: 16px;
+    font-weight: 800;
+    color: #6b4f3a;
+    text-align: center;
+    padding-inline-end: 32px; /* تعادل با دکمه */
+  }
+
+  /* ─── دکمه سه‌خط ─── */
+  .admin-mobile-menu-btn {
+    width: 40px;
+    height: 40px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    padding: 0;
+    border: 0;
+    border-radius: 10px;
+    background: transparent;
+    cursor: pointer;
+    transition: background 0.15s ease;
+    flex-shrink: 0;
+  }
+
+  .admin-mobile-menu-btn:active {
+    background: #f5f0e9;
+  }
+
+  .admin-mobile-menu-btn span {
+    display: block;
+    width: 22px;
+    height: 2px;
+    background: #29251f;
+    border-radius: 2px;
+    transition: all 0.15s ease;
+  }
+
+  .admin-mobile-menu-btn:focus-visible {
+    outline: 2px solid #9a6b3f;
+    outline-offset: 2px;
+  }
+
+  /* ─── بج روی هدر ─── */
+  .admin-mobile-header-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 24px;
+    height: 24px;
+    padding: 0 7px;
+    border-radius: 999px;
+    background: #dc2626;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 800;
+    box-shadow: 0 2px 6px rgba(220, 38, 38, 0.35);
+    flex-shrink: 0;
+  }
+
+  /* ─── هماهنگی: پدینگ main کم‌تر (چون bottom nav حذف شده) ─── */
+  .admin-shell {
+    padding-bottom: 0;
+  }
+
+  .admin-main {
+    padding-bottom: 24px;
+  }
+
+  /* ─── مخفی کردن bottom nav قدیمی ─── */
+  .admin-mobile-nav {
+    display: none !important;
+  }
+
+  /* ─── Drawer overlay ─── */
+  .admin-drawer-overlay {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 199;
+    background: rgba(41, 37, 31, 0.5);
+    -webkit-backdrop-filter: blur(3px);
+    backdrop-filter: blur(3px);
+    animation: drawerFadeIn 0.2s ease;
+  }
+
+  @keyframes drawerFadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  /* ─── Drawer ─── */
+  .admin-drawer {
+    display: flex;
+    flex-direction: column;
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    right: 0;
+    z-index: 200;
+    width: 300px;
+    max-width: 85vw;
+    background: #fffdf9;
+    box-shadow: -8px 0 32px rgba(41, 37, 31, 0.18);
+    animation: drawerSlideIn 0.28s cubic-bezier(0.32, 0.72, 0, 1);
+    overflow-y: auto;
+  }
+
+  @keyframes drawerSlideIn {
+    from { transform: translateX(100%); }
+    to { transform: translateX(0); }
+  }
+
+  /* ─── هدر drawer ─── */
+  .admin-drawer-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 16px 18px;
+    border-bottom: 1px solid #e3ddd2;
+    flex-shrink: 0;
+  }
+
+  .admin-drawer-logo {
+    font-size: 17px;
+    font-weight: 800;
+    color: #6b4f3a;
+  }
+
+  .admin-drawer-logo-sub {
+    font-size: 11px;
+    color: #766f64;
+    margin-top: 3px;
+  }
+
+  .admin-drawer-close {
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid #e3ddd2;
+    border-radius: 10px;
+    background: #fffdf9;
+    color: #766f64;
+    font-size: 14px;
+    font-family: inherit;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    flex-shrink: 0;
+  }
+
+  .admin-drawer-close:active {
+    background: #f5f0e9;
+  }
+
+  /* ─── ناوبری drawer ─── */
+  .admin-drawer-nav {
+    flex: 1;
+    padding: 12px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    overflow-y: auto;
+  }
+
+  .admin-drawer-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    border-radius: 10px;
+    color: #4a443d;
+    font-size: 14px;
+    font-weight: 600;
+    text-decoration: none;
+    transition: all 0.15s ease;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+    width: 100%;
+    text-align: right;
+    font-family: inherit;
+  }
+
+  .admin-drawer-item:active {
+    background: #f5f0e9;
+  }
+
+  .admin-drawer-item.active {
+    background: #6b4f3a;
+    color: #ffffff;
+  }
+
+  .admin-drawer-icon {
+    font-size: 18px;
+    flex-shrink: 0;
+    width: 24px;
+    text-align: center;
+  }
+
+  .admin-drawer-label {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .admin-drawer-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 22px;
+    height: 22px;
+    padding: 0 7px;
+    border-radius: 999px;
+    background: #dc2626;
+    color: #fff;
+    font-size: 10px;
+    font-weight: 800;
+    flex-shrink: 0;
+  }
+
+  .admin-drawer-item.active .admin-drawer-badge {
+    background: rgba(255, 255, 255, 0.25);
+  }
+
+  /* ─── فوتر drawer ─── */
+  .admin-drawer-footer {
+    padding: 12px 10px calc(12px + env(safe-area-inset-bottom));
+    border-top: 1px solid #e3ddd2;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex-shrink: 0;
+  }
+
+  .admin-drawer-footer .admin-logout-btn,
+  .admin-drawer-logout {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    border-radius: 10px;
+    color: #9b3c32;
+    font-size: 14px;
+    font-weight: 600;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+    width: 100%;
+    text-align: right;
+    font-family: inherit;
+    transition: background 0.15s ease;
+  }
+
+  .admin-drawer-footer .admin-logout-btn:active,
+  .admin-drawer-logout:active {
+    background: #fde8e6;
+  }
+
+  /* ─── مخفی کردن FAB قبلی ─── */
+  .admin-mobile-theme-toggle {
+    display: none !important;
+  }
+
+  /* ─── دکمه تم داخل drawer ─── */
+  .admin-drawer-footer .admin-theme-toggle,
+  .admin-drawer-footer > button:not(.admin-drawer-logout) {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    border-radius: 10px;
+    color: #4a443d;
+    font-size: 14px;
+    font-weight: 600;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+    width: 100%;
+    text-align: right;
+    font-family: inherit;
+  }
+}
+
+/* ═══════════════════════════════════════
+   Dark Mode
+   ═══════════════════════════════════════ */
+.admin-shell.dark-mode .admin-mobile-header {
+  background: var(--admin-surface);
+  border-bottom-color: var(--admin-border);
+}
+
+.admin-shell.dark-mode .admin-mobile-menu-btn span {
+  background: var(--admin-text);
+}
+
+.admin-shell.dark-mode .admin-mobile-menu-btn:active {
+  background: var(--admin-hover);
+}
+
+.admin-shell.dark-mode .admin-mobile-logo {
+  color: var(--admin-primary);
+}
+
+.admin-shell.dark-mode .admin-drawer {
+  background: var(--admin-surface);
+}
+
+.admin-shell.dark-mode .admin-drawer-header {
+  border-bottom-color: var(--admin-border);
+}
+
+.admin-shell.dark-mode .admin-drawer-logo {
+  color: var(--admin-primary);
+}
+
+.admin-shell.dark-mode .admin-drawer-logo-sub {
+  color: var(--admin-text-muted);
+}
+
+.admin-shell.dark-mode .admin-drawer-close {
+  background: var(--admin-surface-2);
+  border-color: var(--admin-border);
+  color: var(--admin-text-muted);
+}
+
+.admin-shell.dark-mode .admin-drawer-item {
+  color: var(--admin-text);
+}
+
+.admin-shell.dark-mode .admin-drawer-item:active {
+  background: var(--admin-hover);
+}
+
+.admin-shell.dark-mode .admin-drawer-item.active {
+  background: var(--admin-primary);
+  color: #1a1815;
+}
+
+.admin-shell.dark-mode .admin-drawer-footer {
+  border-top-color: var(--admin-border);
+}
+
+.admin-shell.dark-mode .admin-drawer-footer .admin-logout-btn,
+.admin-shell.dark-mode .admin-drawer-logout {
+  color: #d97a6c;
+}
+
+.admin-shell.dark-mode .admin-drawer-footer .admin-logout-btn:active,
+.admin-shell.dark-mode .admin-drawer-logout:active {
+  background: rgba(155, 60, 50, 0.15);
+}
+
+/* ─── Reduced motion ─── */
+@media (prefers-reduced-motion: reduce) {
+  .admin-drawer,
+  .admin-drawer-overlay {
+    animation: none;
+  }
+}
