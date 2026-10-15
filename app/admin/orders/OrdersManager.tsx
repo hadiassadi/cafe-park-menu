@@ -43,6 +43,11 @@ type Order = {
   ineligible_subtotal: number | null
   status: string
   created_at: string
+  // ✅ فیلدهای لغو
+  cancellation_reason_id: string | null
+  cancellation_reason_label: string | null
+  cancellation_note: string | null
+  cancelled_by: string | null
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -98,6 +103,12 @@ const EXPORT_STATUS_LABELS: Record<ExportStatus, string> = {
   cancelled: 'فقط لغو‌شده',
 }
 
+type CancelReason = {
+  id: string
+  label: string
+  icon: string | null
+}
+
 export default function OrdersManager({
   orders: initialOrders,
 }: {
@@ -115,6 +126,14 @@ export default function OrdersManager({
   const [exportFilter, setExportFilter] = useState<ExportFilter>('month')
   const [exportStatus, setExportStatus] = useState<ExportStatus>('all')
   const [exporting, setExporting] = useState(false)
+
+  // ✅ State های مودال لغو
+  const [cancelOrder, setCancelOrder] = useState<Order | null>(null)
+  const [cancelReasons, setCancelReasons] = useState<CancelReason[]>([])
+  const [selectedReasonId, setSelectedReasonId] = useState<string | null>(null)
+  const [cancelNote, setCancelNote] = useState('')
+  const [loadingReasons, setLoadingReasons] = useState(false)
+  const [cancelling, setCancelling] = useState(false)
 
   // اطمینان از اینکه فقط سمت کلاینت رندر می‌شه
   useEffect(() => {
@@ -178,8 +197,34 @@ export default function OrdersManager({
     }
   }, [printOrder])
 
+  // ✅ useEffect سوم: لود دلایل لغو وقتی مودال باز می‌شه
+  useEffect(() => {
+    if (!cancelOrder) return
+    if (cancelReasons.length > 0) return
+
+    let cancelled = false
+    setLoadingReasons(true)
+
+    fetch('/api/cancellation-reasons?target=admin')
+      .then((res) => res.json())
+      .then((result) => {
+        if (!cancelled) {
+          setCancelReasons(result.reasons || [])
+          setLoadingReasons(false)
+        }
+      })
+      .catch((err) => {
+        console.error(err)
+        if (!cancelled) setLoadingReasons(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [cancelOrder, cancelReasons.length])
+
   // ✅ Export به CSV
-    async function handleExport() {
+  async function handleExport() {
     setExporting(true)
     try {
       const url = `/api/export/orders?filter=${exportFilter}&status=${exportStatus}`
@@ -192,7 +237,6 @@ export default function OrdersManager({
       const blob = await res.blob()
       const downloadUrl = URL.createObjectURL(blob)
 
-      // ✅ اسم فایل با تاریخ میلادی (ASCII-safe)
       const now = new Date()
       const y = now.getFullYear()
       const m = String(now.getMonth() + 1).padStart(2, '0')
@@ -272,10 +316,74 @@ export default function OrdersManager({
     }
   }
 
-  async function handleCancel(order: Order) {
-    if (!confirm(`مطمئنی می‌خوای سفارش #${order.order_number} رو لغو کنی؟`))
-      return
-    await handleStatusChange(order, 'cancelled')
+  // ✅ باز کردن مودال لغو (نه confirm ساده)
+  function openCancelModal(order: Order) {
+    setCancelOrder(order)
+    setSelectedReasonId(null)
+    setCancelNote('')
+  }
+
+  function closeCancelModal() {
+    if (cancelling) return
+    setCancelOrder(null)
+    setSelectedReasonId(null)
+    setCancelNote('')
+  }
+
+  // ✅ انجام لغو با دلیل
+  async function confirmCancel() {
+    if (!cancelOrder) return
+    setCancelling(true)
+
+    try {
+      const selectedReason = cancelReasons.find(
+        (r) => r.id === selectedReasonId
+      )
+
+      const formData = new FormData()
+      formData.append('id', cancelOrder.id)
+      formData.append('status', 'cancelled')
+      formData.append('cancelled_by', 'admin')
+      if (selectedReasonId) {
+        formData.append('cancellation_reason_id', selectedReasonId)
+      }
+      if (selectedReason) {
+        formData.append('cancellation_reason_label', selectedReason.label)
+      }
+      if (cancelNote.trim()) {
+        formData.append('cancellation_note', cancelNote.trim())
+      }
+
+      const result = await updateOrderStatus(formData)
+      if (result?.error) {
+        alert('❌ ' + result.error)
+        return
+      }
+
+      // آپدیت state محلی
+      const updatedOrder: Partial<Order> = {
+        status: 'cancelled',
+        cancelled_by: 'admin',
+        cancellation_reason_id: selectedReasonId,
+        cancellation_reason_label: selectedReason?.label || null,
+        cancellation_note: cancelNote.trim() || null,
+      }
+
+      setOrders((prev) =>
+        prev.map((o) =>
+          o.id === cancelOrder.id ? { ...o, ...updatedOrder } : o
+        )
+      )
+      if (selectedOrder?.id === cancelOrder.id) {
+        setSelectedOrder({ ...selectedOrder, ...updatedOrder })
+      }
+
+      closeCancelModal()
+    } catch {
+      alert('❌ خطا در لغو سفارش')
+    } finally {
+      setCancelling(false)
+    }
   }
 
   return (
@@ -299,7 +407,6 @@ export default function OrdersManager({
             </p>
           </div>
 
-          {/* ✅ دکمه خروجی Excel */}
           <button
             type="button"
             className="btn"
@@ -402,13 +509,13 @@ export default function OrdersManager({
                       {NEXT_LABEL[order.status]}
                     </button>
                   )}
-                  {order.status === 'pending' && (
+                  {['pending', 'confirmed'].includes(order.status) && (
                     <button
                       type="button"
                       className="btn btn-cancel"
                       onClick={(e) => {
                         e.stopPropagation()
-                        handleCancel(order)
+                        openCancelModal(order)
                       }}
                       disabled={loading}
                     >
@@ -446,6 +553,28 @@ export default function OrdersManager({
               </div>
 
               <div className="modal-body">
+                {/* ✅ کارت دلیل لغو */}
+                {selectedOrder.status === 'cancelled' &&
+                  selectedOrder.cancellation_reason_label && (
+                    <div className="cancellation-info-box" style={{ marginTop: 0, marginBottom: '16px' }}>
+                      <div className="cancellation-info-label">
+                        {selectedOrder.cancellation_reason_label}
+                      </div>
+                      {selectedOrder.cancellation_note && (
+                        <div className="cancellation-info-note">
+                          📝 {selectedOrder.cancellation_note}
+                        </div>
+                      )}
+                      <div className="cancellation-info-by">
+                        {selectedOrder.cancelled_by === 'customer'
+                          ? 'لغو شده توسط مشتری'
+                          : selectedOrder.cancelled_by === 'admin'
+                            ? 'لغو شده توسط کافه'
+                            : 'لغو شده'}
+                      </div>
+                    </div>
+                  )}
+
                 <div className="info-card">
                   <h3>👤 اطلاعات مشتری</h3>
                   <div className="info-row">
@@ -565,6 +694,107 @@ export default function OrdersManager({
           </div>
         )}
       </div>
+
+      {/* ✅ Modal لغو سفارش با دلیل */}
+      {cancelOrder && (
+        <div className="modal-overlay" onClick={closeCancelModal}>
+          <div
+            className="modal-container modal-md"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-header">
+              <div className="modal-header-content">
+                <h2>لغو سفارش #{formatPrice(cancelOrder.order_number)}</h2>
+                <p>دلیل لغو رو انتخاب کن</p>
+              </div>
+              <button
+                type="button"
+                className="modal-close-btn"
+                onClick={closeCancelModal}
+                disabled={cancelling}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="modal-body">
+              {loadingReasons ? (
+                <p className="empty-admin" style={{ padding: '20px' }}>
+                  ⏳ در حال بارگذاری دلایل...
+                </p>
+              ) : cancelReasons.length === 0 ? (
+                <p className="empty-admin" style={{ padding: '20px' }}>
+                  دلیلی برای نمایش وجود ندارد. می‌تونی بدون دلیل لغو کنی.
+                </p>
+              ) : (
+                <div className="cancel-reasons-list">
+                  {cancelReasons.map((reason) => (
+                    <button
+                      key={reason.id}
+                      type="button"
+                      className={`cancel-reason-item ${
+                        selectedReasonId === reason.id ? 'selected' : ''
+                      }`}
+                      onClick={() => setSelectedReasonId(reason.id)}
+                      disabled={cancelling}
+                    >
+                      <span className="cancel-reason-icon">
+                        {reason.icon || '📝'}
+                      </span>
+                      <span className="cancel-reason-label">
+                        {reason.label}
+                      </span>
+                      {selectedReasonId === reason.id && (
+                        <span className="cancel-reason-check">✓</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              <div className="cancel-note-field">
+                <label>توضیحات بیشتر (اختیاری)</label>
+                <textarea
+                  value={cancelNote}
+                  onChange={(e) => setCancelNote(e.target.value)}
+                  placeholder="اگه دوست داری بیشتر توضیح بده..."
+                  rows={3}
+                  disabled={cancelling}
+                />
+              </div>
+
+              <div className="cancel-warning">
+                ⚠️ بعد از لغو، این سفارش از سیستم حذف میشه. اگه دلیل
+                انتخاب کنی، برای مشتری نمایش داده میشه.
+              </div>
+            </div>
+
+            <div className="modal-footer">
+              <button
+                type="button"
+                className="btn"
+                onClick={closeCancelModal}
+                disabled={cancelling}
+              >
+                انصراف
+              </button>
+              <button
+                type="button"
+                className="btn"
+                style={{
+                  background: '#9b3c32',
+                  color: '#fff',
+                  border: 0,
+                }}
+                onClick={confirmCancel}
+                disabled={cancelling}
+              >
+                {cancelling ? '...' : '❌ لغو سفارش'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ✅ Modal خروجی Excel */}
       {exportOpen && (

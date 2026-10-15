@@ -1,13 +1,12 @@
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase/server'
 
-// بازه مجاز برای لغو توسط مشتری (دقیقه)
 const CANCEL_WINDOW_MINUTES = 5
 
 export async function POST(request: Request) {
   try {
     const body = await request.json()
-    const { orderId, phone } = body
+    const { orderId, phone, reasonId, reasonLabel, note } = body
 
     if (!orderId || !phone) {
       return NextResponse.json(
@@ -18,7 +17,6 @@ export async function POST(request: Request) {
 
     const db = await supabaseServer()
 
-    // خوندن سفارش
     const { data: order, error: fetchError } = await db
       .from('orders')
       .select('id, status, created_at, customer_phone')
@@ -32,9 +30,9 @@ export async function POST(request: Request) {
       )
     }
 
-    // چک امنیتی: شماره تلفن باید مطابقت داشته باشه
     const normalize = (s: string) =>
-      s.replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06f0))
+      s
+        .replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06f0))
         .replace(/[^\d]/g, '')
 
     if (normalize(order.customer_phone) !== normalize(phone)) {
@@ -44,7 +42,6 @@ export async function POST(request: Request) {
       )
     }
 
-    // چک وضعیت
     if (order.status !== 'pending') {
       return NextResponse.json(
         { error: 'این سفارش دیگه قابل لغو نیست' },
@@ -52,7 +49,6 @@ export async function POST(request: Request) {
       )
     }
 
-    // چک زمان
     const createdAt = new Date(order.created_at).getTime()
     const now = Date.now()
     const diffMinutes = (now - createdAt) / (1000 * 60)
@@ -66,13 +62,20 @@ export async function POST(request: Request) {
       )
     }
 
-    // انجام لغو
+    // ✅ انجام لغو با دلیل (اختیاری)
+    const updateData: Record<string, unknown> = {
+      status: 'cancelled',
+      cancelled_at: new Date().toISOString(),
+      cancelled_by: 'customer',
+    }
+
+    if (reasonId) updateData.cancellation_reason_id = reasonId
+    if (reasonLabel) updateData.cancellation_reason_label = reasonLabel
+    if (note) updateData.cancellation_note = note
+
     const { error: updateError } = await db
       .from('orders')
-      .update({
-        status: 'cancelled',
-        cancelled_at: new Date().toISOString(),
-      })
+      .update(updateData)
       .eq('id', orderId)
 
     if (updateError) {

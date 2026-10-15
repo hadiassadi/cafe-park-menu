@@ -3,31 +3,83 @@
 import { supabaseServer } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 
-// ✅ پاکسازی سفارش‌های قدیمی
+// ─────────────────────────────────────────────
+// تغییر وضعیت سفارش (با پشتیبانی از دلایل لغو)
+// ─────────────────────────────────────────────
+export async function updateOrderStatus(formData: FormData) {
+  const db = await supabaseServer()
+
+  const id = String(formData.get('id') || '')
+  const status = String(formData.get('status') || '')
+
+  if (!id) return { error: 'شناسه سفارش مشخص نیست' }
+  if (!status) return { error: 'وضعیت مشخص نیست' }
+
+  const updateData: Record<string, unknown> = { status }
+
+  // ✅ ثبت تاریخ‌های مربوط به هر وضعیت
+  const now = new Date().toISOString()
+  if (status === 'confirmed') updateData.confirmed_at = now
+  if (status === 'preparing') updateData.preparing_at = now
+  if (status === 'ready') updateData.ready_at = now
+  if (status === 'delivered') updateData.delivered_at = now
+
+  if (status === 'cancelled') {
+    updateData.cancelled_at = now
+    updateData.cancelled_by =
+      String(formData.get('cancelled_by') || 'admin') || 'admin'
+
+    const reasonId = formData.get('cancellation_reason_id')
+    const reasonLabel = formData.get('cancellation_reason_label')
+    const note = formData.get('cancellation_note')
+
+    if (reasonId) updateData.cancellation_reason_id = String(reasonId)
+    if (reasonLabel) updateData.cancellation_reason_label = String(reasonLabel)
+    if (note) updateData.cancellation_note = String(note)
+  }
+
+  const { error } = await db
+    .from('orders')
+    .update(updateData)
+    .eq('id', id)
+
+  if (error) return { error: error.message }
+
+  revalidatePath('/admin/orders')
+  revalidatePath('/admin')
+  return { success: true }
+}
+
+// ─────────────────────────────────────────────
+// پاکسازی سفارش‌های قدیمی (بیشتر از N روز)
+// ─────────────────────────────────────────────
 export async function cleanupOldOrders(days: number = 30) {
   const db = await supabaseServer()
 
-  // محاسبه تاریخ مرز
   const cutoffDate = new Date()
   cutoffDate.setDate(cutoffDate.getDate() - days)
   const cutoffISO = cutoffDate.toISOString()
 
-  // اول بشمار چند سفارش قدیمی هست
+  // شمارش قبل از حذف
   const { count: countBefore, error: countError } = await db
     .from('orders')
     .select('*', { count: 'exact', head: true })
     .lt('created_at', cutoffISO)
-    .in('status', ['delivered', 'cancelled']) // فقط تمام‌شده‌ها یا لغو‌شده‌ها
+    .in('status', ['delivered', 'cancelled'])
 
   if (countError) {
     return { error: 'خطا در شمارش سفارش‌ها: ' + countError.message }
   }
 
   if (!countBefore || countBefore === 0) {
-    return { success: true, deletedCount: 0, message: 'سفارش قدیمی‌ای برای حذف وجود ندارد' }
+    return {
+      success: true,
+      deletedCount: 0,
+      message: 'سفارش قدیمی‌ای برای حذف وجود ندارد',
+    }
   }
 
-  // حذف سفارش‌های قدیمی (فقط delivered و cancelled)
+  // حذف
   const { error: deleteError } = await db
     .from('orders')
     .delete()
@@ -48,7 +100,9 @@ export async function cleanupOldOrders(days: number = 30) {
   }
 }
 
-// ✅ شمارش سفارش‌های قدیمی (برای پیش‌نمایش)
+// ─────────────────────────────────────────────
+// شمارش سفارش‌های قدیمی (برای پیش‌نمایش)
+// ─────────────────────────────────────────────
 export async function countOldOrders(days: number = 30) {
   const db = await supabaseServer()
 
@@ -67,49 +121,4 @@ export async function countOldOrders(days: number = 30) {
   }
 
   return { count: count ?? 0 }
-}
-
-export async function updateOrderStatus(formData: FormData) {
-  const db = await supabaseServer()
-
-  const id = String(formData.get('id') || '')
-  const status = String(formData.get('status') || '')
-
-  if (!id) return { error: 'شناسه سفارش مشخص نیست.' }
-  if (!status) return { error: 'وضعیت مشخص نیست.' }
-
-  const allowed = [
-    'pending',
-    'confirmed',
-    'preparing',
-    'ready',
-    'delivered',
-    'cancelled',
-  ]
-  if (!allowed.includes(status)) {
-    return { error: 'وضعیت نامعتبر است.' }
-  }
-
-  // ستون‌های زمانی
-  const updates: Record<string, unknown> = {
-    status,
-    updated_at: new Date().toISOString(),
-  }
-
-  if (status === 'confirmed') updates.confirmed_at = new Date().toISOString()
-  if (status === 'preparing') updates.preparing_at = new Date().toISOString()
-  if (status === 'ready') updates.ready_at = new Date().toISOString()
-  if (status === 'delivered') updates.delivered_at = new Date().toISOString()
-  if (status === 'cancelled') {
-    updates.cancelled_at = new Date().toISOString()
-    updates.cancelled_by = 'admin'
-  }
-
-  const { error } = await db.from('orders').update(updates).eq('id', id)
-
-  if (error) return { error: error.message }
-
-  revalidatePath('/admin/orders')
-  revalidatePath(`/order/${id}`)
-  return { success: true }
 }

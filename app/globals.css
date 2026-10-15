@@ -9531,4 +9531,1198 @@ body {
   .peak-hour-label {
     font-size: 8px;
   }
-/* } */
+  .peak-hour-label {
+    font-size: 8px;
+  }
+}
+/* ========================================
+   64. ADMIN CUSTOMERS (CRM)
+   ======================================== */
+
+/* ─── خلاصه بالای صفحه ─── */
+.customers-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 12px;
+}
+
+.customers-summary-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  background: #fffdf9;
+  border: 1px solid #e3ddd2;
+  border-radius: 12px;
+  transition: all 0.15s ease;
+}
+
+.customers-summary-card:hover {
+  border-color: #6b4f3a;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(107, 79, 58, 0.06);
+}
+
+.customers-summary-icon {
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  font-size: 20px;
+}
+
+.customers-summary-value {
+  font-size: 18px;
+  font-weight: 800;
+  color: #29251f;
+  line-height: 1;
+}
+
+.customers-summary-label {
+  margin-top: 5px;
+  font-size: 11px;
+  color: #766f64;
+  font-weight: 600;
+}
+
+/* ─── فیلترها و جستجو ─── */
+.customers-toolbar {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.customers-toolbar .search-box {
+  flex: 1;
+  min-width: 200px;
+}
+
+.customers-filters {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* ─── گرید مشتریان ─── */
+.customers-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 14px;
+}
+
+/* ─── کارت مشتری ─── */
+.customer-card {
+  background: #fffdf9;
+  border: 1px solid #e3ddd2;
+  border-radius: 14px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.customer-card:hover {
+  border-color: #d8d0c4;
+  box-shadow: 0 6px 16px rgba(107, 79, 58, 0.06);
+  transform: translateY(-2px);
+}
+
+.customer-card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #ebe6de;
+}
+
+.customer-avatar {
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #9a6b3f 0%, #6b4f3a 100%);
+  color: #fff;
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.customer-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.customer-info strong {
+  display: block;
+  font-size: 14px;
+  font-weight: 800;
+  color: #29251f;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.customer-info small {
+  display: block;
+  margin-top: 3px;
+  font-size: 11px;
+  color: #766f64;
+  font-weight: 600;
+}
+
+.customer-badge {
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.customer-badge.loyal {
+  background: #eee6d9;
+  color: #6b4f3a;
+}
+
+.customer-badge.problem {
+  background: #fde8e6;
+  color: #9b3c32;
+}
+
+.customer-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.customer-stat {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #4a443d;
+}
+
+.customer-stat span:first-child {
+  width: 16px;
+  text-align: center;
+}
+
+/* ─── پیش‌نمایش تگ‌ها ─── */
+.customer-tags-preview {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  padding-top: 4px;
+}
+
+.customer-tag-pill {
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: #f5f0e9;
+  color: #6b4f3a;
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.customer-tag-pill.more {
+  background: #e3ddd2;
+  color: #625b51;
+}
+
+.customer-notes-preview {
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #fbf9f5;
+  border: 1px dashed #d8d0c4;
+  font-size: 11px;
+  color: #625b51;
+  line-height: 1.6;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* ─── دکمه‌های اقدام ─── */
+.customer-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  padding-top: 10px;
+  border-top: 1px solid #ebe6de;
+}
+
+.customer-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 36px;
+  padding: 6px 10px;
+  border: 1px solid #d8d0c4;
+  border-radius: 9px;
+  background: #fffdf9;
+  color: #4a443d;
+  font-size: 11px;
+  font-weight: 700;
+  text-decoration: none;
+  transition: all 0.15s ease;
+}
+
+.customer-action-btn:hover {
+  background: #f5f0e9;
+  border-color: #b8ad9c;
+}
+
+.customer-action-btn.whatsapp {
+  background: #e5f0e6;
+  border-color: #c8dfcb;
+  color: #2d5d3e;
+}
+
+.customer-action-btn.whatsapp:hover {
+  background: #d5e8d8;
+}
+
+/* ─── تگ‌های آماده در مودال ─── */
+.customer-preset-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.preset-tag-btn {
+  padding: 7px 12px;
+  border: 1.5px solid #d8d0c4;
+  border-radius: 999px;
+  background: #fffdf9;
+  color: #4a443d;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.preset-tag-btn:hover:not(:disabled) {
+  border-color: #b8ad9c;
+  background: #fbf9f5;
+}
+
+.preset-tag-btn.selected {
+  background: #6b4f3a;
+  border-color: #6b4f3a;
+  color: #fff;
+}
+
+.preset-tag-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ─── تگ‌های دلخواه ─── */
+.custom-tags-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.custom-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 8px 5px 10px;
+  border-radius: 999px;
+  background: #e6ecf0;
+  color: #4a7c9b;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.custom-tag button {
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(74, 124, 155, 0.2);
+  color: #4a7c9b;
+  font-size: 10px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.custom-tag button:hover {
+  background: rgba(74, 124, 155, 0.4);
+}
+
+.custom-tag-input {
+  display: flex;
+  gap: 8px;
+}
+
+.custom-tag-input input {
+  flex: 1;
+  min-width: 0;
+  padding: 9px 12px;
+  border: 1px solid #d8d0c4;
+  border-radius: 9px;
+  background: #fffdf9;
+  color: #29251f;
+  font: inherit;
+  font-size: 12px;
+}
+
+.custom-tag-input input:focus {
+  outline: 0;
+  border-color: #6b4f3a;
+  box-shadow: 0 0 0 3px rgba(107, 79, 58, 0.1);
+}
+
+.custom-tag-input button {
+  padding: 0 14px;
+  border: 1px solid #d8d0c4;
+  border-radius: 9px;
+  background: #fffdf9;
+  color: #4a443d;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.custom-tag-input button:hover:not(:disabled) {
+  background: #f5f0e9;
+  border-color: #b8ad9c;
+}
+
+.custom-tag-input button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ─── یادداشت ─── */
+.customer-notes-input {
+  width: 100%;
+  padding: 11px 12px;
+  border: 1px solid #d8d0c4;
+  border-radius: 10px;
+  background: #fffdf9;
+  color: #29251f;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.8;
+  resize: vertical;
+  min-height: 90px;
+}
+
+.customer-notes-input:focus {
+  outline: 0;
+  border-color: #6b4f3a;
+  box-shadow: 0 0 0 3px rgba(107, 79, 58, 0.1);
+}
+
+/* ─── Dark Mode ─── */
+.admin-shell.dark-mode .customers-summary-card,
+.admin-shell.dark-mode .customer-card {
+  background: var(--admin-surface);
+  border-color: var(--admin-border);
+}
+
+.admin-shell.dark-mode .customers-summary-value,
+.admin-shell.dark-mode .customer-info strong {
+  color: var(--admin-text);
+}
+
+.admin-shell.dark-mode .customers-summary-label,
+.admin-shell.dark-mode .customer-info small,
+.admin-shell.dark-mode .customer-stat {
+  color: var(--admin-text-muted);
+}
+
+.admin-shell.dark-mode .customer-card-header,
+.admin-shell.dark-mode .customer-actions {
+  border-color: var(--admin-border);
+}
+
+.admin-shell.dark-mode .customer-badge.loyal {
+  background: var(--admin-surface-2);
+  color: var(--admin-primary);
+}
+
+.admin-shell.dark-mode .customer-tag-pill {
+  background: var(--admin-surface-2);
+  color: var(--admin-primary);
+}
+
+.admin-shell.dark-mode .customer-notes-preview {
+  background: var(--admin-surface-2);
+  border-color: var(--admin-border);
+  color: var(--admin-text-muted);
+}
+
+.admin-shell.dark-mode .customer-action-btn {
+  background: var(--admin-surface);
+  border-color: var(--admin-border);
+  color: var(--admin-text);
+}
+
+.admin-shell.dark-mode .customer-action-btn:hover {
+  background: var(--admin-hover);
+}
+
+.admin-shell.dark-mode .customer-action-btn.whatsapp {
+  background: rgba(71, 112, 82, 0.2);
+  border-color: rgba(71, 112, 82, 0.4);
+  color: #8cc79a;
+}
+
+.admin-shell.dark-mode .preset-tag-btn {
+  background: var(--admin-surface);
+  border-color: var(--admin-border);
+  color: var(--admin-text);
+}
+
+.admin-shell.dark-mode .preset-tag-btn:hover:not(:disabled) {
+  background: var(--admin-hover);
+}
+
+.admin-shell.dark-mode .preset-tag-btn.selected {
+  background: var(--admin-primary);
+  border-color: var(--admin-primary);
+  color: #1a1815;
+}
+
+.admin-shell.dark-mode .custom-tag {
+  background: rgba(74, 124, 155, 0.25);
+  color: #8bb8d4;
+}
+
+.admin-shell.dark-mode .custom-tag-input input,
+.admin-shell.dark-mode .custom-tag-input button {
+  background: var(--admin-surface);
+  border-color: var(--admin-border);
+  color: var(--admin-text);
+}
+
+.admin-shell.dark-mode .customer-notes-input {
+  background: var(--admin-surface);
+  border-color: var(--admin-border);
+  color: var(--admin-text);
+}
+
+.admin-shell.dark-mode .customer-notes-input::placeholder {
+  color: #6a6259;
+}
+
+/* ─── موبایل ─── */
+@media (max-width: 650px) {
+  .customers-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .customers-summary-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .customers-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .customers-toolbar .search-box {
+    min-width: 0;
+  }
+
+  .customer-preset-tags {
+    gap: 4px;
+  }
+
+  .preset-tag-btn {
+    padding: 6px 10px;
+    font-size: 10px;
+  }
+}
+/* ردیف لغوها در کارت مشتری */
+.customer-stat-cancelled {
+  color: #9b3c32 !important;
+}
+
+.customer-stat-cancelled span:last-child {
+  font-weight: 700;
+}
+
+.admin-shell.dark-mode .customer-stat-cancelled {
+  color: #d97a6c !important;
+}
+/* ========================================
+   65. ADMIN CANCELLATION REASONS (دلایل لغو)
+   ======================================== */
+
+.reasons-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 14px;
+}
+
+.reason-card {
+  background: #fffdf9;
+  border: 1px solid #e3ddd2;
+  border-radius: 14px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  transition: all 0.15s ease;
+}
+
+.reason-card:hover {
+  border-color: #d8d0c4;
+  box-shadow: 0 6px 16px rgba(107, 79, 58, 0.06);
+  transform: translateY(-2px);
+}
+
+.reason-card.inactive {
+  opacity: 0.6;
+}
+
+.reason-card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #ebe6de;
+}
+
+.reason-icon {
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  background: #f5f0e9;
+  font-size: 22px;
+}
+
+.reason-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.reason-info strong {
+  display: block;
+  font-size: 14px;
+  font-weight: 800;
+  color: #29251f;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reason-target {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.reason-target.target-customer {
+  background: #e6ecf0;
+  color: #4a7c9b;
+}
+
+.reason-target.target-admin {
+  background: #f0e6f0;
+  color: #7a3a7a;
+}
+
+.reason-target.target-both {
+  background: #e5f0e6;
+  color: #477052;
+}
+
+.reason-status {
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.reason-status.active {
+  background: #e5f0e6;
+  color: #477052;
+}
+
+.reason-status.inactive {
+  background: #eee9e4;
+  color: #766f64;
+}
+
+.reason-card-actions {
+  display: flex;
+  gap: 6px;
+  padding-top: 10px;
+  border-top: 1px solid #ebe6de;
+}
+
+.reason-card-actions .btn {
+  flex: 1;
+  min-height: 36px;
+  font-size: 11px;
+  padding: 6px;
+}
+
+.reason-card-actions .btn.danger {
+  flex: 0 0 44px;
+}
+
+/* ─── Dark Mode ─── */
+.admin-shell.dark-mode .reason-card {
+  background: var(--admin-surface);
+  border-color: var(--admin-border);
+}
+
+.admin-shell.dark-mode .reason-card-header,
+.admin-shell.dark-mode .reason-card-actions {
+  border-color: var(--admin-border);
+}
+
+.admin-shell.dark-mode .reason-icon {
+  background: var(--admin-surface-2);
+}
+
+.admin-shell.dark-mode .reason-info strong {
+  color: var(--admin-text);
+}
+
+.admin-shell.dark-mode .reason-target.target-customer {
+  background: rgba(74, 124, 155, 0.25);
+  color: #8bb8d4;
+}
+
+.admin-shell.dark-mode .reason-target.target-admin {
+  background: rgba(122, 58, 122, 0.25);
+  color: #c48ec4;
+}
+
+.admin-shell.dark-mode .reason-target.target-both {
+  background: rgba(71, 112, 82, 0.25);
+  color: #8cc79a;
+}
+
+/* ─── موبایل ─── */
+@media (max-width: 650px) {
+  .reasons-grid {
+    grid-template-columns: 1fr;
+  }
+}
+/* ========================================
+   66. CANCEL REASONS (دلایل لغو در مودال)
+   ======================================== */
+
+.cancel-reasons-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.cancel-reason-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  border: 1.5px solid #d8d0c4;
+  border-radius: 10px;
+  background: #fffdf9;
+  color: #29251f;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: right;
+  transition: all 0.15s ease;
+  min-height: 52px;
+}
+
+.cancel-reason-item:hover:not(:disabled) {
+  border-color: #b8ad9c;
+  background: #fbf9f5;
+}
+
+.cancel-reason-item.selected {
+  background: #6b4f3a;
+  border-color: #6b4f3a;
+  color: #fff;
+}
+
+.cancel-reason-item:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.cancel-reason-icon {
+  font-size: 20px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.cancel-reason-label {
+  flex: 1;
+  min-width: 0;
+  line-height: 1.5;
+}
+
+.cancel-reason-check {
+  font-size: 14px;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+
+/* ─── فیلد توضیحات ─── */
+.cancel-note-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.cancel-note-field label {
+  font-size: 12px;
+  font-weight: 700;
+  color: #4a443d;
+}
+
+.cancel-note-field textarea {
+  width: 100%;
+  padding: 11px 12px;
+  border: 1px solid #d8d0c4;
+  border-radius: 10px;
+  background: #fffdf9;
+  color: #29251f;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.8;
+  resize: vertical;
+  min-height: 70px;
+}
+
+.cancel-note-field textarea:focus {
+  outline: 0;
+  border-color: #6b4f3a;
+  box-shadow: 0 0 0 3px rgba(107, 79, 58, 0.1);
+}
+
+.cancel-note-field textarea::placeholder {
+  color: #aaa297;
+}
+
+/* ─── هشدار ─── */
+.cancel-warning {
+  padding: 10px 12px;
+  background: #fdf9f4;
+  border: 1px solid #f2d5c5;
+  border-radius: 10px;
+  font-size: 11px;
+  color: #9b3c32;
+  line-height: 1.8;
+  text-align: center;
+  font-weight: 600;
+}
+
+/* ─── موبایل ─── */
+@media (max-width: 500px) {
+  .cancel-reasons-list {
+    grid-template-columns: 1fr;
+  }
+}
+/* ========================================
+   68. CANCELLATION STATS (آمار لغوها)
+   ======================================== */
+
+/* ─── کارت‌های خلاصه ─── */
+.cancellation-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.cancellation-summary-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  background: #fffdf9;
+  border: 1px solid #e3ddd2;
+  border-radius: 14px;
+  transition: all 0.15s ease;
+}
+
+.cancellation-summary-card:hover {
+  border-color: #9b3c32;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(155, 60, 50, 0.08);
+}
+
+.cancellation-summary-icon {
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  font-size: 22px;
+}
+
+.cancellation-summary-value {
+  font-size: 20px;
+  font-weight: 800;
+  color: #29251f;
+  line-height: 1;
+}
+
+.cancellation-summary-label {
+  margin-top: 6px;
+  font-size: 11px;
+  color: #766f64;
+  font-weight: 600;
+}
+
+/* ─── نمودار دلایل ─── */
+.cancellation-reasons-chart {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 20px;
+  background: #fffdf9;
+  border: 1px solid #e3ddd2;
+  border-radius: 14px;
+}
+
+.cancellation-chart-row {
+  display: grid;
+  grid-template-columns: 40px 40px 1fr 80px;
+  align-items: center;
+  gap: 12px;
+}
+
+.cancellation-chart-rank {
+  font-size: 12px;
+  font-weight: 800;
+  color: #9b3c32;
+  text-align: center;
+}
+
+.cancellation-chart-icon {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f5f0e9;
+  border-radius: 10px;
+  font-size: 20px;
+}
+
+.cancellation-chart-info {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cancellation-chart-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: #29251f;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cancellation-chart-bar-wrapper {
+  height: 8px;
+  background: #f5f0e9;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.cancellation-chart-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #d97a6c 0%, #9b3c32 100%);
+  border-radius: 999px;
+  transition: width 0.6s ease;
+  min-width: 4px;
+}
+
+.cancellation-chart-stats {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.cancellation-chart-stats strong {
+  font-size: 16px;
+  font-weight: 800;
+  color: #9b3c32;
+  line-height: 1;
+}
+
+.cancellation-chart-stats small {
+  font-size: 10px;
+  color: #766f64;
+  font-weight: 600;
+}
+
+/* ─── جدول لغوها ─── */
+.cancellation-table-wrapper {
+  background: #fffdf9;
+  border: 1px solid #e3ddd2;
+  border-radius: 14px;
+  overflow-x: auto;
+}
+
+.cancellation-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  min-width: 700px;
+}
+
+.cancellation-table thead {
+  background: #f5f0e9;
+}
+
+.cancellation-table th {
+  padding: 12px 14px;
+  text-align: right;
+  font-weight: 800;
+  color: #625b51;
+  font-size: 12px;
+  white-space: nowrap;
+  border-bottom: 1px solid #e3ddd2;
+}
+
+.cancellation-table td {
+  padding: 14px;
+  color: #4a443d;
+  border-bottom: 1px solid #ebe6de;
+  vertical-align: middle;
+}
+
+.cancellation-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.cancellation-table tbody tr:hover {
+  background: #faf7f2;
+}
+
+.cancellation-order-num {
+  font-family: 'Courier New', monospace;
+  font-weight: 800;
+  color: #6b4f3a;
+  font-size: 13px;
+}
+
+.cancellation-table td strong {
+  display: block;
+  color: #29251f;
+  font-weight: 800;
+  font-size: 13px;
+  margin-bottom: 3px;
+}
+
+.cancellation-table td small {
+  display: block;
+  font-size: 11px;
+  color: #766f64;
+}
+
+.cancellation-amount {
+  font-weight: 800;
+  color: #6b4f3a !important;
+  white-space: nowrap;
+}
+
+.cancellation-reason-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #fde8e6;
+  color: #9b3c32;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.cancellation-no-reason {
+  color: #9a9287;
+  font-size: 11px;
+  font-style: italic;
+}
+
+.cancellation-by {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.cancellation-by.by-customer {
+  background: #e6ecf0;
+  color: #4a7c9b;
+}
+
+.cancellation-by.by-admin {
+  background: #f0e6f0;
+  color: #7a3a7a;
+}
+
+.cancellation-date {
+  font-size: 11px;
+  color: #766f64;
+  white-space: nowrap;
+}
+
+/* ─── Dark Mode ─── */
+.admin-shell.dark-mode .cancellation-summary-card,
+.admin-shell.dark-mode .cancellation-reasons-chart,
+.admin-shell.dark-mode .cancellation-table-wrapper {
+  background: var(--admin-surface);
+  border-color: var(--admin-border);
+}
+
+.admin-shell.dark-mode .cancellation-summary-value {
+  color: var(--admin-text);
+}
+
+.admin-shell.dark-mode .cancellation-summary-label {
+  color: var(--admin-text-muted);
+}
+
+.admin-shell.dark-mode .cancellation-chart-icon {
+  background: var(--admin-surface-2);
+}
+
+.admin-shell.dark-mode .cancellation-chart-label {
+  color: var(--admin-text);
+}
+
+.admin-shell.dark-mode .cancellation-chart-bar-wrapper {
+  background: var(--admin-surface-2);
+}
+
+.admin-shell.dark-mode .cancellation-chart-stats small {
+  color: var(--admin-text-muted);
+}
+
+.admin-shell.dark-mode .cancellation-table thead {
+  background: var(--admin-surface-2);
+}
+
+.admin-shell.dark-mode .cancellation-table th {
+  color: var(--admin-text-muted);
+  border-bottom-color: var(--admin-border);
+}
+
+.admin-shell.dark-mode .cancellation-table td {
+  color: var(--admin-text-muted);
+  border-bottom-color: var(--admin-border);
+}
+
+.admin-shell.dark-mode .cancellation-table tbody tr:hover {
+  background: var(--admin-hover);
+}
+
+.admin-shell.dark-mode .cancellation-table td strong {
+  color: var(--admin-text);
+}
+
+.admin-shell.dark-mode .cancellation-order-num {
+  color: var(--admin-primary);
+}
+
+.admin-shell.dark-mode .cancellation-reason-badge {
+  background: rgba(155, 60, 50, 0.25);
+  color: #d97a6c;
+}
+
+.admin-shell.dark-mode .cancellation-by.by-customer {
+  background: rgba(74, 124, 155, 0.25);
+  color: #8bb8d4;
+}
+
+.admin-shell.dark-mode .cancellation-by.by-admin {
+  background: rgba(122, 58, 122, 0.25);
+  color: #c48ec4;
+}
+
+/* ─── موبایل ─── */
+@media (max-width: 650px) {
+  .cancellation-summary-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .cancellation-chart-row {
+    grid-template-columns: 32px 32px 1fr 60px;
+    gap: 8px;
+  }
+
+  .cancellation-chart-icon {
+    width: 32px;
+    height: 32px;
+    font-size: 16px;
+  }
+
+  .cancellation-chart-label {
+    font-size: 12px;
+  }
+
+  .cancellation-chart-stats strong {
+    font-size: 14px;
+  }
+
+  .cancellation-reasons-chart {
+    padding: 14px;
+  }
+
+  .cancellation-table {
+    font-size: 12px;
+    min-width: 600px;
+  }
+
+  .cancellation-table th,
+  .cancellation-table td {
+    padding: 10px 8px;
+  }
+}

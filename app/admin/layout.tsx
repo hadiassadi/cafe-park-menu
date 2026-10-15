@@ -81,15 +81,18 @@ export default function AdminLayout({
     router.replace('/admin/login')
   }
 
-  const menuItems = [
+      const menuItems = [
     { href: '/admin', label: 'داشبورد', icon: '🏠' },
     { href: '/admin/orders', label: 'سفارش‌ها', icon: '🛒' },
+    { href: '/admin/customers', label: 'مشتریان', icon: '👥' },
     { href: '/admin/products', label: 'محصولات', icon: '☕' },
     { href: '/admin/categories', label: 'دسته‌ها', icon: '📂' },
     { href: '/admin/tables', label: 'میزها', icon: '🪑' },
     { href: '/admin/themes', label: 'تم‌ها', icon: '🎨' },
     { href: '/admin/quotes', label: 'جملات', icon: '💬' },
     { href: '/admin/coupons', label: 'کد تخفیف', icon: '🎟️' },
+    { href: '/admin/cancellation-reasons', label: 'دلایل لغو', icon: '🚫' },
+    { href: '/admin/cancellations', label: 'آمار لغوها', icon: '📊' },
     { href: '/admin/settings', label: 'تنظیمات', icon: '⚙️' },
   ]
 

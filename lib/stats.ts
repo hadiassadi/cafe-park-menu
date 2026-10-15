@@ -436,3 +436,409 @@ export const getCouponStats = cache(
     }
   }
 )
+// ─── آمار مشتریان (CRM) ───
+
+export type CustomerData = {
+  phone: string
+  name: string
+  order_count: number
+  total_spent: number
+  cancelled_count: number
+  last_order_at: string | null
+  first_order_at: string | null
+  notes: string | null
+  tags: string[]
+}
+
+export type CustomersReport = {
+  customers: CustomerData[]
+  summary: {
+    total: number
+    loyal: number       // ۵+ سفارش
+    new: number         // ۱ سفارش
+    inactive: number    // ۳۰+ روز غیرفعال
+    problematic: number // ۲+ لغو
+  }
+}
+
+export const getCustomersData = cache(async (): Promise<CustomersReport> => {
+  const db = createDb()
+  const now = new Date()
+  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+
+  // خواندن همه سفارش‌ها (برای محاسبه آمار)
+  const { data: orders, error: ordersError } = await db
+    .from('orders')
+    .select('customer_phone, customer_name, subtotal, status, created_at')
+    .order('created_at', { ascending: false })
+
+  if (ordersError || !orders) {
+    console.error('[customers stats] error:', ordersError)
+    return {
+      customers: [],
+      summary: { total: 0, loyal: 0, new: 0, inactive: 0, problematic: 0 },
+    }
+  }
+
+  // خواندن یادداشت‌ها و تگ‌ها
+  const { data: metaCustomers, error: metaError } = await db
+    .from('customers')
+    .select('phone, notes, tags')
+
+  if (metaError) {
+    console.error('[customers meta] error:', metaError)
+  }
+
+  const metaMap = new Map<string, { notes: string | null; tags: string[] }>()
+  for (const c of metaCustomers ?? []) {
+    const phone = c.phone
+    if (!phone) continue
+    const normalized = String(phone).replace(/[^\d]/g, '')
+    metaMap.set(normalized, {
+      notes: c.notes || null,
+      tags: Array.isArray(c.tags) ? c.tags : [],
+    })
+  }
+
+  // تجمیع داده‌های هر مشتری
+  const customerMap = new Map<
+    string,
+    {
+      phone: string
+      name: string
+      order_count: number
+      total_spent: number
+      cancelled_count: number
+      first_order_at: string | null
+      last_order_at: string | null
+    }
+  >()
+
+  for (const order of orders) {
+    const phone = String(order.customer_phone || '').replace(/[^\d]/g, '')
+    if (!phone) continue
+
+    const existing = customerMap.get(phone) ?? {
+      phone,
+      name: order.customer_name || 'بدون نام',
+      order_count: 0,
+      total_spent: 0,
+      cancelled_count: 0,
+      first_order_at: order.created_at,
+      last_order_at: order.created_at,
+    }
+
+    // آپدیت نام (آخرین نام)
+    if (order.customer_name) existing.name = order.customer_name
+
+    if (order.status !== 'cancelled') {
+      existing.order_count++
+      existing.total_spent += Number(order.subtotal) || 0
+    } else {
+      existing.cancelled_count++
+    }
+
+    // آپدیت تاریخ‌ها
+    if (!existing.first_order_at || order.created_at < existing.first_order_at) {
+      existing.first_order_at = order.created_at
+    }
+    if (!existing.last_order_at || order.created_at > existing.last_order_at) {
+      existing.last_order_at = order.created_at
+    }
+
+    customerMap.set(phone, existing)
+  }
+
+  // تبدیل به آرایه و اضافه کردن متادیتا
+  const customers: CustomerData[] = Array.from(customerMap.values()).map(
+    (c) => {
+      const meta = metaMap.get(c.phone) ?? { notes: null, tags: [] }
+      return {
+        ...c,
+        notes: meta.notes,
+        tags: meta.tags,
+      }
+    }
+  )
+
+  // مرتب‌سازی بر اساس آخرین سفارش
+  customers.sort((a, b) => {
+    const aTime = a.last_order_at ? new Date(a.last_order_at).getTime() : 0
+    const bTime = b.last_order_at ? new Date(b.last_order_at).getTime() : 0
+    return bTime - aTime
+  })
+
+  // محاسبه summary
+  const summary = {
+    total: customers.length,
+    loyal: customers.filter((c) => c.order_count >= 5).length,
+    new: customers.filter((c) => c.order_count === 1).length,
+    inactive: customers.filter((c) => {
+      if (!c.last_order_at) return false
+      return new Date(c.last_order_at) < thirtyDaysAgo
+    }).length,
+    problematic: customers.filter((c) => c.cancelled_count >= 5).length,
+  }
+
+  return { customers, summary }
+})
+// ─── دلایل لغو فعال ───
+
+export type CancellationReason = {
+  id: string
+  label: string
+  target: 'customer' | 'admin' | 'both'
+  icon: string | null
+  sort_order: number
+  is_active: boolean
+}
+
+export const getActiveReasons = cache(
+  async (target: 'customer' | 'admin'): Promise<CancellationReason[]> => {
+    const db = createDb()
+
+    const { data, error } = await db
+      .from('cancellation_reasons')
+      .select('id, label, target, icon, sort_order, is_active')
+      .eq('is_active', true)
+      .in('target', [target, 'both'])
+      .order('sort_order', { ascending: true })
+
+    if (error) {
+      console.error('[getActiveReasons] error:', error)
+      return []
+    }
+
+    return data ?? []
+  }
+)
+// ─── آمار لغو سفارش‌ها ───
+
+export type CancellationStats = {
+  summary: {
+    total: number
+    by_customer: number
+    by_admin: number
+    total_orders: number
+    cancel_rate: number  // درصد
+  }
+  topReasons: Array<{
+    reason: string
+    icon: string | null
+    count: number
+    percentage: number
+  }>
+  dailyCancellations: Array<{
+    date: string
+    label: string
+    count: number
+  }>
+    recentCancellations: Array<{
+    id: string
+    order_number: number
+    customer_name: string
+    customer_phone: string
+    table_number: number | null
+    note: string | null
+    items: Array<{
+      product_name: string
+      option_name: string | null
+      unit_price: number
+      quantity: number
+      discount_amount?: number
+    }>
+    subtotal: number
+    original_subtotal: number | null
+    coupon_code: string | null
+    coupon_discount: number | null
+    cancelled_at: string | null
+    cancelled_by: string | null
+    cancellation_reason_label: string | null
+    cancellation_note: string | null
+  }>
+}
+
+type CancelTimeFilter = 'today' | 'week' | 'month' | 'all'
+
+export const getCancellationStats = cache(
+  async (filter: CancelTimeFilter = 'month'): Promise<CancellationStats> => {
+    const db = createDb()
+    const now = new Date()
+
+    let since: Date | null = null
+    if (filter === 'today') {
+      since = getStartOfDay(now)
+    } else if (filter === 'week') {
+      since = getStartOfWeek(now)
+    } else if (filter === 'month') {
+      since = getStartOfMonth(now)
+    }
+
+    // ─── آمار کلی سفارش‌ها ───
+    let totalOrdersQuery = db.from('orders').select('*', { count: 'exact', head: true })
+    if (since) {
+      totalOrdersQuery = totalOrdersQuery.gte('created_at', since.toISOString())
+    }
+    const { count: totalOrders } = await totalOrdersQuery
+
+        // ─── آمار لغوها ───
+    let cancelQuery = db
+      .from('orders')
+      .select(
+        'id, order_number, customer_name, customer_phone, table_number, note, items, subtotal, original_subtotal, coupon_code, coupon_discount, cancelled_at, cancelled_by, cancellation_reason_label, cancellation_reason_id, cancellation_note, created_at'
+      )
+      .eq('status', 'cancelled')
+
+    if (since) {
+      cancelQuery = cancelQuery.gte('created_at', since.toISOString())
+    }
+
+    const { data: cancelledOrders, error } = await cancelQuery.order(
+      'cancelled_at',
+      { ascending: false }
+    )
+
+    if (error) {
+      console.error('[cancellation stats] error:', error)
+      return {
+        summary: {
+          total: 0,
+          by_customer: 0,
+          by_admin: 0,
+          total_orders: totalOrders ?? 0,
+          cancel_rate: 0,
+        },
+        topReasons: [],
+        dailyCancellations: [],
+        recentCancellations: [],
+      }
+    }
+
+    const orders = cancelledOrders ?? []
+
+    // ─── محاسبه آمار ───
+    const byCustomer = orders.filter((o) => o.cancelled_by === 'customer').length
+    const byAdmin = orders.filter((o) => o.cancelled_by === 'admin').length
+
+    // ─── دلایل پرتکرار ───
+    const reasonMap = new Map<
+      string,
+      { icon: string | null; count: number; reasonId: string | null }
+    >()
+
+    for (const order of orders) {
+      const reasonLabel = order.cancellation_reason_label
+      if (!reasonLabel) continue
+
+      const existing = reasonMap.get(reasonLabel) ?? {
+        icon: null,
+        count: 0,
+        reasonId: order.cancellation_reason_id,
+      }
+      existing.count += 1
+      reasonMap.set(reasonLabel, existing)
+    }
+
+    // ─── گرفتن آیکون دلایل ───
+    const reasonIds = Array.from(reasonMap.values())
+      .map((r) => r.reasonId)
+      .filter((id): id is string => !!id)
+
+    if (reasonIds.length > 0) {
+      const { data: reasonsData } = await db
+        .from('cancellation_reasons')
+        .select('id, icon')
+        .in('id', reasonIds)
+
+      const iconMap = new Map(
+        (reasonsData ?? []).map((r) => [r.id, r.icon])
+      )
+
+      for (const [label, data] of reasonMap.entries()) {
+        if (data.reasonId) {
+          data.icon = iconMap.get(data.reasonId) || null
+        }
+      }
+    }
+
+    const totalWithReason = Array.from(reasonMap.values()).reduce(
+      (sum, r) => sum + r.count,
+      0
+    )
+
+    const topReasons = Array.from(reasonMap.entries())
+      .map(([reason, data]) => ({
+        reason,
+        icon: data.icon,
+        count: data.count,
+        percentage:
+          totalWithReason > 0
+            ? Math.round((data.count / totalWithReason) * 100)
+            : 0,
+      }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5)
+
+    // ─── لغوها به تفکیک روز (۷ روز اخیر) ───
+    const dailyMap = new Map<string, number>()
+    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+
+    for (const order of orders) {
+      const dateStr = order.cancelled_at || order.created_at
+      const d = new Date(dateStr)
+      if (d < sevenDaysAgo) continue
+      const key = d.toISOString().split('T')[0]
+      dailyMap.set(key, (dailyMap.get(key) || 0) + 1)
+    }
+
+    const dailyCancellations: CancellationStats['dailyCancellations'] = []
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(now)
+      d.setDate(d.getDate() - i)
+      d.setHours(0, 0, 0, 0)
+      const key = d.toISOString().split('T')[0]
+      dailyCancellations.push({
+        date: key,
+        label: d.toLocaleDateString('fa-IR', { weekday: 'short' }),
+        count: dailyMap.get(key) || 0,
+      })
+    }
+
+        // ─── ۲۰ لغو اخیر ───
+    const recentCancellations = orders.slice(0, 20).map((o: any) => ({
+      id: o.id,
+      order_number: o.order_number,
+      customer_name: o.customer_name,
+      customer_phone: o.customer_phone,
+      table_number: o.table_number ?? null,
+      note: o.note ?? null,
+      items: Array.isArray(o.items) ? o.items : [],
+      subtotal: Number(o.subtotal) || 0,
+      original_subtotal: o.original_subtotal ?? null,
+      coupon_code: o.coupon_code ?? null,
+      coupon_discount: o.coupon_discount ?? null,
+      cancelled_at: o.cancelled_at,
+      cancelled_by: o.cancelled_by,
+      cancellation_reason_label: o.cancellation_reason_label,
+      cancellation_note: o.cancellation_note,
+    }))
+
+    const cancelRate =
+      (totalOrders ?? 0) > 0
+        ? Math.round((orders.length / (totalOrders ?? 1)) * 100)
+        : 0
+
+    return {
+      summary: {
+        total: orders.length,
+        by_customer: byCustomer,
+        by_admin: byAdmin,
+        total_orders: totalOrders ?? 0,
+        cancel_rate: cancelRate,
+      },
+      topReasons,
+      dailyCancellations,
+      recentCancellations,
+    }
+  }
+)

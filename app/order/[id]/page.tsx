@@ -7,7 +7,6 @@ import { createClient } from '@supabase/supabase-js'
 const formatPrice = (price: number) =>
   new Intl.NumberFormat('fa-IR').format(price)
 
-// فرمت شمارش معکوس: 4:35
 function formatCountdown(seconds: number): string {
   const m = Math.floor(seconds / 60)
   const s = seconds % 60
@@ -37,6 +36,9 @@ type Order = {
   ineligible_subtotal: number | null
   status: string
   created_at: string
+  cancellation_reason_label: string | null
+  cancellation_note: string | null
+  cancelled_by: string | null
 }
 
 const STATUS_STEPS = [
@@ -64,6 +66,14 @@ export default function OrderPage({
   const [cancelSuccess, setCancelSuccess] = useState(false)
   const [canCancel, setCanCancel] = useState(false)
   const [secondsLeft, setSecondsLeft] = useState(0)
+
+  // ✅ state های دلیل لغو
+  const [reasons, setReasons] = useState<
+    Array<{ id: string; label: string; icon: string | null }>
+  >([])
+  const [selectedReasonId, setSelectedReasonId] = useState<string | null>(null)
+  const [cancelNote, setCancelNote] = useState('')
+  const [loadingReasons, setLoadingReasons] = useState(false)
 
   // ✅ بارگذاری اولیه سفارش
   useEffect(() => {
@@ -120,7 +130,7 @@ export default function OrderPage({
       return
     }
 
-    const WINDOW_MS = 5 * 60 * 1000 // ۵ دقیقه
+    const WINDOW_MS = 5 * 60 * 1000
     const createdAt = new Date(order.created_at).getTime()
 
     function tick() {
@@ -146,19 +156,49 @@ export default function OrderPage({
     return () => clearInterval(interval)
   }, [order])
 
-  // ✅ لغو سفارش توسط مشتری
+  // ✅ لود دلایل لغو وقتی مودال باز میشه
+  useEffect(() => {
+    if (!showCancelConfirm) return
+    if (reasons.length > 0) return
+
+    let cancelled = false
+    setLoadingReasons(true)
+
+    fetch('/api/cancellation-reasons?target=customer')
+      .then((res) => res.json())
+      .then((result) => {
+        if (!cancelled) {
+          setReasons(result.reasons || [])
+          setLoadingReasons(false)
+        }
+      })
+      .catch((err) => {
+        console.error(err)
+        if (!cancelled) setLoadingReasons(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [showCancelConfirm, reasons.length])
+
   async function handleCancelOrder() {
     if (!order) return
     setCancelling(true)
     setCancelError(null)
 
     try {
+      const selectedReason = reasons.find((r) => r.id === selectedReasonId)
+
       const res = await fetch('/api/orders/cancel', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           orderId: order.id,
           phone: order.customer_phone,
+          reasonId: selectedReasonId,
+          reasonLabel: selectedReason?.label || null,
+          note: cancelNote.trim() || null,
         }),
       })
 
@@ -238,7 +278,7 @@ export default function OrderPage({
         <span style={{ width: '60px' }} />
       </div>
 
-      {/* استپر وضعیت */}
+      {/* استپر وضعیت یا کارت لغو */}
       {isCancelled ? (
         <div
           className="info-card"
@@ -246,9 +286,35 @@ export default function OrderPage({
         >
           <div style={{ fontSize: 48 }}>❌</div>
           <h2 style={{ color: '#9b3c32' }}>سفارش لغو شد</h2>
-          <p style={{ color: '#766f64' }}>
-            این سفارش لغو شده است.
-          </p>
+
+          {/* ✅ نمایش دلیل لغو (فقط اگه ادمین لغو کرده) */}
+          {order.cancelled_by === 'admin' && order.cancellation_reason_label && (
+            <div className="cancellation-info-box">
+              <div className="cancellation-info-label">
+                {order.cancellation_reason_label}
+              </div>
+              {order.cancellation_note && (
+                <div className="cancellation-info-note">
+                  📝 {order.cancellation_note}
+                </div>
+              )}
+              <div className="cancellation-info-by">
+                لغو شده توسط کافه
+              </div>
+            </div>
+          )}
+
+          {order.cancelled_by === 'customer' && (
+            <p style={{ color: '#766f64', marginTop: '12px' }}>
+              این سفارش توسط خودت لغو شده است.
+            </p>
+          )}
+
+          {!order.cancelled_by && (
+            <p style={{ color: '#766f64', marginTop: '12px' }}>
+              این سفارش لغو شده است.
+            </p>
+          )}
         </div>
       ) : (
         <div className="status-stepper">
@@ -270,7 +336,7 @@ export default function OrderPage({
         </div>
       )}
 
-            {/* باکس اقلام سفارش */}
+      {/* باکس اقلام سفارش */}
       <div className="info-card">
         <h3>🧾 اقلام سفارش</h3>
         {order.table_number && (
@@ -302,7 +368,6 @@ export default function OrderPage({
           </div>
         ))}
 
-        {/* ✅ خلاصه پرداخت با تخفیف */}
         {order.coupon_code && order.coupon_discount ? (
           <div className="order-payment-summary">
             <div className="info-row">
@@ -347,7 +412,7 @@ export default function OrderPage({
         )}
       </div>
 
-      {/* ✅ دکمه لغو سفارش (فقط تا ۵ دقیقه) */}
+      {/* ✅ دکمه لغو سفارش */}
       {canCancel && (
         <div className="order-cancel-section">
           <button
@@ -378,13 +443,13 @@ export default function OrderPage({
           onClick={() => !cancelling && setShowCancelConfirm(false)}
         >
           <div
-            className="modal-container modal-sm"
+            className="modal-container modal-md"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="modal-header">
               <div className="modal-header-content">
                 <h2>لغو سفارش</h2>
-                <p>مطمئنی می‌خوای سفارش رو لغو کنی؟</p>
+                <p>چرا می‌خوای سفارشت رو لغو کنی؟</p>
               </div>
               <button
                 type="button"
@@ -397,21 +462,57 @@ export default function OrderPage({
             </div>
 
             <div className="modal-body">
-              <p
-                style={{
-                  fontSize: '13px',
-                  color: '#766f64',
-                  lineHeight: 1.8,
-                }}
-              >
-                بعد از لغو، سفارش از سیستم حذف می‌شه و قابل بازگشت نیست.
-              </p>
+              {loadingReasons ? (
+                <p className="empty-admin" style={{ padding: '20px' }}>
+                  ⏳ در حال بارگذاری دلایل...
+                </p>
+              ) : reasons.length === 0 ? (
+                <p className="empty-admin" style={{ padding: '20px' }}>
+                  دلیلی برای نمایش وجود ندارد. می‌تونی بدون دلیل لغو کنی.
+                </p>
+              ) : (
+                <div className="cancel-reasons-list">
+                  {reasons.map((reason) => (
+                    <button
+                      key={reason.id}
+                      type="button"
+                      className={`cancel-reason-item ${
+                        selectedReasonId === reason.id ? 'selected' : ''
+                      }`}
+                      onClick={() => setSelectedReasonId(reason.id)}
+                      disabled={cancelling}
+                    >
+                      <span className="cancel-reason-icon">
+                        {reason.icon || '📝'}
+                      </span>
+                      <span className="cancel-reason-label">
+                        {reason.label}
+                      </span>
+                      {selectedReasonId === reason.id && (
+                        <span className="cancel-reason-check">✓</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              <div className="cancel-note-field">
+                <label>توضیحات بیشتر (اختیاری)</label>
+                <textarea
+                  value={cancelNote}
+                  onChange={(e) => setCancelNote(e.target.value)}
+                  placeholder="اگه دوست داری بیشتر توضیح بده..."
+                  rows={3}
+                  disabled={cancelling}
+                />
+              </div>
+
+              <div className="cancel-warning">
+                ⚠️ بعد از لغو، سفارش از سیستم حذف می‌شه و قابل بازگشت نیست.
+              </div>
 
               {cancelError && (
-                <div
-                  className="checkout-error"
-                  style={{ marginTop: '12px' }}
-                >
+                <div className="checkout-error" style={{ marginTop: '12px' }}>
                   ❌ {cancelError}
                 </div>
               )}
@@ -437,7 +538,7 @@ export default function OrderPage({
                 onClick={handleCancelOrder}
                 disabled={cancelling}
               >
-                {cancelling ? '...' : 'بله، لغو کن'}
+                {cancelling ? '...' : '❌ لغو سفارش'}
               </button>
             </div>
           </div>
