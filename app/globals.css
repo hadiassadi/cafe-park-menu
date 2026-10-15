@@ -12061,6 +12061,7 @@ body {
     box-shadow: -8px 0 32px rgba(41, 37, 31, 0.18);
     animation: drawerSlideIn 0.28s cubic-bezier(0.32, 0.72, 0, 1);
     overflow-y: auto;
+	-webkit-overflow-scrolling: touch;
   }
 
   @keyframes drawerSlideIn {
@@ -12114,13 +12115,13 @@ body {
 
   /* ─── ناوبری drawer ─── */
   .admin-drawer-nav {
-    flex: 1;
-    padding: 12px 10px;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    overflow-y: auto;
-  }
+  flex: 1;
+  padding: 12px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  /* overflow-y حذف شد — خود drawer اسکرول می‌شه */
+}
 
   .admin-drawer-item {
     display: flex;
@@ -12191,8 +12192,7 @@ body {
     display: flex;
     flex-direction: column;
     gap: 2px;
-    flex-shrink: 0;
-  }
+    }
 
   .admin-drawer-footer .admin-logout-btn,
   .admin-drawer-logout {
