@@ -1,6 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseServer } from '@/lib/supabase/server'
+import { createClient } from '@supabase/supabase-js'
 import { requestZarinPalPayment } from '@/lib/payment/zarinpal'
+
+export const dynamic = 'force-dynamic'
+
+function createDb() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+  if (!url || !key) throw new Error('Missing Supabase env')
+  return createClient(url, key, { auth: { persistSession: false } })
+}
 
 export const dynamic = 'force-dynamic'
 
@@ -16,7 +25,7 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const db = await supabaseServer()
+        const db = createDb()
 
     // ۱. خواندن سفارش
     const { data: order, error: orderErr } = await db

@@ -1,8 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseServer } from '@/lib/supabase/server'
+import { createClient } from '@supabase/supabase-js'
 import { verifyZarinPalPayment } from '@/lib/payment/zarinpal'
 
 export const dynamic = 'force-dynamic'
+
+function createDb() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+  if (!url || !key) throw new Error('Missing Supabase env')
+  return createClient(url, key, { auth: { persistSession: false } })
+}
 
 export async function GET(req: NextRequest) {
   const origin =
@@ -23,7 +30,7 @@ export async function GET(req: NextRequest) {
       )
     }
 
-    const db = await supabaseServer()
+        const db = createDb()
 
     // ۱. پیدا کردن سفارش
     const { data: order, error: orderErr } = await db
