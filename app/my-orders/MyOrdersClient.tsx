@@ -64,7 +64,6 @@ export default function MyOrdersClient() {
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<Filter>('all')
 
-  // Login state
   const [loginStep, setLoginStep] = useState<'phone' | 'code'>('phone')
   const [phoneInput, setPhoneInput] = useState('')
   const [codeInput, setCodeInput] = useState('')
@@ -74,7 +73,6 @@ export default function MyOrdersClient() {
   const [verifying, setVerifying] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
 
-  // بررسی session فعلی
   useEffect(() => {
     fetch('/api/customer/me', { cache: 'no-store' })
       .then((res) => res.json())
@@ -87,7 +85,6 @@ export default function MyOrdersClient() {
       .catch(() => setLoading(false))
   }, [])
 
-  // لود سفارش‌ها
   useEffect(() => {
     if (!phone) return
     setLoading(true)
@@ -100,7 +97,6 @@ export default function MyOrdersClient() {
       .catch(() => setLoading(false))
   }, [phone])
 
-  // toast
   useEffect(() => {
     if (!toast) return
     const t = setTimeout(() => setToast(null), 2500)
@@ -166,17 +162,19 @@ export default function MyOrdersClient() {
     setLoginStep('phone')
   }
 
+  // ✅ آپدیت شد: استفاده از اسم‌های درست CartItem
   function handleReorder(order: Order) {
     for (const item of order.items) {
       addItem({
         productId: item.product_id || '',
         productName: item.product_name,
+        productImage: item.image_url || null,
+        selectedGroupName: null,
+        selectedOptionName: item.option_name,
+        selectedOptionId: item.variant_option_id || null,
         unitPrice: item.unit_price,
         quantity: item.quantity,
-        variantOptionId: item.variant_option_id || null,
-        variantGroupId: item.variant_group_id || null,
-        optionName: item.option_name,
-        imageUrl: item.image_url || null,
+        note: undefined,
       })
     }
     setToast('✅ آیتم‌ها به سبد اضافه شدن')
@@ -184,8 +182,6 @@ export default function MyOrdersClient() {
       window.location.href = '/cart'
     }, 800)
   }
-
-  // ─── رندر ───
 
   if (loading && !phone && !phoneInput) {
     return (
@@ -200,7 +196,6 @@ export default function MyOrdersClient() {
     )
   }
 
-  // اگه لاگین نکرده → فرم ورود
   if (!phone) {
     return (
       <div className="my-orders-page">
@@ -257,7 +252,6 @@ export default function MyOrdersClient() {
                 کد ۴ رقمی به شماره <strong dir="ltr">{phoneInput}</strong> فرستاده شده.
               </p>
 
-              {/* ⚠️ نمایش کد برای دمو (بعداً با SMS جایگزین می‌شه) */}
               {shownCode && (
                 <div className="customer-login-code-display">
                   <span>کد شما (نمایشی):</span>
@@ -326,7 +320,6 @@ export default function MyOrdersClient() {
     )
   }
 
-  // لاگین کرده → نمایش سفارش‌ها
   const filtered = orders.filter((o) => {
     if (filter === 'all') return true
     if (filter === 'active')
