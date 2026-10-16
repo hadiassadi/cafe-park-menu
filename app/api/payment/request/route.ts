@@ -11,8 +11,6 @@ function createDb() {
   return createClient(url, key, { auth: { persistSession: false } })
 }
 
-export const dynamic = 'force-dynamic'
-
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
@@ -25,14 +23,12 @@ export async function POST(req: NextRequest) {
       )
     }
 
-        const db = createDb()
+    const db = createDb()
 
     // ۱. خواندن سفارش
     const { data: order, error: orderErr } = await db
       .from('orders')
-      .select(
-        'id, order_number, subtotal, payment_status, customer_phone'
-      )
+      .select('id, order_number, subtotal, payment_status, customer_phone')
       .eq('id', orderId)
       .single()
 
@@ -87,7 +83,6 @@ export async function POST(req: NextRequest) {
     const callbackUrl = `${origin}/api/payment/verify`
 
     // ۴. درخواست پرداخت
-    // در حالت sandbox، merchant_id می‌تونه هر مقداری باشه
     const merchantId =
       settings.payment_merchant_id || 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'
 

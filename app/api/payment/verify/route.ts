@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
       )
     }
 
-        const db = createDb()
+    const db = createDb()
 
     // ۱. پیدا کردن سفارش
     const { data: order, error: orderErr } = await db
