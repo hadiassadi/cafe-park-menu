@@ -122,6 +122,7 @@ export default function AdminLayout({
     { href: '/admin/cancellation-reasons', label: 'دلایل لغو', icon: '🚫' },
     { href: '/admin/cancellations', label: 'آمار لغوها', icon: '📊' },
     { href: '/admin/reports/sales', label: 'گزارش فروش', icon: '💰' },
+	{ href: '/admin/settings/payment', label: 'تنظیمات پرداخت', icon: '💳' },
     { href: '/admin/settings', label: 'تنظیمات', icon: '⚙️' },
   ]
 

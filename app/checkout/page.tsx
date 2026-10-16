@@ -21,6 +21,22 @@ type AppliedCoupon = {
   discount_value: number
 }
 
+type PaymentMethod = 'online' | 'cash' | 'card' | 'transfer'
+
+type PaymentSettings = {
+  payment_enabled: boolean
+  payment_online_enabled: boolean
+  payment_cash_enabled: boolean
+  payment_card_enabled: boolean
+  payment_transfer_enabled: boolean
+  payment_min_online_amount: number
+  payment_transfer_bank_name: string | null
+  payment_transfer_account_number: string | null
+  payment_transfer_card_number: string | null
+  payment_transfer_account_holder: string | null
+  payment_transfer_requires_review: boolean
+}
+
 function CheckoutForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -44,7 +60,35 @@ function CheckoutForm() {
   const [ineligibleSubtotal, setIneligibleSubtotal] = useState(0)
   const [eligibleProductIds, setEligibleProductIds] = useState<string[]>([])
 
+  // پرداخت
+  const [paymentSettings, setPaymentSettings] = useState<PaymentSettings | null>(null)
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash')
+  const [settingsLoading, setSettingsLoading] = useState(true)
+
   const finalTotal = totalPrice - discount
+
+  // بارگذاری تنظیمات پرداخت
+  useEffect(() => {
+    fetch('/api/payment/settings', { cache: 'no-store' })
+      .then((res) => res.json())
+      .then((data: PaymentSettings) => {
+        setPaymentSettings(data)
+        // انتخاب پیش‌فرض
+        if (data.payment_enabled) {
+          if (data.payment_online_enabled) {
+            setPaymentMethod('online')
+          } else if (data.payment_cash_enabled) {
+            setPaymentMethod('cash')
+          } else if (data.payment_card_enabled) {
+            setPaymentMethod('card')
+          } else if (data.payment_transfer_enabled) {
+            setPaymentMethod('transfer')
+          }
+        }
+        setSettingsLoading(false)
+      })
+      .catch(() => setSettingsLoading(false))
+  }, [])
 
   // خوندن شماره میز از URL
   useEffect(() => {
@@ -143,6 +187,7 @@ function CheckoutForm() {
       const cleanPhone = toLatinDigits(phone).replace(/\D/g, '')
       if (cleanPhone.length < 10) throw new Error('شماره تماس معتبر نیست')
 
+      // ۱. ثبت سفارش
       const res = await fetch('/api/orders', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -171,24 +216,103 @@ function CheckoutForm() {
         throw new Error(data.error || 'خطا در ثبت سفارش')
       }
 
+      const orderId = data.order.id
+
+      // ذخیره اطلاعات مشتری
       try {
         localStorage.setItem(
           'cafe-park-customer',
-          JSON.stringify({
-            name: name.trim(),
-            phone: cleanPhone,
-          })
+          JSON.stringify({ name: name.trim(), phone: cleanPhone })
         )
       } catch {}
 
       setSubmitted(true)
       clearCart()
-      window.location.href = `/order/${data.order.id}`
+
+      // ۲. پردازش بر اساس روش پرداخت
+      if (paymentMethod === 'online') {
+        const payRes = await fetch('/api/payment/request', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ orderId }),
+        })
+
+        const payData = await payRes.json()
+
+        if (!payRes.ok || !payData.paymentUrl) {
+          // خطا در پرداخت آنلاین → برو به صفحه سفارش با پیام خطا
+          window.location.href = `/order/${orderId}?payment_error=${encodeURIComponent(
+            payData.error || 'خطا در شروع پرداخت'
+          )}`
+          return
+        }
+
+        // ریدایرکت به درگاه
+        window.location.href = payData.paymentUrl
+        return
+      }
+
+      // پرداخت دستی → ثبت روش
+      await fetch('/api/payment/set-method', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderId, method: paymentMethod }),
+      })
+
+      window.location.href = `/order/${orderId}`
     } catch (err) {
       setError(err instanceof Error ? err.message : 'خطا در ثبت سفارش')
-    } finally {
       setSaving(false)
     }
+  }
+
+  // روش‌های پرداخت در دسترس
+  const availableMethods: PaymentMethod[] = []
+  if (paymentSettings?.payment_enabled) {
+    const belowMin =
+      finalTotal < (paymentSettings.payment_min_online_amount || 0)
+    if (paymentSettings.payment_online_enabled && !belowMin)
+      availableMethods.push('online')
+    if (paymentSettings.payment_cash_enabled) availableMethods.push('cash')
+    if (paymentSettings.payment_card_enabled) availableMethods.push('card')
+    if (paymentSettings.payment_transfer_enabled)
+      availableMethods.push('transfer')
+  }
+
+  // اگه هیچ روش پرداختی نیست → پیش‌فرض نقدی
+  if (availableMethods.length === 0) {
+    availableMethods.push('cash')
+  }
+
+  // تضمین انتخاب معتبر
+  if (!availableMethods.includes(paymentMethod)) {
+    setPaymentMethod(availableMethods[0])
+  }
+
+  const METHOD_INFO: Record<
+    PaymentMethod,
+    { icon: string; title: string; hint: string }
+  > = {
+    online: {
+      icon: '💳',
+      title: 'پرداخت آنلاین',
+      hint: 'با کارت بانکی پرداخت کن',
+    },
+    cash: {
+      icon: '💵',
+      title: 'پرداخت نقدی',
+      hint: 'در محل پرداخت می‌کنی',
+    },
+    card: {
+      icon: '💳',
+      title: 'کارت‌خوان',
+      hint: 'با کارت در محل',
+    },
+    transfer: {
+      icon: '🏦',
+      title: 'واریز به حساب',
+      hint: 'با آپلود رسید',
+    },
   }
 
   return (
@@ -255,7 +379,7 @@ function CheckoutForm() {
           </div>
         </div>
 
-        {/* کارت کد تخفیف */}
+        {/* کد تخفیف */}
         <div className="checkout-card">
           <div className="checkout-card-title">🎟️ کد تخفیف</div>
 
@@ -285,7 +409,9 @@ function CheckoutForm() {
           ) : (
             <div className="coupon-applied">
               <div className="coupon-applied-info">
-                <span className="coupon-applied-code">{appliedCoupon.code}</span>
+                <span className="coupon-applied-code">
+                  {appliedCoupon.code}
+                </span>
                 {appliedCoupon.description && (
                   <small>{appliedCoupon.description}</small>
                 )}
@@ -364,6 +490,83 @@ function CheckoutForm() {
           </div>
         </div>
 
+        {/* روش پرداخت */}
+        {!settingsLoading && (
+          <div className="checkout-card">
+            <div className="checkout-card-title">💳 روش پرداخت</div>
+
+            <div className="payment-methods-selector">
+              {availableMethods.map((m) => {
+                const info = METHOD_INFO[m]
+                return (
+                  <button
+                    key={m}
+                    type="button"
+                    className={`payment-method-option ${
+                      paymentMethod === m ? 'selected' : ''
+                    }`}
+                    onClick={() => setPaymentMethod(m)}
+                    disabled={saving}
+                  >
+                    <div className="payment-method-option-icon">
+                      {info.icon}
+                    </div>
+                    <div className="payment-method-option-info">
+                      <strong>{info.title}</strong>
+                      <small>{info.hint}</small>
+                    </div>
+                    {paymentMethod === m && (
+                      <span className="payment-method-option-check">✓</span>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+
+            {/* نمایش اطلاعات حساب برای واریز */}
+            {paymentMethod === 'transfer' && paymentSettings && (
+              <div className="payment-transfer-info">
+                <div className="payment-transfer-info-title">
+                  🏦 اطلاعات حساب
+                </div>
+                {paymentSettings.payment_transfer_bank_name && (
+                  <div className="payment-transfer-row">
+                    <span>بانک:</span>
+                    <strong>{paymentSettings.payment_transfer_bank_name}</strong>
+                  </div>
+                )}
+                {paymentSettings.payment_transfer_account_holder && (
+                  <div className="payment-transfer-row">
+                    <span>صاحب حساب:</span>
+                    <strong>
+                      {paymentSettings.payment_transfer_account_holder}
+                    </strong>
+                  </div>
+                )}
+                {paymentSettings.payment_transfer_account_number && (
+                  <div className="payment-transfer-row">
+                    <span>شماره حساب:</span>
+                    <strong dir="ltr">
+                      {paymentSettings.payment_transfer_account_number}
+                    </strong>
+                  </div>
+                )}
+                {paymentSettings.payment_transfer_card_number && (
+                  <div className="payment-transfer-row">
+                    <span>شماره کارت:</span>
+                    <strong dir="ltr">
+                      {paymentSettings.payment_transfer_card_number}
+                    </strong>
+                  </div>
+                )}
+                <div className="payment-transfer-hint">
+                  ⚠️ بعد از واریز، رسید رو توی صفحه سفارش آپلود کن.
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* خلاصه نهایی */}
         <div className="checkout-card">
           <div className="checkout-card-title">💰 خلاصه نهایی</div>
@@ -384,9 +587,7 @@ function CheckoutForm() {
             <div className="checkout-discount-note">
               <span className="checkout-discount-note-icon">💡</span>
               <span>
-                تخفیف روی {formatPrice(eligibleSubtotal)} تومان از سفارش اعمال
-                شد. {formatPrice(ineligibleSubtotal)} تومان دیگر شامل تخفیف
-                نمی‌شن.
+                تخفیف روی {formatPrice(eligibleSubtotal)} تومان اعمال شد.
               </span>
             </div>
           )}
@@ -402,7 +603,11 @@ function CheckoutForm() {
         {error && <div className="checkout-error">❌ {error}</div>}
 
         <button type="submit" className="checkout-btn" disabled={saving}>
-          {saving ? 'در حال ثبت...' : 'ثبت سفارش ✅'}
+          {saving
+            ? 'در حال پردازش...'
+            : paymentMethod === 'online'
+              ? `💳 پرداخت ${formatPrice(finalTotal)} تومان`
+              : '✅ ثبت سفارش'}
         </button>
 
         <p className="checkout-note">

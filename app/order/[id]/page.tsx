@@ -1,11 +1,12 @@
 'use client'
 
 import { useEffect, useState, use } from 'react'
+import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@supabase/supabase-js'
 
 const formatPrice = (price: number) =>
-  new Intl.NumberFormat('fa-IR').format(price)
+  new Intl.NumberFormat('fa-IR').format(Math.round(price))
 
 function formatCountdown(seconds: number): string {
   const m = Math.floor(seconds / 60)
@@ -39,6 +40,10 @@ type Order = {
   cancellation_reason_label: string | null
   cancellation_note: string | null
   cancelled_by: string | null
+  payment_method: string | null
+  payment_status: string | null
+  payment_ref_id: string | null
+  payment_receipt_url: string | null
 }
 
 const STATUS_STEPS = [
@@ -49,17 +54,28 @@ const STATUS_STEPS = [
   { key: 'delivered', label: 'تحویل شد', icon: '🎉' },
 ]
 
+const PAYMENT_METHODS: Record<
+  string,
+  { label: string; icon: string; hint: string }
+> = {
+  online: { label: 'پرداخت آنلاین', icon: '💳', hint: 'با کارت بانکی' },
+  cash: { label: 'پرداخت نقدی', icon: '💵', hint: 'در محل' },
+  card: { label: 'کارت‌خوان', icon: '💳', hint: 'در محل' },
+  transfer: { label: 'واریز به حساب', icon: '🏦', hint: 'با رسید' },
+}
+
 export default function OrderPage({
   params,
 }: {
   params: Promise<{ id: string }>
 }) {
   const { id } = use(params)
+  const searchParams = useSearchParams()
   const [order, setOrder] = useState<Order | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  // ✅ State های مربوط به لغو
+  // لغو
   const [cancelling, setCancelling] = useState(false)
   const [showCancelConfirm, setShowCancelConfirm] = useState(false)
   const [cancelError, setCancelError] = useState<string | null>(null)
@@ -67,13 +83,25 @@ export default function OrderPage({
   const [canCancel, setCanCancel] = useState(false)
   const [secondsLeft, setSecondsLeft] = useState(0)
 
-  // ✅ state های دلیل لغو
+  // دلایل لغو
   const [reasons, setReasons] = useState<
     Array<{ id: string; label: string; icon: string | null }>
   >([])
   const [selectedReasonId, setSelectedReasonId] = useState<string | null>(null)
   const [cancelNote, setCancelNote] = useState('')
   const [loadingReasons, setLoadingReasons] = useState(false)
+
+  // پرداخت
+  const [paying, setPaying] = useState(false)
+  const [paymentError, setPaymentError] = useState<string | null>(null)
+  const [showChangeMethod, setShowChangeMethod] = useState(false)
+  const [paymentSettings, setPaymentSettings] = useState<{
+    payment_enabled: boolean
+    payment_online_enabled: boolean
+    payment_cash_enabled: boolean
+    payment_card_enabled: boolean
+    payment_transfer_enabled: boolean
+  } | null>(null)
 
   // ✅ بارگذاری اولیه سفارش
   useEffect(() => {
@@ -102,6 +130,14 @@ export default function OrderPage({
     load()
   }, [id])
 
+  // ✅ بارگذاری تنظیمات پرداخت
+  useEffect(() => {
+    fetch('/api/payment/settings', { cache: 'no-store' })
+      .then((res) => res.json())
+      .then((data) => setPaymentSettings(data))
+      .catch(() => {})
+  }, [])
+
   // ✅ بروزرسانی خودکار هر ۱۰ ثانیه
   useEffect(() => {
     if (!order) return
@@ -122,7 +158,7 @@ export default function OrderPage({
     return () => clearInterval(interval)
   }, [id, order])
 
-  // ✅ تایمر شمارش معکوس برای دکمه لغو
+  // ✅ تایمر لغو
   useEffect(() => {
     if (!order || order.status !== 'pending') {
       setCanCancel(false)
@@ -135,20 +171,17 @@ export default function OrderPage({
 
     function tick() {
       const remaining = WINDOW_MS - (Date.now() - createdAt)
-
       if (remaining <= 0) {
         setCanCancel(false)
         setSecondsLeft(0)
         return false
       }
-
       setCanCancel(true)
       setSecondsLeft(Math.floor(remaining / 1000))
       return true
     }
 
     if (!tick()) return
-
     const interval = setInterval(() => {
       if (!tick()) clearInterval(interval)
     }, 1000)
@@ -156,7 +189,20 @@ export default function OrderPage({
     return () => clearInterval(interval)
   }, [order])
 
-  // ✅ لود دلایل لغو وقتی مودال باز میشه
+  // ✅ اگه ?retry=1 بود، بعد از لود، پرداخت آنلاین رو شروع کن
+  useEffect(() => {
+    if (!order) return
+    if (searchParams.get('retry') !== '1') return
+    if (order.payment_status === 'paid') return
+    if (order.payment_method !== 'online') return
+
+    // کمی صبر کن تا UI کامل لود شه
+    const t = setTimeout(() => handlePayOnline(), 800)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [order?.id])
+
+  // ✅ لود دلایل لغو
   useEffect(() => {
     if (!showCancelConfirm) return
     if (reasons.length > 0) return
@@ -189,7 +235,6 @@ export default function OrderPage({
 
     try {
       const selectedReason = reasons.find((r) => r.id === selectedReasonId)
-
       const res = await fetch('/api/orders/cancel', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -204,14 +249,11 @@ export default function OrderPage({
 
       const data = await res.json()
 
-      if (!res.ok) {
-        throw new Error(data.error || 'خطا در لغو سفارش')
-      }
+      if (!res.ok) throw new Error(data.error || 'خطا در لغو سفارش')
 
       setOrder({ ...order, status: 'cancelled' })
       setCancelSuccess(true)
       setShowCancelConfirm(false)
-
       setTimeout(() => setCancelSuccess(false), 3000)
     } catch (err) {
       setCancelError(err instanceof Error ? err.message : 'خطا')
@@ -220,12 +262,65 @@ export default function OrderPage({
     }
   }
 
+  // ✅ شروع پرداخت آنلاین
+  async function handlePayOnline() {
+    if (!order || paying) return
+    setPaying(true)
+    setPaymentError(null)
+
+    try {
+      const res = await fetch('/api/payment/request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderId: order.id }),
+      })
+
+      const data = await res.json()
+
+      if (!res.ok || !data.paymentUrl) {
+        throw new Error(data.error || 'خطا در شروع پرداخت')
+      }
+
+      window.location.href = data.paymentUrl
+    } catch (err) {
+      setPaymentError(err instanceof Error ? err.message : 'خطا')
+      setPaying(false)
+    }
+  }
+
+  // ✅ تغییر روش پرداخت
+  async function handleChangeMethod(method: 'cash' | 'card' | 'transfer') {
+    if (!order) return
+    setPaying(true)
+    setPaymentError(null)
+
+    try {
+      const res = await fetch('/api/payment/set-method', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderId: order.id, method }),
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) throw new Error(data.error || 'خطا در تغییر روش')
+
+      setOrder({
+        ...order,
+        payment_method: method,
+        payment_status: method === 'transfer' ? 'pending_review' : 'unpaid',
+      })
+      setShowChangeMethod(false)
+    } catch (err) {
+      setPaymentError(err instanceof Error ? err.message : 'خطا')
+    } finally {
+      setPaying(false)
+    }
+  }
+
   if (loading) {
     return (
-      <div
-        className="order-detail-container"
-        style={{ textAlign: 'center', paddingTop: '50px' }}
-      >
+      <div className="order-detail-container" style={{ textAlign: 'center', paddingTop: '50px' }}>
         در حال بارگذاری سفارش...
       </div>
     )
@@ -233,17 +328,10 @@ export default function OrderPage({
 
   if (error || !order) {
     return (
-      <div
-        className="order-detail-container"
-        style={{ textAlign: 'center', paddingTop: '50px' }}
-      >
+      <div className="order-detail-container" style={{ textAlign: 'center', paddingTop: '50px' }}>
         <div style={{ fontSize: 48 }}>😕</div>
         <h1>{error || 'خطا'}</h1>
-        <Link
-          href="/"
-          className="btn primary-btn"
-          style={{ marginTop: '20px', display: 'inline-flex' }}
-        >
+        <Link href="/" className="btn primary-btn" style={{ marginTop: '20px', display: 'inline-flex' }}>
           بازگشت به منو
         </Link>
       </div>
@@ -252,11 +340,20 @@ export default function OrderPage({
 
   const currentIndex = STATUS_STEPS.findIndex((s) => s.key === order.status)
   const isCancelled = order.status === 'cancelled'
+  const isPaid = order.payment_status === 'paid'
+  const isPendingReview = order.payment_status === 'pending_review'
+  const isUnpaid = order.payment_status === 'unpaid' || !order.payment_status
+  const isFailed = order.payment_status === 'failed'
+
+  // آیا بخش پرداخت نمایش داده بشه؟
+  const showPaymentSection =
+    !isCancelled &&
+    !isPaid &&
+    paymentSettings?.payment_enabled === true &&
+    (isUnpaid || isFailed || isPendingReview)
 
   const whatsappMessage = buildWhatsAppMessage(order)
-  const whatsappUrl = `https://wa.me/989301817098?text=${encodeURIComponent(
-    whatsappMessage
-  )}`
+  const whatsappUrl = `https://wa.me/989301817098?text=${encodeURIComponent(whatsappMessage)}`
 
   return (
     <div className="order-detail-container">
@@ -278,16 +375,170 @@ export default function OrderPage({
         <span style={{ width: '60px' }} />
       </div>
 
-      {/* استپر وضعیت یا کارت لغو */}
+      {/* ─────── بج وضعیت پرداخت ─────── */}
+      {!isCancelled && (
+        <div className={`order-payment-badge ${
+          isPaid ? 'paid' : isPendingReview ? 'pending' : isFailed ? 'failed' : 'unpaid'
+        }`}>
+          {isPaid && '✅ پرداخت شده'}
+          {isPendingReview && '⏳ در انتظار تأیید رسید'}
+          {isFailed && '❌ پرداخت ناموفق'}
+          {isUnpaid && `⏱ پرداخت نشده — ${PAYMENT_METHODS[order.payment_method || 'cash']?.label || 'نقدی'}`}
+          {isPaid && order.payment_ref_id && (
+            <span className="order-payment-badge-ref" dir="ltr">
+              {order.payment_ref_id}
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* ─────── بخش پرداخت (اگه لازمه) ─────── */}
+      {showPaymentSection && (
+        <div className="order-payment-section">
+          <div className="order-payment-section-title">
+            💳 پرداخت سفارش
+          </div>
+
+          {!showChangeMethod ? (
+            <>
+              <p className="order-payment-section-desc">
+                {isFailed
+                  ? 'پرداخت قبلی ناموفق بود. می‌تونی دوباره امتحان کنی یا روش دیگه‌ای انتخاب کنی.'
+                  : isPendingReview
+                    ? 'رسید واریز شما در انتظار تأیید کافه است.'
+                    : 'برای نهایی شدن سفارش، لطفاً پرداخت رو انجام بده.'}
+              </p>
+
+              {paymentError && (
+                <div className="checkout-error" style={{ marginBottom: '12px' }}>
+                  ❌ {paymentError}
+                </div>
+              )}
+
+              <div className="order-payment-actions">
+                {paymentSettings?.payment_online_enabled && (
+                  <button
+                    type="button"
+                    className="order-payment-btn primary"
+                    onClick={handlePayOnline}
+                    disabled={paying}
+                  >
+                    {paying
+                      ? '...'
+                      : `💳 پرداخت آنلاین ${formatPrice(order.subtotal)} تومان`}
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  className="order-payment-btn secondary"
+                  onClick={() => setShowChangeMethod(true)}
+                  disabled={paying}
+                >
+                  🔀 تغییر روش پرداخت
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="order-payment-section-desc">
+                روش پرداخت جدید رو انتخاب کن:
+              </p>
+
+              {paymentError && (
+                <div className="checkout-error" style={{ marginBottom: '12px' }}>
+                  ❌ {paymentError}
+                </div>
+              )}
+
+              <div className="order-payment-methods">
+                {paymentSettings?.payment_online_enabled && (
+                  <button
+                    type="button"
+                    className="order-payment-method-btn"
+                    onClick={() => {
+                      setShowChangeMethod(false)
+                      handlePayOnline()
+                    }}
+                    disabled={paying}
+                  >
+                    <span className="order-payment-method-icon">💳</span>
+                    <div>
+                      <strong>پرداخت آنلاین</strong>
+                      <small>زرین‌پال / آیدی‌پی</small>
+                    </div>
+                  </button>
+                )}
+
+                {paymentSettings?.payment_cash_enabled && (
+                  <button
+                    type="button"
+                    className="order-payment-method-btn"
+                    onClick={() => handleChangeMethod('cash')}
+                    disabled={paying}
+                  >
+                    <span className="order-payment-method-icon">💵</span>
+                    <div>
+                      <strong>پرداخت نقدی</strong>
+                      <small>در محل</small>
+                    </div>
+                  </button>
+                )}
+
+                {paymentSettings?.payment_card_enabled && (
+                  <button
+                    type="button"
+                    className="order-payment-method-btn"
+                    onClick={() => handleChangeMethod('card')}
+                    disabled={paying}
+                  >
+                    <span className="order-payment-method-icon">💳</span>
+                    <div>
+                      <strong>کارت‌خوان</strong>
+                      <small>در محل</small>
+                    </div>
+                  </button>
+                )}
+
+                {paymentSettings?.payment_transfer_enabled && (
+                  <button
+                    type="button"
+                    className="order-payment-method-btn"
+                    onClick={() => handleChangeMethod('transfer')}
+                    disabled={paying}
+                  >
+                    <span className="order-payment-method-icon">🏦</span>
+                    <div>
+                      <strong>واریز به حساب</strong>
+                      <small>با رسید</small>
+                    </div>
+                  </button>
+                )}
+              </div>
+
+              <button
+                type="button"
+                className="order-payment-btn secondary"
+                onClick={() => {
+                  setShowChangeMethod(false)
+                  setPaymentError(null)
+                }}
+                disabled={paying}
+                style={{ marginTop: '12px' }}
+              >
+                ← بازگشت
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ─────── استپر وضعیت یا کارت لغو ─────── */}
       {isCancelled ? (
-        <div
-          className="info-card"
-          style={{ textAlign: 'center', padding: '30px' }}
-        >
+        <div className="info-card" style={{ textAlign: 'center', padding: '30px' }}>
           <div style={{ fontSize: 48 }}>❌</div>
           <h2 style={{ color: '#9b3c32' }}>سفارش لغو شد</h2>
 
-          {/* ✅ نمایش دلیل لغو (فقط اگه ادمین لغو کرده) */}
           {order.cancelled_by === 'admin' && order.cancellation_reason_label && (
             <div className="cancellation-info-box">
               <div className="cancellation-info-label">
@@ -298,9 +549,7 @@ export default function OrderPage({
                   📝 {order.cancellation_note}
                 </div>
               )}
-              <div className="cancellation-info-by">
-                لغو شده توسط کافه
-              </div>
+              <div className="cancellation-info-by">لغو شده توسط کافه</div>
             </div>
           )}
 
@@ -324,9 +573,7 @@ export default function OrderPage({
             return (
               <div
                 key={step.key}
-                className={`step-item ${isDone ? 'done' : ''} ${
-                  isCurrent ? 'active' : ''
-                }`}
+                className={`step-item ${isDone ? 'done' : ''} ${isCurrent ? 'active' : ''}`}
               >
                 <div className="step-dot">{isDone ? step.icon : ''}</div>
                 <span>{step.label}</span>
@@ -340,13 +587,7 @@ export default function OrderPage({
       <div className="info-card">
         <h3>🧾 اقلام سفارش</h3>
         {order.table_number && (
-          <div
-            style={{
-              fontSize: '13px',
-              color: '#6b4f3a',
-              marginBottom: '10px',
-            }}
-          >
+          <div style={{ fontSize: '13px', color: '#6b4f3a', marginBottom: '10px' }}>
             📍 میز شماره {formatPrice(order.table_number)}
           </div>
         )}
@@ -356,10 +597,7 @@ export default function OrderPage({
             <span>
               {formatPrice(item.quantity)} × {item.product_name}
               {item.option_name && (
-                <small style={{ color: '#766f64' }}>
-                  {' '}
-                  ({item.option_name})
-                </small>
+                <small style={{ color: '#766f64' }}> ({item.option_name})</small>
               )}
             </span>
             <strong>
@@ -372,9 +610,7 @@ export default function OrderPage({
           <div className="order-payment-summary">
             <div className="info-row">
               <span>جمع اقلام:</span>
-              <strong>
-                {formatPrice(order.original_subtotal ?? order.subtotal)} تومان
-              </strong>
+              <strong>{formatPrice(order.original_subtotal ?? order.subtotal)} تومان</strong>
             </div>
             <div className="info-row discount">
               <span>🎟️ تخفیف ({order.coupon_code}):</span>
@@ -412,8 +648,8 @@ export default function OrderPage({
         )}
       </div>
 
-      {/* ✅ دکمه لغو سفارش */}
-      {canCancel && (
+      {/* دکمه لغو سفارش */}
+      {canCancel && !isPaid && (
         <div className="order-cancel-section">
           <button
             type="button"
@@ -429,14 +665,11 @@ export default function OrderPage({
         </div>
       )}
 
-      {/* ✅ پیام موفقیت لغو */}
       {cancelSuccess && (
-        <div className="order-cancel-success">
-          ✅ سفارش با موفقیت لغو شد
-        </div>
+        <div className="order-cancel-success">✅ سفارش با موفقیت لغو شد</div>
       )}
 
-      {/* ✅ مودال تأیید لغو */}
+      {/* مودال تأیید لغو */}
       {showCancelConfirm && (
         <div
           className="modal-overlay"
@@ -485,9 +718,7 @@ export default function OrderPage({
                       <span className="cancel-reason-icon">
                         {reason.icon || '📝'}
                       </span>
-                      <span className="cancel-reason-label">
-                        {reason.label}
-                      </span>
+                      <span className="cancel-reason-label">{reason.label}</span>
                       {selectedReasonId === reason.id && (
                         <span className="cancel-reason-check">✓</span>
                       )}
@@ -530,11 +761,7 @@ export default function OrderPage({
               <button
                 type="button"
                 className="btn"
-                style={{
-                  background: '#9b3c32',
-                  color: '#fff',
-                  border: 0,
-                }}
+                style={{ background: '#9b3c32', color: '#fff', border: 0 }}
                 onClick={handleCancelOrder}
                 disabled={cancelling}
               >
@@ -545,7 +772,7 @@ export default function OrderPage({
         </div>
       )}
 
-      {/* دکمه ثابت پایین صفحه (واتساپ) */}
+      {/* دکمه ثابت پایین (واتساپ) */}
       <div className="sticky-action-bar">
         <a
           href={whatsappUrl}
@@ -565,23 +792,14 @@ function buildWhatsAppMessage(order: Order): string {
   msg += `📋 سفارش #${order.order_number}\n`
   msg += `👤 ${order.customer_name}\n`
   msg += `📞 ${order.customer_phone}\n`
-
-  if (order.table_number) {
-    msg += `📍 میز ${order.table_number}\n`
-  }
-
+  if (order.table_number) msg += `📍 میز ${order.table_number}\n`
   msg += `\n🧾 اقلام:\n`
   for (const item of order.items) {
     msg += `  • ${item.quantity} × ${item.product_name}`
     if (item.option_name) msg += ` (${item.option_name})`
     msg += ` - ${item.unit_price * item.quantity} تومان\n`
   }
-
   msg += `\n💰 جمع کل: ${order.subtotal} تومان`
-
-  if (order.note) {
-    msg += `\n\n📝 توضیحات: ${order.note}`
-  }
-
+  if (order.note) msg += `\n\n📝 توضیحات: ${order.note}`
   return msg
 }

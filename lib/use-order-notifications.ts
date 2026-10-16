@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { createClient } from '@supabase/supabase-js'
+import { usePwaBadge } from './use-pwa-badge'
 
 type NewOrderInfo = {
   id: string
@@ -25,6 +26,9 @@ export function useOrderNotifications(enabled: boolean = true) {
   const flashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const knownOrderIdsRef = useRef<Set<string>>(new Set())
   const isFirstLoadRef = useRef(true)
+
+  // ✅ نمایش تعداد سفارش‌های pending روی آیکون PWA
+  usePwaBadge(pendingCount)
 
   // ─── فعال‌سازی صدا با اولین کلیک ───
   useEffect(() => {
@@ -93,12 +97,15 @@ export function useOrderNotifications(enabled: boolean = true) {
       if (cancelled) return
 
       try {
-        const { data, error } = await db
+                const { data, error } = await db
           .from('orders')
           .select(
-            'id, order_number, customer_name, customer_phone, table_number, subtotal, items, created_at, status'
+            'id, order_number, customer_name, customer_phone, table_number, subtotal, items, created_at, status, payment_method, payment_status'
           )
           .eq('status', 'pending')
+          .or(
+            'payment_method.in.(cash,card),payment_method.is.null,payment_status.in.(paid,pending_review)'
+          )
           .order('created_at', { ascending: false })
           .limit(20)
 
@@ -245,11 +252,10 @@ function showBrowserNotification(orderNumber?: number, customerName?: string) {
       body: `سفارش #${orderNumber ?? '?'} از ${customerName ?? 'مشتری'}`,
       icon: '/icons/icon-192.png',
       tag: 'new-order-' + Date.now(),
-      requireInteraction: true,   // ✅ می‌مونه تا کاربر ببندش
-      silent: true,                // ✅ صدای دوباره از سیستم نده (چون خودمون بوق زدیم)
+      requireInteraction: true,
+      silent: true,
     })
 
-    // ✅ کلیک روی نوتیفیکیشن → برو به صفحه سفارش‌ها
     notif.onclick = () => {
       window.focus()
       window.location.href = '/admin/orders'

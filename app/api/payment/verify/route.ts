@@ -1,0 +1,125 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { supabaseServer } from '@/lib/supabase/server'
+import { verifyZarinPalPayment } from '@/lib/payment/zarinpal'
+
+export const dynamic = 'force-dynamic'
+
+export async function GET(req: NextRequest) {
+  const origin =
+    req.headers.get('origin') ||
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    'http://localhost:3000'
+
+  try {
+    const { searchParams } = new URL(req.url)
+    const authority = searchParams.get('Authority')
+    const status = searchParams.get('Status')
+
+    if (!authority) {
+      return NextResponse.redirect(
+        `${origin}/payment/callback?status=error&message=${encodeURIComponent(
+          'کد Authority دریافت نشد'
+        )}`
+      )
+    }
+
+    const db = await supabaseServer()
+
+    // ۱. پیدا کردن سفارش
+    const { data: order, error: orderErr } = await db
+      .from('orders')
+      .select('id, order_number, subtotal, payment_status')
+      .eq('payment_authority', authority)
+      .single()
+
+    if (orderErr || !order) {
+      return NextResponse.redirect(
+        `${origin}/payment/callback?status=error&message=${encodeURIComponent(
+          'سفارش پیدا نشد'
+        )}`
+      )
+    }
+
+    // ۲. کاربر لغو کرد
+    if (status !== 'OK') {
+      await db
+        .from('orders')
+        .update({ payment_status: 'failed' })
+        .eq('id', order.id)
+
+      return NextResponse.redirect(
+        `${origin}/payment/callback?status=cancelled&orderId=${order.id}`
+      )
+    }
+
+    // ۳. قبلاً پرداخت شده (idempotent)
+    if (order.payment_status === 'paid') {
+      return NextResponse.redirect(
+        `${origin}/payment/callback?status=already-paid&orderId=${order.id}`
+      )
+    }
+
+    // ۴. خواندن تنظیمات
+    const { data: settings, error: settingsErr } = await db
+      .from('settings')
+      .select('payment_merchant_id, payment_sandbox_mode')
+      .eq('id', 1)
+      .single()
+
+    if (settingsErr || !settings) {
+      return NextResponse.redirect(
+        `${origin}/payment/callback?status=error&message=${encodeURIComponent(
+          'خطا در خواندن تنظیمات'
+        )}&orderId=${order.id}`
+      )
+    }
+
+    const merchantId =
+      settings.payment_merchant_id || 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'
+
+    // ۵. تأیید پرداخت
+    const result = await verifyZarinPalPayment(
+      {
+        merchantId,
+        sandbox: !!settings.payment_sandbox_mode,
+      },
+      authority,
+      order.subtotal
+    )
+
+    if (!result.success) {
+      await db
+        .from('orders')
+        .update({ payment_status: 'failed' })
+        .eq('id', order.id)
+
+      return NextResponse.redirect(
+        `${origin}/payment/callback?status=error&message=${encodeURIComponent(
+          result.error
+        )}&orderId=${order.id}`
+      )
+    }
+
+    // ۶. ثبت موفقیت
+    await db
+      .from('orders')
+      .update({
+        payment_status: 'paid',
+        payment_ref_id: result.refId,
+        payment_verified_at: new Date().toISOString(),
+      })
+      .eq('id', order.id)
+
+    // ۷. ریدایرکت
+    return NextResponse.redirect(
+      `${origin}/payment/callback?status=success&orderId=${order.id}&refId=${result.refId}`
+    )
+  } catch (err: any) {
+    console.error('[payment/verify] error:', err)
+    return NextResponse.redirect(
+      `${origin}/payment/callback?status=error&message=${encodeURIComponent(
+        err?.message || 'خطای غیرمنتظره'
+      )}`
+    )
+  }
+}
