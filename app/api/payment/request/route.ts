@@ -80,7 +80,7 @@ export async function POST(req: NextRequest) {
       req.headers.get('origin') ||
       process.env.NEXT_PUBLIC_SITE_URL ||
       'http://localhost:3000'
-    const callbackUrl = `${origin}/api/payment/verify`
+        const callbackUrl = `${origin}/api/payment/verify?orderId=${orderId}`
 
     // ۴. درخواست پرداخت
     const merchantId =

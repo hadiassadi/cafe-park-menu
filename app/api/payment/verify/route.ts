@@ -18,9 +18,10 @@ export async function GET(req: NextRequest) {
     'http://localhost:3000'
 
   try {
-    const { searchParams } = new URL(req.url)
+        const { searchParams } = new URL(req.url)
     const authority = searchParams.get('Authority')
     const status = searchParams.get('Status')
+    const orderId = searchParams.get('orderId')
 
     if (!authority) {
       return NextResponse.redirect(
@@ -30,13 +31,21 @@ export async function GET(req: NextRequest) {
       )
     }
 
+    if (!orderId) {
+      return NextResponse.redirect(
+        `${origin}/payment/callback?status=error&message=${encodeURIComponent(
+          'شناسه سفارش دریافت نشد'
+        )}`
+      )
+    }
+
     const db = createDb()
 
-    // ۱. پیدا کردن سفارش
+    // ۱. پیدا کردن سفارش با orderId
     const { data: order, error: orderErr } = await db
       .from('orders')
       .select('id, order_number, subtotal, payment_status')
-      .eq('payment_authority', authority)
+      .eq('id', orderId)
       .single()
 
     if (orderErr || !order) {

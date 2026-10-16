@@ -13587,3 +13587,15 @@ body {
     grid-template-columns: 1fr;
   }
 }
+/* حالت "پرداخت در محل" — نقدی/کارت‌خوان */
+.order-payment-badge.in-place {
+  background: #f5f0e9;
+  color: #6b4f3a;
+  border: 1px solid #e3ddd2;
+}
+
+.admin-shell.dark-mode .order-payment-badge.in-place {
+  background: var(--admin-surface-2);
+  color: var(--admin-primary);
+  border-color: var(--admin-border);
+}
