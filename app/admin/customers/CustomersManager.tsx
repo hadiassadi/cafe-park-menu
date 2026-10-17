@@ -224,8 +224,8 @@ export default function CustomersManager() {
 
       setSaveMessage('✅ ذخیره شد')
       setTimeout(() => setSaveMessage(null), 2500)
-    } catch (err) {
-      setSaveMessage('❌ خطا در ذخیره')
+        } catch (err) {
+      setSaveMessage(`❌ ${err instanceof Error ? err.message : 'خطا در ذخیره'}`)
       console.error(err)
     } finally {
       setSaving(false)

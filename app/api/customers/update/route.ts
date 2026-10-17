@@ -19,22 +19,35 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'شماره تلفن الزامی است' }, { status: 400 })
     }
 
+    const cleanPhone = String(phone).replace(/[^\d]/g, '')
     const db = createAdminDb()
 
-    // upsert (اگر وجود داشت آپدیت، اگر نه درج شود)
-    const { error } = await db
+    // ۱. چک کن مشتری وجود داره یا نه
+    const { data: existing } = await db
       .from('customers')
-      .upsert(
-        { 
-          phone: String(phone).replace(/[^\d]/g, ''), 
-          notes: notes || null, 
-          tags: tags || [], 
-          updated_at: new Date().toISOString() 
-        },
-        { onConflict: 'phone' }
-      )
+      .select('phone')
+      .eq('phone', cleanPhone)
+      .maybeSingle()
+
+    let error;
+
+    if (existing) {
+      // آپدیت
+      const { error: updateErr } = await db
+        .from('customers')
+        .update({ notes: notes || null, tags: tags || [], updated_at: new Date().toISOString() })
+        .eq('phone', cleanPhone)
+      error = updateErr
+    } else {
+      // درج
+      const { error: insertErr } = await db
+        .from('customers')
+        .insert({ phone: cleanPhone, notes: notes || null, tags: tags || [], updated_at: new Date().toISOString() })
+      error = insertErr
+    }
 
     if (error) {
+      console.error('[customers/update]', error)
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
