@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react'
 import Modal from '../components/Modal'
 import { revalidateMenu } from '../actions'
-import { supabaseBrowser } from '@/lib/supabase/client'
 
 /* ============================================================
    انواع و مقدارهای پیش‌فرض
@@ -219,6 +218,10 @@ async function processImage(file: File, p: Process): Promise<Blob> {
   )
 }
 
+// ✅ این تابع حالا در سطح بالای فایل قرار دارد (خارج از prepareAndUpload)
+const errText = (err: unknown) =>
+  err instanceof UserError ? err.message : 'آپلود نشد. دوباره تلاش کن.'
+
 async function prepareAndUpload(file: File, folder: string, p: Process) {
   if (!file.type.startsWith('image/')) throw new UserError('فایل باید تصویر باشد.')
   if (file.size > 8 * 1024 * 1024) {
@@ -226,19 +229,22 @@ async function prepareAndUpload(file: File, folder: string, p: Process) {
   }
 
   const blob = await processImage(file, p)
-  const db = supabaseBrowser()
-  const path = `settings/${folder}-${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`
+  
+  // ✅ تغییر: آپلود از طریق API سرور به جای اتصال مستقیم
+  const formData = new FormData()
+  formData.append('file', blob)
+  formData.append('folder', folder)
 
-  const { error } = await db.storage
-    .from('product-images')
-    .upload(path, blob, { contentType: 'image/jpeg', upsert: false })
-  if (error) throw error
+  const res = await fetch('/api/upload', {
+    method: 'POST',
+    body: formData,
+  })
 
-  return db.storage.from('product-images').getPublicUrl(path).data.publicUrl
+  const data = await res.json()
+  if (!res.ok || !data.url) throw new UserError(data.error || 'آپلود نشد')
+
+  return data.url
 }
-
-const errText = (err: unknown) =>
-  err instanceof UserError ? err.message : 'آپلود نشد. دوباره تلاش کن.'
 
 /* ============================================================
    کامپوننت‌های کوچک

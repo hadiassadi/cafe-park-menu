@@ -1,71 +1,45 @@
-import { NextResponse } from 'next/server'
-import { supabaseServer } from '@/lib/supabase/server'
+import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
 
 export const dynamic = 'force-dynamic'
 
-export async function POST(request: Request) {
+function createAdminDb() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!url || !key) throw new Error('Missing Supabase admin env')
+  return createClient(url, key, { auth: { persistSession: false } })
+}
+
+export async function POST(req: NextRequest) {
   try {
-    const body = await request.json()
+    const body = await req.json()
     const { phone, notes, tags } = body
 
     if (!phone) {
-      return NextResponse.json(
-        { error: 'شماره تلفن الزامی است' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'شماره تلفن الزامی است' }, { status: 400 })
     }
 
-    const normalizedPhone = String(phone).replace(/[^\d]/g, '')
-    if (!normalizedPhone) {
-      return NextResponse.json(
-        { error: 'شماره تلفن نامعتبر' },
-        { status: 400 }
-      )
-    }
+    const db = createAdminDb()
 
-    const db = await supabaseServer()
-
-    const { data: existing } = await db
+    // upsert (اگر وجود داشت آپدیت، اگر نه درج شود)
+    const { error } = await db
       .from('customers')
-      .select('phone')
-      .eq('phone', normalizedPhone)
-      .maybeSingle()
-
-    const updateData = {
-      notes: notes || null,
-      tags: Array.isArray(tags) ? tags : [],
-    }
-
-    let error
-
-    if (existing) {
-      const result = await db
-        .from('customers')
-        .update(updateData)
-        .eq('phone', normalizedPhone)
-      error = result.error
-    } else {
-      const result = await db.from('customers').insert({
-        phone: normalizedPhone,
-        ...updateData,
-      })
-      error = result.error
-    }
+      .upsert(
+        { 
+          phone: String(phone).replace(/[^\d]/g, ''), 
+          notes: notes || null, 
+          tags: tags || [], 
+          updated_at: new Date().toISOString() 
+        },
+        { onConflict: 'phone' }
+      )
 
     if (error) {
-      console.error('[customer update] error:', error)
-      return NextResponse.json(
-        { error: error.message },
-        { status: 500 }
-      )
+      return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
     return NextResponse.json({ success: true })
-  } catch (err) {
-    console.error('[customer update] error:', err)
-    return NextResponse.json(
-      { error: 'خطای سرور' },
-      { status: 500 }
-    )
+  } catch (err: any) {
+    return NextResponse.json({ error: err?.message || 'خطای غیرمنتظره' }, { status: 500 })
   }
 }

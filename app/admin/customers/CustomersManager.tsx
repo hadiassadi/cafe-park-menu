@@ -1,10 +1,22 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { getCustomersData, type CustomerData } from '@/lib/stats'
 
 const formatPrice = (n: number) =>
   new Intl.NumberFormat('fa-IR').format(Math.round(n))
+
+// Types
+type CustomerData = {
+  phone: string
+  name: string
+  order_count: number
+  total_spent: number
+  cancelled_count: number
+  last_order_at: string | null
+  first_order_at: string | null
+  notes: string | null
+  tags: string[]
+}
 
 const PRESET_TAGS = [
   { key: 'vip', label: '🌟 VIP', color: 'vip' },
@@ -25,7 +37,6 @@ const FILTER_LABELS: Record<CustomerFilter, string> = {
   problematic: '⚠️ مشکل‌دار',
 }
 
-// ✅ فیلتر تعداد لغو
 type CancelFilter = 'all' | '1+' | '3+' | '5+'
 
 const CANCEL_FILTER_LABELS: Record<CancelFilter, string> = {
@@ -60,26 +71,26 @@ export default function CustomersManager() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<CustomerFilter>('all')
-  // ✅ State جدید فیلتر لغو
   const [cancelFilter, setCancelFilter] = useState<CancelFilter>('all')
-  const [selectedCustomer, setSelectedCustomer] = useState<CustomerData | null>(
-    null
-  )
+  const [selectedCustomer, setSelectedCustomer] = useState<CustomerData | null>(null)
   const [editNotes, setEditNotes] = useState('')
   const [editTags, setEditTags] = useState<string[]>([])
   const [newTagInput, setNewTagInput] = useState('')
   const [saving, setSaving] = useState(false)
   const [saveMessage, setSaveMessage] = useState<string | null>(null)
 
-  // لود داده‌ها
+  // ✅ لود داده‌ها از API امن سرور (نه مستقیم از دیتابیس)
   useEffect(() => {
     let cancelled = false
 
-    getCustomersData()
-      .then((result) => {
+    fetch('/api/admin/customers', { cache: 'no-store' })
+      .then((res) => res.json())
+      .then((data) => {
         if (!cancelled) {
-          setCustomers(result.customers)
-          setSummary(result.summary)
+          if (data.customers) {
+            setCustomers(data.customers)
+            setSummary(data.summary)
+          }
           setLoading(false)
         }
       })
@@ -93,7 +104,6 @@ export default function CustomersManager() {
     }
   }, [])
 
-  // ✅ شمارش زنده بر اساس فیلتر لغو (برای نشان دادن روی چیپ‌ها)
   const cancelCounts = useMemo(() => {
     return {
       all: customers.length,
@@ -103,28 +113,24 @@ export default function CustomersManager() {
     }
   }, [customers])
 
-  // فیلتر
   const filteredCustomers = useMemo(() => {
     const thirtyDaysAgo = new Date()
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
 
     let list = customers
 
-    // فیلتر دسته‌بندی
     if (filter === 'loyal') {
       list = list.filter((c) => c.order_count >= 5)
     } else if (filter === 'new') {
       list = list.filter((c) => c.order_count === 1)
     } else if (filter === 'inactive') {
       list = list.filter(
-        (c) =>
-          c.last_order_at && new Date(c.last_order_at) < thirtyDaysAgo
+        (c) => c.last_order_at && new Date(c.last_order_at) < thirtyDaysAgo
       )
     } else if (filter === 'problematic') {
       list = list.filter((c) => c.cancelled_count >= 2)
     }
 
-    // ✅ فیلتر تعداد لغو
     if (cancelFilter === '1+') {
       list = list.filter((c) => c.cancelled_count >= 1)
     } else if (cancelFilter === '3+') {
@@ -133,21 +139,15 @@ export default function CustomersManager() {
       list = list.filter((c) => c.cancelled_count >= 5)
     }
 
-    // جستجو
     if (search.trim()) {
       const q = search.trim().toLowerCase()
       list = list.filter(
-        (c) =>
-          c.name.toLowerCase().includes(q) ||
-          c.phone.includes(q)
+        (c) => c.name.toLowerCase().includes(q) || c.phone.includes(q)
       )
     }
 
-    // مرتب‌سازی: اگه فیلتر لغو فعاله، اول پرلغوترین‌ها
     if (cancelFilter !== 'all') {
-      list = [...list].sort(
-        (a, b) => b.cancelled_count - a.cancelled_count
-      )
+      list = [...list].sort((a, b) => b.cancelled_count - a.cancelled_count)
     }
 
     return list
@@ -209,7 +209,6 @@ export default function CustomersManager() {
         throw new Error(data.error || 'خطا در ذخیره')
       }
 
-      // آپدیت state
       setCustomers((prev) =>
         prev.map((c) =>
           c.phone === selectedCustomer.phone
@@ -244,7 +243,6 @@ export default function CustomersManager() {
 
   return (
     <div className="admin-main">
-      {/* هدر */}
       <div className="admin-header">
         <div>
           <h1>👥 مشتریان</h1>
@@ -256,66 +254,45 @@ export default function CustomersManager() {
         </div>
       </div>
 
-      {/* کارت‌های خلاصه */}
       {!loading && (
         <section className="dashboard-section">
           <div className="customers-summary-grid">
             <div className="customers-summary-card">
-              <div className="customers-summary-icon" style={{ background: '#e5f0e6' }}>
-                👥
-              </div>
+              <div className="customers-summary-icon" style={{ background: '#e5f0e6' }}>👥</div>
               <div>
-                <div className="customers-summary-value">
-                  {formatPrice(summary.total)}
-                </div>
+                <div className="customers-summary-value">{formatPrice(summary.total)}</div>
                 <div className="customers-summary-label">کل مشتریان</div>
               </div>
             </div>
 
             <div className="customers-summary-card">
-              <div className="customers-summary-icon" style={{ background: '#eee6d9' }}>
-                ⭐
-              </div>
+              <div className="customers-summary-icon" style={{ background: '#eee6d9' }}>⭐</div>
               <div>
-                <div className="customers-summary-value">
-                  {formatPrice(summary.loyal)}
-                </div>
+                <div className="customers-summary-value">{formatPrice(summary.loyal)}</div>
                 <div className="customers-summary-label">وفادار (۵+)</div>
               </div>
             </div>
 
             <div className="customers-summary-card">
-              <div className="customers-summary-icon" style={{ background: '#e6ecf0' }}>
-                🆕
-              </div>
+              <div className="customers-summary-icon" style={{ background: '#e6ecf0' }}>🆕</div>
               <div>
-                <div className="customers-summary-value">
-                  {formatPrice(summary.new)}
-                </div>
+                <div className="customers-summary-value">{formatPrice(summary.new)}</div>
                 <div className="customers-summary-label">جدید</div>
               </div>
             </div>
 
             <div className="customers-summary-card">
-              <div className="customers-summary-icon" style={{ background: '#f0e6f0' }}>
-                💤
-              </div>
+              <div className="customers-summary-icon" style={{ background: '#f0e6f0' }}>💤</div>
               <div>
-                <div className="customers-summary-value">
-                  {formatPrice(summary.inactive)}
-                </div>
+                <div className="customers-summary-value">{formatPrice(summary.inactive)}</div>
                 <div className="customers-summary-label">غیرفعال</div>
               </div>
             </div>
 
             <div className="customers-summary-card">
-              <div className="customers-summary-icon" style={{ background: '#fde8e6' }}>
-                ⚠️
-              </div>
+              <div className="customers-summary-icon" style={{ background: '#fde8e6' }}>⚠️</div>
               <div>
-                <div className="customers-summary-value">
-                  {formatPrice(summary.problematic)}
-                </div>
+                <div className="customers-summary-value">{formatPrice(summary.problematic)}</div>
                 <div className="customers-summary-label">مشکل‌دار</div>
               </div>
             </div>
@@ -323,7 +300,6 @@ export default function CustomersManager() {
         </section>
       )}
 
-      {/* فیلترها + جستجو */}
       <section className="dashboard-section">
         <div className="customers-toolbar">
           <div className="search-box">
@@ -350,11 +326,8 @@ export default function CustomersManager() {
           ))}
         </div>
 
-        {/* ✅ فیلتر تعداد لغو */}
         <div className="customers-cancel-filters">
-          <span className="customers-cancel-label">
-            🚫 فیلتر لغو:
-          </span>
+          <span className="customers-cancel-label">🚫 فیلتر لغو:</span>
           <div className="customers-cancel-chips">
             {(Object.keys(CANCEL_FILTER_LABELS) as CancelFilter[]).map((f) => (
               <button
@@ -366,16 +339,13 @@ export default function CustomersManager() {
                 onClick={() => setCancelFilter(f)}
               >
                 {CANCEL_FILTER_LABELS[f]}
-                <span className="chip-count">
-                  {formatPrice(cancelCounts[f])}
-                </span>
+                <span className="chip-count">{formatPrice(cancelCounts[f])}</span>
               </button>
             ))}
           </div>
         </div>
       </section>
 
-      {/* لیست مشتریان */}
       {loading ? (
         <div className="admin-card">
           <p className="empty-admin">⏳ در حال بارگذاری مشتریان...</p>
@@ -394,8 +364,8 @@ export default function CustomersManager() {
         <>
           {cancelFilterActive && (
             <div className="customers-filter-result">
-              🎯 {formatPrice(filteredCustomers.length)} مشتری با فیلتر
-              «{CANCEL_FILTER_LABELS[cancelFilter]}» پیدا شد
+              🎯 {formatPrice(filteredCustomers.length)} مشتری با فیلتر «
+              {CANCEL_FILTER_LABELS[cancelFilter]}» پیدا شد
             </div>
           )}
 
@@ -411,9 +381,7 @@ export default function CustomersManager() {
                 onClick={() => openCustomer(customer)}
               >
                 <div className="customer-card-header">
-                  <div className="customer-avatar">
-                    {customer.name.charAt(0)}
-                  </div>
+                  <div className="customer-avatar">{customer.name.charAt(0)}</div>
                   <div className="customer-info">
                     <strong>{customer.name}</strong>
                     <small dir="ltr">{customer.phone}</small>
@@ -429,9 +397,7 @@ export default function CustomersManager() {
                 <div className="customer-card-body">
                   <div className="customer-stat">
                     <span>🛒</span>
-                    <span>
-                      {formatPrice(customer.order_count)} سفارش موفق
-                    </span>
+                    <span>{formatPrice(customer.order_count)} سفارش موفق</span>
                   </div>
                   {customer.cancelled_count > 0 && (
                     <div
@@ -441,9 +407,7 @@ export default function CustomersManager() {
                     >
                       <span>❌</span>
                       <span>
-                        <strong>
-                          {formatPrice(customer.cancelled_count)}
-                        </strong>{' '}
+                        <strong>{formatPrice(customer.cancelled_count)}</strong>{' '}
                         سفارش لغو
                       </span>
                     </div>
@@ -461,9 +425,7 @@ export default function CustomersManager() {
                 {customer.tags && customer.tags.length > 0 && (
                   <div className="customer-tags-preview">
                     {customer.tags.slice(0, 3).map((tag) => (
-                      <span key={tag} className="customer-tag-pill">
-                        {tag}
-                      </span>
+                      <span key={tag} className="customer-tag-pill">{tag}</span>
                     ))}
                     {customer.tags.length > 3 && (
                       <span className="customer-tag-pill more">
@@ -474,9 +436,7 @@ export default function CustomersManager() {
                 )}
 
                 {customer.notes && (
-                  <div className="customer-notes-preview">
-                    📝 {customer.notes}
-                  </div>
+                  <div className="customer-notes-preview">📝 {customer.notes}</div>
                 )}
 
                 <div className="customer-actions">
@@ -503,16 +463,9 @@ export default function CustomersManager() {
         </>
       )}
 
-      {/* مودال جزئیات مشتری */}
       {selectedCustomer && (
-        <div
-          className="modal-overlay"
-          onClick={() => !saving && setSelectedCustomer(null)}
-        >
-          <div
-            className="modal-container modal-md"
-            onClick={(e) => e.stopPropagation()}
-          >
+        <div className="modal-overlay" onClick={() => !saving && setSelectedCustomer(null)}>
+          <div className="modal-container modal-md" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <div className="modal-header-content">
                 <h2>{selectedCustomer.name}</h2>
@@ -537,19 +490,11 @@ export default function CustomersManager() {
                 </div>
                 <div className="info-row">
                   <span>مجموع خرید:</span>
-                  <strong>
-                    {formatPrice(selectedCustomer.total_spent)} تومان
-                  </strong>
+                  <strong>{formatPrice(selectedCustomer.total_spent)} تومان</strong>
                 </div>
                 <div className="info-row">
                   <span>سفارش لغو شده:</span>
-                  <strong
-                    className={
-                      selectedCustomer.cancelled_count >= 3
-                        ? 'cancelled-emphasis'
-                        : ''
-                    }
-                  >
+                  <strong className={selectedCustomer.cancelled_count >= 3 ? 'cancelled-emphasis' : ''}>
                     {formatPrice(selectedCustomer.cancelled_count)}
                   </strong>
                 </div>
@@ -561,15 +506,12 @@ export default function CustomersManager() {
 
               <div className="info-card" style={{ marginTop: '16px' }}>
                 <h3>🏷️ تگ‌ها</h3>
-
                 <div className="customer-preset-tags">
                   {PRESET_TAGS.map((tag) => (
                     <button
                       key={tag.key}
                       type="button"
-                      className={`preset-tag-btn ${
-                        editTags.includes(tag.label) ? 'selected' : ''
-                      }`}
+                      className={`preset-tag-btn ${editTags.includes(tag.label) ? 'selected' : ''}`}
                       onClick={() => togglePresetTag(tag.key)}
                       disabled={saving}
                     >
@@ -578,22 +520,14 @@ export default function CustomersManager() {
                   ))}
                 </div>
 
-                {editTags.filter(
-                  (t) => !PRESET_TAGS.some((p) => p.label === t)
-                ).length > 0 && (
+                {editTags.filter((t) => !PRESET_TAGS.some((p) => p.label === t)).length > 0 && (
                   <div className="custom-tags-list">
                     {editTags
-                      .filter(
-                        (t) => !PRESET_TAGS.some((p) => p.label === t)
-                      )
+                      .filter((t) => !PRESET_TAGS.some((p) => p.label === t))
                       .map((tag) => (
                         <span key={tag} className="custom-tag">
                           {tag}
-                          <button
-                            type="button"
-                            onClick={() => removeTag(tag)}
-                            disabled={saving}
-                          >
+                          <button type="button" onClick={() => removeTag(tag)} disabled={saving}>
                             ✕
                           </button>
                         </span>
@@ -615,11 +549,7 @@ export default function CustomersManager() {
                     placeholder="تگ دلخواه..."
                     disabled={saving}
                   />
-                  <button
-                    type="button"
-                    onClick={addCustomTag}
-                    disabled={saving || !newTagInput.trim()}
-                  >
+                  <button type="button" onClick={addCustomTag} disabled={saving || !newTagInput.trim()}>
                     + افزودن
                   </button>
                 </div>
@@ -638,34 +568,17 @@ export default function CustomersManager() {
               </div>
 
               {saveMessage && (
-                <div
-                  className={
-                    saveMessage.startsWith('✅')
-                      ? 'admin-message'
-                      : 'admin-error'
-                  }
-                  style={{ marginTop: '12px' }}
-                >
+                <div className={saveMessage.startsWith('✅') ? 'admin-message' : 'admin-error'} style={{ marginTop: '12px' }}>
                   {saveMessage}
                 </div>
               )}
             </div>
 
             <div className="modal-footer">
-              <button
-                type="button"
-                className="btn"
-                onClick={() => setSelectedCustomer(null)}
-                disabled={saving}
-              >
+              <button type="button" className="btn" onClick={() => setSelectedCustomer(null)} disabled={saving}>
                 بستن
               </button>
-              <button
-                type="button"
-                className="btn primary-btn"
-                onClick={saveCustomer}
-                disabled={saving}
-              >
+              <button type="button" className="btn primary-btn" onClick={saveCustomer} disabled={saving}>
                 {saving ? '...' : '💾 ذخیره'}
               </button>
             </div>
