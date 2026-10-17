@@ -1,51 +1,47 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { getCurrentCustomer, normalizePhone } from '@/lib/customer-auth'
+import { cookies } from 'next/headers'
+import crypto from 'crypto'
 
 export const dynamic = 'force-dynamic'
 
-function createDb() {
+function createAdminDb() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
-  if (!url || !key) throw new Error('Missing Supabase env')
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!url || !key) throw new Error('Missing Supabase admin env')
   return createClient(url, key, { auth: { persistSession: false } })
 }
 
-export async function GET() {
-  const customer = await getCurrentCustomer()
+export async function GET(req: NextRequest) {
+  try {
+    const cookieStore = await cookies()
+    const deviceToken = cookieStore.get('cafe_device_token')?.value
 
-  if (!customer) {
-    return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
-  }
+    if (!deviceToken) {
+      return NextResponse.json({ orders: [] }, { headers: { 'Cache-Control': 'no-store' } })
+    }
 
-  const db = createDb()
+    const deviceIdHash = crypto.createHash('sha256').update(deviceToken).digest('hex')
+    const db = createAdminDb()
 
-  // ✅ ساخت همه فرمت‌های ممکن شماره (چون در orders ممکنه فرمت متفاوتی ذخیره شده باشه)
-  const base = normalizePhone(customer.phone) // 09301817098
-  const without0 = base.slice(1)              // 9301817098
-  const withPlus98 = '+98' + without0         // +989301817098
-  const with98 = '98' + without0              // 989301817098
+    const { data, error } = await db
+      .from('orders')
+      .select(
+        'id, order_number, items, subtotal, original_subtotal, coupon_code, coupon_discount, status, created_at, cancelled_by, cancellation_reason_label, customer_name, customer_phone'
+      )
+      .eq('device_id_hash', deviceIdHash) // ✅ فقط سفارش‌های همین دستگاه
+      .order('created_at', { ascending: false })
+      .limit(50)
 
-  const variants = Array.from(
-    new Set([base, without0, withPlus98, with98])
-  )
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
 
-  const { data, error } = await db
-    .from('orders')
-    .select(
-      'id, order_number, items, subtotal, original_subtotal, coupon_code, coupon_discount, status, created_at, cancelled_by, cancellation_reason_label'
+    return NextResponse.json(
+      { orders: data ?? [] },
+      { headers: { 'Cache-Control': 'no-store' } }
     )
-    .in('customer_phone', variants)
-    .order('created_at', { ascending: false })
-    .limit(50)
-
-  if (error) {
-    console.error('[customer orders] error:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+  } catch (err: any) {
+    return NextResponse.json({ error: err?.message }, { status: 500 })
   }
-
-  return NextResponse.json(
-    { orders: data ?? [] },
-    { headers: { 'Cache-Control': 'no-store' } }
-  )
 }

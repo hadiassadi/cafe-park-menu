@@ -37,6 +37,8 @@ type Order = {
   created_at: string
   cancelled_by: string | null
   cancellation_reason_label: string | null
+  customer_name: string
+  customer_phone: string
 }
 
 type Filter = 'all' | 'active' | 'delivered' | 'cancelled'
@@ -59,43 +61,36 @@ const STATUS_INFO: Record<string, { label: string; color: string; icon: string }
 
 export default function MyOrdersClient() {
   const { addItem } = useCart()
-  const [phone, setPhone] = useState<string | null>(null)
   const [orders, setOrders] = useState<Order[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<Filter>('all')
-
-  const [loginStep, setLoginStep] = useState<'phone' | 'code'>('phone')
-  const [phoneInput, setPhoneInput] = useState('')
-  const [codeInput, setCodeInput] = useState('')
-  const [shownCode, setShownCode] = useState<string | null>(null)
-  const [loginError, setLoginError] = useState<string | null>(null)
-  const [sending, setSending] = useState(false)
-  const [verifying, setVerifying] = useState(false)
+  const [customer, setCustomer] = useState<{ name: string; phone: string } | null>(null)
   const [toast, setToast] = useState<string | null>(null)
 
   useEffect(() => {
-    fetch('/api/customer/me', { cache: 'no-store' })
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.customer) {
-          setPhone(data.customer.phone)
+    async function loadData() {
+      try {
+        // دریافت اطلاعات مشتری (اگر قبلا سفارش داده باشد)
+        const meRes = await fetch('/api/customer/me', { cache: 'no-store' })
+        const meData = await meRes.json()
+        if (meData.customer) {
+          setCustomer(meData.customer)
         }
-        setLoading(false)
-      })
-      .catch(() => setLoading(false))
-  }, [])
 
-  useEffect(() => {
-    if (!phone) return
-    setLoading(true)
-    fetch('/api/customer/orders', { cache: 'no-store' })
-      .then((res) => res.json())
-      .then((data) => {
-        setOrders(data.orders ?? [])
+        // دریافت سفارش‌ها
+        const ordersRes = await fetch('/api/customer/orders', { cache: 'no-store' })
+        const ordersData = await ordersRes.json()
+        if (ordersData.orders) {
+          setOrders(ordersData.orders)
+        }
+      } catch {
+        // silent fail
+      } finally {
         setLoading(false)
-      })
-      .catch(() => setLoading(false))
-  }, [phone])
+      }
+    }
+    loadData()
+  }, [])
 
   useEffect(() => {
     if (!toast) return
@@ -103,66 +98,6 @@ export default function MyOrdersClient() {
     return () => clearTimeout(t)
   }, [toast])
 
-  async function handleSendOtp() {
-    setSending(true)
-    setLoginError(null)
-
-    try {
-      const res = await fetch('/api/customer/send-otp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: phoneInput }),
-      })
-      const data = await res.json()
-
-      if (!res.ok) {
-        setLoginError(data.error || 'خطا در ارسال کد')
-      } else {
-        setShownCode(data.code)
-        setLoginStep('code')
-      }
-    } catch {
-      setLoginError('خطای شبکه')
-    }
-    setSending(false)
-  }
-
-  async function handleVerifyOtp() {
-    setVerifying(true)
-    setLoginError(null)
-
-    try {
-      const res = await fetch('/api/customer/verify-otp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: phoneInput, code: codeInput }),
-      })
-      const data = await res.json()
-
-      if (!res.ok) {
-        setLoginError(data.error || 'کد اشتباه است')
-      } else {
-        setPhone(data.phone)
-        setShownCode(null)
-        setCodeInput('')
-      }
-    } catch {
-      setLoginError('خطای شبکه')
-    }
-    setVerifying(false)
-  }
-
-  async function handleLogout() {
-    await fetch('/api/customer/logout', { method: 'POST' })
-    setPhone(null)
-    setOrders([])
-    setPhoneInput('')
-    setCodeInput('')
-    setShownCode(null)
-    setLoginStep('phone')
-  }
-
-  // ✅ آپدیت شد: استفاده از اسم‌های درست CartItem
   function handleReorder(order: Order) {
     for (const item of order.items) {
       addItem({
@@ -183,7 +118,7 @@ export default function MyOrdersClient() {
     }, 800)
   }
 
-  if (loading && !phone && !phoneInput) {
+  if (loading) {
     return (
       <div className="my-orders-page">
         <div className="my-orders-header">
@@ -192,130 +127,6 @@ export default function MyOrdersClient() {
           <span style={{ width: 60 }} />
         </div>
         <div className="my-orders-empty">⏳ در حال بارگذاری...</div>
-      </div>
-    )
-  }
-
-  if (!phone) {
-    return (
-      <div className="my-orders-page">
-        <div className="my-orders-header">
-          <Link href="/" className="my-orders-back">← منو</Link>
-          <h1>ورود / ثبت‌نام</h1>
-          <span style={{ width: 60 }} />
-        </div>
-
-        <div className="customer-login-card">
-          {loginStep === 'phone' ? (
-            <>
-              <div className="customer-login-icon">📱</div>
-              <h2>شماره موبایلت رو وارد کن</h2>
-              <p className="customer-login-hint">
-                بعد از تأیید، می‌تونی سفارش‌های قبلیت رو ببینی و دوباره سفارش بدی.
-              </p>
-
-              <div className="customer-login-field">
-                <label>شماره موبایل</label>
-                <input
-                  type="tel"
-                  inputMode="numeric"
-                  placeholder="09123456789"
-                  value={phoneInput}
-                  onChange={(e) => setPhoneInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') handleSendOtp()
-                  }}
-                  disabled={sending}
-                  dir="ltr"
-                  autoFocus
-                />
-              </div>
-
-              {loginError && (
-                <div className="customer-login-error">❌ {loginError}</div>
-              )}
-
-              <button
-                type="button"
-                className="customer-login-btn"
-                onClick={handleSendOtp}
-                disabled={sending || !phoneInput.trim()}
-              >
-                {sending ? '...' : 'دریافت کد'}
-              </button>
-            </>
-          ) : (
-            <>
-              <div className="customer-login-icon">🔐</div>
-              <h2>کد تأیید رو وارد کن</h2>
-              <p className="customer-login-hint">
-                کد ۴ رقمی به شماره <strong dir="ltr">{phoneInput}</strong> فرستاده شده.
-              </p>
-
-              {shownCode && (
-                <div className="customer-login-code-display">
-                  <span>کد شما (نمایشی):</span>
-                  <strong>{shownCode}</strong>
-                </div>
-              )}
-
-              <div className="customer-login-field">
-                <label>کد ۴ رقمی</label>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  maxLength={4}
-                  placeholder="----"
-                  value={codeInput}
-                  onChange={(e) =>
-                    setCodeInput(e.target.value.replace(/\D/g, ''))
-                  }
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') handleVerifyOtp()
-                  }}
-                  disabled={verifying}
-                  dir="ltr"
-                  autoFocus
-                  style={{
-                    textAlign: 'center',
-                    fontSize: '24px',
-                    letterSpacing: '8px',
-                    fontWeight: 800,
-                  }}
-                />
-              </div>
-
-              {loginError && (
-                <div className="customer-login-error">❌ {loginError}</div>
-              )}
-
-              <button
-                type="button"
-                className="customer-login-btn"
-                onClick={handleVerifyOtp}
-                disabled={verifying || codeInput.length !== 4}
-              >
-                {verifying ? '...' : 'تایید و ورود'}
-              </button>
-
-              <button
-                type="button"
-                className="customer-login-link"
-                onClick={() => {
-                  setLoginStep('phone')
-                  setCodeInput('')
-                  setShownCode(null)
-                  setLoginError(null)
-                }}
-                disabled={verifying}
-              >
-                ← تغییر شماره
-              </button>
-            </>
-          )}
-        </div>
-
-        {toast && <div className="toast">{toast}</div>}
       </div>
     )
   }
@@ -334,35 +145,37 @@ export default function MyOrdersClient() {
       <div className="my-orders-header">
         <Link href="/" className="my-orders-back">← منو</Link>
         <h1>سفارش‌های من</h1>
-        <button
-          type="button"
-          className="my-orders-logout"
-          onClick={handleLogout}
-        >
-          🚪 خروج
-        </button>
+        <span style={{ width: 60 }} />
       </div>
 
-      <div className="my-orders-user">
-        <div className="my-orders-user-icon">👤</div>
-        <div>
-          <strong dir="ltr">{phone}</strong>
-          <small>{formatPrice(orders.length)} سفارش</small>
+      {customer ? (
+        <div className="my-orders-user">
+          <div className="my-orders-user-icon">👤</div>
+          <div>
+            <strong>{customer.name}</strong>
+            <small dir="ltr">{customer.phone}</small>
+          </div>
         </div>
-      </div>
+      ) : (
+        <div className="my-orders-empty" style={{ marginBottom: '16px' }}>
+          هنوز سفارشی با این دستگاه ثبت نکردی. برای دیدن تاریخچه، یک سفارش ثبت کن!
+        </div>
+      )}
 
-      <div className="my-orders-filters">
-        {(Object.keys(FILTER_LABELS) as Filter[]).map((f) => (
-          <button
-            key={f}
-            type="button"
-            className={`filter-chip ${filter === f ? 'active' : ''}`}
-            onClick={() => setFilter(f)}
-          >
-            {FILTER_LABELS[f]}
-          </button>
-        ))}
-      </div>
+      {orders.length > 0 && (
+        <div className="my-orders-filters">
+          {(Object.keys(FILTER_LABELS) as Filter[]).map((f) => (
+            <button
+              key={f}
+              type="button"
+              className={`filter-chip ${filter === f ? 'active' : ''}`}
+              onClick={() => setFilter(f)}
+            >
+              {FILTER_LABELS[f]}
+            </button>
+          ))}
+        </div>
+      )}
 
       {filtered.length === 0 ? (
         <div className="my-orders-empty">

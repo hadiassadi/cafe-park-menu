@@ -206,13 +206,24 @@ set /p commit_msg="  Commit message (empty = default): "
 if "!commit_msg!"=="" set commit_msg=Update: %date% %time%
 
 echo.
-echo  [1/3]  Adding files...
+echo  [1/4]  Building project first (safety check)...
+call npm run build
+if %errorlevel% neq 0 (
+  echo.
+  echo  [ERR]  Build failed! Nothing was pushed to GitHub/Vercel.
+  echo  Please fix the errors above and try again.
+  pause
+  goto MAIN_MENU
+)
+
+echo.
+echo  [2/4]  Adding files...
 git add .
 echo.
-echo  [2/3]  Committing...
+echo  [3/4]  Committing...
 git commit -m "!commit_msg!"
 echo.
-echo  [3/3]  Pushing...
+echo  [4/4]  Pushing...
 git push
 if %errorlevel%==0 (
   echo.
