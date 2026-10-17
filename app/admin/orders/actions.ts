@@ -185,3 +185,41 @@ export async function updateCleanupSettings(
     return { error: err?.message || 'خطای غیرمنتظره' }
   }
 }
+export async function updatePaymentStatus(
+  orderId: string,
+  newStatus: 'paid' | 'unpaid' | 'failed',
+  note?: string,
+  method?: 'cash' | 'card' | 'online' | 'transfer' // ✅ اضافه شد
+): Promise<{ success?: boolean; error?: string }> {
+  try {
+    const db = await supabaseServer()
+
+    const updates: Record<string, any> = {
+      payment_status: newStatus,
+    }
+
+    if (newStatus === 'paid') {
+      updates.payment_verified_at = new Date().toISOString()
+    }
+
+    if (note) {
+      updates.payment_note = note
+    }
+
+    if (method) {
+      updates.payment_method = method
+    }
+
+    const { error } = await db
+      .from('orders')
+      .update(updates)
+      .eq('id', orderId)
+
+    if (error) return { error: error.message }
+
+    revalidatePath('/admin/orders')
+    return { success: true }
+  } catch (err: any) {
+    return { error: err?.message || 'خطای غیرمنتظره' }
+  }
+}

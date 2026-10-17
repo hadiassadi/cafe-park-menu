@@ -5,10 +5,17 @@ export const dynamic = 'force-dynamic'
 
 export async function POST(req: NextRequest) {
   try {
-    const { orderId, receiptUrl } = await req.json()
+    const { orderId, receiptUrl, receiptNote } = await req.json()
 
-    if (!orderId || !receiptUrl) {
-      return NextResponse.json({ error: 'اطلاعات ناقص' }, { status: 400 })
+    if (!orderId) {
+      return NextResponse.json({ error: 'orderId الزامی' }, { status: 400 })
+    }
+
+    if (!receiptUrl && !receiptNote) {
+      return NextResponse.json(
+        { error: 'رسید یا توضیحات الزامی' },
+        { status: 400 }
+      )
     }
 
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -17,20 +24,31 @@ export async function POST(req: NextRequest) {
 
     const db = createClient(url, key, { auth: { persistSession: false } })
 
+    const updates: Record<string, any> = {
+      payment_status: 'pending_review',
+    }
+
+    if (receiptUrl) {
+      updates.payment_receipt_url = receiptUrl
+    }
+
+    if (receiptNote) {
+      updates.payment_note = receiptNote
+    }
+
     const { error } = await db
       .from('orders')
-      .update({
-        payment_receipt_url: receiptUrl,
-        payment_status: 'pending_review',
-      })
+      .update(updates)
       .eq('id', orderId)
 
     if (error) {
+      console.error('[upload-receipt] update error:', error)
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
     return NextResponse.json({ success: true })
   } catch (err: any) {
+    console.error('[upload-receipt] unexpected:', err)
     return NextResponse.json(
       { error: err?.message || 'خطای غیرمنتظره' },
       { status: 500 }

@@ -13598,4 +13598,351 @@ body {
   background: var(--admin-surface-2);
   color: var(--admin-primary);
   border-color: var(--admin-border);
+}/* ========================================
+   82. RECEIPT UPLOAD (آپلود رسید)
+   ======================================== */
+
+.receipt-upload-box {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  background: #fbf9f5;
+  border: 1px dashed #d8d0c4;
+  border-radius: 12px;
+  margin-top: 12px;
+}
+
+.receipt-mode-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  padding: 4px;
+  background: #f5f0e9;
+  border-radius: 10px;
+}
+
+.receipt-mode-tab {
+  padding: 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #625b51;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.receipt-mode-tab.active {
+  background: #fffdf9;
+  color: #6b4f3a;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.receipt-upload-label {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px 16px;
+  border: 2px dashed #d8d0c4;
+  border-radius: 10px;
+  background: #fffdf9;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: center;
+}
+
+.receipt-upload-label:hover {
+  border-color: #9a6b3f;
+  background: #f5f0e9;
+}
+
+.receipt-upload-icon {
+  font-size: 32px;
+}
+
+.receipt-upload-text strong {
+  display: block;
+  font-size: 14px;
+  font-weight: 800;
+  color: #29251f;
+  margin-bottom: 4px;
+}
+
+.receipt-upload-text small {
+  display: block;
+  font-size: 11px;
+  color: #766f64;
+}
+
+.receipt-upload-progress {
+  padding: 10px;
+  text-align: center;
+  color: #6b4f3a;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.receipt-upload-error {
+  padding: 10px 14px;
+  background: #fde8e6;
+  color: #9b3c32;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.receipt-preview img {
+  width: 100%;
+  max-height: 300px;
+  object-fit: contain;
+  border-radius: 10px;
+  border: 1px solid #e3ddd2;
+  background: #f5f0e9;
+}
+
+.receipt-preview-hint {
+  margin-top: 10px;
+  padding: 10px;
+  background: #e5f0e6;
+  color: #2d5d3e;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.receipt-note-input {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #d8d0c4;
+  border-radius: 10px;
+  background: #fffdf9;
+  color: #29251f;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.8;
+  resize: vertical;
+  min-height: 80px;
+}
+
+.receipt-note-input:focus {
+  outline: 0;
+  border-color: #6b4f3a;
+  box-shadow: 0 0 0 3px rgba(107, 79, 58, 0.1);
+}
+
+.receipt-submit-btn {
+  min-height: 44px;
+  padding: 10px 20px;
+  border: 0;
+  border-radius: 10px;
+  background: #6b4f3a;
+  color: #fff;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.receipt-submit-btn:hover:not(:disabled) {
+  background: #5a4230;
+}
+
+.receipt-submit-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+/* ========================================
+   83. ADMIN ORDER PAYMENT COLORS
+   ======================================== */
+
+/* رنگ‌بندی کارت سفارش */
+.order-card--unpaid {
+  border-left: 4px solid #d8d0c4;
+}
+
+.order-card--pending {
+  border-left: 4px solid #d99f59;
+  background: linear-gradient(to left, #fffbf3 0%, #fffdf9 30%);
+}
+
+.order-card--paid {
+  border-left: 4px solid #477052;
+  background: linear-gradient(to left, #f5faf5 0%, #fffdf9 30%);
+}
+
+.order-card--failed {
+  border-left: 4px solid #9b3c32;
+  background: linear-gradient(to left, #fef6f5 0%, #fffdf9 30%);
+}
+
+/* بج وضعیت پرداخت */
+.order-payment-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 800;
+  margin: 8px 0;
+  width: fit-content;
+}
+
+.order-payment-status-badge.paid {
+  background: #e5f0e6;
+  color: #2d5d3e;
+  border: 1px solid #c8dfcb;
+}
+
+.order-payment-status-badge.pending_review {
+  background: #fff4d9;
+  color: #9a6b3f;
+  border: 1px solid #f2d99f;
+}
+
+.order-payment-status-badge.unpaid {
+  background: #f5f0e9;
+  color: #6b4f3a;
+  border: 1px solid #e3ddd2;
+}
+
+.order-payment-status-badge.failed {
+  background: #fde8e6;
+  color: #9b3c32;
+  border: 1px solid #f2c9c5;
+}
+
+.order-payment-ref-id {
+  font-family: 'Courier New', monospace;
+  font-size: 10.5px;
+  letter-spacing: 1px;
+  opacity: 0.85;
+}
+
+/* لینک رسید */
+.order-receipt-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  margin-top: 8px;
+  background: #f5f0e9;
+  color: #6b4f3a;
+  border: 1px dashed #d8d0c4;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+  width: fit-content;
+}
+
+.order-receipt-link:hover {
+  background: #ebe3d6;
+  border-color: #b8ad9c;
+}
+
+/* Dark Mode */
+.admin-shell.dark-mode .order-card--unpaid {
+  border-left-color: var(--admin-border);
+}
+
+.admin-shell.dark-mode .order-card--pending {
+  border-left-color: #d99f59;
+  background: linear-gradient(to left, rgba(217, 159, 89, 0.1) 0%, var(--admin-surface) 30%);
+}
+
+.admin-shell.dark-mode .order-card--paid {
+  border-left-color: #8cc79a;
+  background: linear-gradient(to left, rgba(71, 112, 82, 0.1) 0%, var(--admin-surface) 30%);
+}
+
+.admin-shell.dark-mode .order-card--failed {
+  border-left-color: #d97a6c;
+  background: linear-gradient(to left, rgba(155, 60, 50, 0.1) 0%, var(--admin-surface) 30%);
+}
+
+.admin-shell.dark-mode .order-payment-status-badge.paid {
+  background: rgba(71, 112, 82, 0.25);
+  color: #8cc79a;
+  border-color: rgba(71, 112, 82, 0.4);
+}
+
+.admin-shell.dark-mode .order-payment-status-badge.pending_review {
+  background: rgba(217, 159, 89, 0.2);
+  color: #e0b478;
+  border-color: rgba(217, 159, 89, 0.4);
+}
+
+.admin-shell.dark-mode .order-payment-status-badge.unpaid {
+  background: var(--admin-surface-2);
+  color: var(--admin-text-muted);
+  border-color: var(--admin-border);
+}
+
+.admin-shell.dark-mode .order-payment-status-badge.failed {
+  background: rgba(155, 60, 50, 0.25);
+  color: #d97a6c;
+  border-color: rgba(155, 60, 50, 0.4);
+}
+
+.admin-shell.dark-mode .order-receipt-link {
+  background: var(--admin-surface-2);
+  color: var(--admin-primary);
+  border-color: var(--admin-border);
+}
+/* ========================================
+   84. ADMIN ORDERS SEARCH
+   ======================================== */
+
+.orders-search-box {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 14px;
+  min-height: 46px;
+  margin-bottom: 16px;
+  background: #fffdf9;
+  border: 1px solid #e3ddd2;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(41, 37, 31, 0.04);
+}
+
+.orders-search-box span {
+  font-size: 16px;
+  color: #766f64;
+}
+
+.orders-search-box input {
+  flex: 1;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 14px;
+  color: #29251f;
+}
+
+.orders-search-box input::placeholder {
+  color: #aaa297;
+}
+
+.admin-shell.dark-mode .orders-search-box {
+  background: var(--admin-surface);
+  border-color: var(--admin-border);
+}
+
+.admin-shell.dark-mode .orders-search-box input {
+  color: var(--admin-text);
+}
+
+.admin-shell.dark-mode .orders-search-box span {
+  color: var(--admin-text-muted);
 }

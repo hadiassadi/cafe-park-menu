@@ -97,14 +97,14 @@ export function useOrderNotifications(enabled: boolean = true) {
       if (cancelled) return
 
       try {
-                const { data, error } = await db
+                        const { data, error } = await db
           .from('orders')
           .select(
-            'id, order_number, customer_name, customer_phone, table_number, subtotal, items, created_at, status, payment_method, payment_status'
+            'id, order_number, customer_name, customer_phone, table_number, subtotal, items, created_at, status, payment_method, payment_status, payment_receipt_url'
           )
           .eq('status', 'pending')
           .or(
-            'payment_method.in.(cash,card),payment_method.is.null,payment_status.in.(paid,pending_review)'
+            'payment_method.in.(cash,card),payment_method.is.null,payment_status.eq.paid,and(payment_status.eq.pending_review,payment_receipt_url.not.is.null)'
           )
           .order('created_at', { ascending: false })
           .limit(20)

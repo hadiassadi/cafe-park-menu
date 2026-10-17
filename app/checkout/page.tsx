@@ -183,9 +183,10 @@ function CheckoutForm() {
     setError(null)
 
     try {
-      if (!name.trim()) throw new Error('نام رو وارد کن')
+            if (!name.trim()) throw new Error('نام رو وارد کن')
       const cleanPhone = toLatinDigits(phone).replace(/\D/g, '')
       if (cleanPhone.length < 10) throw new Error('شماره تماس معتبر نیست')
+      if (!tableNumber) throw new Error('شماره میز رو وارد کن (برای سرویس در محل الزامی است)') // ✅ اجباری شد
 
       // ۱. ثبت سفارش
       const res = await fetch('/api/orders', {
@@ -465,7 +466,7 @@ function CheckoutForm() {
           </div>
 
           <div className="checkout-field">
-            <label htmlFor="table">شماره میز (اختیاری)</label>
+                        <label htmlFor="table">شماره میز *</label>
             <input
               id="table"
               type="number"

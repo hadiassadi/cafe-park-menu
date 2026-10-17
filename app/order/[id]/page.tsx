@@ -3,6 +3,7 @@
 import { useEffect, useState, use } from 'react'
 import Link from 'next/link'
 import { createClient } from '@supabase/supabase-js'
+import UploadReceipt from './UploadReceipt'
 
 const formatPrice = (price: number) =>
   new Intl.NumberFormat('fa-IR').format(Math.round(price))
@@ -430,7 +431,18 @@ export default function OrderPage({
                     ? 'پرداخت قبلی ناموفق بود. می‌تونی دوباره امتحان کنی یا روش دیگه‌ای انتخاب کنی.'
                     : 'برای نهایی شدن سفارش، لطفاً پرداخت رو انجام بده.'}
               </p>
-
+              {needsTransferReceipt && (
+                <UploadReceipt
+                  orderId={order.id}
+                  onSuccess={(url, note) => {
+                    setOrder({
+                      ...order,
+                      payment_status: 'pending_review',
+                      payment_receipt_url: url || order.payment_receipt_url,
+                    } as any)
+                  }}
+                />
+              )}
               {paymentError && (
                 <div
                   className="checkout-error"

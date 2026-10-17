@@ -10,7 +10,10 @@ export async function POST(req: NextRequest) {
     const orderId = formData.get('orderId') as string
 
     if (!file || !orderId) {
-      return NextResponse.json({ error: 'فایل و orderId الزامی' }, { status: 400 })
+      return NextResponse.json(
+        { error: 'فایل و orderId الزامی' },
+        { status: 400 }
+      )
     }
 
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -19,7 +22,7 @@ export async function POST(req: NextRequest) {
 
     const db = createClient(url, key, { auth: { persistSession: false } })
 
-    const ext = file.name.split('.').pop() || 'jpg'
+    const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg'
     const fileName = `receipt-${orderId}-${Date.now()}.${ext}`
 
     const arrayBuffer = await file.arrayBuffer()
@@ -39,10 +42,13 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const { data: urlData } = db.storage.from('receipts').getPublicUrl(fileName)
+    const { data: urlData } = db.storage
+      .from('receipts')
+      .getPublicUrl(fileName)
 
     return NextResponse.json({ url: urlData.publicUrl })
   } catch (err: any) {
+    console.error('[upload-receipt] error:', err)
     return NextResponse.json(
       { error: err?.message || 'خطای غیرمنتظره' },
       { status: 500 }

@@ -4,7 +4,7 @@
 > بخش «۵. کارهای باقی‌مانده»، «۸. لاگ تغییرات» و «بالای فایل» رو آپدیت کن.
 > در چت جدید، فقط همین فایل را برای AI پیوست کن.
 
-**آخرین آپدیت:** ۱۴۰۵/۰۷/۲۴ (2026-10-17)
+**آخرین آپدیت:** ۱۴۰۵/۰۸/۰۲ (2026-10-24)
 
 ---
 
@@ -12,113 +12,91 @@
 
 - **نام پکیج:** `cafe-park-menu` (پوشه پروژه: `Cofe-Park`)
 - **تکنولوژی:** Next.js 16 (App Router) + React 19 + TypeScript + Supabase + `globals.css` (بدون Tailwind)
-- **هدف:** مشتری‌ها با اسکن QR روی میز، منو را باز می‌کنند، سفارش می‌دهند و از طریق واتساپ به کافه می‌فرستند. صاحب کافه هم از پنل ادمین، سفارش‌ها، منو، میزها، تم‌ها و تنظیمات را مدیریت می‌کند.
-- **دیتابیس:** Supabase (PostgreSQL) + Realtime برای لیست سفارش‌ها + **Polling برای اعلان‌ها**
+- **هدف:** مشتری‌ها با اسکن QR روی میز، منو را باز می‌کنند، سفارش می‌دهند و از طریق واتساپ به کافه می‌فرستند. صاحب کافه هم از پنل ادمین، سفارش‌ها، منو، میزها، تم‌ها و تنظیمات را مدیریت می‌کند. مشتری‌ها می‌توانند با شماره موبایل وارد پنل خود شوند و سفارش‌های قبلی را ببینند. سیستم پرداخت چندگانه (آنلاین زرین‌پال، نقدی، کارت‌خوان، واریز با رسید) پیاده‌سازی شده است.
+- **دیتابیس:** Supabase (PostgreSQL) + Realtime برای لیست سفارش‌ها + **Polling برای اعلان‌ها** + **pg_cron برای پاکسازی خودکار** + **Storage برای رسیدها**
 - **ریپازیتوری:** `https://github.com/hadiassadi/cafe-park-menu.git` (branch: `main`)
 - **مسیر لوکال:** `D:\Cafe Park\Menu\New Menu\CafePark-Menu\Cofe-Park`
+- **دامنه پروداکشن:** `https://cafe-park-menu.vercel.app`
 
 ---
 
 ## 🗂️ ۲. ساختار پروژه
 
-```
+```text
 Cofe-Park/
 ├── app/
 │   ├── page.tsx                    ← صفحه اصلی (SSR + JSON-LD)
-│   ├── MenuClient.tsx              ← کلاینت منوی مشتری
+│   ├── MenuClient.tsx              ← کلاینت منوی مشتری (+ دکمه سفارش‌های من)
 │   ├── layout.tsx                  ← Root Layout (فونت + متادیتای SEO)
-│   ├── globals.css                 ← ✅ تنها فایل استایل پروژه (۷۱ بخش)
+│   ├── globals.css                 ← ✅ تنها فایل استایل پروژه (۸۴ بخش)
 │   ├── manifest.ts                 ← PWA Manifest
 │   ├── robots.ts                   ← robots.txt
 │   ├── sitemap.ts                  ← sitemap.xml
 │   ├── cart/page.tsx               ← صفحه سبد خرید
-│   ├── checkout/page.tsx           ← صفحه ثبت سفارش + کوپن
-│   ├── order/[id]/page.tsx         ← جزئیات سفارش مشتری + لغو با دلیل
+│   ├── checkout/page.tsx           ← صفحه ثبت سفارش + کوپن + انتخاب پرداخت
+│   ├── my-orders/                  ← ✅ پنل مشتری
+│   │   ├── page.tsx
+│   │   └── MyOrdersClient.tsx      ← ورود OTP + تاریخچه + سفارش مجدد
+│   ├── order/[id]/                 ← جزئیات سفارش مشتری
+│   │   ├── page.tsx                ← صفحه اصلی سفارش + وضعیت پرداخت
+│   │   └── UploadReceipt.tsx       ← ✅ آپلود رسید (عکس/متن)
+│   ├── payment/callback/           ← ✅ بازگشت از درگاه پرداخت
+│   │   ├── page.tsx
+│   │   └── PaymentCallbackClient.tsx
 │   ├── api/
 │   │   ├── orders/
 │   │   │   ├── route.ts            ← API ثبت سفارش + محاسبه کوپن
 │   │   │   └── cancel/route.ts     ← API لغو سفارش (مشتری) + ثبت دلیل
-│   │   ├── coupons/
-│   │   │   ├── validate/route.ts   ← اعتبارسنجی کوپن
-│   │   │   ├── stats/route.ts      ← آمار کوپن‌ها
-│   │   │   └── orders/route.ts     ← سفارش‌های هر کوپن
-│   │   ├── cancellation-reasons/
-│   │   │   └── route.ts            ← ✅ لیست دلایل لغو فعال
-│   │   ├── cancellations/
-│   │   │   └── stats/route.ts      ← ✅ آمار لغوها (شامل byHour/byWeekday/byCategory)
-│   │   └── export/
-│   │       └── orders/route.ts     ← خروجی CSV سفارش‌ها
-│   ├── components/
-│   │   ├── ProductDetailModal.tsx  ← مودال جزئیات محصول
-│   │   ├── CartFloatingBar.tsx     ← نوار شناور سبد
-│   │   ├── ServiceWorkerRegister.tsx ← ثبت Service Worker
-│   │   ├── PWAInstallPrompt.tsx    ← دکمه نصب PWA
-│   │   └── Modal.tsx               ← مودال عمومی ادمین
+│   │   ├── customer/               ← ✅ API پنل مشتری
+│   │   │   ├── send-otp/route.ts
+│   │   │   ├── verify-otp/route.ts
+│   │   │   ├── logout/route.ts
+│   │   │   ├── me/route.ts
+│   │   │   └── orders/route.ts
+│   │   ├── payment/                ← ✅ API پرداخت
+│   │   │   ├── settings/route.ts   ← تنظیمات عمومی پرداخت
+│   │   │   ├── request/route.ts    ← شروع پرداخت زرین‌پال
+│   │   │   ├── verify/route.ts     ← تأیید پرداخت زرین‌پال
+│   │   │   ├── set-method/route.ts ← ثبت روش پرداخت دستی
+│   │   │   └── upload-receipt/route.ts ← ذخیره رسید واریز
+│   │   ├── upload-receipt/route.ts ← ✅ آپلود فایل به Storage
+│   │   ├── coupons/                ← (بدون تغییر)
+│   │   ├── cancellation-reasons/   ← (بدون تغییر)
+│   │   ├── cancellations/          ← (بدون تغییر)
+│   │   ├── reports/sales/route.ts  ← API گزارش فروش
+│   │   ├── cleanup/                ← (بدون تغییر)
+│   │   └── export/                 ← (بدون تغییر)
+│   ├── components/                 ← (بدون تغییر)
 │   └── admin/
-│       ├── layout.tsx              ← سایدبار + منوی موبایل + اعلان سفارش
-│       ├── login/                  ← لاگین (LoginForm + page با metadata)
-│       ├── page.tsx                ← داشبورد با آمار فروش پیشرفته
-│       ├── orders/                 ← مدیریت سفارش‌ها + لغو با دلیل + فاکتور
-│       ├── products/               ← مدیریت محصولات (+ coupon_eligible)
-│       ├── categories/             ← مدیریت دسته‌ها (+ coupon_eligible)
-│       ├── tables/                 ← مدیریت میزها + QR
-│       ├── themes/                 ← تم‌ها
-│       ├── quotes/                 ← جملات
-│       ├── coupons/                ← مدیریت کدهای تخفیف
-│       │   └── reports/            ← گزارش پیشرفته کوپن‌ها
-│       ├── cancellation-reasons/   ← ✅ مدیریت دلایل لغو
+│       ├── layout.tsx              ← هدر موبایل + drawer + اعلان سفارش
+│       ├── orders/                 ← مدیریت سفارش‌ها
 │       │   ├── page.tsx
-│       │   ├── CancellationReasonsManager.tsx
+│       │   ├── OrdersManager.tsx   ← ✅ لیست + جستجو + فیلتر + مودال تسویه
+│       │   └── actions.ts          ← ✅ اکشن‌های تغییر وضعیت و پرداخت
+│       ├── settings/payment/       ← ✅ تنظیمات پرداخت
+│       │   ├── page.tsx
+│       │   ├── PaymentSettingsManager.tsx
 │       │   └── actions.ts
-│       ├── cancellations/          ← ✅ آمار و گزارش لغوها (کارت‌های کلیک‌پذیر + مودال)
-│       │   ├── page.tsx
-│       │   └── CancellationsManager.tsx
-│       ├── components/
-│       │   ├── CleanupOrdersCard.tsx ← پاکسازی سفارش‌های قدیمی
-│       │   ├── AdminThemeToggle.tsx  ← دکمه تغییر تم شبانه/روز
-│       │   ├── NewOrderAlert.tsx     ← کارت هشدار سفارش جدید
-│       │   └── PrintInvoice.tsx      ← کامپوننت چاپ قابل استفاده مجدد
-│       └── settings/               ← تنظیمات کامل
+│       ├── (بقیه صفحات ادمین بدون تغییر)
+│       └── components/
+│           ├── AdminMobileThemeToggle.tsx
+│           └── (بقیه کامپوننت‌ها)
 ├── lib/
-│   ├── menu-types.ts               ← تایپ‌ها + DEFAULT_THEME + Coupon
-│   ├── cart-context.tsx            ← Context سبد خرید
-│   ├── menu.ts                     ← getMenuData() + getSettings()
-│   ├── site.ts                     ← SITE_URL
-│   ├── stats.ts                    ← آمار فروش + کوپن + ✅ لغوها (شامل byHour/byWeekday/byCategory) + دلایل
-│   ├── use-order-notifications.ts  ← هوک اعلان سفارش (Polling)
-│   ├── use-document-title.ts       ← هوک تایتل + favicon داینامیک
+│   ├── menu-types.ts
+│   ├── cart-context.tsx
+│   ├── menu.ts
+│   ├── site.ts
+│   ├── stats.ts
+│   ├── customer-auth.ts            ← ✅ session مشتری (cookie + OTP)
+│   ├── payment/zarinpal.ts         ← ✅ توابع ارتباط با زرین‌پال
+│   ├── use-order-notifications.ts  ← Polling + Badge
+│   ├── use-pwa-badge.ts            ← ✅ هوک PWA Badge
+│   ├── use-document-title.ts
 │   └── supabase/
-│       ├── client.ts               ← supabaseBrowser()
-│       └── server.ts               ← supabaseServer()
-├── public/
-│   ├── sw.js                       ← Service Worker
-│   ├── favicon.ico                 ← (در ریشه public)
-│   └── icons/
-│       ├── source-logo.png         ← منبع آیکون‌ها (شفاف)
-│       ├── icon-192.png
-│       ├── icon-512.png
-│       ├── android-chrome-512x512.png
-│       ├── apple-touch-icon.png
-│       ├── favicon-16x16.png
-│       └── favicon-32x32.png
-├── scripts/
-│   ├── backup.mjs                  ← بکاپ لوکال
-│   ├── backup-server.mjs           ← بکاپ کامل سرور
-│   ├── schedule-backup.mjs         ← بکاپ خودکار هر ۲۴ ساعت
-│   ├── generate-icons.mjs          ← ساخت آیکون‌های PWA
-│   ├── make-transparent.mjs        ← شفاف‌سازی آیکون‌ها
-│   └── build-icons.mjs             ← ساخت همه سایزها از یک منبع
+├── supabase/
+│   └── cron-cleanup.sql            ← SQL راه‌اندازی pg_cron
 ├── proxy.ts                        ← محافظت سرور-side از /admin
-├── schema.sql
-├── package.json
-├── next.config.ts                  ← poweredByHeader: false
-├── PROJECT_STATE.md
-├── dev.bat                         ← منوی توسعه
-├── end-of-day.bat                  ← اسکریپت پایان روز
-├── .gitattributes                  ← خط‌پایان‌های یکسان
-├── .gitignore
-├── backups/                        ← بکاپ‌های لوکال (git ignore)
-└── backups-server/                 ← بکاپ‌های سرور (git ignore)
+├── (بقیه فایل‌ها بدون تغییر)
 ```
 
 ---
@@ -137,9 +115,10 @@ Cofe-Park/
 | `--text-color` | `#29251f` | خاکستری تیره |
 | `--muted-text-color` | `#766f64` | خاکستری متوسط |
 | `--secondary-color` | `#f3eee7` (theme) / `#e3ddd2` (ادمین) | بوردها |
-| **رنگ تخفیف** | `#2d5d3e` | متن تخفیف‌ها (سبز) |
-| **رنگ کوپن غیرفعال / لغو** | `#9b3c32` | هشدارها، بج‌های منفی، لغو |
+| **رنگ تخفیف / موفقیت** | `#2d5d3e` / `#477052` | متن تخفیف‌ها (سبز) |
+| **رنگ کوپن غیرفعال / لغو / خطا** | `#9b3c32` | هشدارها، بج‌های منفی، لغو |
 | **رنگ اعلان** | `#dc2626` / `#ef4444` (dark) | Badge و Alert سفارش جدید |
+| **رنگ در انتظار (پرداخت)** | `#9a6b3f` | بج‌های در انتظار تأیید |
 
 ### رنگ‌های Dark Mode (پنل ادمین):
 ```css
@@ -156,7 +135,7 @@ Cofe-Park/
 - **پیش‌فرض:** `Vazirmatn` (از `next/font/local`، متغیر `--font-vazir`)
 - **سفارشی:** از دیتابیس (جدول `themes`، فیلد `font_metadata`)
 
-### کلاس‌های کلیدی:
+### کلاس‌های کلیدی (به‌روزرسانی‌شده):
 
 **پنل ادمین:** `.admin-shell` / `.admin-sidebar` / `.admin-main` / `.admin-mobile-nav` / `.admin-header` / `.admin-card` / `.btn` / `.field` / `.info-card` / `.info-row`
 
@@ -184,8 +163,6 @@ Cofe-Park/
 
 **مودال لغو:** `.cancel-reasons-list` / `.cancel-reason-item` / `.cancel-reason-icon` / `.cancel-reason-label` / `.cancel-reason-check` / `.cancel-note-field` / `.cancel-warning`
 
-**نمایش دلیل لغو:** `.cancellation-info-box` / `.cancellation-info-label` / `.cancellation-info-note` / `.cancellation-info-by`
-
 **آمار لغوها:** `.cancellation-summary-grid` / `.cancellation-summary-card` / `.cancellation-summary-icon` / `.cancellation-reasons-chart` / `.cancellation-chart-row` / `.cancellation-chart-bar` / `.cancellation-table` / `.cancellation-reason-badge` / `.cancellation-by.by-customer` / `.cancellation-by.by-admin` / `.cancellation-row-clickable`
 
 **آمار پیشرفته لغو:** `.cancel-wide-chart` / `.cancel-peak-bar` / `.cancel-chart-hint`
@@ -193,6 +170,28 @@ Cofe-Park/
 **کارت‌های گزارش:** `.report-cards-grid` / `.report-card` / `.report-card-icon` / `.report-card-body` / `.report-card-title` / `.report-card-value` / `.report-card-hint` / `.report-card-arrow`
 
 **مشتریان (CRM):** `.customers-summary-grid` / `.customers-summary-card` / `.customers-grid` / `.customer-card` / `.customer-avatar` / `.customer-badge` / `.customer-action-btn` / `.preset-tag-btn` / `.custom-tag` / `.customer-notes-input`
+
+**پاکسازی خودکار:** `.cleanup-wrapper` / `.auto-cleanup-card` / `.auto-icon` / `.auto-status-badge` / `.auto-toggle-row` / `.auto-switch` / `.auto-switch-track` / `.auto-switch-thumb` / `.auto-days-row` / `.auto-last-run` / `.auto-last-run-title` / `.auto-last-run-row` / `.auto-last-run-message` / `.auto-last-run-empty`
+
+**گزارش فروش:** `.report-export-actions` / `.sales-summary-grid` / `.sales-summary-card` / `.sales-summary-icon` / `.sales-summary-content` / `.sales-summary-value` / `.sales-summary-label` / `.sales-view-tabs` / `.sales-view-tab` / `.sales-table-wrapper` / `.sales-table` / `.sales-table-num` / `.sales-table-amount` / `.sales-table-discount` / `.sales-table-rank` / `.sales-table-percent` / `.sales-bar-mini` / `.sales-bar-mini-fill` / `.sales-cat-icon` / `.sales-report-hint`
+
+**فیلتر لغو CRM:** `.customers-cancel-filters` / `.customers-cancel-label` / `.customers-cancel-chips` / `.filter-chip.cancel-chip` / `.chip-count` / `.customers-filter-result` / `.customer-card-highlight` / `.cancelled-emphasis`
+
+**هدر و Drawer موبایل:** `.admin-mobile-header` / `.admin-mobile-menu-btn` / `.admin-mobile-logo` / `.admin-mobile-header-badge` / `.admin-drawer-overlay` / `.admin-drawer` / `.admin-drawer-header` / `.admin-drawer-nav` / `.admin-drawer-item` / `.admin-drawer-icon` / `.admin-drawer-label` / `.admin-drawer-badge` / `.admin-drawer-footer` / `.admin-drawer-logout` / `.admin-drawer-close`
+
+**پنل مشتری:** `.my-orders-page` / `.my-orders-header` / `.my-orders-back` / `.my-orders-logout` / `.my-orders-user` / `.my-orders-user-icon` / `.my-orders-filters` / `.my-orders-list` / `.my-orders-empty` / `.my-order-card` / `.my-order-header` / `.my-order-num` / `.my-order-status` / `.my-order-date` / `.my-order-items` / `.my-order-item` / `.my-order-item-more` / `.my-order-total` / `.my-order-cancel-reason` / `.my-order-actions` / `.my-order-btn` / `.customer-login-card` / `.customer-login-icon` / `.customer-login-hint` / `.customer-login-field` / `.customer-login-btn` / `.customer-login-link` / `.customer-login-error` / `.customer-login-code-display` / `.hero-my-orders-btn`
+
+**تنظیمات پرداخت:** `.payment-settings-page` / `.payment-section` / `.payment-section-header` / `.payment-section-icon` / `.payment-section-title` / `.payment-section-hint` / `.payment-warning` / `.payment-sandbox-warning` / `.payment-methods-grid` / `.payment-method-card` / `.payment-method-icon` / `.payment-method-info` / `.payment-gateway-options` / `.payment-gateway-option` / `.payment-toggle-row` / `.payment-toggle-info` / `.payment-coming-soon` / `.payment-save-bar`
+
+**انتخاب پرداخت (Checkout):** `.payment-methods-selector` / `.payment-method-option` / `.payment-method-option-icon` / `.payment-method-option-info` / `.payment-method-option-check` / `.payment-transfer-info` / `.payment-transfer-info-title` / `.payment-transfer-row` / `.payment-transfer-hint`
+
+**بازگشت از درگاه:** `.payment-callback-page` / `.payment-callback-card` / `.payment-callback-icon` / `.payment-callback-desc` / `.payment-callback-ref` / `.payment-callback-actions`
+
+**پرداخت در صفحه سفارش (مشتری):** `.order-payment-badge` / `.order-payment-badge-ref` / `.order-payment-section` / `.order-payment-section-title` / `.order-payment-section-desc` / `.order-payment-actions` / `.order-payment-btn` / `.order-payment-methods` / `.order-payment-method-btn` / `.order-payment-method-icon`
+
+**پرداخت در پنل ادمین:** `.order-card--unpaid` / `.order-card--pending` / `.order-card--paid` / `.order-card--failed` / `.order-payment-badge-inline` / `.order-payment-ref-id` / `.order-receipt-link` / `.payment-status-text` / `.payment-approve-form` / `.orders-search-box`
+
+**آپلود رسید:** `.receipt-upload-box` / `.receipt-mode-tabs` / `.receipt-mode-tab` / `.receipt-upload-label` / `.receipt-upload-icon` / `.receipt-upload-text` / `.receipt-upload-progress` / `.receipt-upload-error` / `.receipt-preview` / `.receipt-preview-hint` / `.receipt-note-input` / `.receipt-submit-btn`
 
 ### شماره‌گذاری بخش‌های `globals.css`:
 | بخش | عنوان |
@@ -239,6 +238,19 @@ Cofe-Park/
 | 69 | CANCELLATION ROW CLICKABLE + PRINT |
 | 70 | CANCELLATION STATS - ADVANCED (آمار پیشرفته لغوها) |
 | 71 | REPORT CARDS (کارت‌های گزارش تفصیلی) |
+| 72 | AUTO CLEANUP (پاکسازی خودکار Cron) |
+| 73 | SALES REPORTS (گزارش فروش و مالیات) |
+| 74 | CUSTOMERS CANCEL FILTER (فیلتر لغو در CRM) |
+| 75 | ADMIN MOBILE THEME TOGGLE (دکمه شناور حالت شبانه) |
+| 76 | ADMIN MOBILE HEADER + DRAWER (هدر موبایل + drawer سه‌خطی) |
+| 77 | CUSTOMER PANEL (پنل مشتری) |
+| 78 | PAYMENT SETTINGS (تنظیمات پرداخت در ادمین) |
+| 79 | PAYMENT (انتخاب روش پرداخت + بازگشت از درگاه) |
+| 80 | ORDER PAYMENT (بخش پرداخت در صفحه سفارش) |
+| 81 | ADMIN ORDER PAYMENT BADGES (بج‌های پرداخت ادمین) |
+| 82 | RECEIPT UPLOAD (آپلود رسید) |
+| 83 | ADMIN ORDER PAYMENT COLORS (رنگ‌بندی کارت‌های ادمین) |
+| 84 | ADMIN ORDERS SEARCH (نوار جستجوی سفارش‌ها) |
 
 ---
 
@@ -246,76 +258,69 @@ Cofe-Park/
 
 ### منوی مشتری
 - [x] صفحه اصلی با هدر داینامیک + JSON-LD
-- [x] جستجوی فارسی (نرمال‌سازی ي/ك، ارقام، نیم‌فاصله)
-- [x] فیلتر «پیشنهاد کافه» + فیلتر دسته‌بندی (Sticky)
-- [x] شیت «کل منو» (Bottom Sheet روی موبایل)
-- [x] کارت محصول با عکس، قیمت، اندازه، بج‌ها
-- [x] مودال جزئیات محصول (تنوع‌ها، آلرژن‌ها، اطلاعات رژیمی)
-- [x] ارسال به سبد + نوار شناور سبد
-- [x] صفحه سبد خرید
-- [x] صفحه ثبت سفارش + ارسال به `/api/orders`
-- [x] صفحه جزئیات سفارش با استپر وضعیت + polling هر ۱۰ ثانیه
-- [x] **لغو سفارش توسط مشتری** با شمارش معکوس ۵ دقیقه‌ای + **انتخاب دلیل**
+- [x] جستجوی فارسی + فیلتر «پیشنهاد کافه» + فیلتر دسته‌بندی
+- [x] شیت «کل منو» + کارت محصول + مودال جزئیات
+- [x] ارسال به سبد + نوار شناور + صفحه سبد + صفحه ثبت سفارش
+- [x] صفحه جزئیات سفارش با استپر وضعیت + polling
+- [x] **لغو سفارش توسط مشتری** با شمارش معکوس + **انتخاب دلیل**
 - [x] **کد تخفیف (کوپن)** با تشخیص اقلام واجد/غیرواجد
 - [x] ارسال سفارش به واتساپ
+- [x] **پنل مشتری** — ورود با شماره + کد ۴ رقمی نمایشی + تاریخچه + سفارش مجدد + جستجوی چندفرمتی (بخش ۷۷)
+- [x] **دکمه «سفارش‌های من» در هدر منو**
+- [x] **انتخاب روش پرداخت در Checkout** (آنلاین، نقدی، کارت‌خوان، واریز) (بخش ۷۹)
+- [x] **اجباری شدن شماره میز در Checkout**
+- [x] **صفحه بازگشت از درگاه** (`/payment/callback`) با نمایش وضعیت (بخش ۷۹)
+- [x] **آپلود رسید (عکس/متن)** برای پرداخت واریزی (بخش ۸۲)
+- [x] **بخش پرداخت در صفحه سفارش** (نمایش وضعیت + دکمه پرداخت مجدد + تغییر روش) (بخش ۸۰)
 
 ### پنل ادمین
-- [x] Layout با سایدبار دسکتاپ + منوی موبایل
-- [x] لاگین + **محافظت سرور-side با `proxy.ts`** + متادیتای `noindex`
-- [x] **داشبورد با آمار پیشرفته** (۶ کارت + نمودار ۷ روزه + ۶ ماهه + ساعات پرترافیک + مقایسه ماه قبل + پرفروش‌ترین محصولات)
-- [x] **پاکسازی سفارش‌های قدیمی** (دستی با تأیید)
-- [x] مدیریت سفارش‌ها + Realtime + فیلتر + فاکتور چاپی + **لغو با دلیل**
-- [x] مدیریت محصولات + تنوع‌ها + عکس + `coupon_eligible`
-- [x] مدیریت دسته‌ها + `coupon_eligible`
-- [x] مدیریت میزها + QR Code + دانلود PNG
-- [x] مدیریت تم‌ها (رنگ + فونت)
-- [x] مدیریت جملات
-- [x] **مدیریت کدهای تخفیف** (CRUD + toggle + وضعیت‌ها)
-- [x] **گزارش پیشرفته کوپن‌ها** — کارت‌های خلاصه + جدول جستجوپذیر + نمودار + مودال سفارش‌ها + ریز اقلام + پرینت تک سفارش
-- [x] **خروجی Excel/CSV از سفارش‌ها** با فیلتر زمانی و وضعیت + پشتیبانی Excel فارسی
-- [x] **CRM (مشتریان)** — گرید مشتریان + آمار + تگ + یادداشت + تماس/واتساپ
-- [x] **مدیریت دلایل لغو** — CRUD با هدف (مشتری/ادمین/هر دو) + آیکون + ترتیب
-- [x] **آمار و گزارش لغوها** — کارت‌های خلاصه + نمودار دلایل + نمودار ۷ روزه + جدول لغوهای اخیر + مودال جزئیات + پرینت فاکتور لغو
-- [x] **آمار پیشرفته لغوها** — نمودار ساعت شبانه‌روز + روز هفته + دسته‌بندی محصولات (با هایلایت پرلغوترین)
-- [x] **بازطراحی صفحه آمار لغوها** — خلاصه + کارت‌های گزارش کلیک‌پذیر + مودال جزئیات
-- [x] تنظیمات کامل (هدر، پس‌زمینه، اطلاعات تماس، لوگو)
-- [x] **دارک مود پنل ادمین** — با ذخیره در localStorage + بدون flash
-- [x] **اعلان سفارش جدید** — Badge + صدا + Toast + Browser Notification + Polling هر ۱۰ ثانیه
+- [x] Layout با سایدبار دسکتاپ + هدر موبایل + drawer کشویی
+- [x] لاگین + محافظت سرور-side + متادیتای `noindex`
+- [x] **داشبورد با آمار پیشرفته** (نمودارها + ساعات پرترافیک + پرفروش‌ترین‌ها)
+- [x] **پاکسازی خودکار سفارش‌های قدیمی** با pg_cron (بخش ۷۲)
+- [x] **گزارش فروش و مالیات** — ۳ تب + ۶ فیلتر + خروجی CSV (بخش ۷۳)
+- [x] **مدیریت سفارش‌ها** + Realtime + فاکتور چاپی + لغو با دلیل
+- [x] **مدیریت سفارش‌ها: جستجو و فیلتر** (بخش ۸۴)
+- [x] **مدیریت سفارش‌ها: فیلتر پرداخت نشده + رنگ‌بندی کارت‌ها** (بخش ۸۳)
+- [x] **مدیریت سفارش‌ها: دکمه تسویه سریع + مودال تسویه (نقدی/کارت‌خوان + یادداشت)** (بخش ۸۳)
+- [x] **مدیریت سفارش‌ها: نمایش رسید واریز در مودال جزئیات** (بخش ۸۱)
+- [x] **مدیریت محصولات، دسته‌ها، میزها، تم‌ها، جملات**
+- [x] **مدیریت کدهای تخفیف** + گزارش پیشرفته کوپن‌ها
+- [x] **خروجی Excel/CSV از سفارش‌ها**
+- [x] **CRM (مشتریان)** + **فیلتر تعداد لغو** (بخش ۷۴)
+- [x] **مدیریت دلایل لغو** + **آمار و گزارش لغوها** (شامل آمار پیشرفته)
+- [x] **تنظیمات کامل** + **دارک مود**
+- [x] **اعلان سفارش جدید** (Badge + صدا + Toast + Browser Notification + Polling)
 - [x] **تایتل داینامیک + favicon** با شمارش سفارش‌ها
+- [x] **PWA Badge** — نمایش تعداد سفارش‌ها روی آیکون
+- [x] **تنظیمات پرداخت** — فعال/غیرفعال کردن روش‌ها، تنظیم درگاه زرین‌پال (Merchant ID, Sandbox)، اطلاعات حساب بانکی (بخش ۷۸)
 
 ### زیرساخت و ابزارها
-- [x] سیستم تم داینامیک از دیتابیس
-- [x] Supabase Server + Browser Client
-- [x] Cart Context با localStorage
-- [x] اسکریپت بکاپ لوکال + سرور
-- [x] بکاپ خودکار (`schedule-backup.mjs`)
-- [x] `dev.bat` + `end-of-day.bat` (UI انگلیسی + ایموجی)
-- [x] `PROJECT_STATE.md` + `.gitignore` + `.gitattributes`
-- [x] **PWA کامل** (manifest + service worker + install prompt)
-- [x] **بهبود SEO** (metadata داینامیک + OpenGraph + Twitter + Sitemap + robots.txt + JSON-LD)
-- [x] اسکریپت‌های ساخت/شفاف‌سازی آیکون (`generate-icons.mjs`, `make-transparent.mjs`, `build-icons.mjs`)
-- [x] **امنیت:** `poweredByHeader: false` + `proxy.ts` (محافظت ادمین) + `noindex` روی صفحات ادمین
+- [x] سیستم تم داینامیک + Supabase Server/Browser Client + Cart Context
+- [x] اسکریپت بکاپ لوکال/سرور + بکاپ خودکار + `dev.bat` + `end-of-day.bat`
+- [x] **PWA کامل** + **SEO کامل**
+- [x] **امنیت:** `poweredByHeader: false` + `proxy.ts` + `noindex`
+- [x] **Deploy روی Vercel**
+- [x] **pg_cron** — پاکسازی خودکار روزانه
+- [x] **Storage Bucket (`receipts`)** — برای آپلود رسیدها
+- [x] **درگاه پرداخت زرین‌پال** — پیاده‌سازی کامل (Request, Verify, Callback) با پشتیبانی از Sandbox
 
 ### رفع باگ‌ها
-- [x] رفع بزرگ شدن عکس محصول در مودال (بخش ۴۰)
-- [x] رفع به‌هم‌ریختگی صفحه سبد خرید (بخش ۴۱)
-- [x] رفع به‌هم‌ریختگی صفحه ثبت سفارش (بخش ۴۲)
-- [x] رفع به‌هم‌ریختگی صفحه مدیریت میزها (بخش ۳۹)
-- [x] رفع به‌هم‌ریختگی لیست سفارش‌های ادمین (بخش ۳۷)
-- [x] رفع به‌هم‌ریختگی صفحه جزئیات سفارش (بخش ۳۸)
-- [x] رفع باگ بکاپ دوبل در `backup.mjs --clean`
-- [x] رفع مشکل Git (pull --rebase قبل از push)
-- [x] رفع RLS جدول `coupons`، `customers` و `cancellation_reasons`
-- [x] رفع فونت و ظاهر فاکتور چاپی (بخش ۴۳)
-- [x] رفع مشکل Service Worker در dev (فقط production)
-- [x] رفع نمایش ستون تخفیف در فاکتور چاپی
-- [x] رفع کارت‌های تیره مونده در دارک مود (بخش ۵۵)
-- [x] **جایگزینی Realtime با Polling** برای اعلان سفارش (به دلیل تحریم WebSocket در ایران)
-- [x] **جایگزینی `middleware.ts` با `proxy.ts`** (تغییر convention در Next.js 16)
-- [x] رفع باگ تایپی `/* } */` در CSS (باعث خراب شدن بخش CRM شده بود)
-- [x] رفع خطای `updated_at` در جدول `customers`
-- [x] **رفع خطای `Expression expected` در `stats.ts`** (به‌خاطر return تکراری)
-- [x] **رفع خطای `Cannot read properties of undefined` در `CancellationsManager`** — استفاده از fallback برای دیتای قدیمی + `cache: 'no-store'` در fetch
+- [x] رفع باگ‌های مربوط به به‌هم‌ریختگی صفحات ادمین و منو
+- [x] رفع مشکل Service Worker در dev
+- [x] **جایگزینی Realtime با Polling**
+- [x] **جایگزینی `middleware.ts` با `proxy.ts`**
+- [x] رفع خطای `Expression expected` در `stats.ts`
+- [x] رفع خطای `Cannot read properties of undefined` در `CancellationsManager`
+- [x] رفع خطای TS در `categories/page.tsx` و `proxy.ts`
+- [x] رفع نبود دکمه حالت شبانه روی موبایل
+- [x] رفع خطای نرمال‌سازی شماره در `send-otp`
+- [x] رفع نمایش نشدن سفارش‌ها در پنل مشتری (جستجوی چندفرمتی)
+- [x] رفع دو `div` تکراری در hero-actions
+- [x] رفع خطای TS در سفارش مجدد (map فیلدهای `CartItem`)
+- [x] **رفع خطای عدم دسترسی به سفارش در `payment/verify`** (پاس دادن `orderId` در callback)
+- [x] **رفع خطای همگام‌سازی وضعیت پرداخت** با اعمال RLS policy مناسب در Supabase
+- [x] **رفع مشکل اعتبارسنجی شماره** در `send-otp` (اول نرمال‌سازی، بعد اعتبارسنجی)
 
 ---
 
@@ -324,17 +329,14 @@ Cofe-Park/
 > اولویت‌ها: 🔴 بالا / 🟡 متوسط / 🟢 پایین
 
 - [ ] 🔴 **تست کامل روی موبایل واقعی** (iOS Safari + Chrome Android)
-- [ ] 🔴 **تست کامل جریان سفارش** از ابتدا تا انتها
-- [ ] 🟡 **پاکسازی خودکار سفارش‌های قدیمی** با Cron Job در Supabase
-- [ ] 🟢 **گزارش فروش روزانه Excel/CSV** (نسخه پیشرفته‌تر برای مالیات)
-- [ ] 🟢 **فیلتر تعداد لغو** در صفحه مشتریان (۱+، ۳+، ۵+)
-- [ ] 🟢 **پنل مشتری** — ثبت‌نام با شماره و مشاهده تاریخچه سفارش‌ها
-- [ ] 🟢 **ایمیل/SMS اطلاع‌رسانی** برای سفارش‌های جدید
+- [ ] 🔴 **تست کامل جریان سفارش** از ابتدا تا انتها (با همه روش‌های پرداخت)
+- [ ] 🟢 **ایمیل/SMS اطلاع‌رسانی** برای سفارش‌های جدید و تحویل شده
 - [ ] 🟢 **تست بار (Load Test)** روی Supabase
-- [ ] 🟢 **آیکون و عنوان PWA** با badge (مشتری)
-- [ ] 🟢 **اتصال به درگاه پرداخت** (زرین‌پال / آیدی‌پی)
+- [ ] 🟢 **آیکون PWA با badge برای مشتری**
+- [ ] 🟢 **اتصال به درگاه پرداخت‌های دیگر** (آیدی‌پی، نکست‌پی) — زیرساخت آماده است
 - [ ] 🟢 **اتصال به نرم‌افزار حسابداری پارسیان** (با واسط محلی)
-- [ ] 🟢 **سیستم پیامک (SMS)** برای OTP و اطلاع‌رسانی لغو
+- [ ] 🟢 **سیستم پیامک (SMS)** برای OTP (به جای نمایش کد در UI)
+- [ ] 🟢 **افزودن جزئیات بیشتر به مودال تسویه** (شماره پیگیری کارت‌خوان، نام بانک)
 
 ---
 
@@ -342,18 +344,20 @@ Cofe-Park/
 
 1. 🚨 **هر کلاس جدید در JSX باید حتماً در `globals.css` تعریف شود.**
 2. **نام کلاس‌ها با BEM-like:** `block-element` یا `block-element-modifier`
-3. **هیچ استایل inline نداشته باشیم**، مگر برای مقادیر داینامیک از theme
-4. **همه چیز از پالت رنگ بخش ۳ استفاده کند**
+3. **هیچ استایل inline نداشته باشیم**، مگر برای مقادیر داینامیک.
+4. **همه چیز از پالت رنگ بخش ۳ استفاده کند.**
 5. **روی موبایل تست شود** — breakpoint‌ها: `650px`, `768px`, `640px`, `500px`
-6. **برای همه مودال‌ها از `modal-overlay` + `modal-container` استفاده شود**
+6. **برای همه مودال‌ها از `modal-overlay` + `modal-container` استفاده شود.**
 7. **قبل از ارسال به چت جدید، فایل `PROJECT_STATE.md` را پیوست کن.**
 8. **بعد از هر تغییر مهم، `Ctrl+Shift+R` رفرش کن.**
-9. **همه متن‌های `.bat` به انگلیسی + ایموجی باشند** (CMD فارسی را RTL رندر نمی‌کند).
+9. **متن‌های `.bat` به انگلیسی + ایموجی باشند.**
 10. **برای سرور از `supabaseServer()`، برای کلاینت از `supabaseBrowser()` استفاده شود.**
 11. **در کوئری‌های Supabase، همیشه ستون‌های جدید را به `select` اضافه کن.**
-12. **برای اعلان‌ها، از Polling استفاده شود (نه Realtime)** — به دلیل تحریم ایران.
-13. **متن‌های کامنت CSS رو کپی نکن** — فقط کد ناب رو در `globals.css` بذار.
-14. **در fetch های API از `cache: 'no-store'` استفاده کن** — برای جلوگیری از کش شدن دیتای قدیمی.
+12. **برای اعلان‌ها، از Polling استفاده شود (نه Realtime)** — تحریم ایران.
+13. **متن‌های کامنت CSS رو کپی نکن.**
+14. **در fetch های API از `cache: 'no-store'` استفاده کن.**
+15. **در کوئری سفارش‌های مشتری، با چند فرمت شماره جستجو کن.**
+16. **برای عملیات‌های حساس پرداخت (تغییر وضعیت)، از Server Actions یا API با دسترسی `service_role` یا `public update` policy استفاده کن.**
 
 ---
 
@@ -361,7 +365,7 @@ Cofe-Park/
 
 > هر بار که می‌خواهی چت جدید بزنی، این متن را کپی کن و فایل `PROJECT_STATE.md` را ضمیمه کن:
 
-```
+```text
 سلام. من روی پروژه «کافه پارک» (Next.js 16 + Supabase + globals.css) کار می‌کنم.
 فایل PROJECT_STATE.md وضعیت کامل پروژه، سیستم طراحی، کلاس‌های CSS و کارهای باقی‌مانده را توضیح می‌دهد.
 لطفاً قبل از هر کاری، این فایل را کامل بخوان و بر اساس آن ادامه بده.
@@ -371,16 +375,18 @@ Cofe-Park/
 2. هر کلاس جدیدی که در JSX استفاده می‌شود، باید در globals.css تعریف شود.
 3. پالت رنگ از متغیرهای CSS می‌آید، نه رنگ hex مستقیم.
 4. مودال‌ها از کلاس‌های modal-overlay + modal-container استفاده کنند.
-5. بخش‌های globals.css شماره‌گذاری شده‌اند (۱ تا ۷۱).
+5. بخش‌های globals.css شماره‌گذاری شده‌اند (۱ تا ۸۴).
 6. برای اعلان‌ها از Polling استفاده شود، نه Realtime (تحریم ایران).
 7. محافظت ادمین با proxy.ts (نه middleware.ts در Next.js 16).
 8. در fetch های API از cache: 'no-store' استفاده شود.
+9. در کوئری سفارش‌های مشتری، با چند فرمت شماره جستجو شود.
 
 📁 ابزارهای موجود در پروژه:
-- dev.bat → منوی همه‌کاره توسعه (۱۶ گزینه)
-- end-of-day.bat → اسکریپت پایان روز (بکاپ + pull + push)
+- dev.bat → منوی همه‌کاره توسعه
+- end-of-day.bat → اسکریپت پایان روز
 - npm run backup / backup:server / backup:clean
 - npm run build:icons / transparent
+- supabase/cron-cleanup.sql → SQL پاکسازی خودکار
 
 درخواست فعلی من:
 [اینجا درخواستت را بنویس]
@@ -395,36 +401,50 @@ Cofe-Park/
 | 1405/07/19 | پیاده‌سازی کامل منوی مشتری + سبد خرید + ثبت سفارش |
 | 1405/07/19 | پیاده‌سازی پنل ادمین (سفارش‌ها، محصولات، دسته‌ها، میزها، تم‌ها، جملات، تنظیمات) |
 | 1405/07/19 | افزودن QR Code به میزها |
-| 1405/07/19 | رفع به‌هم‌ریختگی همه صفحات ادمین و منو (بخش‌های ۳۷-۴۲) |
+| 1405/07/19 | رفع به‌هم‌ریختگی همه صفحات ادمین و منو |
 | 1405/07/19 | ایجاد PROJECT_STATE.md + اسکریپت‌های بکاپ |
 | 1405/07/19 | افزودن dev.bat + end-of-day.bat |
 | 1405/07/19 | رفع باگ بکاپ دوبل + مشکل Git |
-| 1405/07/20 | افزودن دکمه چاپ فاکتور + رفع فونت و ظاهر فاکتور (بخش ۴۳) |
-| 1405/07/20 | **افزودن PWA کامل** (manifest + Service Worker + install prompt) |
-| 1405/07/20 | **بهبود کامل SEO** (metadata + OpenGraph + Sitemap + robots.txt + JSON-LD) |
-| 1405/07/20 | شفاف‌سازی آیکون‌های PWA + انتقال favicon.ico |
-| 1405/07/20 | **افزودن آمار فروش در داشبورد ادمین** (بخش ۴۵) |
-| 1405/07/20 | **افزودن لغو سفارش توسط مشتری** با شمارش معکوس (بخش ۴۶) |
-| 1405/07/20 | **افزودن پاکسازی سفارش‌های قدیمی** (بخش ۴۷) |
-| 1405/07/21 | **افزودن سیستم کامل کد تخفیف (کوپن)** با تشخیص اقلام واجد/غیرواجد (بخش‌های ۴۸-۵۳) |
-| 1405/07/21 | **افزودن max_order_amount و coupon_eligible** به کوپن‌ها، دسته‌ها و محصولات |
-| 1405/07/21 | نمایش تخفیف در فاکتور چاپی + ستون تخفیف هر آیتم |
-| 1405/07/21 | **افزودن دارک مود برای پنل ادمین** (بخش‌های ۵۴-۵۵) |
-| 1405/07/21 | **افزودن اعلان سفارش جدید** (Badge + صدا + Toast + Browser Notification) (بخش‌های ۵۶-۵۷) |
-| 1405/07/21 | **افزودن تایتل و favicon داینامیک** با شمارش سفارش‌های جدید (بخش ۵۸) |
-| 1405/07/21 | **جایگزینی Realtime با Polling** برای اعلان‌ها (به دلیل تحریم ایران) |
-| 1405/07/21 | **افزودن proxy.ts + حذف X-Powered-By + متادیتای صفحات ادمین** (امنیت) |
-| 1405/07/22 | **افزودن گزارش پیشرفته کوپن‌ها** (بخش‌های ۵۹-۶۱) |
-| 1405/07/22 | **استخراج `PrintInvoice.tsx`** به عنوان کامپوننت قابل استفاده مجدد |
-| 1405/07/22 | **افزودن خروجی Excel/CSV از سفارش‌ها** برای حسابداری (بخش ۶۲) |
-| 1405/07/22 | **افزودن داشبورد پیشرفته** (نمودار ۶ ماهه + ساعات پرترافیک + مقایسه ماه قبل) (بخش ۶۳) |
-| 1405/07/22 | **افزودن CRM (مشتریان)** — گرید + آمار + تگ + یادداشت (بخش ۶۴) |
-| 1405/07/23 | **افزودن سیستم کامل لغو سفارش** — دلایل قابل مدیریت + UI مشتری/ادمین + نمایش دلیل + آمار + فاکتور لغو (بخش‌های ۶۵-۶۹) |
-| 1405/07/23 | **افزودن مودال جزئیات سفارش لغو شده** با پرینت فاکتور اختصاصی |
-| 1405/07/24 | **افزودن آمار پیشرفته لغوها** — نمودار ساعت شبانه‌روز + روز هفته + دسته‌بندی محصولات (بخش ۷۰) |
-| 1405/07/24 | **بازطراحی صفحه آمار لغوها** — کارت‌های گزارش کلیک‌پذیر + مودال‌های جزئیات (بخش ۷۱) |
-| 1405/07/24 | **رفع خطای `Expression expected` در `stats.ts`** (return تکراری) |
-| 1405/07/24 | **رفع خطای `Cannot read properties of undefined` در `CancellationsManager`** (fallback + `cache: 'no-store'`) |
+| 1405/07/20 | افزودن دکمه چاپ فاکتور + رفع فونت فاکتور |
+| 1405/07/20 | **افزودن PWA کامل** |
+| 1405/07/20 | **بهبود کامل SEO** |
+| 1405/07/20 | شفاف‌سازی آیکون‌های PWA |
+| 1405/07/20 | **افزودن آمار فروش در داشبورد ادمین** |
+| 1405/07/20 | **افزودن لغو سفارش توسط مشتری** |
+| 1405/07/20 | **افزودن پاکسازی سفارش‌های قدیمی** |
+| 1405/07/21 | **افزودن سیستم کامل کد تخفیف (کوپن)** |
+| 1405/07/21 | **افزودن max_order_amount و coupon_eligible** |
+| 1405/07/21 | نمایش تخفیف در فاکتور چاپی |
+| 1405/07/21 | **افزودن دارک مود برای پنل ادمین** |
+| 1405/07/21 | **افزودن اعلان سفارش جدید** |
+| 1405/07/21 | **افزودن تایتل و favicon داینامیک** |
+| 1405/07/21 | **جایگزینی Realtime با Polling** |
+| 1405/07/21 | **افزودن proxy.ts + حذف X-Powered-By** |
+| 1405/07/22 | **افزودن گزارش پیشرفته کوپن‌ها** |
+| 1405/07/22 | **استخراج `PrintInvoice.tsx`** |
+| 1405/07/22 | **افزودن خروجی Excel/CSV از سفارش‌ها** |
+| 1405/07/22 | **افزودن داشبورد پیشرفته** |
+| 1405/07/22 | **افزودن CRM (مشتریان)** |
+| 1405/07/23 | **افزودن سیستم کامل لغو سفارش** |
+| 1405/07/23 | **افزودن مودال جزئیات سفارش لغو شده** |
+| 1405/07/24 | **افزودن آمار پیشرفته لغوها** |
+| 1405/07/24 | **بازطراحی صفحه آمار لغوها** |
+| 1405/07/24 | **رفع خطای `Expression expected` در `stats.ts`** |
+| 1405/07/24 | **رفع خطای `Cannot read properties of undefined`** |
+| 1405/07/25 | **افزودن پاکسازی خودکار با pg_cron** |
+| 1405/07/26 | **افزودن گزارش فروش و مالیات** |
+| 1405/07/27 | **افزودن فیلتر تعداد لغو در CRM** |
+| 1405/07/28 | **بازطراحی ناوبری موبایل ادمین** |
+| 1405/08/01 | **افزودن پنل مشتری** (ورود OTP + تاریخچه + سفارش مجدد) |
+| 1405/08/02 | **افزودن PWA Badge** |
+| 1405/08/02 | **پیاده‌سازی کامل سیستم پرداخت چندگانه** (زرین‌پال + نقدی + کارت‌خوان + واریز) |
+| 1405/08/02 | **افزودن تنظیمات پرداخت در پنل ادمین** |
+| 1405/08/02 | **افزودن صفحه بازگشت از درگاه + آپلود رسید** |
+| 1405/08/02 | **افزودن نمایش وضعیت پرداخت (بج + رنگ) در پنل ادمین** |
+| 1405/08/02 | **افزودن مودال تسویه سریع (نقدی/کارت‌خوان + یادداشت)** |
+| 1405/08/02 | **افزودن جستجو و فیلتر «پرداخت نشده» به لیست سفارش‌ها** |
+| 1405/08/02 | **اجباری شدن شماره میز در Checkout** |
+| 1405/08/02 | **رفع باگ‌های مربوط به پرداخت (RLS، نرمال‌سازی شماره، وضعیت)** |
 
 ---
 
@@ -432,43 +452,29 @@ Cofe-Park/
 
 ### اسکریپت‌های npm:
 ```bash
-# توسعه
 npm run dev               # اجرای پروژه در حالت توسعه
 npm run build             # بیلد گرفتن
 npm start                 # اجرای نسخه Build شده
 npm run lint              # اجرای Linter
-
-# بکاپ
 npm run backup            # بکاپ لوکال
-npm run backup:clean      # پاکسازی بکاپ‌های قدیمی لوکال
-npm run backup:schedule   # بکاپ خودکار لوکال (هر ۲۴ ساعت)
-npm run backup:server     # بکاپ کامل سرور (شامل node_modules)
-npm run backup:server:light # بکاپ سرور بدون node_modules
-npm run backup:server:test  # تست بکاپ سرور
-
-# ابزارهای تصویر
+npm run backup:clean      # پاکسازی بکاپ‌های قدیمی
+npm run backup:schedule   # بکاپ خودکار (هر ۲۴ ساعت)
+npm run backup:server     # بکاپ کامل سرور
 npm run icons             # ساخت آیکون‌های PWA
 npm run transparent       # شفاف‌سازی آیکون‌ها
-npm run build:icons       # ساخت همه سایزها از source-logo.png
-```
-
-### فایل‌های `.bat`:
-```bash
-dev.bat                   # منوی همه‌کاره توسعه
-end-of-day.bat            # اسکریپت پایان روز
+npm run build:icons       # ساخت همه سایزها
 ```
 
 ### Git:
 ```bash
-git pull origin main --rebase --autostash   # قبل از push
+git pull origin main --rebase --autostash
 git add . && git commit -m "پیام" && git push origin main
 ```
 
-### متغیرهای محیطی (`.env.local`):
+### متغیرهای محیطی (`.env.local` و Vercel):
 ```env
 NEXT_PUBLIC_SUPABASE_URL=https://xxx.supabase.co
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=eyJhbGciOi...
-SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOi...
 NEXT_PUBLIC_SITE_URL=https://cafe-park-menu.vercel.app
 ```
 
@@ -476,11 +482,9 @@ NEXT_PUBLIC_SITE_URL=https://cafe-park-menu.vercel.app
 
 ## 💾 ۱۰. سیستم بکاپ
 
-### دو نوع بکاپ:
-
 | نوع | دستور | مسیر | حجم | شامل | نگهداری |
 |---|---|---|---|---|---|
-| **لوکال** | `npm run backup` | `backups/` | ~0.7 MB | فقط سورس + .bat + .gitignore | ۳۰ روز |
+| **لوکال** | `npm run backup` | `backups/` | ~0.7 MB | سورس + .bat | ۳۰ روز |
 | **سرور** | `npm run backup:server` | `backups-server/` | ~67 MB | سورس + node_modules + .env.local | ۱۴ روز |
 
 ### اسکریپت‌ها:
@@ -488,17 +492,11 @@ NEXT_PUBLIC_SITE_URL=https://cafe-park-menu.vercel.app
 |---|---|
 | `scripts/backup.mjs` | بکاپ لوکال (فایل + zip) |
 | `scripts/backup.mjs --clean` | پاکسازی بکاپ‌های قدیمی |
-| `scripts/backup-server.mjs` | بکاپ کامل سرور (Flood-Fill) |
-| `scripts/backup-server.mjs --no-deps` | بدون node_modules |
-| `scripts/backup-server.mjs --dry-run` | فقط شمارش |
+| `scripts/backup-server.mjs` | بکاپ کامل سرور |
 | `scripts/schedule-backup.mjs` | اجرای خودکار هر ۲۴ ساعت |
-
-### اسکریپت‌های آیکون:
-| اسکریپت | کاربرد |
-|---|---|
 | `scripts/generate-icons.mjs` | ساخت آیکون از رنگ + متن |
-| `scripts/make-transparent.mjs` | حذف پس‌زمینه با Flood-Fill |
-| `scripts/build-icons.mjs` | ساخت همه سایزها از `source-logo.png` |
+| `scripts/make-transparent.mjs` | حذف پس‌زمینه |
+| `scripts/build-icons.mjs` | ساخت همه سایزها |
 
 ---
 
@@ -507,46 +505,58 @@ NEXT_PUBLIC_SITE_URL=https://cafe-park-menu.vercel.app
 | جدول | کاربرد | فیلدهای کلیدی |
 |---|---|---|
 | `categories` | دسته‌بندی محصولات | `id`, `name`, `icon`, `sort_order`, `is_active`, `coupon_eligible` |
-| `products` | محصولات | `id`, `category_id`, `name`, `price`, `image_url`, `is_featured`, `is_new`, `is_available`, `size`, `calories`, `prep_time_minutes`, `ingredients`, `allergens`, `dietary_info`, `coupon_eligible` (nullable) |
+| `products` | محصولات | `id`, `category_id`, `name`, `price`, `image_url`, `is_featured`, `is_new`, `is_available`, `size`, `calories`, `prep_time_minutes`, `ingredients`, `allergens`, `dietary_info`, `coupon_eligible` |
 | `variant_groups` | گروه‌های تنوع | `id`, `product_id`, `name`, `is_required`, `sort_order` |
 | `variant_options` | گزینه‌های هر گروه | `id`, `group_id`, `name`, `price_modifier`, `is_default`, `is_available`, `sort_order` |
-| `orders` | سفارش‌ها | `id`, `order_number`, `customer_name`, `customer_phone`, `table_number`, `note`, `items` (JSONB), `subtotal`, `status`, `original_subtotal`, `coupon_code`, `coupon_discount`, `eligible_subtotal`, `ineligible_subtotal`, **`cancellation_reason_id`**, **`cancellation_reason_label`**, **`cancellation_note`**, **`cancelled_by`** ('customer'/'admin'/'system'), `created_at`, `confirmed_at`, `preparing_at`, `ready_at`, `delivered_at`, `cancelled_at` |
+| `orders` | سفارش‌ها | `id`, `order_number`, `customer_name`, `customer_phone`, `table_number`, `note`, `items` (JSONB), `subtotal`, `status`, `original_subtotal`, `coupon_code`, `coupon_discount`, `eligible_subtotal`, `ineligible_subtotal`, `cancellation_reason_id`, `cancellation_reason_label`, `cancellation_note`, `cancelled_by`, **`payment_method`** ('online'/'cash'/'card'/'transfer'), **`payment_status`** ('unpaid'/'paid'/'failed'/'pending_review'), **`payment_authority`**, **`payment_ref_id`**, **`payment_amount`**, **`payment_receipt_url`**, **`payment_verified_at`**, **`payment_note`**, `created_at`, `confirmed_at`, `preparing_at`, `ready_at`, `delivered_at`, `cancelled_at` |
 | `tables` | میزها | `id`, `number`, `name`, `description`, `capacity`, `location`, `sort_order`, `is_active`, `qr_token` |
 | `quotes` | جملات | `id`, `text`, `author`, `is_active` |
 | `themes` | تم‌ها | رنگ‌ها + font_url‌ها + `font_metadata` (JSONB), `border_radius`, `is_active` |
-| `settings` | تنظیمات سایت (تک‌ردیفی، id=1) | `cafe_name`, `tagline`, `hero_*`, `footer_text`, `address`, `phone`, `instagram`, `working_hours`, `logo_url`, `maps_url`, `og_*`, `show_*`, `*_in_header/footer/floating` |
-| `coupons` | کدهای تخفیف | `id`, `code`, `description`, `discount_type` ('percent'/'fixed'), `discount_value`, `min_order_amount`, `max_order_amount`, `max_discount`, `max_uses`, `used_count`, `valid_from`, `valid_until`, `is_active` |
-| `customers` | مشتریان (خودکار از سفارش‌ها) | `phone`, `notes`, `tags`, `updated_at` |
-| **`cancellation_reasons`** | **دلایل لغو سفارش** | `id`, `label`, `target` ('customer'/'admin'/'both'), `icon`, `sort_order`, `is_active`, `created_at`, `updated_at` |
+| `settings` | تنظیمات سایت (id=1) | `cafe_name`, `tagline`, `hero_*`, `footer_text`, `address`, `phone`, `instagram`, `working_hours`, `logo_url`, `maps_url`, `og_*`, `show_*`, `*_in_header/footer/floating`, `auto_cleanup_enabled`, `auto_cleanup_days`, **`payment_enabled`**, **`payment_online_enabled`**, **`payment_cash_enabled`**, **`payment_card_enabled`**, **`payment_transfer_enabled`**, **`payment_gateway`**, **`payment_merchant_id`**, **`payment_sandbox_mode`**, **`payment_min_online_amount`**, **`payment_transfer_bank_name`**, **`payment_transfer_account_number`**, **`payment_transfer_card_number`**, **`payment_transfer_account_holder`**, **`payment_transfer_requires_review`**, **`payment_transfer_auto_verify`** |
+| `coupons` | کدهای تخفیف | `id`, `code`, `description`, `discount_type`, `discount_value`, `min_order_amount`, `max_order_amount`, `max_discount`, `max_uses`, `used_count`, `valid_from`, `valid_until`, `is_active` |
+| `customers` | مشتریان (از سفارش‌ها) | `phone`, `notes`, `tags`, `updated_at` |
+| `cancellation_reasons` | دلایل لغو | `id`, `label`, `target`, `icon`, `sort_order`, `is_active` |
+| `customer_sessions` | sessionهای ورود مشتری | `id`, `phone`, `code`, `expires_at`, `verified_at`, `session_token`, `created_at` |
+
+### Storage Buckets:
+- **`receipts`** (Public) — برای ذخیره عکس رسیدهای واریز بانکی.
 
 ### وضعیت سفارش‌ها (status):
 ```
-pending    → confirmed  → preparing → ready → delivered
-           ↘ cancelled  (با دلیل و cancelled_by)
+pending → confirmed → preparing → ready → delivered
+       ↘ cancelled (با دلیل و cancelled_by)
 ```
 
-### نحوه استفاده از coupon_eligible:
+### وضعیت پرداخت (payment_status):
 ```
-محصول coupon_eligible = true      → همیشه شامل تخفیف
-محصول coupon_eligible = false     → هرگز شامل تخفیف
-محصول coupon_eligible = null      → از دسته ارث می‌برد
-دسته coupon_eligible = false      → پیش‌فرض غیرفعال (مگر override محصول)
-```
-
-### نحوه استفاده از cancellation_reasons:
-```
-target = 'customer'  → فقط در مودال لغو مشتری نمایش داده می‌شه
-target = 'admin'     → فقط در مودال لغو ادمین نمایش داده می‌شه
-target = 'both'      → در هر دو مودال
-is_active = true     → فقط فعال‌ها نمایش داده می‌شن
+unpaid → paid (تأیید آنلاین یا دستی)
+       ↘ failed (پرداخت ناموفق)
+       ↘ pending_review (واریز با رسید، منتظر تأیید ادمین)
 ```
 
-### Realtime Publications:
+### توابع PostgreSQL:
+```sql
+cleanup_old_orders()                    -- پاکسازی سفارش‌های قدیمی
+get_cleanup_status()                    -- وضعیت پاکسازی خودکار
+update_cleanup_settings(p_enabled, p_days)
+cleanup_expired_customer_sessions()     -- پاکسازی sessionهای منقضی
+```
+
+### pg_cron Setup:
+```sql
+-- نیاز به فعال‌سازی pg_cron از Dashboard → Database → Extensions
+-- فایل کامل: supabase/cron-cleanup.sql
+
+select cron.schedule(
+  'auto-cleanup-orders',
+  '0 3 * * *',
+  $$select cleanup_old_orders()$$
+);
+```
+
+### Realtime:
 ```sql
 alter publication supabase_realtime add table public.orders;
-
-create policy "Enable realtime for orders"
-  on public.orders for select using (true);
 ```
 
 ---
@@ -555,29 +565,34 @@ create policy "Enable realtime for orders"
 
 | ابزار | مسیر | کاربرد |
 |---|---|---|
-| **منوی توسعه** | `dev.bat` | ۱۶ گزینه (dev، build، backup، git، VS Code، ...) |
-| **پایان روز** | `end-of-day.bat` | بکاپ + پاکسازی + pull + push + PROJECT_STATE |
+| **منوی توسعه** | `dev.bat` | منوی همه‌کاره |
+| **پایان روز** | `end-of-day.bat` | بکاپ + push |
 | **بکاپ لوکال** | `scripts/backup.mjs` | فقط سورس |
-| **بکاپ سرور** | `scripts/backup-server.mjs` | کامل + node_modules |
-| **بکاپ خودکار** | `scripts/schedule-backup.mjs` | هر ۲۴ ساعت |
-| **آیکون PWA** | `scripts/build-icons.mjs` | ساخت همه سایزها |
-| **شفاف‌سازی** | `scripts/make-transparent.mjs` | حذف پس‌زمینه |
-| **تغییر تم** | `app/admin/components/AdminThemeToggle.tsx` | toggle روز/شب + localStorage |
-| **اعلان سفارش** | `lib/use-order-notifications.ts` | Polling هر ۱۰ ثانیه + صدا + نوتیفیکیشن |
-| **کارت هشدار** | `app/admin/components/NewOrderAlert.tsx` | Toast قرمز با دکمه مشاهده |
-| **تایتل داینامیک** | `lib/use-document-title.ts` | عنوان + favicon تب مرورگر |
-| **کامپوننت چاپ** | `app/admin/components/PrintInvoice.tsx` | فاکتور قابل استفاده مجدد |
-| **گزارش کوپن** | `app/admin/coupons/reports/CouponReports.tsx` | صفحه گزارش با نمودار و مودال سفارش‌ها |
-| **دلایل لغو** | `app/admin/cancellation-reasons/` | مدیریت دلایل لغو |
-| **آمار لغو** | `app/admin/cancellations/` | گزارش و تحلیل لغوها (شامل آمار پیشرفته) |
-| **محافظت ادمین** | `proxy.ts` | ریدایرکت سرور-side برای /admin |
+| **بکاپ سرور** | `scripts/backup-server.mjs` | کامل |
+| **تغییر تم (سایدبار)** | `app/admin/components/AdminThemeToggle.tsx` | toggle روز/شب |
+| **تغییر تم (موبایل)** | `app/admin/components/AdminMobileThemeToggle.tsx` | FAB |
+| **اعلان سفارش** | `lib/use-order-notifications.ts` | Polling + صدا + Badge |
+| **PWA Badge** | `lib/use-pwa-badge.ts` | setAppBadge |
+| **کارت هشدار** | `app/admin/components/NewOrderAlert.tsx` | Toast |
+| **تایتل داینامیک** | `lib/use-document-title.ts` | عنوان + favicon |
+| **کامپوننت چاپ** | `app/admin/components/PrintInvoice.tsx` | فاکتور |
+| **گزارش کوپن** | `app/admin/coupons/reports/` | گزارش |
+| **گزارش فروش** | `app/admin/reports/sales/` | ۳ تب + CSV |
+| **دلایل لغو** | `app/admin/cancellation-reasons/` | مدیریت |
+| **آمار لغو** | `app/admin/cancellations/` | گزارش |
+| **پنل مشتری** | `app/my-orders/MyOrdersClient.tsx` | OTP + تاریخچه |
+| **Session مشتری** | `lib/customer-auth.ts` | cookie + OTP |
+| **پرداخت زرین‌پال** | `lib/payment/zarinpal.ts` | Request + Verify |
+| **تنظیمات پرداخت** | `app/admin/settings/payment/` | فعال/غیرفعال + Merchant ID |
+| **محافظت ادمین** | `proxy.ts` | server-side |
+| **pg_cron Setup** | `supabase/cron-cleanup.sql` | راه‌اندازی |
 
 ---
 
 ## 📦 ۱۳. نسخه‌های نصب‌شده
 
 ### Dependencies:
-```
+```text
 @supabase/ssr          ^0.5.2
 @supabase/supabase-js  ^2.45.4
 archiver               ^7.0.1
@@ -590,7 +605,7 @@ sharp                  ^0.35.5
 ```
 
 ### DevDependencies:
-```
+```text
 @types/archiver        ^6.0.3
 @types/node            ^22.10.0
 @types/react           ^19.0.0
@@ -605,35 +620,27 @@ typescript             ^5.6.3
 ## 📄 ۱۴. `.gitignore` و `.gitattributes`
 
 ### `.gitignore`:
-```
+```text
 node_modules/
 .next/
 .env
 .env.local
 .env.*.local
 *.lnk
-
-# بکاپ‌های محلی
 backups/
 backups-server/
 ```
 
 ### `.gitattributes`:
-```
+```text
 * text=auto eol=lf
 *.bat text eol=crlf
 *.cmd text eol=crlf
-
 *.png binary
 *.jpg binary
-*.jpeg binary
-*.jfif binary
-*.webp binary
 *.ico binary
-*.woff binary
 *.woff2 binary
 *.ttf binary
-*.otf binary
 *.zip binary
 ```
 
@@ -651,40 +658,70 @@ backups-server/
 
 ## 💡 ۱۶. تصمیمات فنی مهم
 
-1. **بدون Tailwind:** تمام استایل‌ها در `globals.css` برای سادگی و کنترل کامل.
+1. **بدون Tailwind:** تمام استایل‌ها در `globals.css`.
 2. **Realtime Supabase:** برای لیست سفارش‌ها در ادمین.
-3. **Polling برای اعلان سفارش‌ها:** به جای Realtime (به دلیل ناپایداری WebSocket در ایران) — هر ۱۰ ثانیه.
-4. **Polling در صفحه جزئیات سفارش مشتری:** هر ۱۰ ثانیه.
-5. **QR Token برای میزها:** با اسکن QR، `?table=N` به URL اضافه می‌شود.
-6. **فونت داینامیک از دیتابیس:** ادمین می‌تواند فونت سفارشی آپلود کند.
-7. **localStorage برای سبد خرید:** بدون نیاز به ثبت‌نام.
-8. **واتساپ برای اطلاع‌رسانی:** نیازی به پنل پیامکی نیست.
-9. **متن‌های `.bat` به انگلیسی + ایموجی:** چون CMD فارسی RTL رندر نمی‌کند.
-10. **`.gitattributes` برای خط‌پایان‌ها:** جلوگیری از conflict در ویندوز/لینوکس.
-11. **Service Worker فقط در production:** در `npm run dev` غیرفعال است.
-12. **کوپن با ارث‌بری:** محصول تنظیمات اختصاصی دارد یا از دسته ارث می‌برد.
-13. **محاسبه سهم تخفیف هر آیتم:** در API هنگام ثبت سفارش، برای نمایش در فاکتور.
-14. **RLS policy برای همه جداول عمومی:** با `true` on `insert/update/select`.
-15. **React Portal برای فاکتور چاپی:** تا خارج از `.admin-main` قرار بگیرد.
-16. **دارک مود در localStorage:** با کلید `cafe-park-admin-theme`.
-17. **صدا با AudioContext:** با اولین کلیک کاربر unlock می‌شود (محدودیت Chrome).
-18. **تایتل داینامیک:** با شمارش سفارش‌های pending در `document.title`.
-19. **آیکون داینامیک با canvas:** ساخت favicon با badge قرمز.
-20. **`proxy.ts` به جای `middleware.ts`:** در Next.js 16 convention عوض شده. محافظت سرور-side از `/admin`.
-21. **محافظت دو لایه (Defense in Depth):** `proxy.ts` (سرور) + `admin/layout.tsx` (کلاینت).
-22. **`noindex, nofollow` روی صفحات ادمین:** جلوگیری از ایندکس شدن در گوگل.
-23. **کامپوننت چاپ مشترک:** `PrintInvoice.tsx` در صفحه سفارش + گزارش کوپن‌ها استفاده می‌شود.
-24. **گزارش کوپن‌ها با API جداگانه:** `/api/coupons/stats` و `/api/coupons/orders` برای دسترسی از Client Component.
-25. **لغو با دلیل از دیتابیس:** دلایل در جدول `cancellation_reasons` قابل مدیریت از پنل ادمین هستن.
-26. **لغو بدون دلیل مجاز:** فیلد دلیل اختیاریه ولی برای بهبود سرویس توصیه می‌شه.
-27. **نمایش دلیل لغو به مشتری:** فقط وقتی `cancelled_by = 'admin'` باشه.
-28. **لغو با تاریخچه:** هر لغو، تاریخ (`cancelled_at`) و لغوکننده (`cancelled_by`) و دلیل رو ثبت می‌کنه.
-29. **CSV با فرمول `=""`:** برای جلوگیری از Scientific notation در Excel (شماره تلفن).
-30. **پشتیبانی Excel فارسی:** BOM (`\uFEFF`) در ابتدای CSV.
-31. **آمار لغو با نگاشت نام محصول به دسته:** چون در `orders.items` فقط `product_name` ذخیره می‌شه، برای دسته‌بندی از جدول `products` نگاشت می‌گیریم. اگه اسم محصول عوض بشه، لغوهای قبلی ممکنه نگاشت نشن.
-32. **هایلایت ستون پرلغو:** با کلاس `.cancel-peak-bar` (box-shadow قرمز) برای دیده شدن سریع‌تر.
-33. **نمودار عریض با اسکرول افقی:** `.cancel-wide-chart` با `min-width: 620px` تا در موبایل به‌هم نریزه.
-34. **صفحه گزارش با کارت‌های کلیک‌پذیر:** به جای سکشن‌های طولانی، کارت‌های خلاصه + مودال برای جزئیات (سرعت بالاتر، DOM سبک‌تر).
-35. **مودال تودرتو با z-index بالاتر:** `.nested-modal` برای باز شدن جزئیات سفارش روی گزارش.
-36. **فچ API با `cache: 'no-store'`:** جلوگیری از کش شدن دیتای قدیمی در مرورگر.
-37. **Fallback در کامپوننت‌های Client:** استفاده از `data?.byHour ?? []` برای جلوگیری از کرش در صورت قدیمی بودن دیتای API.
+3. **Polling برای اعلان سفارش‌ها:** هر ۱۰ ثانیه (تحریم WebSocket).
+4. **Polling در صفحه جزئیات سفارش:** هر ۱۰ ثانیه.
+5. **QR Token برای میزها:** `?table=N`.
+6. **فونت داینامیک از دیتابیس.**
+7. **localStorage برای سبد خرید.**
+8. **واتساپ برای اطلاع‌رسانی.**
+9. **متن‌های `.bat` به انگلیسی + ایموجی.**
+10. **`.gitattributes` برای خط‌پایان‌ها.**
+11. **Service Worker فقط در production.**
+12. **کوپن با ارث‌بری.**
+13. **محاسبه سهم تخفیف هر آیتم.**
+14. **RLS policy برای همه جداول.**
+15. **React Portal برای فاکتور چاپی.**
+16. **دارک مود در localStorage.**
+17. **صدا با AudioContext.**
+18. **تایتل داینامیک با شمارش pending.**
+19. **آیکون داینامیک با canvas.**
+20. **`proxy.ts` به جای `middleware.ts`.**
+21. **محافظت دو لایه.**
+22. **`noindex, nofollow` روی صفحات ادمین.**
+23. **کامپوننت چاپ مشترک.**
+24. **گزارش کوپن با API جداگانه.**
+25. **لغو با دلیل از دیتابیس.**
+26. **لغو بدون دلیل مجاز.**
+27. **نمایش دلیل لغو فقط وقتی admin.**
+28. **لغو با تاریخچه.**
+29. **CSV با فرمول `=""`.**
+30. **پشتیبانی Excel فارسی (BOM).**
+31. **آمار لغو با نگاشت نام محصول به دسته.**
+32. **هایلایت ستون پرلغو.**
+33. **نمودار عریض با اسکرول افقی.**
+34. **صفحه گزارش با کارت‌های کلیک‌پذیر.**
+35. **مودال تودرتو با z-index بالاتر.**
+36. **فچ API با `cache: 'no-store'`.**
+37. **Fallback در کامپوننت‌های Client.**
+38. **pg_cron برای پاکسازی خودکار.**
+39. **تابع `cleanup_old_orders()` با security definer.**
+40. **`get_cleanup_status()` برای cron.**
+41. **تنظیمات cleanup در جدول settings.**
+42. **Server Action به جای API Route.**
+43. **گزارش فروش با سه تب.**
+44. **CSV با BOM + `=""`.**
+45. **عنوان گزارش در سطر اول CSV.**
+46. **گزارش دسته‌بندی از نگاشت نام محصول.**
+47. **ستون «لغو شده» به‌صورت کارت.**
+48. **ناوبری موبایل با هدر + drawer.**
+49. **بستن خودکار drawer در تغییر مسیر.**
+50. **قفل اسکرول body وقتی drawer بازه.**
+51. **بستن drawer با ESC.**
+52. **حذف `flex: 1` از nav drawer.**
+53. **OTP بدون SMS (کد نمایشی).**
+54. **Session مشتری با httpOnly cookie (۳۰ روز).**
+55. **جستجوی چندفرمتی شماره در orders.**
+56. **نرمال‌سازی قبل از اعتبارسنجی در send-otp.**
+57. **سفارش مجدد با map درست فیلدها.**
+58. **PWA Badge با `navigator.setAppBadge`.**
+59. **دکمه «سفارش‌های من» در hero منو.**
+60. **سیستم پرداخت چندگانه:** پشتیبانی از آنلاین (زرین‌پال)، نقدی، کارت‌خوان و واریز با رسید.
+61. **پرداخت آنلاین (زرین‌پال):** استفاده از Sandbox برای تست. پاس دادن `orderId` در `callback_url` برای اطمینان از پیدا شدن سفارش در `verify`.
+62. **آپلود رسید:** استفاده از Supabase Storage (Bucket: `receipts`). امکان آپلود عکس یا ثبت متن.
+63. **مدیریت وضعیت پرداخت توسط ادمین:** ادمین می‌تواند پرداخت‌های نقدی/کارت‌خوان را «تأیید» کند (با یادداشت). مودال تسویه اختصاصی برای این کار طراحی شده است.
+64. **جلوگیری از اعلان سفارش‌های پرداخت‌نشده:** اعلان‌ها با فیلتر `.or()` در `use-order-notifications` فقط برای سفارش‌های نقدی/کارت‌خوان/پرداخت‌شده ارسال می‌شوند.
+65. **اجباری شدن شماره میز در Checkout:** برای بهبود سرویس در محل.
+66. **جستجو و فیلتر در لیست سفارش‌ها:** با `searchQuery` و فیلتر `unpaid` در `OrdersManager`.
+67. **رنگ‌بندی کارت‌های سفارش:** بر اساس `payment_status` (paid=سبز، pending=زرد، failed=قرمز، unpaid=خاکستری).
