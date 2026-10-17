@@ -1,7 +1,14 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { supabaseServer } from '@/lib/supabase/server'
+import { createClient } from '@supabase/supabase-js'
+
+function createAdminDb() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!url || !key) throw new Error('Missing Supabase admin env')
+  return createClient(url, key, { auth: { persistSession: false } })
+}
 
 export type PaymentSettings = {
   payment_enabled: boolean
@@ -10,7 +17,7 @@ export type PaymentSettings = {
   payment_card_enabled: boolean
   payment_transfer_enabled: boolean
   payment_gateway: string
-  payment_merchant_id: string | null
+  payment_merchant_id: string | null // ✅ برگشت
   payment_sandbox_mode: boolean
   payment_min_online_amount: number
   payment_transfer_bank_name: string | null
@@ -29,7 +36,7 @@ export async function getPaymentSettings(): Promise<{
   error?: string
 }> {
   try {
-    const db = await supabaseServer()
+    const db = createAdminDb()
     const { data, error } = await db
       .from('settings')
       .select(PAYMENT_FIELDS)
@@ -52,7 +59,6 @@ export async function updatePaymentSettings(
   settings: Partial<PaymentSettings>
 ): Promise<{ success?: boolean; error?: string }> {
   try {
-    // اعتبارسنجی
     if (
       settings.payment_enabled &&
       !settings.payment_cash_enabled &&
@@ -60,23 +66,10 @@ export async function updatePaymentSettings(
       !settings.payment_online_enabled &&
       !settings.payment_transfer_enabled
     ) {
-      return {
-        error: 'حداقل یکی از روش‌های پرداخت باید فعال باشد',
-      }
+      return { error: 'حداقل یکی از روش‌های پرداخت باید فعال باشد' }
     }
 
-    if (
-      settings.payment_enabled &&
-      settings.payment_online_enabled &&
-      !settings.payment_merchant_id &&
-      !settings.payment_sandbox_mode
-    ) {
-      return {
-        error: 'برای پرداخت آنلاین، Merchant ID لازم است',
-      }
-    }
-
-    const db = await supabaseServer()
+    const db = createAdminDb()
     const { error } = await db
       .from('settings')
       .update(settings)
@@ -89,6 +82,7 @@ export async function updatePaymentSettings(
 
     revalidatePath('/admin/settings/payment')
     revalidatePath('/checkout')
+    revalidatePath('/') // برای اپدیت منوی اصلی
     return { success: true }
   } catch (err: any) {
     console.error('[updatePaymentSettings] unexpected:', err)

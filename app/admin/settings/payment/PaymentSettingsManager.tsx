@@ -193,9 +193,26 @@ export default function PaymentSettingsManager() {
                 </div>
               </div>
 
-              {/* ✅ حذف فیلد Merchant ID و اضافه کردن راهنما */}
-              <div className="payment-sandbox-warning" style={{ background: '#f0f7ff', borderColor: '#cce5ff', color: '#004085' }}>
-                🔐 شناسه پذیرنده (Merchant ID) برای امنیت بیشتر از طریق متغیرهای محیطی سرور (Vercel) تنظیم می‌شود و در دیتابیس ذخیره نمی‌گردد.
+              {/* ✅ فیلد Merchant ID برگشت */}
+              <div className="field" style={{ marginTop: '16px' }}>
+                <label>
+                  Merchant ID
+                  <span className="payment-required">*</span>
+                </label>
+                <input
+                  type="text"
+                  dir="ltr"
+                  placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                  value={settings.payment_merchant_id || ''}
+                  onChange={(e) =>
+                    update('payment_merchant_id', e.target.value.trim() || null)
+                  }
+                  disabled={saving}
+                />
+                <small>
+                  کد ۳۶ کاراکتری که از پنل {settings.payment_gateway} دریافت
+                  می‌کنی. (در دیتابیس امن ذخیره می‌شود)
+                </small>
               </div>
 
               <div className="payment-toggle-row" style={{ marginTop: '16px' }}>

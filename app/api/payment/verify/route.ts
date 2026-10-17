@@ -37,7 +37,7 @@ export async function GET(req: NextRequest) {
 
     const db = createDb()
 
-    // ۱. پیدا کردن سفارش با orderId
+    // ۱. پیدا کردن سفارش
     const { data: order, error: orderErr } = await db
       .from('orders')
       .select('id, order_number, subtotal, payment_status')
@@ -65,10 +65,10 @@ export async function GET(req: NextRequest) {
       )
     }
 
-    // ۴. خواندن تنظیمات (✅ ستون payment_merchant_id حذف شد)
+    // ۴. خواندن تنظیمات (✅ ستون payment_merchant_id برگشت)
     const { data: settings, error: settingsErr } = await db
       .from('settings')
-      .select('payment_sandbox_mode')
+      .select('payment_merchant_id, payment_sandbox_mode')
       .eq('id', 1)
       .single()
 
@@ -78,8 +78,8 @@ export async function GET(req: NextRequest) {
       )
     }
 
-    // ✅ استفاده از متغیر محیطی
-    const merchantId = process.env.ZARINPAL_MERCHANT_ID
+    // ✅ استفاده از دیتابیس
+    const merchantId = settings.payment_merchant_id
 
     if (!merchantId) {
       return NextResponse.redirect(

@@ -37,10 +37,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'این سفارش قبلاً پرداخت شده' }, { status: 400 })
     }
 
-    // ۲. خواندن تنظیمات
+    // ۲. خواندن تنظیمات (✅ ستون payment_merchant_id برگشت)
     const { data: settings, error: settingsErr } = await db
       .from('settings')
-      .select('payment_enabled, payment_online_enabled, payment_gateway, payment_sandbox_mode')
+      .select('payment_enabled, payment_online_enabled, payment_gateway, payment_merchant_id, payment_sandbox_mode')
       .eq('id', 1)
       .single()
 
@@ -56,11 +56,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: `درگاه «${settings.payment_gateway}» هنوز پیاده‌سازی نشده` }, { status: 400 })
     }
 
-    // ✅ استفاده از متغیر محیطی به جای دیتابیس
-    const merchantId = process.env.ZARINPAL_MERCHANT_ID
+    // ✅ استفاده از دیتابیس به جای متغیر محیطی (چون جدول قفل شده و امن است)
+    const merchantId = settings.payment_merchant_id
 
     if (!merchantId) {
-      return NextResponse.json({ error: 'Merchant ID روی سرور تنظیم نشده است' }, { status: 500 })
+      return NextResponse.json({ error: 'Merchant ID در تنظیمات پرداخت ثبت نشده است' }, { status: 400 })
     }
 
     // ۳. ساخت callback URL

@@ -4,7 +4,7 @@
 > بخش «۵. کارهای باقی‌مانده»، «۸. لاگ تغییرات» و «بالای فایل» رو آپدیت کن.
 > در چت جدید، فقط همین فایل را برای AI پیوست کن.
 
-**آخرین آپدیت:** ۱۴۰۵/۰۸/۰۲ (2026-10-24)
+**آخرین آپدیت:** ۱۴۰۵/۰۸/۰۳ (2026-10-25)
 
 ---
 
@@ -12,8 +12,8 @@
 
 - **نام پکیج:** `cafe-park-menu` (پوشه پروژه: `Cofe-Park`)
 - **تکنولوژی:** Next.js 16 (App Router) + React 19 + TypeScript + Supabase + `globals.css` (بدون Tailwind)
-- **هدف:** مشتری‌ها با اسکن QR روی میز، منو را باز می‌کنند، سفارش می‌دهند و از طریق واتساپ به کافه می‌فرستند. صاحب کافه هم از پنل ادمین، سفارش‌ها، منو، میزها، تم‌ها و تنظیمات را مدیریت می‌کند. مشتری‌ها می‌توانند با شماره موبایل وارد پنل خود شوند و سفارش‌های قبلی را ببینند. سیستم پرداخت چندگانه (آنلاین زرین‌پال، نقدی، کارت‌خوان، واریز با رسید) پیاده‌سازی شده است.
-- **دیتابیس:** Supabase (PostgreSQL) + Realtime برای لیست سفارش‌ها + **Polling برای اعلان‌ها** + **pg_cron برای پاکسازی خودکار** + **Storage برای رسیدها**
+- **هدف:** مشتری‌ها با اسکن QR روی میز، منو را باز می‌کنند، سفارش می‌دهند و از طریق واتساپ به کافه می‌فرستند. صاحب کافه هم از پنل ادمین، سفارش‌ها، منو، میزها، تم‌ها و تنظیمات را مدیریت می‌کند. مشتری‌ها می‌توانند بدون کد و فقط با شناسه دستگاه (کوکی امن)، سفارش‌های قبلی خود را ببینند. سیستم پرداخت چندگانه (آنلاین زرین‌پال، نقدی، کارت‌خوان، واریز با رسید) پیاده‌سازی شده است.
+- **دیتابیس:** Supabase (PostgreSQL) + Realtime برای لیست سفارش‌ها + **Polling برای اعلان‌ها** + **pg_cron برای پاکسازی خودکار** + **Storage برای رسیدها** + **RLS کاملاً قفل‌شده برای جداول حساس**
 - **ریپازیتوری:** `https://github.com/hadiassadi/cafe-park-menu.git` (branch: `main`)
 - **مسیر لوکال:** `D:\Cafe Park\Menu\New Menu\CafePark-Menu\Cofe-Park`
 - **دامنه پروداکشن:** `https://cafe-park-menu.vercel.app`
@@ -34,9 +34,9 @@ Cofe-Park/
 │   ├── sitemap.ts                  ← sitemap.xml
 │   ├── cart/page.tsx               ← صفحه سبد خرید
 │   ├── checkout/page.tsx           ← صفحه ثبت سفارش + کوپن + انتخاب پرداخت
-│   ├── my-orders/                  ← ✅ پنل مشتری
+│   ├── my-orders/                  ← ✅ پنل مشتری (بدون OTP)
 │   │   ├── page.tsx
-│   │   └── MyOrdersClient.tsx      ← ورود OTP + تاریخچه + سفارش مجدد
+│   │   └── MyOrdersClient.tsx      ← تاریخچه سفارش‌ها با کوکی دستگاه
 │   ├── order/[id]/                 ← جزئیات سفارش مشتری
 │   │   ├── page.tsx                ← صفحه اصلی سفارش + وضعیت پرداخت
 │   │   └── UploadReceipt.tsx       ← ✅ آپلود رسید (عکس/متن)
@@ -44,39 +44,46 @@ Cofe-Park/
 │   │   ├── page.tsx
 │   │   └── PaymentCallbackClient.tsx
 │   ├── api/
+│   │   ├── admin/                  ← ✅ APIهای امن ادمین
+│   │   │   ├── customers/route.ts  ← دریافت لیست CRM
+│   │   │   └── orders/pending/route.ts ← اعلان‌ها
 │   │   ├── orders/
-│   │   │   ├── route.ts            ← API ثبت سفارش + محاسبه کوپن
-│   │   │   └── cancel/route.ts     ← API لغو سفارش (مشتری) + ثبت دلیل
-│   │   ├── customer/               ← ✅ API پنل مشتری
-│   │   │   ├── send-otp/route.ts
-│   │   │   ├── verify-otp/route.ts
-│   │   │   ├── logout/route.ts
-│   │   │   ├── me/route.ts
-│   │   │   └── orders/route.ts
-│   │   ├── payment/                ← ✅ API پرداخت
-│   │   │   ├── settings/route.ts   ← تنظیمات عمومی پرداخت
-│   │   │   ├── request/route.ts    ← شروع پرداخت زرین‌پال
-│   │   │   ├── verify/route.ts     ← تأیید پرداخت زرین‌پال
-│   │   │   ├── set-method/route.ts ← ثبت روش پرداخت دستی
-│   │   │   └── upload-receipt/route.ts ← ذخیره رسید واریز
-│   │   ├── upload-receipt/route.ts ← ✅ آپلود فایل به Storage
-│   │   ├── coupons/                ← (بدون تغییر)
-│   │   ├── cancellation-reasons/   ← (بدون تغییر)
-│   │   ├── cancellations/          ← (بدون تغییر)
-│   │   ├── reports/sales/route.ts  ← API گزارش فروش
-│   │   ├── cleanup/                ← (بدون تغییر)
-│   │   └── export/                 ← (بدون تغییر)
-│   ├── components/                 ← (بدون تغییر)
+│   │   │   ├── route.ts            ← API ثبت سفارش (ست کردن کوکی دستگاه)
+│   │   │   ├── [id]/route.ts       ← دریافت سفارش (با Service Role)
+│   │   │   └── cancel/route.ts     ← API لغو سفارش
+│   │   ├── customer/               ← ✅ API پنل مشتری (با Service Role)
+│   │   │   ├── me/route.ts         ← اطلاعات دستگاه فعلی
+│   │   │   └── orders/route.ts     ← سفارش‌های دستگاه فعلی
+│   │   ├── payment/                ← ✅ API پرداخت (با Service Role)
+│   │   │   ├── settings/route.ts   
+│   │   │   ├── request/route.ts    
+│   │   │   ├── verify/route.ts     
+│   │   │   ├── set-method/route.ts 
+│   │   │   └── upload-receipt/route.ts 
+│   │   ├── upload-receipt/route.ts ← آپلود به Storage (Signed URL)
+│   │   ├── coupons/                
+│   │   ├── cancellation-reasons/   ← با Service Role
+│   │   ├── cancellations/          
+│   │   ├── customers/update/route.ts ← ذخیره یادداشت/تگ CRM
+│   │   ├── reports/sales/route.ts  
+│   │   ├── cleanup/                
+│   │   └── export/                 
+│   ├── components/                 
 │   └── admin/
 │       ├── layout.tsx              ← هدر موبایل + drawer + اعلان سفارش
 │       ├── orders/                 ← مدیریت سفارش‌ها
+│       │   ├── page.tsx            ← لود مستقیم با Service Role
+│       │   ├── OrdersManager.tsx   ← لیست + جستجو + فیلتر + مودال تسویه
+│       │   └── actions.ts          ← اکشن‌ها با Service Role
+│       ├── customers/
 │       │   ├── page.tsx
-│       │   ├── OrdersManager.tsx   ← ✅ لیست + جستجو + فیلتر + مودال تسویه
-│       │   └── actions.ts          ← ✅ اکشن‌های تغییر وضعیت و پرداخت
-│       ├── settings/payment/       ← ✅ تنظیمات پرداخت
+│       │   └── CustomersManager.tsx ← دریافت دیتا از API امن
+│       ├── settings/
 │       │   ├── page.tsx
-│       │   ├── PaymentSettingsManager.tsx
-│       │   └── actions.ts
+│       │   └── payment/
+│       │       ├── page.tsx
+│       │       ├── PaymentSettingsManager.tsx
+│       │       └── actions.ts
 │       ├── (بقیه صفحات ادمین بدون تغییر)
 │       └── components/
 │           ├── AdminMobileThemeToggle.tsx
@@ -84,18 +91,18 @@ Cofe-Park/
 ├── lib/
 │   ├── menu-types.ts
 │   ├── cart-context.tsx
-│   ├── menu.ts
+│   ├── menu.ts                     ← لود تنظیمات با Service Role (سرور)
 │   ├── site.ts
 │   ├── stats.ts
-│   ├── customer-auth.ts            ← ✅ session مشتری (cookie + OTP)
-│   ├── payment/zarinpal.ts         ← ✅ توابع ارتباط با زرین‌پال
-│   ├── use-order-notifications.ts  ← Polling + Badge
-│   ├── use-pwa-badge.ts            ← ✅ هوک PWA Badge
+│   ├── payment/zarinpal.ts         ← توابع ارتباط با زرین‌پال
+│   ├── use-order-notifications.ts  ← Polling از API امن
+│   ├── use-pwa-badge.ts            
 │   ├── use-document-title.ts
 │   └── supabase/
 ├── supabase/
 │   └── cron-cleanup.sql            ← SQL راه‌اندازی pg_cron
 ├── proxy.ts                        ← محافظت سرور-side از /admin
+├── dev.bat                         ← منوی توسعه (با Build قبل از Push)
 ├── (بقیه فایل‌ها بدون تغییر)
 ```
 
@@ -256,6 +263,15 @@ Cofe-Park/
 
 ## ✅ ۴. کارهای انجام‌شده
 
+### 🔒 امنیت (فاز جدید)
+- [x] **قفل کردن کامل RLS روی جداول حساس:** `orders`, `coupons`, `customers`, `cancellation_reasons`, `settings`. (حذف Policyهای عمومی)
+- [x] **انتقال همه APIها به `SERVICE_ROLE_KEY`:** ثبت سفارش، پرداخت، لغو، CRM، آپلود رسید و دریافت تنظیمات. (کلید فقط روی سرور است)
+- [x] **جایگزینی OTP با «کوکی دستگاه»:** مشتری بدون کد، فقط با کوکی امن `cafe_device_token` سفارش‌های دستگاه خودش را می‌بیند.
+- [x] **حذف جدول `customer_sessions` و فایل‌های OTP.**
+- [x] **خصوصی کردن Storage `receipts`:** استفاده از Signed URL برای مشاهده رسید.
+- [x] **ذخیره `payment_merchant_id` در دیتابیس:** حالا با RLS امن شده و از پنل ادمین قابل تنظیم است.
+- [x] **آپدیت `dev.bat`:** بیلد اجباری قبل از پوش برای جلوگیری از خرابی سایت.
+
 ### منوی مشتری
 - [x] صفحه اصلی با هدر داینامیک + JSON-LD
 - [x] جستجوی فارسی + فیلتر «پیشنهاد کافه» + فیلتر دسته‌بندی
@@ -265,62 +281,58 @@ Cofe-Park/
 - [x] **لغو سفارش توسط مشتری** با شمارش معکوس + **انتخاب دلیل**
 - [x] **کد تخفیف (کوپن)** با تشخیص اقلام واجد/غیرواجد
 - [x] ارسال سفارش به واتساپ
-- [x] **پنل مشتری** — ورود با شماره + کد ۴ رقمی نمایشی + تاریخچه + سفارش مجدد + جستجوی چندفرمتی (بخش ۷۷)
+- [x] **پنل مشتری (بدون کد):** تاریخچه سفارش‌ها با کوکی دستگاه + سفارش مجدد
 - [x] **دکمه «سفارش‌های من» در هدر منو**
-- [x] **انتخاب روش پرداخت در Checkout** (آنلاین، نقدی، کارت‌خوان، واریز) (بخش ۷۹)
+- [x] **انتخاب روش پرداخت در Checkout** (آنلاین، نقدی، کارت‌خوان، واریز)
 - [x] **اجباری شدن شماره میز در Checkout**
-- [x] **صفحه بازگشت از درگاه** (`/payment/callback`) با نمایش وضعیت (بخش ۷۹)
-- [x] **آپلود رسید (عکس/متن)** برای پرداخت واریزی (بخش ۸۲)
-- [x] **بخش پرداخت در صفحه سفارش** (نمایش وضعیت + دکمه پرداخت مجدد + تغییر روش) (بخش ۸۰)
+- [x] **صفحه بازگشت از درگاه** (`/payment/callback`)
+- [x] **آپلود رسید (عکس/متن)** برای پرداخت واریزی
+- [x] **بخش پرداخت در صفحه سفارش**
 
 ### پنل ادمین
-- [x] Layout با سایدبار دسکتاپ + هدر موبایل + drawer کشویی
+- [x] Layout با سایدبار + هدر موبایل + drawer کشویی
 - [x] لاگین + محافظت سرور-side + متادیتای `noindex`
-- [x] **داشبورد با آمار پیشرفته** (نمودارها + ساعات پرترافیک + پرفروش‌ترین‌ها)
-- [x] **پاکسازی خودکار سفارش‌های قدیمی** با pg_cron (بخش ۷۲)
-- [x] **گزارش فروش و مالیات** — ۳ تب + ۶ فیلتر + خروجی CSV (بخش ۷۳)
-- [x] **مدیریت سفارش‌ها** + Realtime + فاکتور چاپی + لغو با دلیل
-- [x] **مدیریت سفارش‌ها: جستجو و فیلتر** (بخش ۸۴)
-- [x] **مدیریت سفارش‌ها: فیلتر پرداخت نشده + رنگ‌بندی کارت‌ها** (بخش ۸۳)
-- [x] **مدیریت سفارش‌ها: دکمه تسویه سریع + مودال تسویه (نقدی/کارت‌خوان + یادداشت)** (بخش ۸۳)
-- [x] **مدیریت سفارش‌ها: نمایش رسید واریز در مودال جزئیات** (بخش ۸۱)
+- [x] **داشبورد با آمار پیشرفته**
+- [x] **پاکسازی خودکار سفارش‌های قدیمی** با pg_cron
+- [x] **گزارش فروش و مالیات** (۳ تب + ۶ فیلتر + خروجی CSV)
+- [x] **مدیریت سفارش‌ها** + Realtime + فاکتور چاپی
+- [x] **مدیریت سفارش‌ها: جستجو، فیلتر، رنگ‌بندی، تسویه سریع و مودال تسویه**
+- [x] **مدیریت سفارش‌ها: نمایش رسید واریز**
 - [x] **مدیریت محصولات، دسته‌ها، میزها، تم‌ها، جملات**
-- [x] **مدیریت کدهای تخفیف** + گزارش پیشرفته کوپن‌ها
-- [x] **خروجی Excel/CSV از سفارش‌ها**
-- [x] **CRM (مشتریان)** + **فیلتر تعداد لغو** (بخش ۷۴)
-- [x] **مدیریت دلایل لغو** + **آمار و گزارش لغوها** (شامل آمار پیشرفته)
-- [x] **تنظیمات کامل** + **دارک مود**
-- [x] **اعلان سفارش جدید** (Badge + صدا + Toast + Browser Notification + Polling)
-- [x] **تایتل داینامیک + favicon** با شمارش سفارش‌ها
-- [x] **PWA Badge** — نمایش تعداد سفارش‌ها روی آیکون
-- [x] **تنظیمات پرداخت** — فعال/غیرفعال کردن روش‌ها، تنظیم درگاه زرین‌پال (Merchant ID, Sandbox)، اطلاعات حساب بانکی (بخش ۷۸)
+- [x] **مدیریت کدهای تخفیف** + گزارش پیشرفته
+- [x] **خروجی Excel/CSV**
+- [x] **CRM (مشتریان)** + فیلتر تعداد لغو
+- [x] **مدیریت دلایل لغو** + آمار و گزارش لغوها
+- [x] **تنظیمات کامل** + دارک مود
+- [x] **اعلان سفارش جدید** (Polling + Badge + صدا)
+- [x] **تایتل داینامیک + favicon**
+- [x] **PWA Badge**
+- [x] **تنظیمات پرداخت** (فعال/غیرفعال، Merchant ID، Sandbox، حساب بانکی)
 
 ### زیرساخت و ابزارها
 - [x] سیستم تم داینامیک + Supabase Server/Browser Client + Cart Context
-- [x] اسکریپت بکاپ لوکال/سرور + بکاپ خودکار + `dev.bat` + `end-of-day.bat`
-- [x] **PWA کامل** + **SEO کامل**
-- [x] **امنیت:** `poweredByHeader: false` + `proxy.ts` + `noindex`
-- [x] **Deploy روی Vercel**
-- [x] **pg_cron** — پاکسازی خودکار روزانه
-- [x] **Storage Bucket (`receipts`)** — برای آپلود رسیدها
-- [x] **درگاه پرداخت زرین‌پال** — پیاده‌سازی کامل (Request, Verify, Callback) با پشتیبانی از Sandbox
+- [x] بکاپ لوکال/سرور + بکاپ خودکار + `dev.bat` + `end-of-day.bat`
+- [x] PWA کامل + SEO کامل
+- [x] امنیت: `poweredByHeader: false` + `proxy.ts` + `noindex`
+- [x] Deploy روی Vercel
+- [x] pg_cron
+- [x] Storage Bucket (`receipts` - Private)
+- [x] درگاه زرین‌پال
 
 ### رفع باگ‌ها
-- [x] رفع باگ‌های مربوط به به‌هم‌ریختگی صفحات ادمین و منو
+- [x] رفع باگ‌های مربوط به به‌هم‌ریختگی صفحات
 - [x] رفع مشکل Service Worker در dev
-- [x] **جایگزینی Realtime با Polling**
-- [x] **جایگزینی `middleware.ts` با `proxy.ts`**
+- [x] جایگزینی Realtime با Polling
+- [x] جایگزینی `middleware.ts` با `proxy.ts`
 - [x] رفع خطای `Expression expected` در `stats.ts`
-- [x] رفع خطای `Cannot read properties of undefined` در `CancellationsManager`
+- [x] رفع خطای `Cannot read properties of undefined`
 - [x] رفع خطای TS در `categories/page.tsx` و `proxy.ts`
 - [x] رفع نبود دکمه حالت شبانه روی موبایل
-- [x] رفع خطای نرمال‌سازی شماره در `send-otp`
-- [x] رفع نمایش نشدن سفارش‌ها در پنل مشتری (جستجوی چندفرمتی)
-- [x] رفع دو `div` تکراری در hero-actions
-- [x] رفع خطای TS در سفارش مجدد (map فیلدهای `CartItem`)
-- [x] **رفع خطای عدم دسترسی به سفارش در `payment/verify`** (پاس دادن `orderId` در callback)
-- [x] **رفع خطای همگام‌سازی وضعیت پرداخت** با اعمال RLS policy مناسب در Supabase
-- [x] **رفع مشکل اعتبارسنجی شماره** در `send-otp` (اول نرمال‌سازی، بعد اعتبارسنجی)
+- [x] رفع خطای نمایش سفارش‌ها (چندفرمتی)
+- [x] رفع خطای عدم دسترسی به سفارش در `payment/verify`
+- [x] رفع مشکل اعتبارسنجی شماره
+- [x] رفع خطای `updated_at` در جدول `customers`
+- [x] رفع خطای `column settings.payment_merchant_id does not exist`
 
 ---
 
@@ -334,9 +346,9 @@ Cofe-Park/
 - [ ] 🟢 **تست بار (Load Test)** روی Supabase
 - [ ] 🟢 **آیکون PWA با badge برای مشتری**
 - [ ] 🟢 **اتصال به درگاه پرداخت‌های دیگر** (آیدی‌پی، نکست‌پی) — زیرساخت آماده است
-- [ ] 🟢 **اتصال به نرم‌افزار حسابداری پارسیان** (با واسط محلی)
-- [ ] 🟢 **سیستم پیامک (SMS)** برای OTP (به جای نمایش کد در UI)
-- [ ] 🟢 **افزودن جزئیات بیشتر به مودال تسویه** (شماره پیگیری کارت‌خوان، نام بانک)
+- [ ] 🟢 **اتصال به نرم‌افزار حسابداری پارسیان**
+- [ ] 🟢 **سیستم پیامک (SMS) برای OTP** (جایگزینی کوکی دستگاه در آینده)
+- [ ] 🟢 **افزودن جزئیات بیشتر به مودال تسویه**
 
 ---
 
@@ -351,13 +363,13 @@ Cofe-Park/
 7. **قبل از ارسال به چت جدید، فایل `PROJECT_STATE.md` را پیوست کن.**
 8. **بعد از هر تغییر مهم، `Ctrl+Shift+R` رفرش کن.**
 9. **متن‌های `.bat` به انگلیسی + ایموجی باشند.**
-10. **برای سرور از `supabaseServer()`، برای کلاینت از `supabaseBrowser()` استفاده شود.**
+10. **برای سرور از `SERVICE_ROLE_KEY` استفاده شود، برای کلاینت از `supabaseBrowser()`.** (به دلیل قفل بودن RLS)
 11. **در کوئری‌های Supabase، همیشه ستون‌های جدید را به `select` اضافه کن.**
 12. **برای اعلان‌ها، از Polling استفاده شود (نه Realtime)** — تحریم ایران.
 13. **متن‌های کامنت CSS رو کپی نکن.**
 14. **در fetch های API از `cache: 'no-store'` استفاده کن.**
 15. **در کوئری سفارش‌های مشتری، با چند فرمت شماره جستجو کن.**
-16. **برای عملیات‌های حساس پرداخت (تغییر وضعیت)، از Server Actions یا API با دسترسی `service_role` یا `public update` policy استفاده کن.**
+16. **برای عملیات‌های حساس (دیتابیس)، حتماً از API Route یا Server Action با کلید مخفی استفاده کن.**
 
 ---
 
@@ -380,6 +392,7 @@ Cofe-Park/
 7. محافظت ادمین با proxy.ts (نه middleware.ts در Next.js 16).
 8. در fetch های API از cache: 'no-store' استفاده شود.
 9. در کوئری سفارش‌های مشتری، با چند فرمت شماره جستجو شود.
+10. به دلیل قفل بودن RLS، همه APIهای حساس باید از SERVICE_ROLE_KEY استفاده کنند.
 
 📁 ابزارهای موجود در پروژه:
 - dev.bat → منوی همه‌کاره توسعه
@@ -406,45 +419,46 @@ Cofe-Park/
 | 1405/07/19 | افزودن dev.bat + end-of-day.bat |
 | 1405/07/19 | رفع باگ بکاپ دوبل + مشکل Git |
 | 1405/07/20 | افزودن دکمه چاپ فاکتور + رفع فونت فاکتور |
-| 1405/07/20 | **افزودن PWA کامل** |
-| 1405/07/20 | **بهبود کامل SEO** |
+| 1405/07/20 | افزودن PWA کامل |
+| 1405/07/20 | بهبود کامل SEO |
 | 1405/07/20 | شفاف‌سازی آیکون‌های PWA |
-| 1405/07/20 | **افزودن آمار فروش در داشبورد ادمین** |
-| 1405/07/20 | **افزودن لغو سفارش توسط مشتری** |
-| 1405/07/20 | **افزودن پاکسازی سفارش‌های قدیمی** |
-| 1405/07/21 | **افزودن سیستم کامل کد تخفیف (کوپن)** |
-| 1405/07/21 | **افزودن max_order_amount و coupon_eligible** |
+| 1405/07/20 | افزودن آمار فروش در داشبورد ادمین |
+| 1405/07/20 | افزودن لغو سفارش توسط مشتری |
+| 1405/07/20 | افزودن پاکسازی سفارش‌های قدیمی |
+| 1405/07/21 | افزودن سیستم کامل کد تخفیف (کوپن) |
+| 1405/07/21 | افزودن max_order_amount و coupon_eligible |
 | 1405/07/21 | نمایش تخفیف در فاکتور چاپی |
-| 1405/07/21 | **افزودن دارک مود برای پنل ادمین** |
-| 1405/07/21 | **افزودن اعلان سفارش جدید** |
-| 1405/07/21 | **افزودن تایتل و favicon داینامیک** |
-| 1405/07/21 | **جایگزینی Realtime با Polling** |
-| 1405/07/21 | **افزودن proxy.ts + حذف X-Powered-By** |
-| 1405/07/22 | **افزودن گزارش پیشرفته کوپن‌ها** |
-| 1405/07/22 | **استخراج `PrintInvoice.tsx`** |
-| 1405/07/22 | **افزودن خروجی Excel/CSV از سفارش‌ها** |
-| 1405/07/22 | **افزودن داشبورد پیشرفته** |
-| 1405/07/22 | **افزودن CRM (مشتریان)** |
-| 1405/07/23 | **افزودن سیستم کامل لغو سفارش** |
-| 1405/07/23 | **افزودن مودال جزئیات سفارش لغو شده** |
-| 1405/07/24 | **افزودن آمار پیشرفته لغوها** |
-| 1405/07/24 | **بازطراحی صفحه آمار لغوها** |
-| 1405/07/24 | **رفع خطای `Expression expected` در `stats.ts`** |
-| 1405/07/24 | **رفع خطای `Cannot read properties of undefined`** |
-| 1405/07/25 | **افزودن پاکسازی خودکار با pg_cron** |
-| 1405/07/26 | **افزودن گزارش فروش و مالیات** |
-| 1405/07/27 | **افزودن فیلتر تعداد لغو در CRM** |
-| 1405/07/28 | **بازطراحی ناوبری موبایل ادمین** |
-| 1405/08/01 | **افزودن پنل مشتری** (ورود OTP + تاریخچه + سفارش مجدد) |
-| 1405/08/02 | **افزودن PWA Badge** |
-| 1405/08/02 | **پیاده‌سازی کامل سیستم پرداخت چندگانه** (زرین‌پال + نقدی + کارت‌خوان + واریز) |
-| 1405/08/02 | **افزودن تنظیمات پرداخت در پنل ادمین** |
-| 1405/08/02 | **افزودن صفحه بازگشت از درگاه + آپلود رسید** |
-| 1405/08/02 | **افزودن نمایش وضعیت پرداخت (بج + رنگ) در پنل ادمین** |
-| 1405/08/02 | **افزودن مودال تسویه سریع (نقدی/کارت‌خوان + یادداشت)** |
-| 1405/08/02 | **افزودن جستجو و فیلتر «پرداخت نشده» به لیست سفارش‌ها** |
-| 1405/08/02 | **اجباری شدن شماره میز در Checkout** |
-| 1405/08/02 | **رفع باگ‌های مربوط به پرداخت (RLS، نرمال‌سازی شماره، وضعیت)** |
+| 1405/07/21 | افزودن دارک مود برای پنل ادمین |
+| 1405/07/21 | افزودن اعلان سفارش جدید |
+| 1405/07/21 | افزودن تایتل و favicon داینامیک |
+| 1405/07/21 | جایگزینی Realtime با Polling |
+| 1405/07/21 | افزودن proxy.ts + حذف X-Powered-By |
+| 1405/07/22 | افزودن گزارش پیشرفته کوپن‌ها |
+| 1405/07/22 | استخراج PrintInvoice.tsx |
+| 1405/07/22 | افزودن خروجی Excel/CSV از سفارش‌ها |
+| 1405/07/22 | افزودن داشبورد پیشرفته |
+| 1405/07/22 | افزودن CRM (مشتریان) |
+| 1405/07/23 | افزودن سیستم کامل لغو سفارش |
+| 1405/07/23 | افزودن مودال جزئیات سفارش لغو شده |
+| 1405/07/24 | افزودن آمار پیشرفته لغوها |
+| 1405/07/24 | بازطراحی صفحه آمار لغوها |
+| 1405/07/24 | رفع خطای Expression expected در stats.ts |
+| 1405/07/24 | رفع خطای Cannot read properties of undefined |
+| 1405/07/25 | افزودن پاکسازی خودکار با pg_cron |
+| 1405/07/26 | افزودن گزارش فروش و مالیات |
+| 1405/07/27 | افزودن فیلتر تعداد لغو در CRM |
+| 1405/07/28 | بازطراحی ناوبری موبایل ادمین |
+| 1405/08/01 | افزودن پنل مشتری (ورود OTP + تاریخچه + سفارش مجدد) |
+| 1405/08/02 | افزودن PWA Badge |
+| 1405/08/02 | پیاده‌سازی کامل سیستم پرداخت چندگانه (زرین‌پال + نقدی + کارت‌خوان + واریز) |
+| 1405/08/02 | افزودن تنظیمات پرداخت در پنل ادمین |
+| 1405/08/02 | افزودن صفحه بازگشت از درگاه + آپلود رسید |
+| 1405/08/02 | افزودن نمایش وضعیت پرداخت (بج + رنگ) در پنل ادمین |
+| 1405/08/02 | افزودن مودال تسویه سریع |
+| 1405/08/02 | افزودن جستجو و فیلتر «پرداخت نشده» |
+| 1405/08/02 | اجباری شدن شماره میز در Checkout |
+| 1405/08/02 | رفع باگ‌های مربوط به پرداخت (RLS، نرمال‌سازی شماره، وضعیت) |
+| 1405/08/03 | **بهینه‌سازی امنیتی بزرگ:** قفل RLS + انتقال APIها به Service Role + جایگزینی OTP با کوکی دستگاه + انتقال Merchant ID به دیتابیس قفل‌شده + آپدیت dev.bat برای جلوگیری از پوش خراب |
 
 ---
 
@@ -475,6 +489,7 @@ git add . && git commit -m "پیام" && git push origin main
 ```env
 NEXT_PUBLIC_SUPABASE_URL=https://xxx.supabase.co
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=eyJhbGciOi...
+SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOi...
 NEXT_PUBLIC_SITE_URL=https://cafe-park-menu.vercel.app
 ```
 
@@ -508,7 +523,7 @@ NEXT_PUBLIC_SITE_URL=https://cafe-park-menu.vercel.app
 | `products` | محصولات | `id`, `category_id`, `name`, `price`, `image_url`, `is_featured`, `is_new`, `is_available`, `size`, `calories`, `prep_time_minutes`, `ingredients`, `allergens`, `dietary_info`, `coupon_eligible` |
 | `variant_groups` | گروه‌های تنوع | `id`, `product_id`, `name`, `is_required`, `sort_order` |
 | `variant_options` | گزینه‌های هر گروه | `id`, `group_id`, `name`, `price_modifier`, `is_default`, `is_available`, `sort_order` |
-| `orders` | سفارش‌ها | `id`, `order_number`, `customer_name`, `customer_phone`, `table_number`, `note`, `items` (JSONB), `subtotal`, `status`, `original_subtotal`, `coupon_code`, `coupon_discount`, `eligible_subtotal`, `ineligible_subtotal`, `cancellation_reason_id`, `cancellation_reason_label`, `cancellation_note`, `cancelled_by`, **`payment_method`** ('online'/'cash'/'card'/'transfer'), **`payment_status`** ('unpaid'/'paid'/'failed'/'pending_review'), **`payment_authority`**, **`payment_ref_id`**, **`payment_amount`**, **`payment_receipt_url`**, **`payment_verified_at`**, **`payment_note`**, `created_at`, `confirmed_at`, `preparing_at`, `ready_at`, `delivered_at`, `cancelled_at` |
+| `orders` | سفارش‌ها | `id`, `order_number`, `customer_name`, `customer_phone`, `table_number`, `note`, `items` (JSONB), `subtotal`, `status`, `original_subtotal`, `coupon_code`, `coupon_discount`, `eligible_subtotal`, `ineligible_subtotal`, `cancellation_reason_id`, `cancellation_reason_label`, `cancellation_note`, `cancelled_by`, **`payment_method`**, **`payment_status`**, **`payment_authority`**, **`payment_ref_id`**, **`payment_amount`**, **`payment_receipt_url`**, **`payment_verified_at`**, **`payment_note`**, **`device_id_hash`**, `created_at`, `confirmed_at`, `preparing_at`, `ready_at`, `delivered_at`, `cancelled_at` |
 | `tables` | میزها | `id`, `number`, `name`, `description`, `capacity`, `location`, `sort_order`, `is_active`, `qr_token` |
 | `quotes` | جملات | `id`, `text`, `author`, `is_active` |
 | `themes` | تم‌ها | رنگ‌ها + font_url‌ها + `font_metadata` (JSONB), `border_radius`, `is_active` |
@@ -516,10 +531,9 @@ NEXT_PUBLIC_SITE_URL=https://cafe-park-menu.vercel.app
 | `coupons` | کدهای تخفیف | `id`, `code`, `description`, `discount_type`, `discount_value`, `min_order_amount`, `max_order_amount`, `max_discount`, `max_uses`, `used_count`, `valid_from`, `valid_until`, `is_active` |
 | `customers` | مشتریان (از سفارش‌ها) | `phone`, `notes`, `tags`, `updated_at` |
 | `cancellation_reasons` | دلایل لغو | `id`, `label`, `target`, `icon`, `sort_order`, `is_active` |
-| `customer_sessions` | sessionهای ورود مشتری | `id`, `phone`, `code`, `expires_at`, `verified_at`, `session_token`, `created_at` |
 
 ### Storage Buckets:
-- **`receipts`** (Public) — برای ذخیره عکس رسیدهای واریز بانکی.
+- **`receipts`** (Private) — برای ذخیره عکس رسیدهای واریز بانکی (با Signed URL).
 
 ### وضعیت سفارش‌ها (status):
 ```
@@ -539,7 +553,6 @@ unpaid → paid (تأیید آنلاین یا دستی)
 cleanup_old_orders()                    -- پاکسازی سفارش‌های قدیمی
 get_cleanup_status()                    -- وضعیت پاکسازی خودکار
 update_cleanup_settings(p_enabled, p_days)
-cleanup_expired_customer_sessions()     -- پاکسازی sessionهای منقضی
 ```
 
 ### pg_cron Setup:
@@ -554,18 +567,13 @@ select cron.schedule(
 );
 ```
 
-### Realtime:
-```sql
-alter publication supabase_realtime add table public.orders;
-```
-
 ---
 
 ## 🛠️ ۱۲. ابزارهای توسعه
 
 | ابزار | مسیر | کاربرد |
 |---|---|---|
-| **منوی توسعه** | `dev.bat` | منوی همه‌کاره |
+| **منوی توسعه** | `dev.bat` | منوی همه‌کاره (با Build قبل از Push) |
 | **پایان روز** | `end-of-day.bat` | بکاپ + push |
 | **بکاپ لوکال** | `scripts/backup.mjs` | فقط سورس |
 | **بکاپ سرور** | `scripts/backup-server.mjs` | کامل |
@@ -580,8 +588,7 @@ alter publication supabase_realtime add table public.orders;
 | **گزارش فروش** | `app/admin/reports/sales/` | ۳ تب + CSV |
 | **دلایل لغو** | `app/admin/cancellation-reasons/` | مدیریت |
 | **آمار لغو** | `app/admin/cancellations/` | گزارش |
-| **پنل مشتری** | `app/my-orders/MyOrdersClient.tsx` | OTP + تاریخچه |
-| **Session مشتری** | `lib/customer-auth.ts` | cookie + OTP |
+| **پنل مشتری** | `app/my-orders/MyOrdersClient.tsx` | بدون OTP (کوکی) |
 | **پرداخت زرین‌پال** | `lib/payment/zarinpal.ts` | Request + Verify |
 | **تنظیمات پرداخت** | `app/admin/settings/payment/` | فعال/غیرفعال + Merchant ID |
 | **محافظت ادمین** | `proxy.ts` | server-side |
@@ -671,7 +678,7 @@ backups-server/
 11. **Service Worker فقط در production.**
 12. **کوپن با ارث‌بری.**
 13. **محاسبه سهم تخفیف هر آیتم.**
-14. **RLS policy برای همه جداول.**
+14. **RLS policy:** حالا **کاملاً قفل** است. همه درخواست‌های حساس از طریق API با `SERVICE_ROLE_KEY` انجام می‌شوند.
 15. **React Portal برای فاکتور چاپی.**
 16. **دارک مود در localStorage.**
 17. **صدا با AudioContext.**
@@ -710,18 +717,18 @@ backups-server/
 50. **قفل اسکرول body وقتی drawer بازه.**
 51. **بستن drawer با ESC.**
 52. **حذف `flex: 1` از nav drawer.**
-53. **OTP بدون SMS (کد نمایشی).**
-54. **Session مشتری با httpOnly cookie (۳۰ روز).**
+53. **ورود مشتری با کوکی دستگاه (بدون OTP):** جایگزین جدول `customer_sessions` شد. امن‌تر و ساده‌تر.
+54. **Session مشتری با httpOnly cookie (۱ سال).**
 55. **جستجوی چندفرمتی شماره در orders.**
-56. **نرمال‌سازی قبل از اعتبارسنجی در send-otp.**
-57. **سفارش مجدد با map درست فیلدها.**
-58. **PWA Badge با `navigator.setAppBadge`.**
-59. **دکمه «سفارش‌های من» در hero منو.**
-60. **سیستم پرداخت چندگانه:** پشتیبانی از آنلاین (زرین‌پال)، نقدی، کارت‌خوان و واریز با رسید.
-61. **پرداخت آنلاین (زرین‌پال):** استفاده از Sandbox برای تست. پاس دادن `orderId` در `callback_url` برای اطمینان از پیدا شدن سفارش در `verify`.
-62. **آپلود رسید:** استفاده از Supabase Storage (Bucket: `receipts`). امکان آپلود عکس یا ثبت متن.
-63. **مدیریت وضعیت پرداخت توسط ادمین:** ادمین می‌تواند پرداخت‌های نقدی/کارت‌خوان را «تأیید» کند (با یادداشت). مودال تسویه اختصاصی برای این کار طراحی شده است.
-64. **جلوگیری از اعلان سفارش‌های پرداخت‌نشده:** اعلان‌ها با فیلتر `.or()` در `use-order-notifications` فقط برای سفارش‌های نقدی/کارت‌خوان/پرداخت‌شده ارسال می‌شوند.
-65. **اجباری شدن شماره میز در Checkout:** برای بهبود سرویس در محل.
-66. **جستجو و فیلتر در لیست سفارش‌ها:** با `searchQuery` و فیلتر `unpaid` در `OrdersManager`.
-67. **رنگ‌بندی کارت‌های سفارش:** بر اساس `payment_status` (paid=سبز، pending=زرد، failed=قرمز، unpaid=خاکستری).
+56. **سفارش مجدد با map درست فیلدها.**
+57. **PWA Badge با `navigator.setAppBadge`.**
+58. **دکمه «سفارش‌های من» در hero منو.**
+59. **سیستم پرداخت چندگانه:** پشتیبانی از آنلاین (زرین‌پال)، نقدی، کارت‌خوان و واریز با رسید.
+60. **پرداخت آنلاین (زرین‌پال):** استفاده از Sandbox. پاس دادن `orderId` در callback. ذخیره Merchant ID در دیتابیس (با RLS قفل).
+61. **آپلود رسید:** استفاده از Supabase Storage (Bucket خصوصی). استفاده از Signed URL برای مشاهده.
+62. **مدیریت وضعیت پرداخت توسط ادمین:** با مودال تسویه.
+63. **جلوگیری از اعلان سفارش‌های پرداخت‌نشده:** با فیلتر `.or()`.
+64. **اجباری شدن شماره میز در Checkout.**
+65. **جستجو و فیلتر در لیست سفارش‌ها.**
+66. **رنگ‌بندی کارت‌های سفارش.**
+67. **`dev.bat` با Build قبل از Push:** جلوگیری از خراب شدن سایت زنده.
