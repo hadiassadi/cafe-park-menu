@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic'
 
 function createDb() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
   if (!url || !key) throw new Error('Missing Supabase env')
   return createClient(url, key, { auth: { persistSession: false } })
 }
@@ -17,10 +17,7 @@ export async function POST(req: NextRequest) {
     const orderId = body.orderId
 
     if (!orderId) {
-      return NextResponse.json(
-        { error: 'شناسه سفارش الزامی است' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'شناسه سفارش الزامی است' }, { status: 400 })
     }
 
     const db = createDb()
@@ -37,42 +34,33 @@ export async function POST(req: NextRequest) {
     }
 
     if (order.payment_status === 'paid') {
-      return NextResponse.json(
-        { error: 'این سفارش قبلاً پرداخت شده' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'این سفارش قبلاً پرداخت شده' }, { status: 400 })
     }
 
     // ۲. خواندن تنظیمات
     const { data: settings, error: settingsErr } = await db
       .from('settings')
-      .select(
-        'payment_enabled, payment_online_enabled, payment_gateway, payment_merchant_id, payment_sandbox_mode'
-      )
+      .select('payment_enabled, payment_online_enabled, payment_gateway, payment_sandbox_mode')
       .eq('id', 1)
       .single()
 
     if (settingsErr || !settings) {
-      return NextResponse.json(
-        { error: 'خطا در خواندن تنظیمات پرداخت' },
-        { status: 500 }
-      )
+      return NextResponse.json({ error: 'خطا در خواندن تنظیمات پرداخت' }, { status: 500 })
     }
 
     if (!settings.payment_enabled || !settings.payment_online_enabled) {
-      return NextResponse.json(
-        { error: 'پرداخت آنلاین غیرفعال است' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'پرداخت آنلاین غیرفعال است' }, { status: 400 })
     }
 
     if (settings.payment_gateway !== 'zarinpal') {
-      return NextResponse.json(
-        {
-          error: `درگاه «${settings.payment_gateway}» هنوز پیاده‌سازی نشده`,
-        },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: `درگاه «${settings.payment_gateway}» هنوز پیاده‌سازی نشده` }, { status: 400 })
+    }
+
+    // ✅ استفاده از متغیر محیطی به جای دیتابیس
+    const merchantId = process.env.ZARINPAL_MERCHANT_ID
+
+    if (!merchantId) {
+      return NextResponse.json({ error: 'Merchant ID روی سرور تنظیم نشده است' }, { status: 500 })
     }
 
     // ۳. ساخت callback URL
@@ -80,12 +68,9 @@ export async function POST(req: NextRequest) {
       req.headers.get('origin') ||
       process.env.NEXT_PUBLIC_SITE_URL ||
       'http://localhost:3000'
-        const callbackUrl = `${origin}/api/payment/verify?orderId=${orderId}`
+    const callbackUrl = `${origin}/api/payment/verify?orderId=${orderId}`
 
     // ۴. درخواست پرداخت
-    const merchantId =
-      settings.payment_merchant_id || 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'
-
     const result = await requestZarinPalPayment(
       {
         merchantId,
@@ -119,9 +104,6 @@ export async function POST(req: NextRequest) {
     })
   } catch (err: any) {
     console.error('[payment/request] error:', err)
-    return NextResponse.json(
-      { error: err?.message || 'خطای غیرمنتظره' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: err?.message || 'خطای غیرمنتظره' }, { status: 500 })
   }
 }

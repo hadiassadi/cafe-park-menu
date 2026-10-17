@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic'
 
 function createDb() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
   if (!url || !key) throw new Error('Missing Supabase env')
   return createClient(url, key, { auth: { persistSession: false } })
 }
@@ -18,24 +18,20 @@ export async function GET(req: NextRequest) {
     'http://localhost:3000'
 
   try {
-        const { searchParams } = new URL(req.url)
+    const { searchParams } = new URL(req.url)
     const authority = searchParams.get('Authority')
     const status = searchParams.get('Status')
     const orderId = searchParams.get('orderId')
 
     if (!authority) {
       return NextResponse.redirect(
-        `${origin}/payment/callback?status=error&message=${encodeURIComponent(
-          'کد Authority دریافت نشد'
-        )}`
+        `${origin}/payment/callback?status=error&message=${encodeURIComponent('کد Authority دریافت نشد')}`
       )
     }
 
     if (!orderId) {
       return NextResponse.redirect(
-        `${origin}/payment/callback?status=error&message=${encodeURIComponent(
-          'شناسه سفارش دریافت نشد'
-        )}`
+        `${origin}/payment/callback?status=error&message=${encodeURIComponent('شناسه سفارش دریافت نشد')}`
       )
     }
 
@@ -50,48 +46,46 @@ export async function GET(req: NextRequest) {
 
     if (orderErr || !order) {
       return NextResponse.redirect(
-        `${origin}/payment/callback?status=error&message=${encodeURIComponent(
-          'سفارش پیدا نشد'
-        )}`
+        `${origin}/payment/callback?status=error&message=${encodeURIComponent('سفارش پیدا نشد')}`
       )
     }
 
     // ۲. کاربر لغو کرد
     if (status !== 'OK') {
-      await db
-        .from('orders')
-        .update({ payment_status: 'failed' })
-        .eq('id', order.id)
-
+      await db.from('orders').update({ payment_status: 'failed' }).eq('id', order.id)
       return NextResponse.redirect(
         `${origin}/payment/callback?status=cancelled&orderId=${order.id}`
       )
     }
 
-    // ۳. قبلاً پرداخت شده (idempotent)
+    // ۳. قبلاً پرداخت شده
     if (order.payment_status === 'paid') {
       return NextResponse.redirect(
         `${origin}/payment/callback?status=already-paid&orderId=${order.id}`
       )
     }
 
-    // ۴. خواندن تنظیمات
+    // ۴. خواندن تنظیمات (✅ ستون payment_merchant_id حذف شد)
     const { data: settings, error: settingsErr } = await db
       .from('settings')
-      .select('payment_merchant_id, payment_sandbox_mode')
+      .select('payment_sandbox_mode')
       .eq('id', 1)
       .single()
 
     if (settingsErr || !settings) {
       return NextResponse.redirect(
-        `${origin}/payment/callback?status=error&message=${encodeURIComponent(
-          'خطا در خواندن تنظیمات'
-        )}&orderId=${order.id}`
+        `${origin}/payment/callback?status=error&message=${encodeURIComponent('خطا در خواندن تنظیمات')}&orderId=${order.id}`
       )
     }
 
-    const merchantId =
-      settings.payment_merchant_id || 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'
+    // ✅ استفاده از متغیر محیطی
+    const merchantId = process.env.ZARINPAL_MERCHANT_ID
+
+    if (!merchantId) {
+      return NextResponse.redirect(
+        `${origin}/payment/callback?status=error&message=${encodeURIComponent('Merchant ID روی سرور تنظیم نشده')}&orderId=${order.id}`
+      )
+    }
 
     // ۵. تأیید پرداخت
     const result = await verifyZarinPalPayment(
@@ -104,15 +98,9 @@ export async function GET(req: NextRequest) {
     )
 
     if (!result.success) {
-      await db
-        .from('orders')
-        .update({ payment_status: 'failed' })
-        .eq('id', order.id)
-
+      await db.from('orders').update({ payment_status: 'failed' }).eq('id', order.id)
       return NextResponse.redirect(
-        `${origin}/payment/callback?status=error&message=${encodeURIComponent(
-          result.error
-        )}&orderId=${order.id}`
+        `${origin}/payment/callback?status=error&message=${encodeURIComponent(result.error)}&orderId=${order.id}`
       )
     }
 
@@ -133,9 +121,7 @@ export async function GET(req: NextRequest) {
   } catch (err: any) {
     console.error('[payment/verify] error:', err)
     return NextResponse.redirect(
-      `${origin}/payment/callback?status=error&message=${encodeURIComponent(
-        err?.message || 'خطای غیرمنتظره'
-      )}`
+      `${origin}/payment/callback?status=error&message=${encodeURIComponent(err?.message || 'خطای غیرمنتظره')}`
     )
   }
 }
