@@ -10,15 +10,13 @@ export async function POST(req: NextRequest) {
     const orderId = formData.get('orderId') as string
 
     if (!file || !orderId) {
-      return NextResponse.json(
-        { error: 'فایل و orderId الزامی' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'فایل و orderId الزامی' }, { status: 400 })
     }
 
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
-    if (!url || !key) throw new Error('Missing Supabase env')
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY // ✅ استفاده از کلید مخفی سرور
+
+    if (!url || !key) throw new Error('Missing Supabase admin env')
 
     const db = createClient(url, key, { auth: { persistSession: false } })
 
@@ -36,22 +34,21 @@ export async function POST(req: NextRequest) {
 
     if (uploadError) {
       console.error('[upload-receipt]', uploadError)
-      return NextResponse.json(
-        { error: uploadError.message },
-        { status: 500 }
-      )
+      return NextResponse.json({ error: uploadError.message }, { status: 500 })
     }
 
-    const { data: urlData } = db.storage
+    // ✅ ساخت لینک امن (Signed URL) با اعتبار ۱ سال (چون باکت خصوصی شده)
+    const { data: signedUrlData, error: signError } = await db.storage
       .from('receipts')
-      .getPublicUrl(fileName)
+      .createSignedUrl(fileName, 60 * 60 * 24 * 365)
 
-    return NextResponse.json({ url: urlData.publicUrl })
+    if (signError || !signedUrlData) {
+       return NextResponse.json({ error: 'خطا در ساخت لینک رسید' }, { status: 500 })
+    }
+
+    return NextResponse.json({ url: signedUrlData.signedUrl })
   } catch (err: any) {
     console.error('[upload-receipt] error:', err)
-    return NextResponse.json(
-      { error: err?.message || 'خطای غیرمنتظره' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: err?.message || 'خطای غیرمنتظره' }, { status: 500 })
   }
 }

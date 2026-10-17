@@ -2,7 +2,6 @@
 
 import { useEffect, useState, use } from 'react'
 import Link from 'next/link'
-import { createClient } from '@supabase/supabase-js'
 import UploadReceipt from './UploadReceipt'
 
 const formatPrice = (price: number) =>
@@ -44,6 +43,7 @@ type Order = {
   payment_status: string | null
   payment_ref_id: string | null
   payment_receipt_url: string | null
+  payment_note: string | null
 }
 
 const STATUS_STEPS = [
@@ -100,28 +100,23 @@ export default function OrderPage({
     payment_transfer_enabled: boolean
   } | null>(null)
 
+  // ✅ لود اولیه از API امن سرور
   useEffect(() => {
     async function load() {
-      const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-      const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
-      if (!url || !key) {
-        setError('تنظیمات ناقص')
-        setLoading(false)
-        return
-      }
-      const supabase = createClient(url, key)
-      const { data, error } = await supabase
-        .from('orders')
-        .select('*')
-        .eq('id', id)
-        .maybeSingle()
+      try {
+        const res = await fetch(`/api/orders/${id}`, { cache: 'no-store' })
+        const data = await res.json()
 
-      if (error || !data) {
-        setError('سفارش پیدا نشد')
-      } else {
-        setOrder(data as Order)
+        if (!res.ok || data.error) {
+          setError(data.error || 'سفارش پیدا نشد')
+        } else {
+          setOrder(data.order as Order)
+        }
+      } catch {
+        setError('خطا در ارتباط با سرور')
+      } finally {
+        setLoading(false)
       }
-      setLoading(false)
     }
     load()
   }, [id])
@@ -133,20 +128,18 @@ export default function OrderPage({
       .catch(() => {})
   }, [])
 
+  // ✅ بروزرسانی خودکار با API (نه Supabase)
   useEffect(() => {
     if (!order) return
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
-    if (!url || !key) return
 
-    const supabase = createClient(url, key)
     const interval = setInterval(async () => {
-      const { data } = await supabase
-        .from('orders')
-        .select('*')
-        .eq('id', id)
-        .maybeSingle()
-      if (data) setOrder(data as Order)
+      try {
+        const res = await fetch(`/api/orders/${id}`, { cache: 'no-store' })
+        const data = await res.json()
+        if (data.order) setOrder(data.order as Order)
+      } catch {
+        // silent fail on polling
+      }
     }, 10000)
 
     return () => clearInterval(interval)
@@ -227,7 +220,6 @@ export default function OrderPage({
       })
 
       const data = await res.json()
-
       if (!res.ok) throw new Error(data.error || 'خطا در لغو سفارش')
 
       setOrder({ ...order, status: 'cancelled' })
@@ -253,13 +245,10 @@ export default function OrderPage({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ orderId: order.id }),
       })
-
       const data = await res.json()
-
       if (!res.ok || !data.paymentUrl) {
         throw new Error(data.error || 'خطا در شروع پرداخت')
       }
-
       window.location.href = data.paymentUrl
     } catch (err) {
       setPaymentError(err instanceof Error ? err.message : 'خطا')
@@ -279,9 +268,7 @@ export default function OrderPage({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ orderId: order.id, method }),
       })
-
       const data = await res.json()
-
       if (!res.ok) throw new Error(data.error || 'خطا در تغییر روش')
 
       setOrder({
@@ -292,11 +279,7 @@ export default function OrderPage({
       setShowChangeMethod(false)
 
       const methodLabel =
-        method === 'cash'
-          ? 'نقدی'
-          : method === 'card'
-            ? 'کارت‌خوان'
-            : 'واریز به حساب'
+        method === 'cash' ? 'نقدی' : method === 'card' ? 'کارت‌خوان' : 'واریز به حساب'
       setPaymentSuccess(`✅ روش پرداخت به «${methodLabel}» تغییر کرد`)
       setTimeout(() => setPaymentSuccess(null), 3500)
     } catch (err) {
@@ -308,10 +291,7 @@ export default function OrderPage({
 
   if (loading) {
     return (
-      <div
-        className="order-detail-container"
-        style={{ textAlign: 'center', paddingTop: '50px' }}
-      >
+      <div className="order-detail-container" style={{ textAlign: 'center', paddingTop: '50px' }}>
         در حال بارگذاری سفارش...
       </div>
     )
@@ -319,17 +299,10 @@ export default function OrderPage({
 
   if (error || !order) {
     return (
-      <div
-        className="order-detail-container"
-        style={{ textAlign: 'center', paddingTop: '50px' }}
-      >
+      <div className="order-detail-container" style={{ textAlign: 'center', paddingTop: '50px' }}>
         <div style={{ fontSize: 48 }}>😕</div>
         <h1>{error || 'خطا'}</h1>
-        <Link
-          href="/"
-          className="btn primary-btn"
-          style={{ marginTop: '20px', display: 'inline-flex' }}
-        >
+        <Link href="/" className="btn primary-btn" style={{ marginTop: '20px', display: 'inline-flex' }}>
           بازگشت به منو
         </Link>
       </div>
@@ -382,23 +355,12 @@ export default function OrderPage({
   }
 
   const whatsappMessage = buildWhatsAppMessage(order)
-  const whatsappUrl = `https://wa.me/989301817098?text=${encodeURIComponent(
-    whatsappMessage
-  )}`
+  const whatsappUrl = `https://wa.me/989301817098?text=${encodeURIComponent(whatsappMessage)}`
 
   return (
     <div className="order-detail-container">
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          marginBottom: '10px',
-        }}
-      >
-        <Link href="/" className="btn" style={{ padding: '6px 12px' }}>
-          ← منو
-        </Link>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+        <Link href="/" className="btn" style={{ padding: '6px 12px' }}>← منو</Link>
         <h1 style={{ fontSize: '20px', margin: 0, color: '#29251f' }}>
           سفارش #{formatPrice(order.order_number)}
         </h1>
@@ -420,17 +382,63 @@ export default function OrderPage({
         <div className="order-payment-section">
           <div className="order-payment-section-title">💳 پرداخت سفارش</div>
 
-          {!showChangeMethod && (
+          {showChangeMethod ? (
+            <>
+              <p className="order-payment-section-desc">روش پرداخت جدید رو انتخاب کن:</p>
+
+              {paymentError && (
+                <div className="checkout-error" style={{ marginBottom: '12px' }}>❌ {paymentError}</div>
+              )}
+
+              <div className="order-payment-methods">
+                {paymentSettings?.payment_online_enabled && (
+                  <button type="button" className="order-payment-method-btn" onClick={() => { setShowChangeMethod(false); handlePayOnline() }} disabled={paying}>
+                    <span className="order-payment-method-icon">💳</span>
+                    <div><strong>پرداخت آنلاین</strong><small>زرین‌پال / آیدی‌پی</small></div>
+                  </button>
+                )}
+                {paymentSettings?.payment_cash_enabled && (
+                  <button type="button" className="order-payment-method-btn" onClick={() => handleChangeMethod('cash')} disabled={paying}>
+                    <span className="order-payment-method-icon">💵</span>
+                    <div><strong>پرداخت نقدی</strong><small>در محل</small></div>
+                  </button>
+                )}
+                {paymentSettings?.payment_card_enabled && (
+                  <button type="button" className="order-payment-method-btn" onClick={() => handleChangeMethod('card')} disabled={paying}>
+                    <span className="order-payment-method-icon">💳</span>
+                    <div><strong>کارت‌خوان</strong><small>در محل</small></div>
+                  </button>
+                )}
+                {paymentSettings?.payment_transfer_enabled && (
+                  <button type="button" className="order-payment-method-btn" onClick={() => handleChangeMethod('transfer')} disabled={paying}>
+                    <span className="order-payment-method-icon">🏦</span>
+                    <div><strong>واریز به حساب</strong><small>با رسید</small></div>
+                  </button>
+                )}
+              </div>
+
+              <button type="button" className="order-payment-btn secondary" onClick={() => { setShowChangeMethod(false); setPaymentError(null) }} disabled={paying} style={{ marginTop: '12px' }}>
+                ← بازگشت
+              </button>
+            </>
+          ) : (
             <>
               <p className="order-payment-section-desc">
                 {needsTransferReceipt
-                  ? `🏦 برای تکمیل سفارش، لطفاً مبلغ ${formatPrice(
-                      order.subtotal
-                    )} تومان رو واریز کن و رسید رو توی صفحه سفارش آپلود کن.`
+                  ? `🏦 برای تکمیل سفارش، لطفاً مبلغ ${formatPrice(order.subtotal)} تومان رو واریز کن و رسید رو توی صفحه سفارش آپلود کن.`
                   : isFailed
                     ? 'پرداخت قبلی ناموفق بود. می‌تونی دوباره امتحان کنی یا روش دیگه‌ای انتخاب کنی.'
                     : 'برای نهایی شدن سفارش، لطفاً پرداخت رو انجام بده.'}
               </p>
+
+              {paymentError && (
+                <div className="checkout-error" style={{ marginBottom: '12px' }}>❌ {paymentError}</div>
+              )}
+
+              {paymentSuccess && (
+                <div className="admin-message" style={{ marginBottom: '12px' }}>{paymentSuccess}</div>
+              )}
+
               {needsTransferReceipt && (
                 <UploadReceipt
                   orderId={order.id}
@@ -443,189 +451,40 @@ export default function OrderPage({
                   }}
                 />
               )}
-              {paymentError && (
-                <div
-                  className="checkout-error"
-                  style={{ marginBottom: '12px' }}
-                >
-                  ❌ {paymentError}
-                </div>
-              )}
 
-              {paymentSuccess && (
-                <div
-                  className="admin-message"
-                  style={{ marginBottom: '12px' }}
-                >
-                  {paymentSuccess}
-                </div>
-              )}
-
-              <div className="order-payment-actions">
-                {needsOnlinePayment &&
-                  paymentSettings?.payment_online_enabled && (
-                    <button
-                      type="button"
-                      className="order-payment-btn primary"
-                      onClick={handlePayOnline}
-                      disabled={paying}
-                    >
-                      {paying
-                        ? '...'
-                        : `💳 پرداخت آنلاین ${formatPrice(
-                            order.subtotal
-                          )} تومان`}
-                    </button>
-                  )}
-
-                <button
-                  type="button"
-                  className="order-payment-btn secondary"
-                  onClick={() => {
-                    setShowChangeMethod(true)
-                    setPaymentError(null)
-                    setPaymentSuccess(null)
-                  }}
-                  disabled={paying}
-                >
+              <div className="order-payment-actions" style={{ marginTop: '12px' }}>
+                {needsOnlinePayment && paymentSettings?.payment_online_enabled && (
+                  <button type="button" className="order-payment-btn primary" onClick={handlePayOnline} disabled={paying}>
+                    {paying ? '...' : `💳 پرداخت آنلاین ${formatPrice(order.subtotal)} تومان`}
+                  </button>
+                )}
+                <button type="button" className="order-payment-btn secondary" onClick={() => { setShowChangeMethod(true); setPaymentError(null); setPaymentSuccess(null) }} disabled={paying}>
                   🔀 تغییر روش پرداخت
                 </button>
               </div>
-            </>
-          )}
-
-          {showChangeMethod && (
-            <>
-              <p className="order-payment-section-desc">
-                روش پرداخت جدید رو انتخاب کن:
-              </p>
-
-              {paymentError && (
-                <div
-                  className="checkout-error"
-                  style={{ marginBottom: '12px' }}
-                >
-                  ❌ {paymentError}
-                </div>
-              )}
-
-              <div className="order-payment-methods">
-                {paymentSettings?.payment_online_enabled && (
-                  <button
-                    type="button"
-                    className="order-payment-method-btn"
-                    onClick={() => {
-                      setShowChangeMethod(false)
-                      handlePayOnline()
-                    }}
-                    disabled={paying}
-                  >
-                    <span className="order-payment-method-icon">💳</span>
-                    <div>
-                      <strong>پرداخت آنلاین</strong>
-                      <small>زرین‌پال / آیدی‌پی</small>
-                    </div>
-                  </button>
-                )}
-
-                {paymentSettings?.payment_cash_enabled && (
-                  <button
-                    type="button"
-                    className="order-payment-method-btn"
-                    onClick={() => handleChangeMethod('cash')}
-                    disabled={paying}
-                  >
-                    <span className="order-payment-method-icon">💵</span>
-                    <div>
-                      <strong>پرداخت نقدی</strong>
-                      <small>در محل</small>
-                    </div>
-                  </button>
-                )}
-
-                {paymentSettings?.payment_card_enabled && (
-                  <button
-                    type="button"
-                    className="order-payment-method-btn"
-                    onClick={() => handleChangeMethod('card')}
-                    disabled={paying}
-                  >
-                    <span className="order-payment-method-icon">💳</span>
-                    <div>
-                      <strong>کارت‌خوان</strong>
-                      <small>در محل</small>
-                    </div>
-                  </button>
-                )}
-
-                {paymentSettings?.payment_transfer_enabled && (
-                  <button
-                    type="button"
-                    className="order-payment-method-btn"
-                    onClick={() => handleChangeMethod('transfer')}
-                    disabled={paying}
-                  >
-                    <span className="order-payment-method-icon">🏦</span>
-                    <div>
-                      <strong>واریز به حساب</strong>
-                      <small>با رسید</small>
-                    </div>
-                  </button>
-                )}
-              </div>
-
-              <button
-                type="button"
-                className="order-payment-btn secondary"
-                onClick={() => {
-                  setShowChangeMethod(false)
-                  setPaymentError(null)
-                }}
-                disabled={paying}
-                style={{ marginTop: '12px' }}
-              >
-                ← بازگشت
-              </button>
             </>
           )}
         </div>
       )}
 
       {isCancelled ? (
-        <div
-          className="info-card"
-          style={{ textAlign: 'center', padding: '30px' }}
-        >
+        <div className="info-card" style={{ textAlign: 'center', padding: '30px' }}>
           <div style={{ fontSize: 48 }}>❌</div>
           <h2 style={{ color: '#9b3c32' }}>سفارش لغو شد</h2>
-
-          {order.cancelled_by === 'admin' &&
-            order.cancellation_reason_label && (
-              <div className="cancellation-info-box">
-                <div className="cancellation-info-label">
-                  {order.cancellation_reason_label}
-                </div>
-                {order.cancellation_note && (
-                  <div className="cancellation-info-note">
-                    📝 {order.cancellation_note}
-                  </div>
-                )}
-                <div className="cancellation-info-by">
-                  لغو شده توسط کافه
-                </div>
-              </div>
-            )}
-
-          {order.cancelled_by === 'customer' && (
-            <p style={{ color: '#766f64', marginTop: '12px' }}>
-              این سفارش توسط خودت لغو شده است.
-            </p>
+          {order.cancelled_by === 'admin' && order.cancellation_reason_label && (
+            <div className="cancellation-info-box">
+              <div className="cancellation-info-label">{order.cancellation_reason_label}</div>
+              {order.cancellation_note && (
+                <div className="cancellation-info-note">📝 {order.cancellation_note}</div>
+              )}
+              <div className="cancellation-info-by">لغو شده توسط کافه</div>
+            </div>
           )}
-
+          {order.cancelled_by === 'customer' && (
+            <p style={{ color: '#766f64', marginTop: '12px' }}>این سفارش توسط خودت لغو شده است.</p>
+          )}
           {!order.cancelled_by && (
-            <p style={{ color: '#766f64', marginTop: '12px' }}>
-              این سفارش لغو شده است.
-            </p>
+            <p style={{ color: '#766f64', marginTop: '12px' }}>این سفارش لغو شده است.</p>
           )}
         </div>
       ) : (
@@ -634,12 +493,7 @@ export default function OrderPage({
             const isDone = index <= currentIndex
             const isCurrent = index === currentIndex
             return (
-              <div
-                key={step.key}
-                className={`step-item ${isDone ? 'done' : ''} ${
-                  isCurrent ? 'active' : ''
-                }`}
-              >
+              <div key={step.key} className={`step-item ${isDone ? 'done' : ''} ${isCurrent ? 'active' : ''}`}>
                 <div className="step-dot">{isDone ? step.icon : ''}</div>
                 <span>{step.label}</span>
               </div>
@@ -651,41 +505,24 @@ export default function OrderPage({
       <div className="info-card">
         <h3>🧾 اقلام سفارش</h3>
         {order.table_number && (
-          <div
-            style={{
-              fontSize: '13px',
-              color: '#6b4f3a',
-              marginBottom: '10px',
-            }}
-          >
+          <div style={{ fontSize: '13px', color: '#6b4f3a', marginBottom: '10px' }}>
             📍 میز شماره {formatPrice(order.table_number)}
           </div>
         )}
-
         {order.items.map((item, idx) => (
           <div key={idx} className="info-row">
             <span>
               {formatPrice(item.quantity)} × {item.product_name}
-              {item.option_name && (
-                <small style={{ color: '#766f64' }}>
-                  {' '}
-                  ({item.option_name})
-                </small>
-              )}
+              {item.option_name && <small style={{ color: '#766f64' }}> ({item.option_name})</small>}
             </span>
-            <strong>
-              {formatPrice(item.unit_price * item.quantity)} تومان
-            </strong>
+            <strong>{formatPrice(item.unit_price * item.quantity)} تومان</strong>
           </div>
         ))}
-
         {order.coupon_code && order.coupon_discount ? (
           <div className="order-payment-summary">
             <div className="info-row">
               <span>جمع اقلام:</span>
-              <strong>
-                {formatPrice(order.original_subtotal ?? order.subtotal)} تومان
-              </strong>
+              <strong>{formatPrice(order.original_subtotal ?? order.subtotal)} تومان</strong>
             </div>
             <div className="info-row discount">
               <span>🎟️ تخفیف ({order.coupon_code}):</span>
@@ -706,30 +543,16 @@ export default function OrderPage({
 
       <div className="info-card">
         <h3>👤 اطلاعات تماس</h3>
-        <div className="info-row">
-          <span>نام:</span>
-          <strong>{order.customer_name}</strong>
-        </div>
-        <div className="info-row">
-          <span>شماره:</span>
-          <strong dir="ltr">{order.customer_phone}</strong>
-        </div>
+        <div className="info-row"><span>نام:</span><strong>{order.customer_name}</strong></div>
+        <div className="info-row"><span>شماره:</span><strong dir="ltr">{order.customer_phone}</strong></div>
         {order.note && (
-          <div className="info-row">
-            <span>توضیحات:</span>
-            <strong>{order.note}</strong>
-          </div>
+          <div className="info-row"><span>توضیحات:</span><strong>{order.note}</strong></div>
         )}
       </div>
 
       {canCancel && !isPaid && (
         <div className="order-cancel-section">
-          <button
-            type="button"
-            className="order-cancel-btn"
-            onClick={() => setShowCancelConfirm(true)}
-            disabled={cancelling}
-          >
+          <button type="button" className="order-cancel-btn" onClick={() => setShowCancelConfirm(true)} disabled={cancelling}>
             ❌ لغو سفارش
           </button>
           <p className="order-cancel-hint">
@@ -743,109 +566,41 @@ export default function OrderPage({
       )}
 
       {showCancelConfirm && (
-        <div
-          className="modal-overlay"
-          onClick={() => !cancelling && setShowCancelConfirm(false)}
-        >
-          <div
-            className="modal-container modal-md"
-            onClick={(e) => e.stopPropagation()}
-          >
+        <div className="modal-overlay" onClick={() => !cancelling && setShowCancelConfirm(false)}>
+          <div className="modal-container modal-md" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <div className="modal-header-content">
                 <h2>لغو سفارش</h2>
                 <p>چرا می‌خوای سفارشت رو لغو کنی؟</p>
               </div>
-              <button
-                type="button"
-                className="modal-close-btn"
-                onClick={() => setShowCancelConfirm(false)}
-                disabled={cancelling}
-              >
-                ✕
-              </button>
+              <button type="button" className="modal-close-btn" onClick={() => setShowCancelConfirm(false)} disabled={cancelling}>✕</button>
             </div>
-
             <div className="modal-body">
               {loadingReasons ? (
-                <p className="empty-admin" style={{ padding: '20px' }}>
-                  ⏳ در حال بارگذاری دلایل...
-                </p>
+                <p className="empty-admin" style={{ padding: '20px' }}>⏳ در حال بارگذاری دلایل...</p>
               ) : reasons.length === 0 ? (
-                <p className="empty-admin" style={{ padding: '20px' }}>
-                  دلیلی برای نمایش وجود ندارد. می‌تونی بدون دلیل لغو کنی.
-                </p>
+                <p className="empty-admin" style={{ padding: '20px' }}>دلیلی برای نمایش وجود ندارد. می‌تونی بدون دلیل لغو کنی.</p>
               ) : (
                 <div className="cancel-reasons-list">
                   {reasons.map((reason) => (
-                    <button
-                      key={reason.id}
-                      type="button"
-                      className={`cancel-reason-item ${
-                        selectedReasonId === reason.id ? 'selected' : ''
-                      }`}
-                      onClick={() => setSelectedReasonId(reason.id)}
-                      disabled={cancelling}
-                    >
-                      <span className="cancel-reason-icon">
-                        {reason.icon || '📝'}
-                      </span>
-                      <span className="cancel-reason-label">
-                        {reason.label}
-                      </span>
-                      {selectedReasonId === reason.id && (
-                        <span className="cancel-reason-check">✓</span>
-                      )}
+                    <button key={reason.id} type="button" className={`cancel-reason-item ${selectedReasonId === reason.id ? 'selected' : ''}`} onClick={() => setSelectedReasonId(reason.id)} disabled={cancelling}>
+                      <span className="cancel-reason-icon">{reason.icon || '📝'}</span>
+                      <span className="cancel-reason-label">{reason.label}</span>
+                      {selectedReasonId === reason.id && <span className="cancel-reason-check">✓</span>}
                     </button>
                   ))}
                 </div>
               )}
-
               <div className="cancel-note-field">
                 <label>توضیحات بیشتر (اختیاری)</label>
-                <textarea
-                  value={cancelNote}
-                  onChange={(e) => setCancelNote(e.target.value)}
-                  placeholder="اگه دوست داری بیشتر توضیح بده..."
-                  rows={3}
-                  disabled={cancelling}
-                />
+                <textarea value={cancelNote} onChange={(e) => setCancelNote(e.target.value)} placeholder="اگه دوست داری بیشتر توضیح بده..." rows={3} disabled={cancelling} />
               </div>
-
-              <div className="cancel-warning">
-                ⚠️ بعد از لغو، سفارش از سیستم حذف می‌شه و قابل بازگشت نیست.
-              </div>
-
-              {cancelError && (
-                <div
-                  className="checkout-error"
-                  style={{ marginTop: '12px' }}
-                >
-                  ❌ {cancelError}
-                </div>
-              )}
+              <div className="cancel-warning">⚠️ بعد از لغو، سفارش از سیستم حذف می‌شه و قابل بازگشت نیست.</div>
+              {cancelError && <div className="checkout-error" style={{ marginTop: '12px' }}>❌ {cancelError}</div>}
             </div>
-
             <div className="modal-footer">
-              <button
-                type="button"
-                className="btn"
-                onClick={() => setShowCancelConfirm(false)}
-                disabled={cancelling}
-              >
-                انصراف
-              </button>
-              <button
-                type="button"
-                className="btn"
-                style={{
-                  background: '#9b3c32',
-                  color: '#fff',
-                  border: 0,
-                }}
-                onClick={handleCancelOrder}
-                disabled={cancelling}
-              >
+              <button type="button" className="btn" onClick={() => setShowCancelConfirm(false)} disabled={cancelling}>انصراف</button>
+              <button type="button" className="btn" style={{ background: '#9b3c32', color: '#fff', border: 0 }} onClick={handleCancelOrder} disabled={cancelling}>
                 {cancelling ? '...' : '❌ لغو سفارش'}
               </button>
             </div>
@@ -854,12 +609,7 @@ export default function OrderPage({
       )}
 
       <div className="sticky-action-bar">
-        <a
-          href={whatsappUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="btn-whatsapp"
-        >
+        <a href={whatsappUrl} target="_blank" rel="noopener noreferrer" className="btn-whatsapp">
           💬 ارسال سفارش در واتساپ
         </a>
       </div>
