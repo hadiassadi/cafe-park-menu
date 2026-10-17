@@ -1,14 +1,20 @@
 'use server'
 
-import { supabaseServer } from '@/lib/supabase/server'
+import { createClient } from '@supabase/supabase-js'
 import { revalidatePath } from 'next/cache'
-// اگه این import قبلاً نیست، اضافه کن:
-// import { supabaseServer } from '@/lib/supabase/server'
+
+function createAdminDb() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!url || !key) throw new Error('Missing Supabase admin env')
+  return createClient(url, key, { auth: { persistSession: false } })
+}
+
 // ─────────────────────────────────────────────
 // تغییر وضعیت سفارش (با پشتیبانی از دلایل لغو)
 // ─────────────────────────────────────────────
 export async function updateOrderStatus(formData: FormData) {
-  const db = await supabaseServer()
+  const db = createAdminDb()
 
   const id = String(formData.get('id') || '')
   const status = String(formData.get('status') || '')
@@ -55,13 +61,12 @@ export async function updateOrderStatus(formData: FormData) {
 // پاکسازی سفارش‌های قدیمی (بیشتر از N روز)
 // ─────────────────────────────────────────────
 export async function cleanupOldOrders(days: number = 30) {
-  const db = await supabaseServer()
+  const db = createAdminDb()
 
   const cutoffDate = new Date()
   cutoffDate.setDate(cutoffDate.getDate() - days)
   const cutoffISO = cutoffDate.toISOString()
 
-  // شمارش قبل از حذف
   const { count: countBefore, error: countError } = await db
     .from('orders')
     .select('*', { count: 'exact', head: true })
@@ -80,7 +85,6 @@ export async function cleanupOldOrders(days: number = 30) {
     }
   }
 
-  // حذف
   const { error: deleteError } = await db
     .from('orders')
     .delete()
@@ -105,7 +109,7 @@ export async function cleanupOldOrders(days: number = 30) {
 // شمارش سفارش‌های قدیمی (برای پیش‌نمایش)
 // ─────────────────────────────────────────────
 export async function countOldOrders(days: number = 30) {
-  const db = await supabaseServer()
+  const db = createAdminDb()
 
   const cutoffDate = new Date()
   cutoffDate.setDate(cutoffDate.getDate() - days)
@@ -123,6 +127,7 @@ export async function countOldOrders(days: number = 30) {
 
   return { count: count ?? 0 }
 }
+
 // ═══════════════════════════════════════════════════════════
 // Server Actions برای پاکسازی خودکار (Auto Cleanup)
 // ═══════════════════════════════════════════════════════════
@@ -144,8 +149,8 @@ export async function getCleanupStatus(): Promise<{
   error?: string
 }> {
   try {
-    const supabase = await supabaseServer()
-    const { data, error } = await supabase.rpc('get_cleanup_status')
+    const db = createAdminDb()
+    const { data, error } = await db.rpc('get_cleanup_status')
 
     if (error) {
       console.error('[getCleanupStatus]', error)
@@ -168,8 +173,8 @@ export async function updateCleanupSettings(
       return { error: 'بازه نگهداری باید بین ۷ تا ۳۶۵ روز باشه' }
     }
 
-    const supabase = await supabaseServer()
-    const { data, error } = await supabase.rpc('update_cleanup_settings', {
+    const db = createAdminDb()
+    const { data, error } = await db.rpc('update_cleanup_settings', {
       p_enabled: enabled,
       p_days: daysKept,
     })
@@ -185,14 +190,15 @@ export async function updateCleanupSettings(
     return { error: err?.message || 'خطای غیرمنتظره' }
   }
 }
+
 export async function updatePaymentStatus(
   orderId: string,
   newStatus: 'paid' | 'unpaid' | 'failed',
   note?: string,
-  method?: 'cash' | 'card' | 'online' | 'transfer' // ✅ اضافه شد
+  method?: 'cash' | 'card' | 'online' | 'transfer'
 ): Promise<{ success?: boolean; error?: string }> {
   try {
-    const db = await supabaseServer()
+    const db = createAdminDb()
 
     const updates: Record<string, any> = {
       payment_status: newStatus,

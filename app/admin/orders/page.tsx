@@ -1,16 +1,28 @@
 import type { Metadata } from 'next'
+import { createClient } from '@supabase/supabase-js'
+import OrdersManager from './OrdersManager'
 
 export const metadata: Metadata = {
   title: 'سفارش ها',
   robots: { index: false, follow: false },
 }
-import { supabaseServer } from '@/lib/supabase/server'
-import OrdersManager from './OrdersManager'
 
 export const dynamic = 'force-dynamic'
 
 export default async function OrdersPage() {
-  const db = await supabaseServer()
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+  
+  if (!url || !key) {
+    return (
+      <main className="admin">
+        <h1>مدیریت سفارش‌ها</h1>
+        <p className="danger">تنظیمات سرور ناقص است (Service Role Key وجود ندارد).</p>
+      </main>
+    )
+  }
+
+  const db = createClient(url, key, { auth: { persistSession: false } })
 
   const { data: orders, error } = await db
     .from('orders')

@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { createClient } from '@supabase/supabase-js'
 import { usePwaBadge } from './use-pwa-badge'
 
 type NewOrderInfo = {
@@ -27,18 +26,15 @@ export function useOrderNotifications(enabled: boolean = true) {
   const knownOrderIdsRef = useRef<Set<string>>(new Set())
   const isFirstLoadRef = useRef(true)
 
-  // ✅ نمایش تعداد سفارش‌های pending روی آیکون PWA
   usePwaBadge(pendingCount)
 
-  // ─── فعال‌سازی صدا با اولین کلیک ───
   useEffect(() => {
     if (typeof window === 'undefined') return
     if (audioUnlocked) return
 
     function unlockAudio() {
       try {
-        const AC =
-          window.AudioContext || (window as any).webkitAudioContext
+        const AC = window.AudioContext || (window as any).webkitAudioContext
         if (!AC) return
 
         if (!audioContextRef.current) {
@@ -48,7 +44,6 @@ export function useOrderNotifications(enabled: boolean = true) {
           audioContextRef.current.resume()
         }
         setAudioUnlocked(true)
-        console.log('🔊 Audio unlocked')
       } catch (e) {
         console.error('Audio unlock error:', e)
       }
@@ -64,7 +59,6 @@ export function useOrderNotifications(enabled: boolean = true) {
     }
   }, [audioUnlocked])
 
-  // ─── پاکسازی ───
   useEffect(() => {
     isMountedRef.current = true
     return () => {
@@ -73,54 +67,28 @@ export function useOrderNotifications(enabled: boolean = true) {
     }
   }, [])
 
-  // ─── Polling (بررسی دوره‌ای) ───
   useEffect(() => {
-    if (!enabled) {
-      console.log('🔕 Notifications disabled')
-      return
-    }
+    if (!enabled) return
 
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
-    if (!url || !key) {
-      console.error('❌ Supabase env missing')
-      return
-    }
-
-    console.log('🔔 Setting up polling (every 10s)...')
-    const db = createClient(url, key, {
-      auth: { persistSession: false, autoRefreshToken: false },
-    })
     let cancelled = false
 
     async function checkOrders() {
       if (cancelled) return
 
       try {
-                        const { data, error } = await db
-          .from('orders')
-          .select(
-            'id, order_number, customer_name, customer_phone, table_number, subtotal, items, created_at, status, payment_method, payment_status, payment_receipt_url'
-          )
-          .eq('status', 'pending')
-          .or(
-            'payment_method.in.(cash,card),payment_method.is.null,payment_status.eq.paid,and(payment_status.eq.pending_review,payment_receipt_url.not.is.null)'
-          )
-          .order('created_at', { ascending: false })
-          .limit(20)
+        // ✅ دریافت دیتا از API امن سرور به جای اتصال مستقیم به دیتابیس
+        const res = await fetch('/api/admin/orders/pending', { cache: 'no-store' })
+        if (!res.ok) return
+        
+        const json = await res.json()
+        if (cancelled || !json.orders) return
+        
+        const data = json.orders
 
-        if (cancelled || error || !data) return
+        const newOnes = data.filter((o: any) => !knownOrderIdsRef.current.has(o.id))
 
-        // ─── پیدا کردن سفارش‌های جدید ───
-        const newOnes = data.filter(
-          (o) => !knownOrderIdsRef.current.has(o.id)
-        )
-
-        // اگه اولین بار نیست و سفارش جدید داریم
         if (!isFirstLoadRef.current && newOnes.length > 0) {
-          console.log('🎉 New orders detected:', newOnes.length)
-
-          newOnes.forEach((order) => {
+          newOnes.forEach((order: any) => {
             const info: NewOrderInfo = {
               id: order.id,
               order_number: order.order_number,
@@ -128,9 +96,7 @@ export function useOrderNotifications(enabled: boolean = true) {
               customer_phone: order.customer_phone,
               table_number: order.table_number,
               subtotal: order.subtotal,
-              items_count: Array.isArray(order.items)
-                ? order.items.length
-                : 0,
+              items_count: Array.isArray(order.items) ? order.items.length : 0,
               created_at: order.created_at,
             }
 
@@ -139,10 +105,7 @@ export function useOrderNotifications(enabled: boolean = true) {
             }
 
             playBeep(audioContextRef)
-            showBrowserNotification(
-              info.order_number,
-              info.customer_name
-            )
+            showBrowserNotification(info.order_number, info.customer_name)
           })
 
           if (isMountedRef.current) {
@@ -154,9 +117,8 @@ export function useOrderNotifications(enabled: boolean = true) {
           }
         }
 
-        // ─── آپدیت لیست شناخته‌شده ───
         knownOrderIdsRef.current.clear()
-        data.forEach((o) => knownOrderIdsRef.current.add(o.id))
+        data.forEach((o: any) => knownOrderIdsRef.current.add(o.id))
 
         if (isMountedRef.current) {
           setPendingCount(data.length)
@@ -167,14 +129,10 @@ export function useOrderNotifications(enabled: boolean = true) {
       }
     }
 
-    // اجرای اولیه
     checkOrders()
-
-    // هر ۱۰ ثانیه یک بار
     const interval = setInterval(checkOrders, 10000)
 
     return () => {
-      console.log('🔌 Cleanup polling')
       cancelled = true
       clearInterval(interval)
       if (flashTimerRef.current) clearTimeout(flashTimerRef.current)
@@ -199,25 +157,14 @@ export function useOrderNotifications(enabled: boolean = true) {
   }
 }
 
-// ─── توابع کمکی ───
-
 function playBeep(ref: React.RefObject<AudioContext | null>) {
   try {
     if (typeof window === 'undefined') return
-
     const AC = window.AudioContext || (window as any).webkitAudioContext
     if (!AC) return
-
-    if (!ref.current) {
-      ref.current = new AC()
-    }
+    if (!ref.current) ref.current = new AC()
     const ctx = ref.current
-
-    if (ctx.state === 'suspended') {
-      ctx.resume()
-    }
-
-    console.log('🔊 Playing beep...')
+    if (ctx.state === 'suspended') ctx.resume()
 
     const frequencies = [880, 1174.66, 880]
     const startTimes = [0, 0.2, 0.4]
