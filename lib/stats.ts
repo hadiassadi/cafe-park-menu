@@ -1,4 +1,5 @@
 // lib/stats.ts
+import 'server-only'
 import { cache } from 'react'
 import { createClient } from '@supabase/supabase-js'
 
@@ -34,7 +35,8 @@ export type OrderStats = {
 
 function createDb() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+  // ✅ استفاده از کلید مخفی سرور (به دلیل قفل بودن RLS)
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
   if (!url || !key) {
     throw new Error('Supabase environment variables are missing')
   }
