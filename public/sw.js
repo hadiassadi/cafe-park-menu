@@ -91,7 +91,8 @@ self.addEventListener('push', (event) => {
     data = { title: 'کافه پارک', body: 'پیام جدیدی دارید' }
   }
 
-    const options = {
+  const title = data.title || 'کافه پارک'
+  const options = {
     body: data.body || '',
     icon: data.icon || '/icons/icon-192.png',
     badge: '/icons/icon-192.png',
@@ -101,8 +102,7 @@ self.addEventListener('push', (event) => {
     renotify: true,
     data: { url: data.url || '/' },
     vibrate: [200, 100, 200],
-    requireInteraction: false, // 👈 اینو false کن تا خودش بعد از چند ثانیه بره
-    silent: false
+    requireInteraction: true,
   }
 
   event.waitUntil(self.registration.showNotification(title, options))
