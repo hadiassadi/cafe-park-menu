@@ -1,6 +1,6 @@
 // public/sw.js — Service Worker برای کافه پارک
 
-const CACHE_NAME = 'cafe-park-v2'
+const CACHE_NAME = 'cafe-park-v3'
 const STATIC_ASSETS = [
   '/manifest.webmanifest',
   '/icons/icon-192.png',
@@ -17,7 +17,7 @@ self.addEventListener('install', (event) => {
   self.skipWaiting()
 })
 
-// ─── Activate: پاک کردن cacheهای قدیمی ───
+// ─── Activate ───
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((names) => {
@@ -36,18 +36,12 @@ self.addEventListener('fetch', (event) => {
   const { request } = event
   const url = new URL(request.url)
 
-  // فقط GET
   if (request.method !== 'GET') return
 
-  // API و Supabase رو کش نکن
-  if (
-    url.pathname.startsWith('/api/') ||
-    url.hostname.includes('supabase')
-  ) {
+  if (url.pathname.startsWith('/api/') || url.hostname.includes('supabase')) {
     return
   }
 
-  // ⚠️ تصاویر و فونت‌ها: Cache First
   const isStaticAsset = url.pathname.match(
     /\.(png|jpg|jpeg|svg|webp|ico|woff2?|ttf|otf)$/
   )
@@ -68,7 +62,6 @@ self.addEventListener('fetch', (event) => {
     return
   }
 
-  // ⚠️ HTML، JS، CSS: Network First (همیشه نسخه جدید)
   event.respondWith(
     fetch(request)
       .then((response) => {
@@ -79,10 +72,62 @@ self.addEventListener('fetch', (event) => {
         return response
       })
       .catch(() => {
-        // حالت آفلاین
         return caches.match(request).then((cached) => {
           return cached || caches.match('/')
         })
       })
+  )
+})
+
+// ═══════════════════════════════════════════════════════════
+// 🔔 PUSH NOTIFICATION
+// ═══════════════════════════════════════════════════════════
+
+self.addEventListener('push', (event) => {
+  let data = {}
+  try {
+    data = event.data ? event.data.json() : {}
+  } catch {
+    data = { title: 'کافه پارک', body: 'پیام جدیدی دارید' }
+  }
+
+  const title = data.title || 'کافه پارک'
+  const options = {
+    body: data.body || '',
+    icon: data.icon || '/icons/icon-192.png',
+    badge: '/icons/icon-192.png',
+    dir: 'rtl',
+    lang: 'fa',
+    tag: data.tag || 'order-update',
+    renotify: true,
+    data: { url: data.url || '/' },
+    vibrate: [200, 100, 200],
+    requireInteraction: true,
+  }
+
+  event.waitUntil(self.registration.showNotification(title, options))
+})
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close()
+  const targetUrl = event.notification.data?.url || '/'
+
+  event.waitUntil(
+    (async () => {
+      const allClients = await clients.matchAll({
+        type: 'window',
+        includeUncontrolled: true,
+      })
+
+      for (const client of allClients) {
+        const clientUrl = new URL(client.url)
+        const target = new URL(targetUrl, self.location.origin)
+        if (clientUrl.pathname === target.pathname) {
+          return client.focus()
+        }
+      }
+
+      return clients.openWindow(targetUrl)
+    })()
   )
 })

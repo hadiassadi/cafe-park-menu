@@ -4,7 +4,7 @@
 > بخش «۵. کارهای باقی‌مانده»، «۸. لاگ تغییرات» و «بالای فایل» رو آپدیت کن.
 > در چت جدید، فقط همین فایل را برای AI پیوست کن.
 
-**آخرین آپدیت:** ۱۴۰۵/۰۸/۰۴ (2026-10-26)
+**آخرین آپدیت:** ۱۴۰۵/۰۷/۲۷ (2026-10-19)
 
 ---
 
@@ -12,7 +12,7 @@
 
 - **نام پکیج:** `cafe-park-menu` (پوشه پروژه: `Cofe-Park`)
 - **تکنولوژی:** Next.js 16 (App Router) + React 19 + TypeScript + Supabase + `globals.css` (بدون Tailwind)
-- **هدف:** مشتری‌ها با اسکن QR روی میز، منو را باز می‌کنند، سفارش می‌دهند و از طریق واتساپ به کافه می‌فرستند. صاحب کافه هم از پنل ادمین، سفارش‌ها، منو، میزها، تم‌ها و تنظیمات را مدیریت می‌کند. مشتری‌ها می‌توانند بدون کد و فقط با شناسه دستگاه (کوکی امن)، سفارش‌های قبلی خود را ببینند. سیستم پرداخت چندگانه (آنلاین زرین‌پال، نقدی، کارت‌خوان، واریز با رسید) پیاده‌سازی شده است.
+- **هدف:** مشتری‌ها با اسکن QR روی میز، منو را باز می‌کنند، سفارش می‌دهند و از طریق واتساپ به کافه می‌فرستند. صاحب کافه هم از پنل ادمین، سفارش‌ها، منو، میزها، تم‌ها و تنظیمات را مدیریت می‌کند. مشتری‌ها می‌توانند بدون کد و فقط با شناسه دستگاه (کوکی امن)، سفارش‌های قبلی خود را ببینند. سیستم پرداخت چندگانه پیاده‌سازی شده است. همچنین مشتری‌ها می‌توانند Web Push Notification (اعلان مرورگر) را فعال کنند تا وضعیت سفارششان حتی وقتی سایت بسته است به آن‌ها اطلاع داده شود.
 - **دیتابیس:** Supabase (PostgreSQL) + Realtime برای لیست سفارش‌ها + **Polling برای اعلان‌ها** + **pg_cron برای پاکسازی خودکار** + **Storage برای رسیدها** + **RLS کاملاً قفل‌شده برای جداول حساس**
 - **ریپازیتوری:** `https://github.com/hadiassadi/cafe-park-menu.git` (branch: `main`)
 - **مسیر لوکال:** `D:\Cafe Park\Menu\New Menu\CafePark-Menu\Cofe-Park`
@@ -26,20 +26,20 @@
 Cofe-Park/
 ├── app/
 │   ├── page.tsx                    ← صفحه اصلی (SSR + JSON-LD)
-│   ├── MenuClient.tsx              ← کلاینت منوی مشتری (+ دکمه سفارش‌های من)
+│   ├── MenuClient.tsx              ← کلاینت منوی مشتری (+ دکمه سفارش‌های من + نوار شناور سبد)
 │   ├── layout.tsx                  ← Root Layout (فونت + متادیتای SEO)
-│   ├── globals.css                 ← ✅ تنها فایل استایل پروژه (۸۴ بخش)
+│   ├── globals.css                 ← ✅ تنها فایل استایل پروژه (۹۲ بخش)
 │   ├── manifest.ts                 ← PWA Manifest
 │   ├── robots.ts                   ← robots.txt
 │   ├── sitemap.ts                  ← sitemap.xml
-│   ├── cart/page.tsx               ← صفحه سبد خرید
+│   ├── cart/page.tsx               ← صفحه سبد خرید (+ خواندن شماره میز از QR)
 │   ├── checkout/page.tsx           ← صفحه ثبت سفارش + کوپن + انتخاب پرداخت
 │   ├── my-orders/                  ← ✅ پنل مشتری (بدون OTP)
 │   │   ├── page.tsx
 │   │   └── MyOrdersClient.tsx      ← تاریخچه سفارش‌ها با کوکی دستگاه
 │   ├── order/[id]/                 ← جزئیات سفارش مشتری
 │   │   ├── page.tsx                ← صفحه اصلی سفارش + وضعیت پرداخت
-│   │   └── UploadReceipt.tsx       ← ✅ آپلود رسید (عکس/متن + نمایش رسید قبلی)
+│   │   └── UploadReceipt.tsx       ← ✅ آپلود رسید (عکس/متن + نمایش رسید قبلی + دکمه تغییر)
 │   ├── payment/callback/           ← ✅ بازگشت از درگاه پرداخت
 │   │   ├── page.tsx
 │   │   └── PaymentCallbackClient.tsx
@@ -150,11 +150,11 @@ Cofe-Park/
 
 **مودال‌ها:** `.modal-overlay` / `.modal-container` / `.modal-body` / `.modal-footer` / `.product-modal-overlay` / `.product-modal-image`
 
-**منوی مشتری:** `.theme-root` / `.hero` / `.sticky-head` / `.toolbar` / `.cats` / `.grid` / `.product` / `.cart-floating-bar`
+**منوی مشتری:** `.theme-root` / `.hero` / `.sticky-head` / `.toolbar` / `.cats` / `.grid` / `.product` / `.cart-floating-bar` / `.cart-floating-btn` / `.cart-floating-count` / `.cart-floating-text` / `.cart-floating-price`
 
-**سبد و ثبت سفارش:** `.cart-page` / `.cart-item` / `.qty-selector` / `.checkout-page` / `.checkout-card` / `.checkout-field` / `.checkout-btn`
+**سبد و ثبت سفارش:** `.cart-page` / `.cart-item` / `.qty-selector` / `.cart-table-badge` / `.checkout-page` / `.checkout-card` / `.checkout-field` / `.checkout-btn`
 
-**صفحه جزئیات سفارش:** `.order-detail-container` / `.status-stepper` / `.step-item` / `.info-card` / `.sticky-action-bar` / `.btn-whatsapp` / `.order-cancel-section`
+**صفحه جزئیات سفارش:** `.order-detail-container` / `.status-stepper` / `.step-item` / `.info-card` / `.sticky-action-bar` / `.btn-whatsapp` / `.order-cancel-section` / `.order-success-banner` / `.order-success-icon` / `.order-success-body` / `.order-success-title` / `.order-success-text` / `.order-success-hint` / `.order-success-close`
 
 **کوپن:** `.coupons-grid` / `.coupon-card` / `.coupon-code` / `.coupon-badge` / `.coupon-input-row` / `.coupon-applied` / `.coupon-selector` / `.coupon-option` / `.coupon-toggle-card` / `.item-badge.badge-eligible` / `.item-badge.badge-ineligible`
 
@@ -194,7 +194,7 @@ Cofe-Park/
 
 **بازگشت از درگاه:** `.payment-callback-page` / `.payment-callback-card` / `.payment-callback-icon` / `.payment-callback-desc` / `.payment-callback-ref` / `.payment-callback-actions`
 
-**پرداخت در صفحه سفارش (مشتری):** `.order-payment-badge` / `.order-payment-badge-ref` / `.order-payment-section` / `.order-payment-section-title` / `.order-payment-section-desc` / `.order-payment-actions` / `.order-payment-btn` / `.order-payment-methods` / `.order-payment-method-btn` / `.order-payment-method-icon`
+**پرداخت در صفحه سفارش (مشتری):** `.order-payment-badge` / `.order-payment-badge.in-place` / `.order-payment-badge-ref` / `.order-payment-section` / `.order-payment-section-title` / `.order-payment-section-desc` / `.order-payment-actions` / `.order-payment-btn` / `.order-payment-methods` / `.order-payment-method-btn` / `.order-payment-method-icon`
 
 **پرداخت در پنل ادمین:** `.order-card--unpaid` / `.order-card--pending` / `.order-card--paid` / `.order-card--failed` / `.order-payment-badge-inline` / `.order-payment-ref-id` / `.order-receipt-link` / `.payment-status-text` / `.payment-approve-form` / `.orders-search-box`
 
@@ -219,8 +219,8 @@ Cofe-Park/
 | 37 | ADMIN ORDERS LIST |
 | 38 | ORDER DETAILS PAGE |
 | 39 | ADMIN TABLES |
-| 40 | PRODUCT MODAL + CART BAR + BADGES |
-| 41 | CART PAGE |
+| 40 | PRODUCT DETAIL MODAL + CART BAR + BADGES |
+| 41 | CART PAGE (+ cart-table-badge) |
 | 42 | CHECKOUT PAGE |
 | 43 | PRINT INVOICE |
 | 44 | PWA INSTALL PROMPT |
@@ -260,10 +260,19 @@ Cofe-Park/
 | 78 | PAYMENT SETTINGS (تنظیمات پرداخت در ادمین) |
 | 79 | PAYMENT (انتخاب روش پرداخت + بازگشت از درگاه) |
 | 80 | ORDER PAYMENT (بخش پرداخت در صفحه سفارش) |
-| 81 | ADMIN ORDER PAYMENT BADGES (بج‌های پرداخت ادمین) |
-| 82 | RECEIPT UPLOAD (آپلود رسید) |
+| 82 | RECEIPT UPLOAD (آپلود رسید + دکمه تغییر) |
 | 83 | ADMIN ORDER PAYMENT COLORS (رنگ‌بندی کارت‌های ادمین) |
 | 84 | ADMIN ORDERS SEARCH (نوار جستجوی سفارش‌ها) |
+| 85 | ORDERS TABS (تب‌های سفارش‌ها) |
+| 85b | STAT TABS (تب‌های آماری - مشترک صفحات ادمین) |
+| 86 | DELIVER WITHOUT PAYMENT (تحویل بدون تسویه) |
+| 87 | ORDER SUCCESS BANNER (بنر موفقیت سفارش) |
+| 88 | ORDERS SEARCH SELECT (منوی کشویی جستجو) |
+| 89 | ORDERS GRID - RESPONSIVE DESKTOP |
+| 90 | ADMIN ORDER DELETE BUTTON |
+| 91 | CATEGORIES GRID (صفحه اصلی - نسخه categories-grid) |
+| 91b | CATEGORIES GRID - cat-grid (نسخه cat-card) |
+| 92 | CATEGORY PAGE HEADER (هدر صفحه دسته) |
 
 ---
 
@@ -277,6 +286,9 @@ Cofe-Park/
 - [x] **خصوصی کردن Storage `receipts`:** استفاده از Signed URL برای مشاهده رسید.
 - [x] **ذخیره `payment_merchant_id` در دیتابیس:** حالا با RLS امن شده و از پنل ادمین قابل تنظیم است.
 - [x] **آپدیت `dev.bat`:** بیلد اجباری قبل از پوش برای جلوگیری از خرابی سایت.
+- [x] Web Push Notification (اعلان مرورگر): کارت فعال‌سازی، ثبت اشتراک، ارسال خودکار از پنل ادمین.
+
+
 
 ### منوی مشتری
 - [x] صفحه اصلی با هدر داینامیک + JSON-LD
@@ -295,6 +307,8 @@ Cofe-Park/
 - [x] **آپلود رسید (عکس/متن)** برای پرداخت واریزی
 - [x] **بخش پرداخت در صفحه سفارش**
 - [x] **بنر موفقیت بعد از ثبت سفارش** (با `sessionStorage`)
+- [x] **شماره میز خودکار از لینک QR:** موقع باز شدن `/?table=N`، مقدار `table` خونده می‌شه، در `sessionStorage` ذخیره می‌شه، در Cart با بج نمایش داده می‌شه و در Checkout با «✅ از QR تشخیص داده شد» به‌طور خودکار پر می‌شه.
+- [x] **نوار شناور سبد خرید (sticky):** در تمام صفحات منو (Hero، دسته‌بندی، محصولات) دیده می‌شه و بعد از اسکرول هم ثابت می‌مونه.
 
 ### پنل ادمین
 - [x] Layout با سایدبار + هدر موبایل + drawer کشویی
@@ -315,6 +329,8 @@ Cofe-Park/
 - [x] **تایتل داینامیک + favicon**
 - [x] **PWA Badge**
 - [x] **تنظیمات پرداخت** (فعال/غیرفعال، Merchant ID، Sandbox، حساب بانکی)
+- [x] **تحویل بدون تسویه:** در مودال تسویه ادمین — سفارش بدون تغییر وضعیت پرداخت تحویل داده می‌شه.
+- [x] **حذف نرم سفارش:** APIهای `soft-delete` و `restore` برای حذف قابل بازگشت.
 
 ### زیرساخت و ابزارها
 - [x] سیستم تم داینامیک + Supabase Server/Browser Client + Cart Context
@@ -351,6 +367,10 @@ Cofe-Park/
 - [x] **افزودن نمایش رسید قبلی در `UploadReceipt`:** پراپ `initialUrl` به `Props` اضافه شد تا اگر مشتری قبلاً رسید آپلود کرده باشد، همان عکس نمایش داده شود (نه فرم خالی).
 - [x] **افزودن دکمه «🔄 تغییر رسید»:** اگر کاربر قبلاً رسید آپلود کرده باشد، با زدن این دکمه می‌تواند رسید جدید آپلود کند (قبلاً گیر می‌کرد).
 - [x] **رفع خطای TypeScript `Duplicate identifier` در `menu-types.ts`:** فیلدهای تکراری `floating_enabled` و `floating_side` در interface `Settings` حذف شدند.
+- [x] **رفع خطای بیلد CSS (Missing Braces):** دو `}` اضافه که موقع پاک‌کردن بلاک‌های تکراری مونده بود، حذف شد.
+- [x] **رفع باگ ۳ فیلد تکراری در Checkout:** فیلدهای «شماره تماس»، «شماره میز» و «توضیحات» دو بار نمایش داده می‌شدند — حذف شدند.
+- [x] **پاکسازی `globals.css` از ۹ مشکل ساختاری:** دو بلوک تکراری بخش ۴۰ و ۴۵، دو `85` و دو `91`، `.receipt-replace-btn` و `.cart-table-badge` و `.order-payment-badge.in-place` شناور، کامنت دوبل بخش ۴۳، و `@media` تکراری بخش ۵۱.
+- [x] **رفع خطاهای Build نهایی:** `✓ Compiled successfully` روی Next.js 16.3.8.
 
 ---
 
@@ -360,8 +380,6 @@ Cofe-Park/
 
 - [ ] 🔴 **تست کامل روی موبایل واقعی** (iOS Safari + Chrome Android)
 - [ ] 🔴 **تست کامل جریان سفارش** از ابتدا تا انتها (با همه روش‌های پرداخت)
-- [ ] 🟡 **ثابت (sticky) کردن آیکون سبد خرید** در همه صفحات (به‌جای ناپدید شدن بعد از اسکرول)
-- [ ] 🟡 **شماره میز خودکار از لینک QR:** موقع باز شدن `/cart?table=N`، مقدار `table` از URL خونده بشه و به‌صورت خودکار در Checkout پر بشه (تا الان اجبار به وارد کردن دستی هست)
 - [ ] 🟡 **بررسی نهایی آپلود عکس در پرداخت کارت‌به‌کارت** با گوشی واقعی (تست‌های چت قبلی ناتمام موندن)
 - [ ] 🟢 **ایمیل/SMS اطلاع‌رسانی** برای سفارش‌های جدید و تحویل شده
 - [ ] 🟢 **تست بار (Load Test)** روی Supabase
@@ -394,6 +412,7 @@ Cofe-Park/
 17. **هر فایل سروری که با SERVICE_ROLE_KEY کار می‌کند، حتماً `import 'server-only'` داشته باشد.**
 18. **برای عملیات دیتابیسی در سرور (API ها)، به‌جای ساخت کلاینت جدید، همیشه از تابع `supabaseAdmin()` از فایل `lib/supabase/server.ts` استفاده شود.** (به دلیل قفل بودن RLS)
 19. **پراپ‌های کامپوننت باید در `type Props` تعریف شوند — اضافه کردن پراپ جدید بدون تعریف در `Props`، خطای بیلد می‌دهد.**
+20. **بعد از هر پاکسازی یا جابجایی بلوک‌های CSS، حتماً `npm run build` بزن** تا خطاهای `Missing Braces` یا `Duplicate Identifier` گرفته شوند.
 
 ---
 
@@ -411,13 +430,14 @@ Cofe-Park/
 2. هر کلاس جدیدی که در JSX استفاده می‌شود، باید در globals.css تعریف شود.
 3. پالت رنگ از متغیرهای CSS می‌آید، نه رنگ hex مستقیم.
 4. مودال‌ها از کلاس‌های modal-overlay + modal-container استفاده کنند.
-5. بخش‌های globals.css شماره‌گذاری شده‌اند (۱ تا ۸۴).
+5. بخش‌های globals.css شماره‌گذاری شده‌اند (۱ تا ۹۲ با زیرشماره‌ها).
 6. برای اعلان‌ها از Polling استفاده شود، نه Realtime (تحریم ایران).
 7. محافظت ادمین با proxy.ts (نه middleware.ts در Next.js 16).
 8. در fetch های API از cache: 'no-store' استفاده شود.
 9. در کوئری سفارش‌های مشتری، با چند فرمت شماره جستجو شود.
 10. به دلیل قفل بودن RLS، همه APIهای حساس باید از SERVICE_ROLE_KEY استفاده کنند.
 11. هر پراپ جدید کامپوننت باید در `type Props` تعریف شود، وگرنه بیلد fail می‌شود.
+12. بعد از هر پاکسازی CSS، `npm run build` بزن تا خطاهای braces گرفته شوند.
 
 📁 ابزارهای موجود در پروژه:
 - dev.bat → منوی همه‌کاره توسعه
@@ -487,6 +507,9 @@ Cofe-Park/
 | 1405/08/03 | رفع باگ قطع ارتباط داشبورد/آمار لغوها/گزارش فروش با دیتابیس (انتقال stats.ts به Service Role) |
 | 1405/08/03 | **تکمیل فاز ۱ (Quick Wins):** رفع باگ آپلود رسید (E)، دکمه تحویل بدون تسویه (C)، گزارش کوپن (M)، دراور ادمین (H)، تب‌های سفارش (I) و رفع نهایی باگ RLS در `stats.ts`. |
 | 1405/08/04 | **آپدیت `PROJECT_STATE.md`:** افزودن بنر موفقیت سفارش، بهبود UX آپلود رسید (نمایش رسید قبلی + دکمه تغییر)، رفع باگ نمایش تکراری تاریخ در ریز اقلام، و حذف فیلدهای تکراری `floating_*` در `menu-types.ts`. |
+| 1405/08/05 | **فاز Quick Wins ۲:** شماره میز خودکار از لینک QR (Cart + Checkout)، نوار شناور sticky سبد خرید در `MenuClient`، رفع ۳ فیلد تکراری در Checkout، پاکسازی `globals.css` از ۹ مشکل ساختاری (بلوک‌های تکراری + braces جاافتاده)، و **Build موفق** روی Next.js 16.3.8. |
+| 1405/08/06 | پیاده‌سازی کامل Web Push Notification (VAPID، جدول اشتراک‌ها، Service Worker و کارت فعال‌سازی) |
+
 
 ---
 
@@ -519,6 +542,9 @@ NEXT_PUBLIC_SUPABASE_URL=https://xxx.supabase.co
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=eyJhbGciOi...
 SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOi...
 NEXT_PUBLIC_SITE_URL=https://cafe-park-menu.vercel.app
+VAPID_PUBLIC_KEY=BEl62iUYgUivx...
+VAPID_PRIVATE_KEY=UUxI4O8-Fb...
+VAPID_SUBJECT=mailto:hadiassadi@gmail.com
 ```
 
 ---
@@ -559,6 +585,9 @@ NEXT_PUBLIC_SITE_URL=https://cafe-park-menu.vercel.app
 | `coupons` | کدهای تخفیف | `id`, `code`, `description`, `discount_type`, `discount_value`, `min_order_amount`, `max_order_amount`, `max_discount`, `max_uses`, `used_count`, `valid_from`, `valid_until`, `is_active` |
 | `customers` | مشتریان (از سفارش‌ها) | `phone`, `notes`, `tags`, `updated_at` |
 | `cancellation_reasons` | دلایل لغو | `id`, `label`, `target`, `icon`, `sort_order`, `is_active` |
+| push_subscriptions | اشتراک‌های اعلان مرورگر | id, device_id_hash, endpoint, p256dh, auth, user_agent, is_active, created_at, last_used_at |
+
+
 
 ### Storage Buckets:
 - **`receipts`** (Private) — برای ذخیره عکس رسیدهای واریز بانکی (با Signed URL).
@@ -637,6 +666,8 @@ qrcode.react           ^4.2.0
 react                  ^19.3.0
 react-dom              ^19.3.0
 sharp                  ^0.35.5
+web-push               ^3.6.7
+@types/web-push        ^3.6.4
 ```
 
 ### DevDependencies:
@@ -765,3 +796,7 @@ backups-server/
 70. **بنر موفقیت با `sessionStorage`:** بعد از redirect از Checkout به صفحه سفارش، یک فلگ `cafe-park-order-success-${id}` در `sessionStorage` ست می‌شه و در `order/[id]/page.tsx` فقط یک بار خونده و پاک می‌شه (بهبود UX، جلوگیری از نمایش مکرر).
 71. **رسید قبلی در `UploadReceipt`:** با پراپ `initialUrl`، اگر رسید قبلی وجود داشته باشد در پیش‌نمایش نمایش داده می‌شود — جلوگیری از آپلود مکرر.
 72. **دکمه «تغییر رسید»:** با کلاس `.receipt-replace-btn` کاربر می‌تواند رسید آپلود شده را جایگزین کند (قبلاً چون `preview` از `initialUrl` پر می‌شد، دکمه آپلود مجدد مخفی می‌ماند و کاربر گیر می‌کرد).
+73. **شماره میز خودکار از QR:** `MenuClient` مقدار `?table=N` را از URL می‌خواند و در `sessionStorage` ذخیره می‌کند. Cart آن را می‌خواند و هم بج نمایش می‌دهد هم در لینک Checkout پاس می‌دهد. Checkout از URL یا `sessionStorage` پر می‌کند و برچسب «✅ از QR تشخیص داده شد» می‌زند.
+74. **نوار شناور sticky سبد خرید:** کلاس `.cart-floating-bar` در `MenuClient` با `position: fixed` — همیشه در دسترس، حتی بعد از اسکرول. الگوی `pointer-events: none` برای پس‌زمینه + `pointer-events: auto` برای خود دکمه (تا مانع کلیک روی محصولات نشود).
+75. **پاکسازی ساختاری `globals.css`:** حذف بلوک‌های تکراری (۴۰، ۴۵، ۸۵، ۹۱) و اصلاح شماره‌گذاری (۸۵b، ۹۱b) + حذف braces جاافتاده که باعث خطای `Missing Braces` می‌شدند. بعد از هر پاکسازی، `npm run build` اجباری است.
+76. **`Suspense` برای `useSearchParams`:** در Next.js 16، کامپوننت‌هایی که از `useSearchParams` استفاده می‌کنند باید داخل `<Suspense>` باشند (به همین دلیل `CartPage` به دو بخش `CartPage` + `CartContent` تقسیم شد).

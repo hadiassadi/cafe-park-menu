@@ -2,6 +2,7 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { revalidatePath } from 'next/cache'
+import { sendPushToOrder } from '@/lib/push/send-push'
 
 function createAdminDb() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -45,18 +46,25 @@ export async function updateOrderStatus(formData: FormData) {
     if (note) updateData.cancellation_note = String(note)
   }
 
-  const { error } = await db
-    .from('orders')
-    .update(updateData)
-    .eq('id', id)
+    const { error } = await db.from('orders').update(updateData).eq('id', id)
 
   if (error) return { error: error.message }
+
+  // 🔔 Push notification (fire and forget — منتظر جواب نمی‌مونیم)
+  if (
+    ['confirmed', 'preparing', 'ready', 'delivered', 'cancelled'].includes(
+      status
+    )
+  ) {
+    sendPushToOrder(id, status).catch((err) =>
+      console.error('[updateOrderStatus] push failed:', err)
+    )
+  }
 
   revalidatePath('/admin/orders')
   revalidatePath('/admin')
   return { success: true }
 }
-
 // ─────────────────────────────────────────────
 // پاکسازی سفارش‌های قدیمی (بیشتر از N روز)
 // ─────────────────────────────────────────────

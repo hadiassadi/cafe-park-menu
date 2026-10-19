@@ -3,6 +3,7 @@
 import { useEffect, useState, use } from 'react'
 import Link from 'next/link'
 import UploadReceipt from './UploadReceipt'
+import EnablePushCard from '@/app/components/EnablePushCard'
 import { formatPersianDate } from '@/lib/format-date'
 
 const formatPrice = (price: number) =>
@@ -413,6 +414,12 @@ export default function OrderPage({
           </button>
         </div>
       )}
+	  {!isCancelled &&
+  order &&
+  order.status !== 'delivered' &&
+  order.status !== 'cancelled' && (
+    <EnablePushCard orderId={order.id} />
+  )}
 
       {showBadge && (
         <div className={`order-payment-badge ${badgeType}`}>
