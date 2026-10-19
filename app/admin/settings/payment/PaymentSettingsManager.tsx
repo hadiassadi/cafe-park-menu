@@ -147,17 +147,22 @@ export default function PaymentSettingsManager() {
                   <span className="auto-switch-track"><span className="auto-switch-thumb" /></span>
                 </button>
               </div>
-              <div className={`payment-method-card ${settings.payment_cash_enabled ? 'active' : ''}`}>
+                            <div className={`payment-method-card ${(settings.payment_cash_enabled || settings.payment_card_enabled) ? 'active' : ''}`}>
                 <div className="payment-method-icon">💵</div>
-                <div className="payment-method-info"><strong>پرداخت نقدی</strong><small>پرداخت در محل</small></div>
-                <button type="button" className={`auto-switch ${settings.payment_cash_enabled ? 'on' : 'off'}`} onClick={() => update('payment_cash_enabled', !settings.payment_cash_enabled)} disabled={saving}>
-                  <span className="auto-switch-track"><span className="auto-switch-thumb" /></span>
-                </button>
-              </div>
-              <div className={`payment-method-card ${settings.payment_card_enabled ? 'active' : ''}`}>
-                <div className="payment-method-icon">💳</div>
-                <div className="payment-method-info"><strong>کارت‌خوان</strong><small>پرداخت با کارت در محل</small></div>
-                <button type="button" className={`auto-switch ${settings.payment_card_enabled ? 'on' : 'off'}`} onClick={() => update('payment_card_enabled', !settings.payment_card_enabled)} disabled={saving}>
+                <div className="payment-method-info">
+                  <strong>پرداخت در محل</strong>
+                  <small>نقدی یا کارت‌خوان (توسط پرسنل)</small>
+                </div>
+                <button 
+                  type="button" 
+                  className={`auto-switch ${(settings.payment_cash_enabled || settings.payment_card_enabled) ? 'on' : 'off'}`} 
+                  onClick={() => {
+                    const newVal = !(settings.payment_cash_enabled || settings.payment_card_enabled)
+                    update('payment_cash_enabled', newVal)
+                    update('payment_card_enabled', false) // برای تمیزکاری دیتابیس
+                  }} 
+                  disabled={saving}
+                >
                   <span className="auto-switch-track"><span className="auto-switch-thumb" /></span>
                 </button>
               </div>

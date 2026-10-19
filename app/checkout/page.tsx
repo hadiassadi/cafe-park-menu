@@ -293,15 +293,19 @@ function CheckoutForm() {
     }
   }
 
-  // روش‌های پرداخت در دسترس
+    // روش‌های پرداخت در دسترس
   const availableMethods: PaymentMethod[] = []
   if (paymentSettings?.payment_enabled) {
     const belowMin =
       finalTotal < (paymentSettings.payment_min_online_amount || 0)
     if (paymentSettings.payment_online_enabled && !belowMin)
       availableMethods.push('online')
-    if (paymentSettings.payment_cash_enabled) availableMethods.push('cash')
-    if (paymentSettings.payment_card_enabled) availableMethods.push('card')
+    
+    // ✅ ادغام نقدی و کارت‌خوان به عنوان یک روش واحد
+    if (paymentSettings.payment_cash_enabled || paymentSettings.payment_card_enabled) {
+      availableMethods.push('cash')
+    }
+    
     if (paymentSettings.payment_transfer_enabled)
       availableMethods.push('transfer')
   }
@@ -325,16 +329,16 @@ function CheckoutForm() {
       title: 'پرداخت آنلاین',
       hint: 'با کارت بانکی پرداخت کن',
     },
-    cash: {
+        cash: {
       icon: '💵',
-      title: 'پرداخت نقدی',
-      hint: 'در محل پرداخت می‌کنی',
+      title: 'پرداخت در محل',
+      hint: 'نقدی یا کارت‌خوان (توسط گارسون/ریسپشن)',
     },
     card: {
-  icon: '💳',
-  title: 'کارت‌خوان (POS)',
-  hint: 'پرداخت حضوری با دستگاه',
-},
+      icon: '💳',
+      title: 'کارت‌خوان',
+      hint: 'پرداخت حضوری با دستگاه',
+    },
 transfer: {
   icon: '🏦',
   title: 'کارت به کارت',

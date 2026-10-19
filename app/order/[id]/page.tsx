@@ -294,8 +294,8 @@ export default function OrderPage({
       })
       setShowChangeMethod(false)
 
-      const methodLabel =
-        method === 'cash' ? 'نقدی' : method === 'card' ? 'کارت‌خوان' : 'واریز به حساب'
+            const methodLabel =
+        (method === 'cash' || method === 'card') ? 'پرداخت در محل (نقدی/کارت‌خوان)' : 'واریز به حساب'
       setPaymentSuccess(`✅ روش پرداخت به «${methodLabel}» تغییر کرد`)
       setTimeout(() => setPaymentSuccess(null), 3500)
     } catch (err) {
@@ -362,12 +362,9 @@ export default function OrderPage({
   } else if (isFailed) {
     badgeType = 'failed'
     badgeText = '❌ پرداخت ناموفق'
-  } else if (isCash) {
+    } else if (isCash || isCard) {
     badgeType = 'in-place'
-    badgeText = '💵 پرداخت در محل — نقدی'
-  } else if (isCard) {
-    badgeType = 'in-place'
-    badgeText = '💳 پرداخت در محل — کارت‌خوان'
+    badgeText = '💵 پرداخت در محل (نقدی / کارت‌خوان)'
   } else if (isOnline) {
     badgeType = 'unpaid'
     badgeText = '⏱ پرداخت آنلاین — منتظر پرداخت'
@@ -451,16 +448,10 @@ export default function OrderPage({
                     <div><strong>پرداخت آنلاین</strong><small>زرین‌پال / آیدی‌پی</small></div>
                   </button>
                 )}
-                {paymentSettings?.payment_cash_enabled && (
+                                {(paymentSettings?.payment_cash_enabled || paymentSettings?.payment_card_enabled) && (
                   <button type="button" className="order-payment-method-btn" onClick={() => handleChangeMethod('cash')} disabled={paying}>
                     <span className="order-payment-method-icon">💵</span>
-                    <div><strong>پرداخت نقدی</strong><small>در محل</small></div>
-                  </button>
-                )}
-                {paymentSettings?.payment_card_enabled && (
-                  <button type="button" className="order-payment-method-btn" onClick={() => handleChangeMethod('card')} disabled={paying}>
-                    <span className="order-payment-method-icon">💳</span>
-                    <div><strong>کارت‌خوان</strong><small>در محل</small></div>
+                    <div><strong>پرداخت در محل</strong><small>نقدی / کارت‌خوان</small></div>
                   </button>
                 )}
                 {paymentSettings?.payment_transfer_enabled && (
