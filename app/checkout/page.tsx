@@ -90,10 +90,28 @@ function CheckoutForm() {
       .catch(() => setSettingsLoading(false))
   }, [])
 
-  // خوندن شماره میز از URL
+    // ✅ خوندن شماره میز: اول از URL، بعد از sessionStorage
+  const [tableAutoDetected, setTableAutoDetected] = useState(false)
+
   useEffect(() => {
-    const table = searchParams.get('table')
-    if (table) setTableNumber(table)
+    const tableFromUrl = searchParams.get('table')
+    if (tableFromUrl) {
+      setTableNumber(tableFromUrl)
+      setTableAutoDetected(true)
+      try {
+        sessionStorage.setItem('cafe-park-table', tableFromUrl)
+      } catch {}
+      return
+    }
+
+    // fallback: خواندن از sessionStorage (وقتی ?table توی URL نیست)
+    try {
+      const savedTable = sessionStorage.getItem('cafe-park-table')
+      if (savedTable) {
+        setTableNumber(savedTable)
+        setTableAutoDetected(true)
+      }
+    } catch {}
   }, [searchParams])
 
   // اگه سبد خالی بود برگرد
@@ -217,7 +235,12 @@ function CheckoutForm() {
         throw new Error(data.error || 'خطا در ثبت سفارش')
       }
 
-      const orderId = data.order.id
+            const orderId = data.order.id
+
+      // ✅ ذخیره فلگ موفقیت برای نمایش بنر در صفحه سفارش
+      try {
+        sessionStorage.setItem(`cafe-park-order-success-${orderId}`, '1')
+      } catch {}
 
       // ذخیره اطلاعات مشتری
       try {
@@ -240,8 +263,11 @@ function CheckoutForm() {
 
         const payData = await payRes.json()
 
-        if (!payRes.ok || !payData.paymentUrl) {
-          // خطا در پرداخت آنلاین → برو به صفحه سفارش با پیام خطا
+                if (!payRes.ok || !payData.paymentUrl) {
+          // ✅ حتی اگه پرداخت آنلاین شروع نشد، سفارش ثبت شده و باید بنر نشون داده بشه
+          try {
+            sessionStorage.setItem(`cafe-park-order-success-${orderId}`, '1')
+          } catch {}
           window.location.href = `/order/${orderId}?payment_error=${encodeURIComponent(
             payData.error || 'خطا در شروع پرداخت'
           )}`
@@ -305,15 +331,15 @@ function CheckoutForm() {
       hint: 'در محل پرداخت می‌کنی',
     },
     card: {
-      icon: '💳',
-      title: 'کارت‌خوان',
-      hint: 'با کارت در محل',
-    },
-    transfer: {
-      icon: '🏦',
-      title: 'واریز به حساب',
-      hint: 'با آپلود رسید',
-    },
+  icon: '💳',
+  title: 'کارت‌خوان (POS)',
+  hint: 'پرداخت حضوری با دستگاه',
+},
+transfer: {
+  icon: '🏦',
+  title: 'کارت به کارت',
+  hint: 'واریز به حساب + آپلود رسید',
+},
   }
 
   return (
@@ -431,7 +457,7 @@ function CheckoutForm() {
           {couponError && <div className="coupon-error">❌ {couponError}</div>}
         </div>
 
-        {/* اطلاعات مشتری */}
+                {/* اطلاعات مشتری */}
         <div className="checkout-card">
           <div className="checkout-card-title">📋 اطلاعات شما</div>
 
@@ -445,6 +471,69 @@ function CheckoutForm() {
               placeholder="مثلاً احمد رضایی"
               required
               autoComplete="name"
+              disabled={saving}
+            />
+          </div>
+
+          <div className="checkout-field">
+            <label htmlFor="phone">شماره تماس *</label>
+            <input
+              id="phone"
+              type="tel"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="۰۹۱۲۳۴۵۶۷۸۹"
+              required
+              autoComplete="tel"
+              inputMode="tel"
+              dir="ltr"
+              disabled={saving}
+            />
+          </div>
+
+          <div className="checkout-field">
+            <label htmlFor="table">
+              شماره میز *
+              {tableAutoDetected && (
+                <span
+                  style={{
+                    fontSize: '11px',
+                    color: '#477052',
+                    fontWeight: 500,
+                    marginInlineStart: '8px',
+                  }}
+                >
+                  ✅ از QR تشخیص داده شد
+                </span>
+              )}
+            </label>
+            <input
+              id="table"
+              type="number"
+              value={tableNumber}
+              onChange={(e) => {
+                setTableNumber(e.target.value)
+                setTableAutoDetected(false)
+                try {
+                  if (e.target.value) {
+                    sessionStorage.setItem('cafe-park-table', e.target.value)
+                  }
+                } catch {}
+              }}
+              placeholder="مثلاً ۵"
+              min="1"
+              disabled={saving}
+            />
+          </div>
+
+          <div className="checkout-field">
+            <label htmlFor="note">توضیحات (اختیاری)</label>
+            <textarea
+              id="note"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="مثلاً: قند جدا، بدون شکر..."
+              rows={3}
               disabled={saving}
             />
           </div>

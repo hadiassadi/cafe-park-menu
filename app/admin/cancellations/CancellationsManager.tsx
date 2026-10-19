@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import type { CancellationStats } from '@/lib/stats'
+import { formatPersianDate } from '@/lib/format-date'
 
 const formatPrice = (n: number) =>
   new Intl.NumberFormat('fa-IR').format(Math.round(n))
@@ -25,14 +26,6 @@ const FILTER_LABELS: Record<TimeFilter, string> = {
 }
 
 type CancelledOrder = CancellationStats['recentCancellations'][0]
-
-function formatDateTime(iso: string | null): string {
-  if (!iso) return '—'
-  return new Date(iso).toLocaleString('fa-IR', {
-    dateStyle: 'short',
-    timeStyle: 'short',
-  })
-}
 
 // ─── کامپوننت مودال گزارش ───
 function ReportModal({
@@ -127,7 +120,6 @@ export default function CancellationsManager() {
     }
   }, [printOrder])
 
-  // ✅ Fallback امن
   const byHour = data?.byHour ?? []
   const byWeekday = data?.byWeekday ?? []
   const byCategory = data?.byCategory ?? []
@@ -148,7 +140,6 @@ export default function CancellationsManager() {
     ? Math.max(...byCategory.map((c) => c.count), 1)
     : 1
 
-  // ─── خلاصه‌های کارت گزارش ───
   const topReason = topReasons[0]
   const peakHour = byHour.length
     ? byHour.reduce((a, b) => (a.count >= b.count ? a : b))
@@ -163,7 +154,6 @@ export default function CancellationsManager() {
 
   return (
     <div className="admin-main">
-      {/* هدر */}
       <div className="admin-header">
         <div>
           <h1>📊 آمار لغو سفارش‌ها</h1>
@@ -176,7 +166,6 @@ export default function CancellationsManager() {
         </Link>
       </div>
 
-      {/* فیلترها */}
       <div
         className="toolbar"
         style={{
@@ -208,7 +197,6 @@ export default function CancellationsManager() {
         </div>
       ) : (
         <>
-          {/* کارت‌های خلاصه */}
           <section className="dashboard-section">
             <div className="cancellation-summary-grid">
               <div className="cancellation-summary-card">
@@ -276,11 +264,9 @@ export default function CancellationsManager() {
             </div>
           </section>
 
-          {/* کارت‌های گزارش */}
           <section className="dashboard-section">
             <h2>📊 گزارش‌های تفصیلی</h2>
             <div className="report-cards-grid">
-              {/* دلایل */}
               <button
                 type="button"
                 className="report-card"
@@ -308,7 +294,6 @@ export default function CancellationsManager() {
                 <span className="report-card-arrow">←</span>
               </button>
 
-              {/* ۷ روز اخیر */}
               <button
                 type="button"
                 className="report-card"
@@ -336,7 +321,6 @@ export default function CancellationsManager() {
                 <span className="report-card-arrow">←</span>
               </button>
 
-              {/* ساعتی */}
               <button
                 type="button"
                 className="report-card"
@@ -366,7 +350,6 @@ export default function CancellationsManager() {
                 <span className="report-card-arrow">←</span>
               </button>
 
-              {/* روز هفته */}
               <button
                 type="button"
                 className="report-card"
@@ -396,7 +379,6 @@ export default function CancellationsManager() {
                 <span className="report-card-arrow">←</span>
               </button>
 
-              {/* دسته‌بندی */}
               <button
                 type="button"
                 className="report-card"
@@ -426,7 +408,6 @@ export default function CancellationsManager() {
                 <span className="report-card-arrow">←</span>
               </button>
 
-              {/* لغوهای اخیر */}
               <button
                 type="button"
                 className="report-card"
@@ -456,9 +437,6 @@ export default function CancellationsManager() {
         </>
       )}
 
-      {/* ─── مودال‌های گزارش ─── */}
-
-      {/* دلایل پرتکرار */}
       {openModal === 'reasons' && data && (
         <ReportModal
           title="🎯 پرتکرارترین دلایل لغو"
@@ -499,7 +477,6 @@ export default function CancellationsManager() {
         </ReportModal>
       )}
 
-      {/* ۷ روز اخیر */}
       {openModal === 'daily' && data && (
         <ReportModal
           title="📉 لغوها در ۷ روز اخیر"
@@ -546,7 +523,6 @@ export default function CancellationsManager() {
         </ReportModal>
       )}
 
-      {/* ساعتی */}
       {openModal === 'hourly' && data && (
         <ReportModal
           title="🕐 لغوها بر اساس ساعت شبانه‌روز"
@@ -598,7 +574,6 @@ export default function CancellationsManager() {
         </ReportModal>
       )}
 
-      {/* روز هفته */}
       {openModal === 'weekday' && data && (
         <ReportModal
           title="📅 لغوها بر اساس روز هفته"
@@ -652,7 +627,6 @@ export default function CancellationsManager() {
         </ReportModal>
       )}
 
-      {/* دسته‌بندی */}
       {openModal === 'category' && data && (
         <ReportModal
           title="📂 لغوها بر اساس دسته‌بندی محصولات"
@@ -702,7 +676,6 @@ export default function CancellationsManager() {
         </ReportModal>
       )}
 
-      {/* لغوهای اخیر */}
       {openModal === 'recent' && data && (
         <ReportModal
           title="📋 لغوهای اخیر"
@@ -768,7 +741,7 @@ export default function CancellationsManager() {
                         )}
                       </td>
                       <td className="cancellation-date">
-                        {formatDateTime(order.cancelled_at)}
+                        {formatPersianDate(order.cancelled_at)}
                       </td>
                     </tr>
                   ))}
@@ -779,7 +752,6 @@ export default function CancellationsManager() {
         </ReportModal>
       )}
 
-      {/* ─── مودال جزئیات سفارش (nested) ─── */}
       {selectedOrder && (
         <div
           className="modal-overlay nested-modal"
@@ -822,7 +794,7 @@ export default function CancellationsManager() {
                       ? '🛠️ لغو شده توسط کافه'
                       : 'لغو شده'}
                   {' · '}
-                  {formatDateTime(selectedOrder.cancelled_at)}
+                  {formatPersianDate(selectedOrder.cancelled_at)}
                 </div>
               </div>
 
@@ -932,7 +904,6 @@ export default function CancellationsManager() {
         </div>
       )}
 
-      {/* فاکتور چاپی */}
       {mounted &&
         printOrder &&
         createPortal(
@@ -955,7 +926,7 @@ export default function CancellationsManager() {
               </div>
               <div className="print-invoice-meta-row">
                 <span>تاریخ لغو:</span>
-                <strong>{formatDateTime(printOrder.cancelled_at)}</strong>
+                <strong>{formatPersianDate(printOrder.cancelled_at)}</strong>
               </div>
               <div className="print-invoice-meta-row">
                 <span>لغو کننده:</span>

@@ -11937,14 +11937,14 @@ body {
 /* ═══════════════════════════════════════
    موبایل < 768px
    ═══════════════════════════════════════ */
-@media (max-width: 768px) {
-  /* ─── هدر موبایل ─── */
   .admin-mobile-header {
     display: flex;
     align-items: center;
     gap: 12px;
-    position: sticky;
+    position: fixed;
     top: 0;
+    left: 0;
+    right: 0;
     z-index: 90;
     height: 56px;
     padding: 0 14px;
@@ -12020,7 +12020,8 @@ body {
     padding-bottom: 0;
   }
 
-  .admin-main {
+    .admin-main {
+    padding-top: 72px;
     padding-bottom: 24px;
   }
 
@@ -12239,7 +12240,6 @@ body {
     text-align: right;
     font-family: inherit;
   }
-}
 
 /* ═══════════════════════════════════════
    Dark Mode
@@ -13945,4 +13945,893 @@ body {
 
 .admin-shell.dark-mode .orders-search-box span {
   color: var(--admin-text-muted);
+}
+/* ========================================
+   85. ORDERS TABS (تب‌های سفارش‌ها - نسخه wrap)
+   ======================================== */
+
+.orders-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 0 16px 0;
+}
+
+.orders-tabs .filter-chip {
+  flex: 0 0 auto;
+}
+
+/* موبایل: هر تب حداقل نصف عرض خط */
+@media (max-width: 500px) {
+  .orders-tabs .filter-chip {
+    flex: 1 1 calc(50% - 4px);
+    min-width: 0;
+    justify-content: center;
+    padding: 10px 8px;
+    font-size: 12px;
+  }
+}
+/* ========================================
+   85. STAT TABS (تب‌های آماری/فیلتر - مشترک بین صفحات ادمین)
+   
+   استفاده در:
+   - /admin/orders (فیلتر سفارش‌ها)
+   - /admin/customers (فیلتر لغو مشتریان)
+   - /admin/cancellations (فیلتر زمان)
+   - /admin/reports/sales (فیلتر زمان)
+   - /admin/coupons/reports (فیلتر زمان)
+   
+   برای تغییر ظاهر این تب‌ها در همه صفحات، فقط این بخش رو ویرایش کن.
+   ======================================== */
+
+.stat-tabs {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(70px, 1fr));
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.stat-tab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 12px 6px;
+  border-radius: 12px;
+  background: #fffdf9;
+  border: 1.5px solid #e3ddd2;
+  color: #4a443d;
+  font: inherit;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: center;
+  min-height: 76px;
+}
+
+.stat-tab:hover {
+  border-color: #b8ad9c;
+  background: #fbf9f5;
+  transform: translateY(-1px);
+}
+
+.stat-tab:focus-visible {
+  outline: 2px solid #9a6b3f;
+  outline-offset: 2px;
+}
+
+.stat-tab.active {
+  background: #6b4f3a;
+  border-color: #6b4f3a;
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(107, 79, 58, 0.22);
+  transform: translateY(-1px);
+}
+
+.stat-tab-icon {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.stat-tab-count {
+  font-size: 16px;
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+.stat-tab-label {
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+/* رنگ‌های خاص */
+.stat-tab[data-tone="pending"]:not(.active) .stat-tab-count,
+.stat-tab[data-tone="unpaid"]:not(.active) .stat-tab-count,
+.stat-tab[data-tone="danger"]:not(.active) .stat-tab-count {
+  color: #9b3c32;
+}
+
+.stat-tab[data-tone="unpaid"]:not(.active),
+.stat-tab[data-tone="danger"]:not(.active) {
+  border-color: #f2c9c5;
+}
+
+.stat-tab[data-tone="done"]:not(.active) .stat-tab-count,
+.stat-tab[data-tone="success"]:not(.active) .stat-tab-count {
+  color: #477052;
+}
+
+/* ─── موبایل ─── */
+@media (max-width: 650px) {
+  .stat-tabs {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .stat-tab {
+    padding: 10px 4px;
+    min-height: 70px;
+    border-radius: 10px;
+    gap: 2px;
+  }
+
+  .stat-tab-icon {
+    font-size: 16px;
+  }
+
+  .stat-tab-count {
+    font-size: 15px;
+  }
+
+  .stat-tab-label {
+    font-size: 9.5px;
+  }
+}
+
+/* ─── Dark Mode ─── */
+.admin-shell.dark-mode .stat-tab {
+  background: var(--admin-surface);
+  border-color: var(--admin-border);
+  color: var(--admin-text);
+}
+
+.admin-shell.dark-mode .stat-tab:hover {
+  background: var(--admin-hover);
+  border-color: #5a5247;
+}
+
+.admin-shell.dark-mode .stat-tab.active {
+  background: var(--admin-primary);
+  border-color: var(--admin-primary);
+  color: #1a1815;
+  box-shadow: 0 4px 12px rgba(168, 130, 100, 0.3);
+}
+
+.admin-shell.dark-mode .stat-tab[data-tone="pending"]:not(.active) .stat-tab-count,
+.admin-shell.dark-mode .stat-tab[data-tone="unpaid"]:not(.active) .stat-tab-count,
+.admin-shell.dark-mode .stat-tab[data-tone="danger"]:not(.active) .stat-tab-count {
+  color: #d97a6c;
+}
+
+.admin-shell.dark-mode .stat-tab[data-tone="unpaid"]:not(.active),
+.admin-shell.dark-mode .stat-tab[data-tone="danger"]:not(.active) {
+  border-color: rgba(155, 60, 50, 0.4);
+}
+
+.admin-shell.dark-mode .stat-tab[data-tone="done"]:not(.active) .stat-tab-count,
+.admin-shell.dark-mode .stat-tab[data-tone="success"]:not(.active) .stat-tab-count {
+  color: #8cc79a;
+}
+/* ========================================
+   86. DELIVER WITHOUT PAYMENT (تحویل بدون تسویه)
+   ======================================== */
+
+.deliver-without-pay-section {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px dashed #d8d0c4;
+}
+
+.btn-deliver-without-pay {
+  width: 100%;
+  justify-content: center;
+  color: #9a6b3f;
+  border-color: #f2d99f;
+  background: #fffdf9;
+}
+
+.btn-deliver-without-pay:hover:not(:disabled) {
+  background: #fff4d9;
+  border-color: #d99f59;
+}
+
+.deliver-without-pay-hint {
+  margin: 8px 0 0;
+  font-size: 11px;
+  color: #9a9287;
+  text-align: center;
+  line-height: 1.7;
+}
+
+/* ─── Dark Mode ─── */
+.admin-shell.dark-mode .deliver-without-pay-section {
+  border-top-color: var(--admin-border);
+}
+
+.admin-shell.dark-mode .btn-deliver-without-pay {
+  color: #e0b478;
+  border-color: rgba(217, 159, 89, 0.4);
+  background: var(--admin-surface);
+}
+
+.admin-shell.dark-mode .btn-deliver-without-pay:hover:not(:disabled) {
+  background: rgba(217, 159, 89, 0.15);
+}
+
+.admin-shell.dark-mode .deliver-without-pay-hint {
+  color: var(--admin-text-muted);
+}
+/* ========================================
+   87. ORDER SUCCESS BANNER (بنر موفقیت ثبت سفارش)
+   ======================================== */
+
+.order-success-banner {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  padding: 16px 18px;
+  background: linear-gradient(135deg, #e5f0e6 0%, #f0f7f0 100%);
+  border: 1.5px solid #c8dfcb;
+  border-radius: 14px;
+  margin-bottom: 16px;
+  box-shadow: 0 4px 16px rgba(71, 112, 82, 0.08);
+  animation: successSlideIn 0.4s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+@keyframes successSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.order-success-icon {
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #477052;
+  color: #fff;
+  border-radius: 50%;
+  font-size: 22px;
+  box-shadow: 0 4px 12px rgba(71, 112, 82, 0.3);
+}
+
+.order-success-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.order-success-title {
+  margin: 0 0 8px;
+  font-size: 15px;
+  font-weight: 800;
+  color: #2d5d3e;
+}
+
+.order-success-text {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: #3d6b48;
+  line-height: 1.9;
+}
+
+.order-success-text strong {
+  color: #2d5d3e;
+  font-weight: 800;
+}
+
+.order-success-hint {
+  margin: 0;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px dashed #c8dfcb;
+  border-radius: 8px;
+  font-size: 12px;
+  color: #3d6b48;
+  line-height: 1.9;
+}
+
+.order-success-hint strong {
+  color: #2d5d3e;
+  font-weight: 800;
+}
+
+.order-success-close {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #477052;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.order-success-close:hover {
+  background: rgba(71, 112, 82, 0.15);
+}
+
+.order-success-close:focus-visible {
+  outline: 2px solid #477052;
+  outline-offset: 2px;
+}
+
+/* ─── موبایل ─── */
+@media (max-width: 500px) {
+  .order-success-banner {
+    padding: 14px;
+    gap: 10px;
+  }
+
+  .order-success-icon {
+    width: 36px;
+    height: 36px;
+    flex-basis: 36px;
+    font-size: 18px;
+  }
+
+  .order-success-title {
+    font-size: 14px;
+  }
+
+  .order-success-text {
+    font-size: 12px;
+  }
+
+  .order-success-hint {
+    font-size: 11px;
+    padding: 8px 10px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .order-success-banner {
+    animation: none;
+  }
+}
+/* ========================================
+   88. ORDERS SEARCH SELECT (منوی کشویی جستجو)
+   ======================================== */
+
+.orders-search-select {
+  border: 0;
+  outline: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  color: #6b4f3a;
+  cursor: pointer;
+  padding-inline-end: 8px;
+  border-inline-end: 1px solid #e3ddd2;
+  margin-inline-end: 8px;
+}
+
+.orders-search-select option {
+  background: #fffdf9;
+  color: #29251f;
+  font-weight: 600;
+}
+
+.admin-shell.dark-mode .orders-search-select {
+  color: var(--admin-primary);
+  border-inline-end-color: var(--admin-border);
+}
+
+.admin-shell.dark-mode .orders-search-select option {
+  background: var(--admin-surface);
+  color: var(--admin-text);
+}
+.orders-search-select:focus-visible {
+  outline: 2px solid #9a6b3f;
+  outline-offset: 2px;
+}
+
+@media (max-width: 500px) {
+  .orders-search-select {
+    max-width: 110px;
+    font-size: 12px;
+    padding-inline-end: 4px;
+    margin-inline-end: 4px;
+  }
+}
+/* ========================================
+   89. ORDERS GRID - RESPONSIVE DESKTOP
+   ======================================== */
+
+/* تبلت و مانیتور متوسط: ۲ ستونی */
+@media (min-width: 1024px) {
+  .orders-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    max-width: 1400px;
+    gap: 14px;
+    align-items: start;
+  }
+
+  .order-card {
+    margin: 0;
+  }
+}
+
+/* مانیتور بزرگ: ۳ ستونی */
+@media (min-width: 1600px) {
+  .orders-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    max-width: 1800px;
+  }
+}
+/* ========================================
+   90. ADMIN ORDER DELETE BUTTON
+   ======================================== */
+
+.btn-delete-order {
+  color: #9b3c32;
+  border-color: #f2c9c5;
+  background: #fde8e6;
+  padding: 8px 12px;
+  min-height: 40px;
+}
+.btn-delete-order:hover:not(:disabled) {
+  background: #fbd5d2;
+}
+.admin-shell.dark-mode .btn-delete-order {
+  color: #d97a6c;
+  border-color: rgba(155, 60, 50, 0.4);
+  background: rgba(155, 60, 50, 0.15);
+}
+/* ========================================
+   91. CATEGORIES GRID (صفحه اصلی)
+   ======================================== */
+
+.section-title {
+  margin: 0 2px 16px;
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--primary-color);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.categories-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 6px 0 8px;
+}
+
+@media (min-width: 640px) {
+  .categories-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .categories-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 16px;
+  }
+}
+
+.category-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 22px 12px 18px;
+  background: var(--surface-color);
+  border: 1.5px solid var(--secondary-color);
+  border-radius: 20px;
+  text-decoration: none;
+  color: var(--text-color);
+  transition: all 0.2s ease;
+  min-height: 140px;
+  position: relative;
+  overflow: hidden;
+}
+
+.category-card:hover {
+  border-color: var(--primary-color);
+  transform: translateY(-3px);
+  box-shadow: 0 10px 30px rgba(41, 37, 31, 0.1);
+}
+
+.category-card:active {
+  transform: translateY(-1px) scale(0.98);
+}
+
+.category-card-icon {
+  font-size: 42px;
+  line-height: 1;
+  display: block;
+  transition: transform 0.2s ease;
+}
+
+.category-card:hover .category-card-icon {
+  transform: scale(1.08);
+}
+
+.category-card-name {
+  font-size: 14px;
+  font-weight: 800;
+  text-align: center;
+  line-height: 1.4;
+  color: var(--text-color);
+  word-break: break-word;
+  margin-top: 4px;
+}
+
+.category-card-count {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted-text-color);
+  padding: 2px 10px;
+  background: var(--secondary-color);
+  border-radius: 999px;
+  margin-top: 4px;
+}
+
+.category-card-featured {
+  background: linear-gradient(135deg, #fdf6e3 0%, #fef8e8 100%);
+  border-color: #d99f59;
+  border-width: 2px;
+}
+
+.category-card-featured .category-card-icon {
+  filter: drop-shadow(0 2px 4px rgba(217, 159, 89, 0.3));
+}
+
+.category-card-featured .category-card-count {
+  background: rgba(217, 159, 89, 0.2);
+  color: #9a6b3f;
+}
+
+.category-card-featured:hover {
+  border-color: #c78a3f;
+  box-shadow: 0 10px 30px rgba(217, 159, 89, 0.2);
+}
+
+@media (min-width: 640px) {
+  .category-card {
+    padding: 26px 14px 20px;
+    min-height: 160px;
+  }
+  .category-card-icon {
+    font-size: 52px;
+  }
+  .category-card-name {
+    font-size: 15px;
+  }
+}
+
+/* ========================================
+   92. CATEGORY PAGE HEADER (هدر صفحه دسته)
+   ======================================== */
+
+.category-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+}
+
+.category-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: var(--surface-color);
+  border: 1px solid var(--secondary-color);
+  color: var(--text-color);
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.category-back:hover {
+  border-color: var(--primary-color);
+  color: var(--primary-color);
+}
+
+.category-title {
+  flex: 1;
+  text-align: center;
+  margin: 0;
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--primary-color);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.category-spacer {
+  width: 64px;
+  flex-shrink: 0;
+}
+
+a.cat {
+  text-decoration: none;
+}
+
+.toolbar-static {
+  position: static;
+  top: auto;
+  background: transparent;
+  border-bottom: 0;
+  padding: 4px 0 16px;
+}
+
+@media (max-width: 768px) {
+  .category-header {
+    padding: 8px 12px;
+    gap: 8px;
+  }
+  .category-title {
+    font-size: 15px;
+  }
+  .category-back {
+    padding: 6px 12px;
+    font-size: 12px;
+  }
+  .category-spacer {
+    width: 54px;
+  }
+}
+/* ========================================
+   91. CATEGORIES GRID (صفحه اصلی - گرید دسته‌بندی)
+   ======================================== */
+
+.cat-grid-wrap {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 20px 14px 40px;
+}
+
+.cat-search-form {
+  margin-bottom: 20px;
+}
+
+.cat-search-form .search-box {
+  width: 100%;
+  min-height: 48px;
+}
+
+/* ─── گرید دسته‌بندی ─── */
+.cat-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+@media (min-width: 500px) {
+  .cat-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
+  }
+}
+
+@media (min-width: 768px) {
+  .cat-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 16px;
+  }
+}
+
+/* ─── کارت دسته‌بندی ─── */
+.cat-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 22px 12px 18px;
+  border-radius: 16px;
+  background: var(--surface-color);
+  border: 1.5px solid var(--secondary-color);
+  text-align: center;
+  transition: all 0.18s ease;
+  min-height: 140px;
+  text-decoration: none;
+  color: inherit;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.cat-card:hover {
+  border-color: var(--primary-color);
+  box-shadow: 0 6px 20px rgba(41, 37, 31, 0.08);
+  transform: translateY(-2px);
+}
+
+.cat-card:active {
+  transform: scale(0.97);
+}
+
+.cat-card:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 2px;
+}
+
+.cat-card-icon {
+  font-size: 44px;
+  line-height: 1;
+  margin-bottom: 4px;
+}
+
+.cat-card-name {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text-color);
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.cat-card-count {
+  font-size: 11px;
+  color: var(--muted-text-color);
+  font-weight: 600;
+}
+
+/* ─── کارت Featured (پیشنهاد کافه) ─── */
+.cat-card-featured {
+  background: linear-gradient(
+    135deg,
+    var(--secondary-color) 0%,
+    var(--surface-color) 100%
+  );
+  border-color: var(--accent-color);
+}
+
+.cat-card-featured .cat-card-name {
+  color: var(--primary-color);
+}
+
+/* ─── هدر صفحه دسته ─── */
+.cat-page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px 8px;
+  max-width: 1000px;
+  margin: 0 auto;
+}
+
+.cat-page-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: var(--surface-color);
+  border: 1px solid var(--secondary-color);
+  color: var(--text-color);
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.cat-page-back:hover {
+  background: var(--secondary-color);
+}
+
+.cat-page-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--primary-color);
+  text-align: center;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cat-page-spacer {
+  width: 100px;
+  flex-shrink: 0;
+  visibility: hidden;
+}
+
+@media (max-width: 500px) {
+  .cat-page-title {
+    font-size: 16px;
+  }
+
+  .cat-page-back {
+    padding: 6px 12px;
+    font-size: 12px;
+  }
+
+  .cat-page-spacer {
+    width: 80px;
+  }
+
+  .cat-grid-wrap {
+    padding: 14px 12px 30px;
+  }
+
+  .cat-card {
+    padding: 18px 8px 14px;
+    min-height: 120px;
+  }
+
+  .cat-card-icon {
+    font-size: 38px;
+  }
+
+  .cat-card-name {
+    font-size: 13px;
+  }
+
+  .cat-card-count {
+    font-size: 10px;
+  }
+}
+
+/* ─── لینک‌های nav در صفحه دسته (تغییر از button به a) ─── */
+.cats a.cat {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  text-decoration: none;
+}
+.receipt-replace-btn {
+  margin-top: 10px;
+  padding: 8px 16px;
+  border: 1px solid #d4cbbd;
+  background: #fff;
+  color: #6b4f3a;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.receipt-replace-btn:hover:not(:disabled) {
+  background: #f7f3eb;
+  border-color: #9a6b3f;
+}
+
+.receipt-replace-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }

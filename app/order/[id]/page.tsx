@@ -3,6 +3,7 @@
 import { useEffect, useState, use } from 'react'
 import Link from 'next/link'
 import UploadReceipt from './UploadReceipt'
+import { formatPersianDate } from '@/lib/format-date'
 
 const formatPrice = (price: number) =>
   new Intl.NumberFormat('fa-IR').format(Math.round(price))
@@ -92,6 +93,8 @@ export default function OrderPage({
   const [paymentError, setPaymentError] = useState<string | null>(null)
   const [paymentSuccess, setPaymentSuccess] = useState<string | null>(null)
   const [showChangeMethod, setShowChangeMethod] = useState(false)
+  
+  // ✅ تعریف تنظیمات پرداخت (که قبلاً اشتباهاً پاک شده بود)
   const [paymentSettings, setPaymentSettings] = useState<{
     payment_enabled: boolean
     payment_online_enabled: boolean
@@ -99,6 +102,9 @@ export default function OrderPage({
     payment_card_enabled: boolean
     payment_transfer_enabled: boolean
   } | null>(null)
+
+  // ✅ بنر موفقیت بعد از ثبت سفارش
+  const [showSuccessBanner, setShowSuccessBanner] = useState(false)
 
   // ✅ لود اولیه از API امن سرور
   useEffect(() => {
@@ -111,6 +117,15 @@ export default function OrderPage({
           setError(data.error || 'سفارش پیدا نشد')
         } else {
           setOrder(data.order as Order)
+
+          // ✅ بررسی فلگ موفقیت (فقط یک بار نمایش داده می‌شه)
+          try {
+            const key = `cafe-park-order-success-${id}`
+            if (sessionStorage.getItem(key)) {
+              setShowSuccessBanner(true)
+              sessionStorage.removeItem(key)
+            }
+          } catch {}
         }
       } catch {
         setError('خطا در ارتباط با سرور')
@@ -322,7 +337,7 @@ export default function OrderPage({
   const isTransfer = order.payment_method === 'transfer'
 
   const needsOnlinePayment = isOnline && (isUnpaid || isFailed)
-  const needsTransferReceipt = isTransfer && isPendingReview
+  const needsTransferReceipt = isTransfer && (isUnpaid || isPendingReview || isFailed)
 
   const showPaymentSection =
     !isCancelled &&
@@ -340,6 +355,9 @@ export default function OrderPage({
   } else if (isPendingReview) {
     badgeType = 'pending'
     badgeText = '⏳ در انتظار تأیید رسید'
+  } else if (isTransfer && isUnpaid) {
+    badgeType = 'pending'
+    badgeText = '🏦 منتظر آپلود رسید'
   } else if (isFailed) {
     badgeType = 'failed'
     badgeText = '❌ پرداخت ناموفق'
@@ -366,6 +384,35 @@ export default function OrderPage({
         </h1>
         <span style={{ width: '60px' }} />
       </div>
+
+      {showSuccessBanner && (
+        <div className="order-success-banner">
+          <div className="order-success-icon">✅</div>
+          <div className="order-success-body">
+            <p className="order-success-title">سفارش شما با موفقیت ثبت شد!</p>
+            <p className="order-success-text">
+              سفارش <strong>#{formatPrice(order.order_number)}</strong>
+              {order.table_number && (
+                <> برای <strong>میز شماره {formatPrice(order.table_number)}</strong></>
+              )}{' '}
+              ثبت شد و در صف آماده‌سازی قرار گرفت.
+            </p>
+            <p className="order-success-hint">
+              🙏 لطفاً برای جلوگیری از تداخل در سرویس‌دهی،{' '}
+              <strong>میز خود را ترک نکنید</strong> و منتظر بمانید.
+              می‌تونید وضعیت سفارش رو از همین صفحه پیگیری کنید.
+            </p>
+          </div>
+          <button
+            type="button"
+            className="order-success-close"
+            onClick={() => setShowSuccessBanner(false)}
+            aria-label="بستن"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {showBadge && (
         <div className={`order-payment-badge ${badgeType}`}>
@@ -442,6 +489,7 @@ export default function OrderPage({
               {needsTransferReceipt && (
                 <UploadReceipt
                   orderId={order.id}
+                  initialUrl={order.payment_receipt_url}
                   onSuccess={(url, note) => {
                     setOrder({
                       ...order,
@@ -510,14 +558,22 @@ export default function OrderPage({
           </div>
         )}
         {order.items.map((item, idx) => (
-          <div key={idx} className="info-row">
-            <span>
-              {formatPrice(item.quantity)} × {item.product_name}
-              {item.option_name && <small style={{ color: '#766f64' }}> ({item.option_name})</small>}
-            </span>
-            <strong>{formatPrice(item.unit_price * item.quantity)} تومان</strong>
-          </div>
-        ))}
+  <div key={idx} className="info-row">
+    <span>
+      {formatPrice(item.quantity)} × {item.product_name}
+      {item.option_name && (
+        <small style={{ color: '#766f64' }}> ({item.option_name})</small>
+      )}
+    </span>
+    <strong>{formatPrice(item.unit_price * item.quantity)} تومان</strong>
+  </div>
+))}
+
+{/* تاریخ ثبت — یک بار، بیرون از حلقه */}
+<div className="info-row">
+  <span>تاریخ ثبت:</span>
+  <strong>{formatPersianDate(order.created_at)}</strong>
+</div>
         {order.coupon_code && order.coupon_discount ? (
           <div className="order-payment-summary">
             <div className="info-row">

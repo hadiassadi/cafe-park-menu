@@ -1,5 +1,6 @@
 'use client'
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
 import { DEFAULT_THEME } from '@/lib/menu-types'
@@ -7,13 +8,9 @@ import type { MenuData, Quote, Settings } from '@/lib/menu-types'
 import ProductDetailModal from './components/ProductDetailModal'
 import type { Product } from '@/lib/menu-types'
 import { useCart } from '@/lib/cart-context'
-import CartFloatingBar from './components/CartFloatingBar'
 import ServiceWorkerRegister from './components/ServiceWorkerRegister'
 import PWAInstallPrompt from './components/PWAInstallPrompt'
 
-/* ---------- کمکی‌ها ---------- */
-
-// نرمال‌سازی متن فارسی برای جستجو: ي/ك عربی، ارقام، اعراب، نیم‌فاصله
 function normalize(s: string) {
   return s
     .toLowerCase()
@@ -35,7 +32,6 @@ function getFormatFromUrl(url: string): string {
   return 'truetype'
 }
 
-// فقط اولین اسم از font-family (اگر کل stack ذخیره شده باشد)
 function cleanFamily(f: string | null | undefined) {
   if (!f) return ''
   return f.split(',')[0].replace(/["']/g, '').trim()
@@ -50,7 +46,6 @@ function getMinPrice(product: Product): number {
   for (const g of groups) {
     for (const o of g.variant_options) {
       if (!o.is_available) continue
-      // ✅ قیمت گزینه، خودش قیمت نهایی هست
       const p = o.price_modifier
       if (p < min) min = p
     }
@@ -61,23 +56,19 @@ function getMinPrice(product: Product): number {
 const formatPrice = (price: number) =>
   new Intl.NumberFormat('fa-IR').format(price)
 
-// ارقام انگلیسی → فارسی (برای هماهنگی «اندازه» با قیمت)
 const toFaDigits = (s: string) =>
   s.replace(/\d/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[Number(d)])
 
-// ارقام فارسی/عربی → انگلیسی (برای لینک تماس)
 const toLatinDigits = (s: string) =>
   s
     .replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06f0))
     .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660))
 
-// فقط آدرس‌های http/https
 function safeHttpUrl(u: string | null | undefined) {
   const v = (u ?? '').trim()
   return /^https?:\/\//i.test(v) ? v : null
 }
 
-// «@name» یا لینک کامل اینستاگرام → { handle, url }
 function parseInstagram(v: string | null | undefined) {
   const raw = (v ?? '').trim()
   if (!raw) return null
@@ -85,8 +76,6 @@ function parseInstagram(v: string | null | undefined) {
   const handle = (m ? m[1] : raw.replace(/^@/, '')).replace(/[^A-Za-z0-9._]/g, '')
   return handle ? { handle, url: `https://instagram.com/${handle}` } : null
 }
-
-/* ---------- آیکن‌ها و مدل اطلاعات تماس ---------- */
 
 type ContactKey = 'address' | 'phone' | 'instagram' | 'hours'
 type ContactItem = { text: string; href: string | null }
@@ -152,14 +141,23 @@ const CHIP_EMOJI: Record<ContactKey, string> = {
 const extProps = (href: string) =>
   href.startsWith('http') ? { target: '_blank', rel: 'noopener noreferrer' } : {}
 
-/* ---------- کامپوننت ---------- */
-
-export default function MenuClient({ initial }: { initial: MenuData }) {
+export default function MenuClient({
+  initial,
+  initialCategoryId = null,
+}: {
+  initial: MenuData
+  initialCategoryId?: string | null
+}) {
   const { categories, products, quotes } = initial
   const theme = { ...DEFAULT_THEME, ...(initial.theme ?? {}) }
   const settings: Settings = initial.settings ?? {}
 
-  // کلیدهای «نمایش در منو» از تنظیمات (پیش‌فرض همه روشن)
+  const isAllMode = initialCategoryId === 'all'
+  const isFeaturedMode = initialCategoryId === 'featured'
+
+  const searchParams = useSearchParams()
+  const initialQuery = searchParams.get('q') || ''
+
   const show = {
     quote: settings.show_quote !== false,
     shareButton: settings.show_share_button !== false,
@@ -173,34 +171,43 @@ export default function MenuClient({ initial }: { initial: MenuData }) {
     workingHours: settings.show_working_hours !== false,
   }
 
-  const [search, setSearch] = useState('')
+  const [search, setSearch] = useState(initialQuery)
   const deferredSearch = useDeferredValue(search)
   const [onlyFeatured, setOnlyFeatured] = useState(false)
-  const [activeCategory, setActiveCategory] = useState<string | null>(null)
   const [currentQuote, setCurrentQuote] = useState<Quote | null>(null)
   const [toast, setToast] = useState<string | null>(null)
-  const [pendingScroll, setPendingScroll] = useState<string | null>(null)
   const [fabOpen, setFabOpen] = useState(false)
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
+  const [tableParam, setTableParam] = useState('')
   const { totalItems, totalPrice } = useCart()
 
-  const sectionRefs = useRef<Record<string, HTMLElement | null>>({})
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    try {
+      const params = new URLSearchParams(window.location.search)
+      const tableFromUrl = params.get('table')
+      if (tableFromUrl && /^\d+$/.test(tableFromUrl)) {
+        setTableParam(tableFromUrl)
+        sessionStorage.setItem('cafe-park-table', tableFromUrl)
+      } else {
+        const saved = sessionStorage.getItem('cafe-park-table')
+        if (saved) setTableParam(saved)
+      }
+    } catch {}
+  }, [])
 
-  // انتخاب نقل‌قول بعد از mount (تا با HTML سرور اختلاف hydration ایجاد نشود)
   useEffect(() => {
     if (quotes.length > 0) {
       setCurrentQuote(quotes[Math.floor(Math.random() * quotes.length)])
     }
   }, [quotes])
 
-  // toast
   useEffect(() => {
     if (!toast) return
     const t = setTimeout(() => setToast(null), 2200)
     return () => clearTimeout(t)
   }, [toast])
 
-  // دکمه شناور: بستن با Esc
   useEffect(() => {
     if (!fabOpen) return
     const onKey = (e: KeyboardEvent) => {
@@ -209,8 +216,6 @@ export default function MenuClient({ initial }: { initial: MenuData }) {
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
   }, [fabOpen])
-
-  /* ---------- فونت سفارشی (فقط اگر ادمین واقعاً فایل آپلود کرده) ---------- */
 
   const family = cleanFamily(theme.font_family)
 
@@ -223,7 +228,8 @@ export default function MenuClient({ initial }: { initial: MenuData }) {
     for (const font of meta) {
       if (!font.url) continue
       const ff = (font.family ?? '').toLowerCase().trim()
-      const related = ff === normalizedFamily || ff.startsWith(normalizedFamily + ' ')
+      const related =
+        ff === normalizedFamily || ff.startsWith(normalizedFamily + ' ')
       if (!related) continue
       const weight =
         font.weight ?? font.detected_weight ?? font.default_weight ?? 400
@@ -249,8 +255,6 @@ export default function MenuClient({ initial }: { initial: MenuData }) {
     return faces.join('\n')
   }, [theme, family])
 
-  /* ---------- فیلتر و گروه‌بندی ---------- */
-
   const hasFeatured = useMemo(
     () => products.some((p) => p.is_featured),
     [products]
@@ -267,57 +271,55 @@ export default function MenuClient({ initial }: { initial: MenuData }) {
     [products]
   )
 
-  const filtered = useMemo(() => {
-    const q = normalize(deferredSearch)
-    return products.filter((p) => {
-      if (onlyFeatured && !p.is_featured) return false
-      if (!q) return true
-      return (searchIndex.get(p.id) ?? '').includes(q)
-    })
-  }, [products, deferredSearch, onlyFeatured, searchIndex])
-
-  const grouped = useMemo(
+  const currentCategory = useMemo(
     () =>
-      categories
-        .map((c) => ({
-          category: c,
-          items: filtered.filter((p) => p.category_id === c.id),
-        }))
-        .filter((g) => g.items.length > 0),
-    [categories, filtered]
+      initialCategoryId && !isAllMode && !isFeaturedMode
+        ? categories.find((c) => c.id === initialCategoryId) || null
+        : null,
+    [categories, initialCategoryId, isAllMode, isFeaturedMode]
   )
 
-  // نوار دسته‌ها همیشه همه دسته‌های دارای محصول را نشان می‌دهد،
-  // حتی وقتی فیلتر «پیشنهاد کافه» یا جستجو فعال است
+  const pageTitle = isFeaturedMode
+    ? '⭐ پیشنهاد کافه'
+    : isAllMode
+      ? search
+        ? `نتایج جستجو: ${search}`
+        : 'همه محصولات'
+      : currentCategory?.name || 'منو'
+
+  const displayedProducts = useMemo(() => {
+    let result = products
+
+    if (isFeaturedMode) {
+      result = result.filter((p) => p.is_featured)
+    } else if (!isAllMode && initialCategoryId) {
+      result = result.filter((p) => p.category_id === initialCategoryId)
+    }
+
+    const q = normalize(deferredSearch)
+    if (q) {
+      result = result.filter((p) => (searchIndex.get(p.id) ?? '').includes(q))
+    }
+
+    if (onlyFeatured && !isFeaturedMode) {
+      result = result.filter((p) => p.is_featured)
+    }
+
+    return result
+  }, [
+    products,
+    initialCategoryId,
+    isAllMode,
+    isFeaturedMode,
+    deferredSearch,
+    searchIndex,
+    onlyFeatured,
+  ])
+
   const navCategories = useMemo(
     () => categories.filter((c) => products.some((p) => p.category_id === c.id)),
     [categories, products]
   )
-
-  const visibleIds = useMemo(
-    () => new Set(grouped.map((g) => g.category.id)),
-    [grouped]
-  )
-
-
-  /* ---------- هایلایت دسته فعال هنگام اسکرول ---------- */
-
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (entry.isIntersecting) {
-            setActiveCategory(entry.target.id.replace('c-', ''))
-          }
-        }
-      },
-      { rootMargin: '-40% 0px -55% 0px', threshold: 0 }
-    )
-    Object.values(sectionRefs.current).forEach((el) => el && observer.observe(el))
-    return () => observer.disconnect()
-  }, [grouped])
-
-  /* ---------- اکشن‌ها ---------- */
 
   const cafeName = settings.cafe_name || 'کافه پارک'
   const heroTitle = settings.hero_title || cafeName
@@ -345,7 +347,6 @@ export default function MenuClient({ initial }: { initial: MenuData }) {
     hours: hoursText ? { text: hoursText, href: null } : null,
   }
 
-  // جای نمایش هر مورد (پیش‌فرض: هدر و فوتر روشن، شناور خاموش)
   const inHeader: Record<ContactKey, boolean> = {
     address: settings.address_in_header !== false,
     phone: settings.phone_in_header !== false,
@@ -375,11 +376,13 @@ export default function MenuClient({ initial }: { initial: MenuData }) {
   const showFab = settings.floating_enabled === true && floatKeys.length > 0
   const fabSide = settings.floating_side === 'left' ? 'left' : 'right'
 
-  // ظاهر هدر و پس‌زمینه صفحه
   const heroImage =
-    settings.hero_bg_mode === 'image' ? safeHttpUrl(settings.hero_bg_image_url) : null
+    settings.hero_bg_mode === 'image'
+      ? safeHttpUrl(settings.hero_bg_image_url)
+      : null
   const heroOverlay = Math.min(80, Math.max(0, settings.hero_overlay ?? 45))
-  const pageBg = settings.bg_enabled === true ? safeHttpUrl(settings.bg_image_url) : null
+  const pageBg =
+    settings.bg_enabled === true ? safeHttpUrl(settings.bg_image_url) : null
   const bgWash = Math.min(98, Math.max(0, settings.bg_overlay ?? 88))
 
   const handleShare = async () => {
@@ -395,41 +398,10 @@ export default function MenuClient({ initial }: { initial: MenuData }) {
         await navigator.clipboard.writeText(window.location.href)
         setToast('لینک منو کپی شد')
       }
-    } catch {
-      // کاربر انصراف داد
-    }
+    } catch {}
   }
 
-  const scrollToCategory = (id: string) => {
-    if (!visibleIds.has(id)) {
-      // دسته‌ای که با فیلتر فعلی مخفی است: فیلترها را بردار و بعد از رندر برو سراغش
-      setOnlyFeatured(false)
-      setSearch('')
-      setPendingScroll(id)
-      return
-    }
-    setActiveCategory(id)
-    sectionRefs.current[id]?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }
-
-  // بعد از برداشتن فیلتر و رندر دوباره، به دسته انتخاب‌شده اسکرول کن
-  useEffect(() => {
-    if (!pendingScroll) return
-    const el = sectionRefs.current[pendingScroll]
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'start' })
-      setActiveCategory(pendingScroll)
-      setPendingScroll(null)
-    }
-  }, [pendingScroll, grouped])
-
-  // «کل منو»: برگشت به نمای اصلی (همه دسته‌ها، بدون فیلتر، از بالای صفحه)
-  const showAllMenu = () => {
-    setSearch('')
-    setOnlyFeatured(false)
-    setActiveCategory(null)
-    window.scrollTo({ top: 0, behavior: 'smooth' })
-  }
+  const tableSuffix = tableParam ? `?table=${tableParam}` : ''
 
   const themeStyle = {
     '--primary-color': theme.primary_color,
@@ -440,14 +412,8 @@ export default function MenuClient({ initial }: { initial: MenuData }) {
     '--muted-text-color': theme.muted_text_color,
     '--accent-color': theme.accent_color,
     '--border-radius': `${theme.border_radius}px`,
-    // فقط وقتی فونت سفارشی واقعاً تعریف شده؛ در غیر این صورت وزیرمتن layout
     ...(fontFaces ? { '--font-family': `"${family}"` } : {}),
   } as React.CSSProperties
-
-  const currentActive =
-    activeCategory && visibleIds.has(activeCategory)
-      ? activeCategory
-      : grouped[0]?.category.id ?? null
 
   return (
     <>
@@ -482,7 +448,10 @@ export default function MenuClient({ initial }: { initial: MenuData }) {
                 ? {
                     backgroundImage: `linear-gradient(rgba(41,37,31,${
                       heroOverlay / 100
-                    }), rgba(41,37,31,${Math.min(0.9, heroOverlay / 100 + 0.15)}))`,
+                    }), rgba(41,37,31,${Math.min(
+                      0.9,
+                      heroOverlay / 100 + 0.15
+                    )}))`,
                   }
                 : undefined
             }
@@ -505,7 +474,8 @@ export default function MenuClient({ initial }: { initial: MenuData }) {
               <div className="hero-info">
                 {headerKeys.map((k) => {
                   const c = contacts[k]!
-                  const asIcon = headerStyle === 'icons' && k !== 'hours' && !!c.href
+                  const asIcon =
+                    headerStyle === 'icons' && k !== 'hours' && !!c.href
 
                   if (asIcon) {
                     const label =
@@ -545,22 +515,28 @@ export default function MenuClient({ initial }: { initial: MenuData }) {
               </div>
             )}
 
-   <div className="hero-actions">
-  {show.shareButton && (
-    <button type="button" className="share-btn" onClick={handleShare}>
-      اشتراک‌گذاری منو
-    </button>
-  )}
-  <Link href="/my-orders" className="share-btn hero-my-orders-btn">
-    👤 سفارش‌های من
-  </Link>
-</div>
+            <div className="hero-actions">
+              {show.shareButton && (
+                <button
+                  type="button"
+                  className="share-btn"
+                  onClick={handleShare}
+                >
+                  اشتراک‌گذاری منو
+                </button>
+              )}
+              <Link href="/my-orders" className="share-btn hero-my-orders-btn">
+                👤 سفارش‌های من
+              </Link>
+            </div>
           </div>
         </header>
 
         {show.quote && currentQuote && (
           <div className="quote-bar">
-            <span className="quote-icon" aria-hidden="true">❝</span>
+            <span className="quote-icon" aria-hidden="true">
+              ❝
+            </span>
             <span className="quote-text">{currentQuote.text}</span>
             {currentQuote.author && (
               <span className="quote-author">— {currentQuote.author}</span>
@@ -568,177 +544,163 @@ export default function MenuClient({ initial }: { initial: MenuData }) {
           </div>
         )}
 
-        {/* toolbar و دسته‌ها داخل یک wrapper sticky: بدون JS و بدون عدد جادویی */}
         <div className="sticky-head">
+          <div className="cat-page-header">
+            <Link href={`/${tableSuffix}`} className="cat-page-back">
+              ← همه دسته‌ها
+            </Link>
+            <h1 className="cat-page-title">{pageTitle}</h1>
+            <span className="cat-page-spacer" aria-hidden="true" />
+          </div>
+
           <div className="toolbar">
             <div className="search-box">
               <span aria-hidden="true">🔍</span>
               <input
                 type="search"
                 aria-label="جستجو در منو"
-                placeholder="جستجوی نوشیدنی، غذا..."
+                placeholder="جستجو در این بخش..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
             </div>
-            {hasFeatured && show.featuredFilter && (
+            {hasFeatured && show.featuredFilter && !isFeaturedMode && (
               <button
                 type="button"
                 className={`filter-chip ${onlyFeatured ? 'active' : ''}`}
                 aria-pressed={onlyFeatured}
                 onClick={() => setOnlyFeatured((v) => !v)}
               >
-                ⭐ پیشنهاد کافه
+                ⭐ پیشنهاد
               </button>
             )}
           </div>
 
-          {navCategories.length > 0 && (
-            <nav className="cats" aria-label="دسته‌بندی‌ها">
-              <button
-                type="button"
-                className="cat cat-all"
-                onClick={showAllMenu}
+          <nav className="cats" aria-label="دسته‌بندی‌ها">
+            {hasFeatured && (
+              <Link
+                href={`/c/featured${tableSuffix}`}
+                className={`cat ${isFeaturedMode ? 'active' : ''}`}
               >
-                <span aria-hidden="true">🍽️</span> کل منو
-              </button>
-              {navCategories.map((category) => (
-                <button
-                  type="button"
-                  key={category.id}
-                  className={`cat ${currentActive === category.id ? 'active' : ''} ${
-                    visibleIds.has(category.id) ? '' : 'dim'
-                  }`}
-                  aria-current={currentActive === category.id ? 'true' : undefined}
-                  onClick={() => scrollToCategory(category.id)}
-                >
-                  {category.icon && <span className="cat-icon">{category.icon}</span>}
-                  {category.name}
-                </button>
-              ))}
-            </nav>
-          )}
+                <span className="cat-icon">⭐</span>
+                پیشنهاد کافه
+              </Link>
+            )}
+            {navCategories.map((category) => (
+              <Link
+                key={category.id}
+                href={`/c/${category.id}${tableSuffix}`}
+                className={`cat ${
+                  initialCategoryId === category.id ? 'active' : ''
+                }`}
+              >
+                {category.icon && (
+                  <span className="cat-icon">{category.icon}</span>
+                )}
+                {category.name}
+              </Link>
+            ))}
+          </nav>
         </div>
 
         <main className="wrap">
-          {grouped.length === 0 ? (
+          {displayedProducts.length === 0 ? (
             <div className="empty">
               {search || onlyFeatured
                 ? 'موردی پیدا نشد. عبارت دیگری را جستجو کن یا فیلتر را بردار.'
-                : 'هنوز محصولی به منو اضافه نشده است.'}
+                : 'هنوز محصولی در این دسته وجود ندارد.'}
             </div>
           ) : (
-            grouped.map(({ category, items }, groupIndex) => (
-              <section
-                key={category.id}
-                id={`c-${category.id}`}
-                className="section"
-                ref={(el) => {
-                  sectionRefs.current[category.id] = el
-                }}
-              >
-                <h2>
-                  {category.icon && <span className="section-icon">{category.icon}</span>}
-                  {category.name}
-                  <span className="count">{formatPrice(items.length)}</span>
-                </h2>
+            <div className="grid">
+              {displayedProducts.map((product, index) => {
+                const hasVariants = (product.variant_groups ?? []).length > 0
 
-                <div className="grid">
-                  {items.map((product, index) => {
-  const hasVariants = (product.variant_groups ?? []).length > 0
-const hasInfo = !!(
-  product.calories ||
-  product.prep_time_minutes ||
-  product.ingredients ||
-  product.allergens ||
-  product.dietary_info
-)
-const isClickable = true   // ✅ همه محصولات کلیک‌پذیر
+                return (
+                  <article
+                    className="product product-clickable"
+                    key={product.id}
+                    style={{
+                      animationDelay: `${Math.min(index * 40, 400)}ms`,
+                    }}
+                    onClick={() => setSelectedProduct(product)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        setSelectedProduct(product)
+                      }
+                    }}
+                  >
+                    {show.productImages && product.image_url && (
+                      <div className="photo">
+                        <Image
+                          src={product.image_url}
+                          alt={product.name}
+                          width={256}
+                          height={256}
+                          sizes="(max-width: 640px) 112px, 128px"
+                          priority={index < 2}
+                        />
+                        {product.is_featured && (
+                          <span className="featured-badge">⭐ پیشنهاد</span>
+                        )}
+                        {product.is_new && (
+                          <span className="new-badge">🆕 جدید</span>
+                        )}
+                        {product.is_available === false && (
+                          <span className="unavailable-badge">ناموجود</span>
+                        )}
+                      </div>
+                    )}
 
-  return (
-    <article
-      className={`product ${isClickable ? 'product-clickable' : ''}`}
-      key={product.id}
-      style={{ animationDelay: `${Math.min(index * 40, 400)}ms` }}
-      onClick={() => {
-        if (isClickable) setSelectedProduct(product)
-      }}
-      role={isClickable ? 'button' : undefined}
-      tabIndex={isClickable ? 0 : undefined}
-      onKeyDown={(e) => {
-        if (isClickable && (e.key === 'Enter' || e.key === ' ')) {
-          e.preventDefault()
-          setSelectedProduct(product)
-        }
-      }}
-    >
-      {/* بدون عکس = بدون باکس خاکستری */}
-      {show.productImages && product.image_url && (
-        <div className="photo">
-          <Image
-            src={product.image_url}
-            alt={product.name}
-            width={256}
-            height={256}
-            sizes="(max-width: 640px) 112px, 128px"
-            priority={groupIndex === 0 && index < 2}
-          />
-          {product.is_featured && (
-            <span className="featured-badge">⭐ پیشنهاد</span>
-          )}
-          {product.is_new && (
-            <span className="new-badge">🆕 جدید</span>
-          )}
-          {product.is_available === false && (
-  <span className="unavailable-badge">ناموجود</span>
-)}
-        </div>
-      )}
+                    <div className="product-info">
+                      <div className="name">
+                        {product.name}
+                        {!(show.productImages && product.image_url) &&
+                          product.is_featured && (
+                            <span className="featured-inline">⭐</span>
+                          )}
+                        {!(show.productImages && product.image_url) &&
+                          product.is_new && (
+                            <span className="new-inline">🆕</span>
+                          )}
+                      </div>
 
-      <div className="product-info">
-        <div className="name">
-          {product.name}
-          {!(show.productImages && product.image_url) &&
-            product.is_featured && (
-              <span className="featured-inline">⭐</span>
-            )}
-          {!(show.productImages && product.image_url) &&
-            product.is_new && <span className="new-inline">🆕</span>}
-        </div>
+                      {product.description && (
+                        <div className="desc">{product.description}</div>
+                      )}
 
-        {product.description && (
-          <div className="desc">{product.description}</div>
-        )}
+                      <div className="meta">
+                        {show.productSize && product.size && (
+                          <span className="size">
+                            {toFaDigits(product.size)}
+                          </span>
+                        )}
 
-        <div className="meta">
-          {show.productSize && product.size && (
-            <span className="size">{toFaDigits(product.size)}</span>
-          )}
+                        {hasVariants ? (
+                          <span className="price price-from">
+                            از {formatPrice(getMinPrice(product))}{' '}
+                            <small>تومان</small>
+                          </span>
+                        ) : (
+                          <span className="price">
+                            {formatPrice(product.price)}{' '}
+                            <small>تومان</small>
+                          </span>
+                        )}
+                      </div>
 
-          {hasVariants ? (
-  <span className="price price-from">
-    از {formatPrice(getMinPrice(product))}{' '}
-    <small>تومان</small>
-  </span>
-) : (
-  <span className="price">
-    {formatPrice(product.price)} <small>تومان</small>
-  </span>
-)}
-        </div>
-
-        {isClickable && (
-          <div className="product-action-hint">
-            {hasVariants ? '👆 مشاهده گزینه‌ها' : '👆 اطلاعات بیشتر'}
-          </div>
-        )}
-      </div>
-    </article>
-  )
-})}
-                </div>
-              </section>
-            ))
+                      <div className="product-action-hint">
+                        {hasVariants
+                          ? '👆 مشاهده گزینه‌ها'
+                          : '👆 اطلاعات بیشتر'}
+                      </div>
+                    </div>
+                  </article>
+                )
+              })}
+            </div>
           )}
         </main>
 
@@ -751,7 +713,13 @@ const isClickable = true   // ✅ همه محصولات کلیک‌پذیر
                   const inner = (
                     <>
                       <Icon name={k} />
-                      <span dir={k === 'phone' || k === 'instagram' ? 'ltr' : undefined}>
+                      <span
+                        dir={
+                          k === 'phone' || k === 'instagram'
+                            ? 'ltr'
+                            : undefined
+                        }
+                      >
                         {c.text}
                       </span>
                     </>
@@ -777,7 +745,10 @@ const isClickable = true   // ✅ همه محصولات کلیک‌پذیر
         {showFab && (
           <>
             {fabOpen && (
-              <div className="fab-backdrop" onClick={() => setFabOpen(false)} />
+              <div
+                className="fab-backdrop"
+                onClick={() => setFabOpen(false)}
+              />
             )}
             <div className={`fab fab-${fabSide}`}>
               {fabOpen && (
@@ -789,7 +760,13 @@ const isClickable = true   // ✅ همه محصولات کلیک‌پذیر
                     const inner = (
                       <>
                         <Icon name={k} />
-                        <span dir={k === 'phone' || k === 'instagram' ? 'ltr' : undefined}>
+                        <span
+                          dir={
+                            k === 'phone' || k === 'instagram'
+                              ? 'ltr'
+                              : undefined
+                          }
+                        >
                           {text}
                         </span>
                       </>
@@ -825,16 +802,12 @@ const isClickable = true   // ✅ همه محصولات کلیک‌پذیر
           </>
         )}
 
-                {/* ✅ Modal جزئیات محصول */}
         <ProductDetailModal
           product={selectedProduct}
           isOpen={!!selectedProduct}
           onClose={() => setSelectedProduct(null)}
         />
-                {/* ✅ نوار شناور سبد */}
-        <CartFloatingBar />
 
-        {/* ✅ PWA */}
         <ServiceWorkerRegister />
         <PWAInstallPrompt />
 

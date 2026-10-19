@@ -1,3 +1,5 @@
+// app/admin/reports/sales/SalesReportsManager.tsx
+
 'use client'
 
 import { useEffect, useState } from 'react'
@@ -243,8 +245,8 @@ export default function SalesReportsManager() {
                         {data.daily.map((d) => (
                           <tr key={d.date}>
                             <td>
+                              {/* ✅ تاریخ میلادی حذف شد و فقط لیبل فارسی ماند */}
                               <strong>{d.label}</strong>
-                              <small dir="ltr">{d.date}</small>
                             </td>
                             <td className="sales-table-num">
                               {formatPrice(d.orders)}

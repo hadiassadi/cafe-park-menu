@@ -4,14 +4,19 @@ import { useState } from 'react'
 
 type Props = {
   orderId: string
-  onSuccess: (receiptUrl: string | null, receiptNote: string | null) => void
+  onSuccess: (url: string | null, note: string | null) => void
+  initialUrl?: string | null
 }
 
-export default function UploadReceipt({ orderId, onSuccess }: Props) {
+export default function UploadReceipt({
+  orderId,
+  onSuccess,
+  initialUrl,
+}: Props) {
   const [mode, setMode] = useState<'image' | 'text'>('image')
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [preview, setPreview] = useState<string | null>(null)
+  const [preview, setPreview] = useState<string | null>(initialUrl ?? null)
   const [noteText, setNoteText] = useState('')
 
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -22,8 +27,9 @@ export default function UploadReceipt({ orderId, onSuccess }: Props) {
       setError('فقط عکس مجاز است (JPG، PNG، WEBP)')
       return
     }
-    if (file.size > 5 * 1024 * 1024) {
-      setError('حجم عکس نباید بیشتر از ۵ مگابایت باشه')
+
+    if (file.size > 3 * 1024 * 1024) {
+      setError('حجم عکس نباید بیشتر از ۳ مگابایت باشه')
       return
     }
 
@@ -39,7 +45,17 @@ export default function UploadReceipt({ orderId, onSuccess }: Props) {
         method: 'POST',
         body: formData,
       })
-      const data = await res.json()
+
+      const text = await res.text()
+      let data: any
+      try {
+        data = JSON.parse(text)
+      } catch {
+        console.error('Raw server response:', text)
+        throw new Error(
+          'خطا در پردازش پاسخ سرور. ممکن است حجم عکس زیاد باشد یا سرور شلوغ باشد. لطفاً از عکس کوچکتری استفاده کنید.'
+        )
+      }
 
       if (!res.ok || !data.url) {
         throw new Error(data.error || 'خطا در آپلود')
@@ -91,6 +107,11 @@ export default function UploadReceipt({ orderId, onSuccess }: Props) {
     }
   }
 
+  function handleReplaceReceipt() {
+    setPreview(null)
+    setError(null)
+  }
+
   return (
     <div className="receipt-upload-box">
       <div className="receipt-mode-tabs">
@@ -119,6 +140,14 @@ export default function UploadReceipt({ orderId, onSuccess }: Props) {
             <div className="receipt-preview-hint">
               ✅ رسید آپلود شد — در انتظار تأیید کافه
             </div>
+            <button
+              type="button"
+              className="receipt-replace-btn"
+              onClick={handleReplaceReceipt}
+              disabled={uploading}
+            >
+              🔄 تغییر رسید
+            </button>
           </div>
         ) : (
           <>
@@ -126,7 +155,7 @@ export default function UploadReceipt({ orderId, onSuccess }: Props) {
               <div className="receipt-upload-icon">📸</div>
               <div className="receipt-upload-text">
                 <strong>آپلود عکس رسید</strong>
-                <small>JPG، PNG — حداکثر ۵ مگابایت</small>
+                <small>JPG، PNG — حداکثر ۳ مگابایت</small>
               </div>
               <input
                 id="receipt-input"

@@ -35,7 +35,6 @@ export type OrderStats = {
 
 function createDb() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  // ✅ استفاده از کلید مخفی سرور (به دلیل قفل بودن RLS)
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY
   if (!url || !key) {
     throw new Error('Supabase environment variables are missing')
@@ -75,6 +74,7 @@ export const getOrderStats = cache(async (): Promise<OrderStats> => {
     .select('created_at, subtotal, status, items')
     .gte('created_at', oneYearAgo.toISOString())
     .neq('status', 'cancelled')
+	.is('deleted_at', null)
     .order('created_at', { ascending: false })
 
   const emptyStats: OrderStats = {
@@ -187,7 +187,7 @@ export const getOrderStats = cache(async (): Promise<OrderStats> => {
     const data = dailyMap.get(key) || { revenue: 0, orders: 0 }
     dailyRevenue.push({
       date: key,
-      label: d.toLocaleDateString('fa-IR', { weekday: 'short' }),
+      label: d.toLocaleDateString('fa-IR', { weekday: 'short', timeZone: 'Asia/Tehran' }),
       revenue: data.revenue,
       orders: data.orders,
     })
@@ -203,7 +203,7 @@ export const getOrderStats = cache(async (): Promise<OrderStats> => {
     const data = monthlyMap.get(key) || { revenue: 0, orders: 0 }
     monthlyRevenue.push({
       month: key,
-      label: d.toLocaleDateString('fa-IR', { month: 'short' }),
+      label: d.toLocaleDateString('fa-IR', { month: 'short', timeZone: 'Asia/Tehran' }),
       revenue: data.revenue,
       orders: data.orders,
     })
@@ -333,6 +333,7 @@ export const getCouponStats = cache(
       .select('coupon_code, coupon_discount, subtotal, status, created_at')
       .not('coupon_code', 'is', null)
       .neq('status', 'cancelled')
+	  .is('deleted_at', null)
 
     if (since) {
       ordersQuery = ordersQuery.gte('created_at', since.toISOString())
@@ -457,6 +458,7 @@ export const getCustomersData = cache(async (): Promise<CustomersReport> => {
   const { data: orders, error: ordersError } = await db
     .from('orders')
     .select('customer_phone, customer_name, subtotal, status, created_at')
+	.is('deleted_at', null)
     .order('created_at', { ascending: false })
 
   if (ordersError || !orders) {
@@ -675,21 +677,23 @@ export const getCancellationStats = cache(
     }
 
     // ─── آمار کلی سفارش‌ها ───
-    let totalOrdersQuery = db
+        let totalOrdersQuery = db
       .from('orders')
       .select('*', { count: 'exact', head: true })
+      .is('deleted_at', null)
     if (since) {
       totalOrdersQuery = totalOrdersQuery.gte('created_at', since.toISOString())
     }
     const { count: totalOrders } = await totalOrdersQuery
 
     // ─── آمار لغوها ───
-    let cancelQuery = db
+        let cancelQuery = db
       .from('orders')
       .select(
         'id, order_number, customer_name, customer_phone, table_number, note, items, subtotal, original_subtotal, coupon_code, coupon_discount, cancelled_at, cancelled_by, cancellation_reason_label, cancellation_reason_id, cancellation_note, created_at'
       )
       .eq('status', 'cancelled')
+      .is('deleted_at', null)
 
     if (since) {
       cancelQuery = cancelQuery.gte('created_at', since.toISOString())
@@ -800,7 +804,7 @@ export const getCancellationStats = cache(
       const key = d.toISOString().split('T')[0]
       dailyCancellations.push({
         date: key,
-        label: d.toLocaleDateString('fa-IR', { weekday: 'short' }),
+        label: d.toLocaleDateString('fa-IR', { weekday: 'short', timeZone: 'Asia/Tehran' }),
         count: dailyMap.get(key) || 0,
       })
     }
@@ -1047,6 +1051,7 @@ function getFilterRange(filter: SalesReportFilter): {
       label: lastMonthEnd.toLocaleDateString('fa-IR', {
         month: 'long',
         year: 'numeric',
+        timeZone: 'Asia/Tehran',
       }),
     }
   }
@@ -1070,6 +1075,7 @@ export const getSalesReport = cache(
     let summaryQuery = db
       .from('orders')
       .select('subtotal, original_subtotal, coupon_discount, status, created_at, items')
+      .is('deleted_at', null)
 
     if (since) {
       summaryQuery = summaryQuery.gte('created_at', since.toISOString())
@@ -1137,9 +1143,10 @@ export const getSalesReport = cache(
       .map(([date, data]) => ({
         date,
         label: new Date(date).toLocaleDateString('fa-IR', {
-          weekday: 'short',
+          weekday: 'long',
           day: 'numeric',
-          month: 'short',
+          month: 'long',
+          timeZone: 'Asia/Tehran',
         }),
         orders: data.orders,
         revenue: data.revenue,

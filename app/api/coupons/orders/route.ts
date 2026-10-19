@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { supabaseServer } from '@/lib/supabase/server'
+import { supabaseAdmin } from '@/lib/supabase/server'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,11 +16,12 @@ export async function GET(request: Request) {
   }
 
   try {
-    const db = await supabaseServer()
+    // ✅ استفاده از کلاینت ادمین برای دور زدن RLS
+    const db = supabaseAdmin()
 
     let query = db
       .from('orders')
-            .select(
+      .select(
         'id, order_number, customer_name, customer_phone, table_number, note, items, subtotal, original_subtotal, coupon_discount, status, created_at'
       )
       .eq('coupon_code', code)

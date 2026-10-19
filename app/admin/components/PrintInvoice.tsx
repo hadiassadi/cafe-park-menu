@@ -1,5 +1,7 @@
 'use client'
 
+import { formatPersianDate } from '@/lib/format-date'
+
 const formatPrice = (n: number) =>
   new Intl.NumberFormat('fa-IR').format(Math.round(n))
 
@@ -39,7 +41,7 @@ export default function PrintInvoice({ order }: { order: PrintableOrder }) {
         </div>
         <div className="print-invoice-meta-row">
           <span>تاریخ و ساعت:</span>
-          <strong>{new Date(order.created_at).toLocaleString('fa-IR')}</strong>
+          <strong>{formatPersianDate(order.created_at)}</strong>
         </div>
       </div>
 

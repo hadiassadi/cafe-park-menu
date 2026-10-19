@@ -1,14 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { supabaseAdmin } from '@/lib/supabase/server'
 
 export const dynamic = 'force-dynamic'
-
-function createDb() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
-  if (!url || !key) throw new Error('Missing Supabase env')
-  return createClient(url, key, { auth: { persistSession: false } })
-}
 
 const VALID_METHODS: readonly string[] = ['cash', 'card', 'transfer']
 
@@ -31,7 +24,8 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const db = createDb()
+    // ✅ استفاده از کلاینت ادمین برای دور زدن RLS
+    const db = supabaseAdmin()
 
     const updates: Record<string, any> = {
       payment_method: method,
@@ -42,14 +36,21 @@ export async function POST(req: NextRequest) {
       updates.payment_status = 'pending_review'
     }
 
-    const { error } = await db
+    // ✅ استفاده از select() برای مطمئن شدن از اعمال تغییرات
+    const { data, error } = await db
       .from('orders')
       .update(updates)
       .eq('id', orderId)
+      .select('id')
 
     if (error) {
       console.error('[payment/set-method] error:', error)
       return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+
+    if (!data || data.length === 0) {
+      console.error('[payment/set-method] no rows updated:', orderId)
+      return NextResponse.json({ error: 'سفارش یافت نشد یا تغییر نکرد' }, { status: 404 })
     }
 
     return NextResponse.json({ success: true })

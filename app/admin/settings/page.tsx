@@ -66,6 +66,8 @@ type BoolKey =
   | 'eitaa_enabled'
   | 'bale_enabled'
   | 'rubika_enabled'
+  // ✅ جدید
+  | 'admin_allow_delete_orders'
 
 type Settings = Record<TextKey, string> &
   Record<BoolKey, boolean> & {
@@ -86,6 +88,7 @@ type SectionKey =
   | 'messengers'
   | 'display'
   | 'share'
+  | 'security' // ✅ جدید
 
 const TEXT_KEYS: TextKey[] = [
   'cafe_name', 'tagline', 'logo_url', 'hero_title', 'hero_subtitle',
@@ -109,6 +112,8 @@ const BOOL_DEFAULTS: Record<BoolKey, boolean> = {
   hours_in_header: true, hours_in_footer: true,
   payment_enabled: false, request_card_enabled: true,
   whatsapp_enabled: true, eitaa_enabled: false, bale_enabled: false, rubika_enabled: false,
+  // ✅ جدید: پیش‌فرض روشن
+  admin_allow_delete_orders: true,
 }
 
 const BOOL_KEYS = Object.keys(BOOL_DEFAULTS) as BoolKey[]
@@ -218,7 +223,6 @@ async function processImage(file: File, p: Process): Promise<Blob> {
   )
 }
 
-// ✅ این تابع حالا در سطح بالای فایل قرار دارد (خارج از prepareAndUpload)
 const errText = (err: unknown) =>
   err instanceof UserError ? err.message : 'آپلود نشد. دوباره تلاش کن.'
 
@@ -229,8 +233,7 @@ async function prepareAndUpload(file: File, folder: string, p: Process) {
   }
 
   const blob = await processImage(file, p)
-  
-  // ✅ تغییر: آپلود از طریق API سرور به جای اتصال مستقیم
+
   const formData = new FormData()
   formData.append('file', blob)
   formData.append('folder', folder)
@@ -441,6 +444,8 @@ const SECTIONS: Array<{ key: SectionKey; icon: string; title: string; desc: stri
   { key: 'messengers', icon: '💬', title: 'پیام‌رسان‌ها', desc: 'واتساپ، ایتا، بله، روبیکا' },
   { key: 'display', icon: '👁️', title: 'نمایش در منو', desc: 'روشن و خاموش کردن بخش‌ها' },
   { key: 'share', icon: '🔗', title: 'پیش‌نمایش لینک', desc: 'ظاهر لینک در پیام‌رسان‌ها' },
+  // ✅ جدید
+  { key: 'security', icon: '🔒', title: 'امنیت و دسترسی', desc: 'کنترل عملیات حساس پنل' },
 ]
 
 const DISPLAY_TOGGLES: Array<{ key: BoolKey; title: string; hint: string }> = [
@@ -499,6 +504,8 @@ function previewOf(key: SectionKey, f: Settings): string {
       return `${on.toLocaleString('fa-IR')} از ${flags.length.toLocaleString('fa-IR')} بخش فعال`
     }
     case 'share': return f.og_enabled ? f.og_title || 'پیش‌فرض' : 'غیرفعال'
+    // ✅ جدید
+    case 'security': return f.admin_allow_delete_orders ? 'حذف سفارش: فعال' : 'حذف سفارش: غیرفعال'
   }
 }
 
@@ -853,6 +860,33 @@ export default function SettingsPage() {
                 value={draft.og_image_url} onChange={(url) => setText('og_image_url', url)}
                 folder="og" process={{ kind: 'cover', w: 1200, h: 630, minW: 800 }} wide />
             </div>
+          </>
+        )
+      // ✅ بخش امنیت
+      case 'security':
+        return (
+          <>
+            <p className="legend">
+              کنترل دسترسی به عملیات حساس در پنل ادمین.
+            </p>
+            <div className="toggle-row">
+              <div>
+                <strong>حذف سفارش از گزارش‌ها</strong>
+                <small>
+                  اگه روشن باشه، ادمین می‌تونه سفارش‌ها رو حذف کنه (نیاز به تأیید رمز داره). سفارش‌های حذف‌شده از گزارش‌ها حذف می‌شن ولی برای بازیابی باقی می‌مونن.
+                </small>
+              </div>
+              <Switch
+                checked={draft.admin_allow_delete_orders}
+                onChange={(v) => setBool('admin_allow_delete_orders', v)}
+                label={draft.admin_allow_delete_orders ? 'فعال' : 'غیرفعال'}
+              />
+            </div>
+            {!draft.admin_allow_delete_orders && (
+              <p className="legend" style={{ marginTop: 12, background: '#fdf9f4', color: '#9b3c32' }}>
+                ⚠️ با غیرفعال کردن این گزینه، دکمه حذف از پنل سفارش‌ها مخفی می‌شه و API هم درخواست‌ها رو رد می‌کنه. سفارش‌های قبلاً حذف‌شده دست‌نخورده باقی می‌مونن.
+              </p>
+            )}
           </>
         )
       default: return null

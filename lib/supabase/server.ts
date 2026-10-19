@@ -1,4 +1,5 @@
 import { createServerClient } from '@supabase/ssr'
+import { createClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 
 export async function supabaseServer() {
@@ -29,5 +30,21 @@ export async function supabaseServer() {
         } catch {}
       },
     },
+  })
+}
+
+// ✅ کلاینت سرور با دسترسی کامل (RLS رو دور می‌زنه)
+// برای APIهای حساس (سفارش‌ها، کوپن‌ها، CRM، آمار، ...) استفاده شود.
+// هرگز این تابع رو در Client Component صدا نزن!
+export function supabaseAdmin() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+  if (!url || !key) {
+    throw new Error('Supabase admin env variables are missing')
+  }
+
+  return createClient(url, key, {
+    auth: { persistSession: false },
   })
 }

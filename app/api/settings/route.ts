@@ -86,6 +86,8 @@ const BOOL_FIELDS = [
   'eitaa_enabled',
   'bale_enabled',
   'rubika_enabled',
+  // ✅ امنیت (جدید)
+  'admin_allow_delete_orders',
 ]
 
 // مقدارهای مجاز برای فیلدهای انتخابی

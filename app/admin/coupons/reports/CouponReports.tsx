@@ -1,3 +1,5 @@
+// app/admin/coupons/reports/CouponReports.tsx
+
 'use client'
 
 import { useEffect, useState } from 'react'
@@ -7,6 +9,7 @@ import type { CouponReportData } from '@/lib/stats'
 import PrintInvoice, {
   type PrintableOrder,
 } from '@/app/admin/components/PrintInvoice'
+import { formatPersianDate } from '@/lib/format-date' // ✅ اضافه شد
 
 const formatPrice = (n: number) =>
   new Intl.NumberFormat('fa-IR').format(Math.round(n))
@@ -64,12 +67,10 @@ export default function CouponReports() {
   const [printOrder, setPrintOrder] = useState<PrintableOrder | null>(null)
   const [mounted, setMounted] = useState(false)
 
-  // ✅ برای Portal
   useEffect(() => {
     setMounted(true)
   }, [])
 
-  // ✅ لود آمار کوپن‌ها
   useEffect(() => {
     let cancelled = false
     setLoading(true)
@@ -92,7 +93,6 @@ export default function CouponReports() {
     }
   }, [filter])
 
-  // ✅ لود سفارش‌های کوپن انتخاب‌شده
   useEffect(() => {
     if (!selectedCode) {
       setOrders([])
@@ -120,7 +120,6 @@ export default function CouponReports() {
     }
   }, [selectedCode, filter])
 
-  // ✅ تریگر پرینت
   useEffect(() => {
     if (!printOrder) return
 
@@ -140,12 +139,10 @@ export default function CouponReports() {
     }
   }, [printOrder])
 
-  // ✅ بالاترین تخفیف برای bar chart
   const maxDiscount = data?.stats.length
     ? Math.max(...data.stats.map((s) => s.total_discount))
     : 1
 
-  // ✅ فیلتر جستجو
   const filteredStats = (data?.stats ?? []).filter((stat) => {
     if (!search.trim()) return true
     const q = search.trim().toLowerCase()
@@ -157,7 +154,6 @@ export default function CouponReports() {
 
   return (
     <div className="admin-main">
-      {/* هدر */}
       <div className="admin-header">
         <div>
           <h1>📊 گزارش کوپن‌ها</h1>
@@ -170,7 +166,6 @@ export default function CouponReports() {
         </Link>
       </div>
 
-      {/* فیلترها */}
       <div
         className="toolbar"
         style={{
@@ -204,7 +199,6 @@ export default function CouponReports() {
         </div>
       ) : (
         <>
-          {/* ─── کارت‌های خلاصه ─── */}
           <section className="dashboard-section">
             <div className="coupon-report-summary">
               <div className="coupon-report-stat">
@@ -277,7 +271,6 @@ export default function CouponReports() {
             </div>
           </section>
 
-          {/* ─── جدول کوپن‌ها ─── */}
           <section className="dashboard-section">
             <div className="coupon-report-table-header">
               <h2>📋 عملکرد کوپن‌ها</h2>
@@ -357,7 +350,6 @@ export default function CouponReports() {
             </div>
           </section>
 
-          {/* ─── نمودار تخفیف ─── */}
           <section className="dashboard-section">
             <h2>📉 بیشترین تخفیف داده‌شده</h2>
             <div className="coupon-chart">
@@ -390,7 +382,6 @@ export default function CouponReports() {
         </>
       )}
 
-      {/* ─── Modal سفارش‌های کوپن ─── */}
       {selectedCode && (
         <div
           className="modal-overlay"
@@ -465,18 +456,12 @@ export default function CouponReports() {
                           <div className="coupon-order-row">
                             <span>🕐</span>
                             <span>
-                              {new Date(order.created_at).toLocaleString(
-                                'fa-IR',
-                                {
-                                  dateStyle: 'short',
-                                  timeStyle: 'short',
-                                }
-                              )}
+                              {/* ✅ تاریخ کامل با روز هفته */}
+                              {formatPersianDate(order.created_at)}
                             </span>
                           </div>
                         </div>
 
-                        {/* ✅ ریز اقلام */}
                         {isExpanded && (
                           <div className="coupon-order-items">
                             <div className="coupon-order-items-title">
@@ -535,7 +520,6 @@ export default function CouponReports() {
                           </div>
                         </div>
 
-                        {/* ✅ دکمه‌های اقدام */}
                         <div className="coupon-order-actions">
                           <button
                             type="button"
@@ -580,7 +564,6 @@ export default function CouponReports() {
         </div>
       )}
 
-      {/* ✅ فاکتور چاپی — با Portal */}
       {mounted &&
         printOrder &&
         createPortal(<PrintInvoice order={printOrder} />, document.body)}

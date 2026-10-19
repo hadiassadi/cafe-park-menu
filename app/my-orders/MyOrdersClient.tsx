@@ -3,16 +3,10 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useCart } from '@/lib/cart-context'
+import { formatPersianDate } from '@/lib/format-date'
 
 const formatPrice = (n: number) =>
   new Intl.NumberFormat('fa-IR').format(Math.round(n))
-
-function formatDateTime(iso: string): string {
-  return new Date(iso).toLocaleString('fa-IR', {
-    dateStyle: 'short',
-    timeStyle: 'short',
-  })
-}
 
 type OrderItem = {
   product_name: string
@@ -70,14 +64,12 @@ export default function MyOrdersClient() {
   useEffect(() => {
     async function loadData() {
       try {
-        // دریافت اطلاعات مشتری (اگر قبلا سفارش داده باشد)
         const meRes = await fetch('/api/customer/me', { cache: 'no-store' })
         const meData = await meRes.json()
         if (meData.customer) {
           setCustomer(meData.customer)
         }
 
-        // دریافت سفارش‌ها
         const ordersRes = await fetch('/api/customer/orders', { cache: 'no-store' })
         const ordersData = await ordersRes.json()
         if (ordersData.orders) {
@@ -202,7 +194,7 @@ export default function MyOrdersClient() {
                 </div>
 
                 <div className="my-order-date">
-                  📅 {formatDateTime(order.created_at)}
+                  📅 {formatPersianDate(order.created_at)}
                 </div>
 
                 <div className="my-order-items">
@@ -234,10 +226,11 @@ export default function MyOrdersClient() {
                   </div>
                 )}
 
-                <div className="my-order-actions">
+                <div className="my-orders-actions" style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
                   <button
                     type="button"
                     className="my-order-btn primary"
+                    style={{ flex: 1 }}
                     onClick={() => handleReorder(order)}
                   >
                     🔄 سفارش مجدد
@@ -245,6 +238,7 @@ export default function MyOrdersClient() {
                   <Link
                     href={`/order/${order.id}`}
                     className="my-order-btn"
+                    style={{ flex: 1, textAlign: 'center' }}
                   >
                     👁️ جزئیات
                   </Link>

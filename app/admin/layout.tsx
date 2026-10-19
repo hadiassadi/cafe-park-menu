@@ -44,15 +44,26 @@ export default function AdminLayout({
     return () => window.removeEventListener('keydown', handleKey)
   }, [drawerOpen])
 
-  // ✅ قفل اسکرول body وقتی drawer بازه
+    // ✅ قفل اسکرول صفحه وقتی drawer بازه (روش قفل مطلق با position: fixed)
   useEffect(() => {
-    if (drawerOpen) {
-      document.body.style.overflow = 'hidden'
-    } else {
-      document.body.style.overflow = ''
-    }
+    if (!drawerOpen) return
+
+    const scrollY = window.scrollY
+    const body = document.body
+
+    body.style.position = 'fixed'
+    body.style.top = `-${scrollY}px`
+    body.style.left = '0'
+    body.style.right = '0'
+    body.style.width = '100%'
+
     return () => {
-      document.body.style.overflow = ''
+      body.style.position = ''
+      body.style.top = ''
+      body.style.left = ''
+      body.style.right = ''
+      body.style.width = ''
+      window.scrollTo(0, scrollY)
     }
   }, [drawerOpen])
 

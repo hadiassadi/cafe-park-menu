@@ -4,15 +4,8 @@ import localFont from 'next/font/local'
 import { getSettings } from '@/lib/menu'
 import { SITE_URL } from '@/lib/site'
 import { CartProvider } from '@/lib/cart-context'
-import { useDocumentTitle } from '@/lib/use-document-title'
+import CartFloatingBar from './components/CartFloatingBar' // ✅ اضافه شد
 
-// اگر فایل‌های Medium و Bold را هم داری، این‌جا اضافه‌شان کن
-// تا font-weight 500/700 مصنوعی ساخته نشود:
-//   src: [
-//     { path: './fonts/Vazirmatn-Regular.woff2', weight: '400', style: 'normal' },
-//     { path: './fonts/Vazirmatn-Medium.woff2',  weight: '500', style: 'normal' },
-//     { path: './fonts/Vazirmatn-Bold.woff2',    weight: '700', style: 'normal' },
-//   ],
 const vazir = localFont({
   src: './fonts/Vazirmatn-Regular.woff2',
   display: 'swap',
@@ -36,8 +29,6 @@ export async function generateMetadata(): Promise<Metadata> {
     metadataBase: new URL(SITE_URL),
     title: { default: baseTitle, template: `%s | ${name}` },
     description,
-
-    // ✅ کلیدواژه‌های جستجو
     keywords: [
       name,
       'کافه',
@@ -49,19 +40,13 @@ export async function generateMetadata(): Promise<Metadata> {
       'پارک سلامت',
       'شیراز',
     ],
-
-    // ✅ اطلاعات پدیدآورنده
     applicationName: name,
     authors: [{ name }],
     creator: name,
     publisher: name,
-
-    // ✅ آدرس اصلی صفحه (برای جلوگیری از محتوای تکراری)
     alternates: {
       canonical: '/',
     },
-
-    // ✅ راهنمای ربات‌های جستجو
     robots: {
       index: true,
       follow: true,
@@ -73,8 +58,6 @@ export async function generateMetadata(): Promise<Metadata> {
         'max-video-preview': -1,
       },
     },
-
-    // ✅ PWA
     manifest: '/manifest.webmanifest',
     formatDetection: {
       telephone: false,
@@ -84,18 +67,15 @@ export async function generateMetadata(): Promise<Metadata> {
       title: name,
       statusBarStyle: 'default',
     },
-
-    // ✅ فاویکون‌ها
     icons: {
       icon: [
         { url: '/icons/favicon-32x32.png', sizes: '32x32', type: 'image/png' },
         { url: '/icons/favicon-16x16.png', sizes: '16x16', type: 'image/png' },
       ],
       apple: [{ url: '/icons/apple-touch-icon.png', sizes: '180x180' }],
-      },
+    },
   }
 
-  // اگر پیش‌نمایش لینک فعال باشد (پیش‌فرض: فعال)
   if (s?.og_enabled !== false) {
     const ogTitle = s?.og_title?.trim() || baseTitle
     const ogDescription = s?.og_description?.trim() || description
@@ -151,7 +131,11 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <body>
-        <CartProvider>{children}</CartProvider>
+        <CartProvider>
+          {children}
+          {/* ✅ نوار شناور سبد خرید در تمام صفحات */}
+          <CartFloatingBar />
+        </CartProvider>
       </body>
     </html>
   )

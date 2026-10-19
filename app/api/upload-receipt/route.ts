@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { supabaseAdmin } from '@/lib/supabase/server'
 
 export const dynamic = 'force-dynamic'
 
@@ -10,45 +10,78 @@ export async function POST(req: NextRequest) {
     const orderId = formData.get('orderId') as string
 
     if (!file || !orderId) {
-      return NextResponse.json({ error: 'فایل و orderId الزامی' }, { status: 400 })
+      return NextResponse.json(
+        { error: 'فایل و orderId الزامی' },
+        { status: 400 }
+      )
     }
 
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const key = process.env.SUPABASE_SERVICE_ROLE_KEY // ✅ استفاده از کلید مخفی سرور
+    // ✅ چک کردن نوع و حجم فایل سمت سرور
+    if (!file.type.startsWith('image/')) {
+      return NextResponse.json(
+        { error: 'فقط فایل عکس مجاز است' },
+        { status: 400 }
+      )
+    }
 
-    if (!url || !key) throw new Error('Missing Supabase admin env')
+    if (file.size > 5 * 1024 * 1024) {
+      return NextResponse.json(
+        { error: 'حجم فایل نباید بیشتر از ۵ مگابایت باشد' },
+        { status: 400 }
+      )
+    }
 
-    const db = createClient(url, key, { auth: { persistSession: false } })
+    const db = supabaseAdmin()
 
     const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg'
-    const fileName = `receipt-${orderId}-${Date.now()}.${ext}`
+    // ✅ جلوگیری از اسم فایل با کاراکترهای غیرمجاز
+    const safeExt = /^[a-z0-9]+$/.test(ext) ? ext : 'jpg'
+    const fileName = `receipt-${orderId}-${Date.now()}.${safeExt}`
 
     const arrayBuffer = await file.arrayBuffer()
+    const buffer = new Uint8Array(arrayBuffer)
+
+    console.log('[upload-receipt] uploading:', {
+      fileName,
+      size: file.size,
+      type: file.type,
+      orderId,
+    })
 
     const { error: uploadError } = await db.storage
       .from('receipts')
-      .upload(fileName, arrayBuffer, {
+      .upload(fileName, buffer, {
         contentType: file.type,
         upsert: false,
       })
 
     if (uploadError) {
-      console.error('[upload-receipt]', uploadError)
-      return NextResponse.json({ error: uploadError.message }, { status: 500 })
+      console.error('[upload-receipt] storage error:', uploadError)
+      return NextResponse.json(
+        { error: `خطای Storage: ${uploadError.message}` },
+        { status: 500 }
+      )
     }
 
-    // ✅ ساخت لینک امن (Signed URL) با اعتبار ۱ سال (چون باکت خصوصی شده)
+    // ✅ لینک امضا شده با اعتبار ۱ سال
     const { data: signedUrlData, error: signError } = await db.storage
       .from('receipts')
       .createSignedUrl(fileName, 60 * 60 * 24 * 365)
 
     if (signError || !signedUrlData) {
-       return NextResponse.json({ error: 'خطا در ساخت لینک رسید' }, { status: 500 })
+      console.error('[upload-receipt] sign url error:', signError)
+      return NextResponse.json(
+        { error: 'خطا در ساخت لینک رسید' },
+        { status: 500 }
+      )
     }
 
     return NextResponse.json({ url: signedUrlData.signedUrl })
   } catch (err: any) {
-    console.error('[upload-receipt] error:', err)
-    return NextResponse.json({ error: err?.message || 'خطای غیرمنتظره' }, { status: 500 })
+    console.error('[upload-receipt] unexpected:', err)
+    return NextResponse.json(
+      { error: err?.message || 'خطای غیرمنتظره' },
+      { status: 500 }
+    )
   }
 }

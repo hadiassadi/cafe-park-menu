@@ -131,8 +131,9 @@ export type Settings = {
   hours_in_footer?: boolean | null
   floating_enabled?: boolean | null
   floating_side?: string | null
+  // ✅ جدید
+  admin_allow_delete_orders?: boolean | null
 }
-
 export type Quote = {
   id: string
   text: string

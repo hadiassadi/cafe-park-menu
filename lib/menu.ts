@@ -133,5 +133,5 @@ export async function getMenuData(): Promise<MenuData> {
     theme: theme.data ?? null,
     settings,
     quotes: quotes.data ?? [],
-  }
+	  }
 }
