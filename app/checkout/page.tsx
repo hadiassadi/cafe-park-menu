@@ -457,7 +457,7 @@ transfer: {
           {couponError && <div className="coupon-error">❌ {couponError}</div>}
         </div>
 
-                {/* اطلاعات مشتری */}
+                        {/* اطلاعات مشتری */}
         <div className="checkout-card">
           <div className="checkout-card-title">📋 اطلاعات شما</div>
 
@@ -520,47 +520,6 @@ transfer: {
                   }
                 } catch {}
               }}
-              placeholder="مثلاً ۵"
-              min="1"
-              disabled={saving}
-            />
-          </div>
-
-          <div className="checkout-field">
-            <label htmlFor="note">توضیحات (اختیاری)</label>
-            <textarea
-              id="note"
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              placeholder="مثلاً: قند جدا، بدون شکر..."
-              rows={3}
-              disabled={saving}
-            />
-          </div>
-
-          <div className="checkout-field">
-            <label htmlFor="phone">شماره تماس *</label>
-            <input
-              id="phone"
-              type="tel"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              placeholder="۰۹۱۲۳۴۵۶۷۸۹"
-              required
-              autoComplete="tel"
-              inputMode="tel"
-              dir="ltr"
-              disabled={saving}
-            />
-          </div>
-
-          <div className="checkout-field">
-                        <label htmlFor="table">شماره میز *</label>
-            <input
-              id="table"
-              type="number"
-              value={tableNumber}
-              onChange={(e) => setTableNumber(e.target.value)}
               placeholder="مثلاً ۵"
               min="1"
               disabled={saving}

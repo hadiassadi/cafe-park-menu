@@ -807,7 +807,24 @@ export default function MenuClient({
           isOpen={!!selectedProduct}
           onClose={() => setSelectedProduct(null)}
         />
-
+        {totalItems > 0 && (
+          <Link
+            href={`/cart${tableSuffix}`}
+            className="cart-floating-bar"
+            aria-label="مشاهده سبد خرید"
+          >
+            <span className="cart-floating-icon">🛒</span>
+            <span className="cart-floating-text">
+              <span className="cart-floating-count">
+                {formatPrice(totalItems)} قلم
+              </span>
+              <span className="cart-floating-total">
+                {formatPrice(totalPrice)} <small>تومان</small>
+              </span>
+            </span>
+            <span className="cart-floating-arrow">←</span>
+          </Link>
+        )}
         <ServiceWorkerRegister />
         <PWAInstallPrompt />
 

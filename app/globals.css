@@ -4739,35 +4739,6 @@ body {
   border-radius: 8px;
 }
 /* ========================================
-   40. PRODUCT DETAIL / MODAL IMAGE FIXES
-   ======================================== */
-
-/* محدود کردن عکس محصول در مودال یا صفحه جزئیات */
-.product-detail-image,
-.modal-product-image {
-  width: 100%;
-  max-height: 280px; /* جلوگیری از بزرگ شدن بیش از حد */
-  object-fit: cover;
-  border-radius: 12px;
-  margin-bottom: 16px;
-  background-color: #efe9e0;
-}
-
-/* اگر از مودال استفاده می‌کنید، کانتینر عکس را محدود کنید */
-.modal-body .product-image-container {
-  width: 100%;
-  max-height: 280px;
-  overflow: hidden;
-  border-radius: 12px;
-  margin-bottom: 16px;
-}
-
-.modal-body .product-image-container img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-/* ========================================
    40. PRODUCT DETAIL MODAL + CART BAR + BADGES
    (استایل‌های گم‌شده که باعث بزرگ شدن عکس می‌شدند)
    ======================================== */
@@ -5782,7 +5753,28 @@ body {
     color: #766f64;
   }
 }
+/* ─── بج شماره میز در صفحه سبد (فاز جدید) ─── */
+.cart-table-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 16px;
+  margin: 12px 16px;
+  background: #e8f4ea;
+  border: 1px solid #b8d9bf;
+  color: #2d5d3e;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+}
 
+@media (min-width: 640px) {
+  .cart-table-badge {
+    max-width: 640px;
+    margin: 12px auto;
+  }
+}
 /* ========================================
    42. CHECKOUT PAGE (ثبت سفارش)
    ======================================== */
@@ -6029,7 +6021,6 @@ body {
   }
 }
 /* ========================================
-   /* ========================================
    43. PRINT INVOICE (چاپ فاکتور)
    ======================================== */
 
@@ -6383,172 +6374,6 @@ body {
   overflow: hidden;
   position: relative;
   border: 1px dashed #e3ddd2;   /* ← اضافه شد */
-}
-
-.chart-bar {
-  width: 100%;
-  background: linear-gradient(180deg, #9a6b3f 0%, #6b4f3a 100%);
-  border-radius: 6px 6px 0 0;
-  transition: height 0.4s ease;
-  min-height: 4px;
-}
-
-.chart-col-label {
-  font-size: 11px;
-  color: #625b51;
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-/* ─── پرفروش‌ترین محصولات ─── */
-.top-products-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.top-product-item {
-  display: grid;
-  grid-template-columns: 44px 1fr;
-  gap: 12px;
-  padding: 14px;
-  background: #fffdf9;
-  border: 1px solid #e3ddd2;
-  border-radius: 12px;
-  align-items: center;
-  transition: box-shadow 0.15s ease;
-}
-
-.top-product-item:hover {
-  box-shadow: 0 4px 12px rgba(41, 37, 31, 0.04);
-}
-
-.top-product-rank {
-  width: 44px;
-  height: 44px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #f5f0e9;
-  border-radius: 10px;
-  color: #6b4f3a;
-  font-size: 14px;
-  font-weight: 800;
-}
-
-.top-product-info {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.top-product-info strong {
-  font-size: 13px;
-  color: #29251f;
-  font-weight: 800;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.top-product-info small {
-  font-size: 11px;
-  color: #766f64;
-}
-
-.top-product-bar {
-  grid-column: 1 / -1;
-  height: 6px;
-  background: #f5f0e9;
-  border-radius: 999px;
-  overflow: hidden;
-  margin-top: 4px;
-}
-
-.top-product-bar-fill {
-  height: 100%;
-  background: linear-gradient(90deg, #9a6b3f 0%, #6b4f3a 100%);
-  border-radius: 999px;
-  transition: width 0.5s ease;
-}
-
-/* ─── موبایل ─── */
-@media (max-width: 650px) {
-  .chart-card {
-    padding: 14px;
-  }
-
-  .chart-col-value {
-    font-size: 9px;
-  }
-
-  .chart-col-label {
-    font-size: 10px;
-  }
-
-  .top-product-item {
-    padding: 12px;
-    gap: 10px;
-  }
-
-  .top-product-rank {
-    width: 38px;
-    height: 38px;
-    font-size: 12px;
-  }
-}
-/* ========================================
-   45. ADMIN DASHBOARD - SALES STATS
-   ======================================== */
-
-/* ─── نمودار فروش ─── */
-.chart-card {
-  background: #fffdf9;
-  border: 1px solid #e3ddd2;
-  border-radius: 14px;
-  padding: 20px;
-  overflow-x: auto;
-}
-
-.chart-bars {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 8px;
-  min-height: 200px;
-  min-width: 400px;
-}
-
-.chart-col {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  height: 200px;
-}
-
-.chart-col-value {
-  font-size: 10px;
-  color: #766f64;
-  font-weight: 700;
-  min-height: 14px;
-  text-align: center;
-  white-space: nowrap;
-}
-
-.chart-bar-wrapper {
-  flex: 1;
-  width: 100%;
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  background: #f5f0e9;
-  border-radius: 8px;
-  overflow: hidden;
-  position: relative;
 }
 
 .chart-bar {
@@ -7419,7 +7244,7 @@ body {
     margin: 4px 0 0 0;
     width: fit-content;
   }
-
+}
   /* ─── یادداشت تخفیف در خلاصه نهایی ─── */
 .checkout-discount-note {
   display: flex;
@@ -7439,7 +7264,6 @@ body {
   font-size: 14px;
   line-height: 1.5;
   flex-shrink: 0;
-}
 }
 /* ========================================
    52. ORDER DISCOUNT DISPLAY (نمایش تخفیف در سفارش)
@@ -13587,18 +13411,8 @@ body {
     grid-template-columns: 1fr;
   }
 }
-/* حالت "پرداخت در محل" — نقدی/کارت‌خوان */
-.order-payment-badge.in-place {
-  background: #f5f0e9;
-  color: #6b4f3a;
-  border: 1px solid #e3ddd2;
-}
 
-.admin-shell.dark-mode .order-payment-badge.in-place {
-  background: var(--admin-surface-2);
-  color: var(--admin-primary);
-  border-color: var(--admin-border);
-}/* ========================================
+/* ========================================
    82. RECEIPT UPLOAD (آپلود رسید)
    ======================================== */
 
@@ -13756,6 +13570,34 @@ body {
 }
 
 .receipt-submit-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.receipt-submit-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ─── دکمه تغییر رسید (فاز جدید) ─── */
+.receipt-replace-btn {
+  margin-top: 10px;
+  padding: 8px 16px;
+  border: 1px solid #d4cbbd;
+  background: #fff;
+  color: #6b4f3a;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.receipt-replace-btn:hover:not(:disabled) {
+  background: #f7f3eb;
+  border-color: #9a6b3f;
+}
+
+.receipt-replace-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
@@ -13972,7 +13814,7 @@ body {
   }
 }
 /* ========================================
-   85. STAT TABS (تب‌های آماری/فیلتر - مشترک بین صفحات ادمین)
+   85b. STAT TABS (تب‌های آماری/فیلتر - مشترک بین صفحات ادمین)
    
    استفاده در:
    - /admin/orders (فیلتر سفارش‌ها)
@@ -14613,7 +14455,7 @@ a.cat {
   }
 }
 /* ========================================
-   91. CATEGORIES GRID (صفحه اصلی - گرید دسته‌بندی)
+   91b. CATEGORIES GRID - cat-grid (صفحه اصلی - گرید دسته‌بندی)
    ======================================== */
 
 .cat-grid-wrap {
@@ -14812,26 +14654,4 @@ a.cat {
   align-items: center;
   gap: 6px;
   text-decoration: none;
-}
-.receipt-replace-btn {
-  margin-top: 10px;
-  padding: 8px 16px;
-  border: 1px solid #d4cbbd;
-  background: #fff;
-  color: #6b4f3a;
-  border-radius: 8px;
-  font-family: inherit;
-  font-size: 13px;
-  cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
-}
-
-.receipt-replace-btn:hover:not(:disabled) {
-  background: #f7f3eb;
-  border-color: #9a6b3f;
-}
-
-.receipt-replace-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
 }

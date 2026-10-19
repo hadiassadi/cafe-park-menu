@@ -4,7 +4,7 @@
 > بخش «۵. کارهای باقی‌مانده»، «۸. لاگ تغییرات» و «بالای فایل» رو آپدیت کن.
 > در چت جدید، فقط همین فایل را برای AI پیوست کن.
 
-**آخرین آپدیت:** ۱۴۰۵/۰۸/۰۳ (2026-10-25)
+**آخرین آپدیت:** ۱۴۰۵/۰۸/۰۴ (2026-10-26)
 
 ---
 
@@ -39,7 +39,7 @@ Cofe-Park/
 │   │   └── MyOrdersClient.tsx      ← تاریخچه سفارش‌ها با کوکی دستگاه
 │   ├── order/[id]/                 ← جزئیات سفارش مشتری
 │   │   ├── page.tsx                ← صفحه اصلی سفارش + وضعیت پرداخت
-│   │   └── UploadReceipt.tsx       ← ✅ آپلود رسید (عکس/متن)
+│   │   └── UploadReceipt.tsx       ← ✅ آپلود رسید (عکس/متن + نمایش رسید قبلی)
 │   ├── payment/callback/           ← ✅ بازگشت از درگاه پرداخت
 │   │   ├── page.tsx
 │   │   └── PaymentCallbackClient.tsx
@@ -198,7 +198,13 @@ Cofe-Park/
 
 **پرداخت در پنل ادمین:** `.order-card--unpaid` / `.order-card--pending` / `.order-card--paid` / `.order-card--failed` / `.order-payment-badge-inline` / `.order-payment-ref-id` / `.order-receipt-link` / `.payment-status-text` / `.payment-approve-form` / `.orders-search-box`
 
-**آپلود رسید:** `.receipt-upload-box` / `.receipt-mode-tabs` / `.receipt-mode-tab` / `.receipt-upload-label` / `.receipt-upload-icon` / `.receipt-upload-text` / `.receipt-upload-progress` / `.receipt-upload-error` / `.receipt-preview` / `.receipt-preview-hint` / `.receipt-note-input` / `.receipt-submit-btn`
+**آپلود رسید:** `.receipt-upload-box` / `.receipt-mode-tabs` / `.receipt-mode-tab` / `.receipt-upload-label` / `.receipt-upload-icon` / `.receipt-upload-text` / `.receipt-upload-progress` / `.receipt-upload-error` / `.receipt-preview` / `.receipt-preview-hint` / `.receipt-note-input` / `.receipt-submit-btn` / `.receipt-replace-btn`
+
+**بنر موفقیت سفارش:** `.order-success-banner` / `.order-success-icon` / `.order-success-body` / `.order-success-title` / `.order-success-text` / `.order-success-hint` / `.order-success-close`
+
+**لغو سفارش (تکمیلی):** `.order-cancel-success` / `.order-cancel-btn` / `.order-cancel-hint` / `.cancellation-info-box` / `.cancellation-info-label` / `.cancellation-info-note` / `.cancellation-info-by`
+
+**خلاصه مبلغ پرداخت:** `.order-payment-summary` / `.discount` / `.total-row`
 
 ### شماره‌گذاری بخش‌های `globals.css`:
 | بخش | عنوان |
@@ -288,6 +294,7 @@ Cofe-Park/
 - [x] **صفحه بازگشت از درگاه** (`/payment/callback`)
 - [x] **آپلود رسید (عکس/متن)** برای پرداخت واریزی
 - [x] **بخش پرداخت در صفحه سفارش**
+- [x] **بنر موفقیت بعد از ثبت سفارش** (با `sessionStorage`)
 
 ### پنل ادمین
 - [x] Layout با سایدبار + هدر موبایل + drawer کشویی
@@ -340,6 +347,10 @@ Cofe-Park/
 - [x] **رفع باگ دراور ادمین:** اسکرول پس‌زمینه قفل شد و هدر موبایل با `position: fixed` ثابت ماند.
 - [x] **یکدست‌سازی تب‌های ادمین:** کلاس‌های `stat-tabs` ایجاد شد تا در همه صفحات (سفارش‌ها، CRM، گزارش‌ها) مشترک باشد.
 - [x] **رفع باگ قطع ارتباط داشبورد با دیتابیس:** `lib/stats.ts` به `SUPABASE_SERVICE_ROLE_KEY` و `server-only` منتقل شد.
+- [x] **رفع باگ نمایش تکراری تاریخ ثبت سفارش:** «تاریخ ثبت» که اشتباهاً داخل `order.items.map()` بود، به بیرون حلقه منتقل شد تا فقط یک بار نمایش داده شود.
+- [x] **افزودن نمایش رسید قبلی در `UploadReceipt`:** پراپ `initialUrl` به `Props` اضافه شد تا اگر مشتری قبلاً رسید آپلود کرده باشد، همان عکس نمایش داده شود (نه فرم خالی).
+- [x] **افزودن دکمه «🔄 تغییر رسید»:** اگر کاربر قبلاً رسید آپلود کرده باشد، با زدن این دکمه می‌تواند رسید جدید آپلود کند (قبلاً گیر می‌کرد).
+- [x] **رفع خطای TypeScript `Duplicate identifier` در `menu-types.ts`:** فیلدهای تکراری `floating_enabled` و `floating_side` در interface `Settings` حذف شدند.
 
 ---
 
@@ -349,6 +360,9 @@ Cofe-Park/
 
 - [ ] 🔴 **تست کامل روی موبایل واقعی** (iOS Safari + Chrome Android)
 - [ ] 🔴 **تست کامل جریان سفارش** از ابتدا تا انتها (با همه روش‌های پرداخت)
+- [ ] 🟡 **ثابت (sticky) کردن آیکون سبد خرید** در همه صفحات (به‌جای ناپدید شدن بعد از اسکرول)
+- [ ] 🟡 **شماره میز خودکار از لینک QR:** موقع باز شدن `/cart?table=N`، مقدار `table` از URL خونده بشه و به‌صورت خودکار در Checkout پر بشه (تا الان اجبار به وارد کردن دستی هست)
+- [ ] 🟡 **بررسی نهایی آپلود عکس در پرداخت کارت‌به‌کارت** با گوشی واقعی (تست‌های چت قبلی ناتمام موندن)
 - [ ] 🟢 **ایمیل/SMS اطلاع‌رسانی** برای سفارش‌های جدید و تحویل شده
 - [ ] 🟢 **تست بار (Load Test)** روی Supabase
 - [ ] 🟢 **آیکون PWA با badge برای مشتری**
@@ -378,7 +392,9 @@ Cofe-Park/
 15. **در کوئری سفارش‌های مشتری، با چند فرمت شماره جستجو کن.**
 16. **برای عملیات‌های حساس (دیتابیس)، حتماً از API Route یا Server Action با کلید مخفی استفاده کن.**
 17. **هر فایل سروری که با SERVICE_ROLE_KEY کار می‌کند، حتماً `import 'server-only'` داشته باشد.**
-17. **برای عملیات دیتابیسی در سرور (API ها)، به‌جای ساخت کلاینت جدید، همیشه از تابع `supabaseAdmin()` از فایل `lib/supabase/server.ts` استفاده شود.** (به دلیل قفل بودن RLS)
+18. **برای عملیات دیتابیسی در سرور (API ها)، به‌جای ساخت کلاینت جدید، همیشه از تابع `supabaseAdmin()` از فایل `lib/supabase/server.ts` استفاده شود.** (به دلیل قفل بودن RLS)
+19. **پراپ‌های کامپوننت باید در `type Props` تعریف شوند — اضافه کردن پراپ جدید بدون تعریف در `Props`، خطای بیلد می‌دهد.**
+
 ---
 
 ## 📝 ۷. متن آماده برای شروع چت جدید
@@ -401,6 +417,7 @@ Cofe-Park/
 8. در fetch های API از cache: 'no-store' استفاده شود.
 9. در کوئری سفارش‌های مشتری، با چند فرمت شماره جستجو شود.
 10. به دلیل قفل بودن RLS، همه APIهای حساس باید از SERVICE_ROLE_KEY استفاده کنند.
+11. هر پراپ جدید کامپوننت باید در `type Props` تعریف شود، وگرنه بیلد fail می‌شود.
 
 📁 ابزارهای موجود در پروژه:
 - dev.bat → منوی همه‌کاره توسعه
@@ -469,6 +486,8 @@ Cofe-Park/
 | 1405/08/03 | **بهینه‌سازی امنیتی بزرگ:** قفل RLS + انتقال APIها به Service Role + جایگزینی OTP با کوکی دستگاه + انتقال Merchant ID به دیتابیس قفل‌شده + آپدیت dev.bat برای جلوگیری از پوش خراب |
 | 1405/08/03 | رفع باگ قطع ارتباط داشبورد/آمار لغوها/گزارش فروش با دیتابیس (انتقال stats.ts به Service Role) |
 | 1405/08/03 | **تکمیل فاز ۱ (Quick Wins):** رفع باگ آپلود رسید (E)، دکمه تحویل بدون تسویه (C)، گزارش کوپن (M)، دراور ادمین (H)، تب‌های سفارش (I) و رفع نهایی باگ RLS در `stats.ts`. |
+| 1405/08/04 | **آپدیت `PROJECT_STATE.md`:** افزودن بنر موفقیت سفارش، بهبود UX آپلود رسید (نمایش رسید قبلی + دکمه تغییر)، رفع باگ نمایش تکراری تاریخ در ریز اقلام، و حذف فیلدهای تکراری `floating_*` در `menu-types.ts`. |
+
 ---
 
 ## 🔗 ۹. دستورات مهم (Quick Reference)
@@ -536,7 +555,7 @@ NEXT_PUBLIC_SITE_URL=https://cafe-park-menu.vercel.app
 | `tables` | میزها | `id`, `number`, `name`, `description`, `capacity`, `location`, `sort_order`, `is_active`, `qr_token` |
 | `quotes` | جملات | `id`, `text`, `author`, `is_active` |
 | `themes` | تم‌ها | رنگ‌ها + font_url‌ها + `font_metadata` (JSONB), `border_radius`, `is_active` |
-| `settings` | تنظیمات سایت (id=1) | `cafe_name`, `tagline`, `hero_*`, `footer_text`, `address`, `phone`, `instagram`, `working_hours`, `logo_url`, `maps_url`, `og_*`, `show_*`, `*_in_header/footer/floating`, `auto_cleanup_enabled`, `auto_cleanup_days`, **`payment_enabled`**, **`payment_online_enabled`**, **`payment_cash_enabled`**, **`payment_card_enabled`**, **`payment_transfer_enabled`**, **`payment_gateway`**, **`payment_merchant_id`**, **`payment_sandbox_mode`**, **`payment_min_online_amount`**, **`payment_transfer_bank_name`**, **`payment_transfer_account_number`**, **`payment_transfer_card_number`**, **`payment_transfer_account_holder`**, **`payment_transfer_requires_review`**, **`payment_transfer_auto_verify`** |
+| `settings` | تنظیمات سایت (id=1) | `cafe_name`, `tagline`, `hero_*`, `footer_text`, `address`, `phone`, `instagram`, `working_hours`, `logo_url`, `maps_url`, `og_*`, `show_*`, `*_in_header/footer/floating`, `auto_cleanup_enabled`, `auto_cleanup_days`, **`payment_enabled`**, **`payment_online_enabled`**, **`payment_cash_enabled`**, **`payment_card_enabled`**, **`payment_transfer_enabled`**, **`payment_gateway`**, **`payment_merchant_id`**, **`payment_sandbox_mode`**, **`payment_min_online_amount`**, **`payment_transfer_bank_name`**, **`payment_transfer_account_number`**, **`payment_transfer_card_number`**, **`payment_transfer_account_holder`**, **`payment_transfer_requires_review`**, **`payment_transfer_auto_verify`**, **`admin_allow_delete_orders`** |
 | `coupons` | کدهای تخفیف | `id`, `code`, `description`, `discount_type`, `discount_value`, `min_order_amount`, `max_order_amount`, `max_discount`, `max_uses`, `used_count`, `valid_from`, `valid_until`, `is_active` |
 | `customers` | مشتریان (از سفارش‌ها) | `phone`, `notes`, `tags`, `updated_at` |
 | `cancellation_reasons` | دلایل لغو | `id`, `label`, `target`, `icon`, `sort_order`, `is_active` |
@@ -613,7 +632,7 @@ select cron.schedule(
 @supabase/supabase-js  ^2.45.4
 archiver               ^7.0.1
 fontkit                ^2.0.4
-next                   ^16.3.6
+next                   ^16.3.8
 qrcode.react           ^4.2.0
 react                  ^19.3.0
 react-dom              ^19.3.0
@@ -664,7 +683,7 @@ backups-server/
 
 ## 🐛 ۱۵. باگ‌های شناخته‌شده
 
-> هیچ باگ باز فعلاً وجود ندارد.
+> هیچ باگ باز فعلی وجود ندارد.
 
 | تاریخ | توضیح | وضعیت |
 |---|---|---|
@@ -743,3 +762,6 @@ backups-server/
 67. **`dev.bat` با Build قبل از Push:** جلوگیری از خراب شدن سایت زنده.
 68. **`stats.ts` کاملاً سروری است:** همه توابع آماری (`getOrderStats`, `getCancellationStats`, `getSalesReport`, `getCouponStats`, `getCustomersData`) با Service Role کار می‌کنند و `server-only` دارند.
 69. **تابع `supabaseAdmin()`:** یک تابع مشترک در `lib/supabase/server.ts` ایجاد شد تا در تمام APIها به جای `createClient` تکراری استفاده شود و همیشه RLS را دور بزند.
+70. **بنر موفقیت با `sessionStorage`:** بعد از redirect از Checkout به صفحه سفارش، یک فلگ `cafe-park-order-success-${id}` در `sessionStorage` ست می‌شه و در `order/[id]/page.tsx` فقط یک بار خونده و پاک می‌شه (بهبود UX، جلوگیری از نمایش مکرر).
+71. **رسید قبلی در `UploadReceipt`:** با پراپ `initialUrl`، اگر رسید قبلی وجود داشته باشد در پیش‌نمایش نمایش داده می‌شود — جلوگیری از آپلود مکرر.
+72. **دکمه «تغییر رسید»:** با کلاس `.receipt-replace-btn` کاربر می‌تواند رسید آپلود شده را جایگزین کند (قبلاً چون `preview` از `initialUrl` پر می‌شد، دکمه آپلود مجدد مخفی می‌ماند و کاربر گیر می‌کرد).

@@ -1,16 +1,37 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 import { useCart } from '@/lib/cart-context'
 
 const formatPrice = (price: number) =>
   new Intl.NumberFormat('fa-IR').format(price)
 
-export default function CartPage() {
+function CartContent() {
+  const searchParams = useSearchParams()
   const { items, totalItems, totalPrice, updateQuantity, removeItem, clearCart } = useCart()
   const [showClearConfirm, setShowClearConfirm] = useState(false)
+  const [tableNumber, setTableNumber] = useState<string>('')
+
+  // ✅ خواندن شماره میز: اول از URL، بعد از sessionStorage
+  useEffect(() => {
+    const tableFromUrl = searchParams.get('table')
+    if (tableFromUrl && /^\d+$/.test(tableFromUrl)) {
+      setTableNumber(tableFromUrl)
+      try {
+        sessionStorage.setItem('cafe-park-table', tableFromUrl)
+      } catch {}
+      return
+    }
+    try {
+      const saved = sessionStorage.getItem('cafe-park-table')
+      if (saved) setTableNumber(saved)
+    } catch {}
+  }, [searchParams])
+
+  const tableSuffix = tableNumber ? `?table=${tableNumber}` : ''
 
   if (items.length === 0) {
     return (
@@ -29,7 +50,6 @@ export default function CartPage() {
 
   return (
     <div className="cart-page">
-      {/* هدر */}
       <header className="cart-header">
         <Link href="/" className="cart-back">
           ← بازگشت
@@ -38,7 +58,12 @@ export default function CartPage() {
         <span className="cart-count">{formatPrice(totalItems)} قلم</span>
       </header>
 
-      {/* لیست آیتم‌ها */}
+      {tableNumber && (
+        <div className="cart-table-badge">
+          📍 سفارش برای میز شماره {formatPrice(Number(tableNumber))}
+        </div>
+      )}
+
       <div className="cart-items">
         {items.map((item) => (
           <div key={item.id} className="cart-item">
@@ -68,17 +93,14 @@ export default function CartPage() {
               )}
 
               <div className="cart-item-price">
-                {formatPrice(item.unitPrice)}{' '}
-                <small>تومان</small>
+                {formatPrice(item.unitPrice)} <small>تومان</small>
               </div>
 
               <div className="cart-item-actions">
                 <div className="qty-selector">
                   <button
                     type="button"
-                    onClick={() =>
-                      updateQuantity(item.id, item.quantity - 1)
-                    }
+                    onClick={() => updateQuantity(item.id, item.quantity - 1)}
                     disabled={item.quantity <= 1}
                     className="qty-btn-sm"
                   >
@@ -89,9 +111,7 @@ export default function CartPage() {
                   </span>
                   <button
                     type="button"
-                    onClick={() =>
-                      updateQuantity(item.id, item.quantity + 1)
-                    }
+                    onClick={() => updateQuantity(item.id, item.quantity + 1)}
                     className="qty-btn-sm"
                   >
                     +
@@ -117,7 +137,6 @@ export default function CartPage() {
         ))}
       </div>
 
-      {/* خلاصه */}
       <div className="cart-summary">
         <div className="cart-summary-row">
           <span>تعداد کل</span>
@@ -132,9 +151,8 @@ export default function CartPage() {
         </div>
       </div>
 
-      {/* دکمه‌ها */}
       <div className="cart-actions">
-        <Link href="/checkout" className="cart-btn-primary">
+        <Link href={`/checkout${tableSuffix}`} className="cart-btn-primary">
           ادامه و ثبت سفارش ←
         </Link>
 
@@ -147,9 +165,11 @@ export default function CartPage() {
         </button>
       </div>
 
-      {/* تأیید خالی کردن */}
       {showClearConfirm && (
-        <div className="cart-confirm-overlay" onClick={() => setShowClearConfirm(false)}>
+        <div
+          className="cart-confirm-overlay"
+          onClick={() => setShowClearConfirm(false)}
+        >
           <div className="cart-confirm" onClick={(e) => e.stopPropagation()}>
             <h3>مطمئنی؟</h3>
             <p>همه آیتم‌های سبد حذف می‌شن.</p>
@@ -176,5 +196,13 @@ export default function CartPage() {
         </div>
       )}
     </div>
+  )
+}
+
+export default function CartPage() {
+  return (
+    <Suspense fallback={<div className="cart-page">در حال بارگذاری...</div>}>
+      <CartContent />
+    </Suspense>
   )
 }
