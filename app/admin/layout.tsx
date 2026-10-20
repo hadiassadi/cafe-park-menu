@@ -122,6 +122,7 @@ export default function AdminLayout({
 
   const menuItems = [
     { href: '/admin', label: 'داشبورد', icon: '🏠' },
+	{ href: '/admin/memberships', label: 'باشگاه مشتریان', icon: '🎓' },
     { href: '/admin/orders', label: 'سفارش‌ها', icon: '🛒' },
     { href: '/admin/customers', label: 'مشتریان', icon: '👥' },
     { href: '/admin/products', label: 'محصولات', icon: '☕' },

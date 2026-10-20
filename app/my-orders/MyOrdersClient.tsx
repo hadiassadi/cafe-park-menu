@@ -61,6 +61,26 @@ export default function MyOrdersClient() {
   const [customer, setCustomer] = useState<{ name: string; phone: string } | null>(null)
   const [toast, setToast] = useState<string | null>(null)
 
+  // ✅ State های مربوط به ثبت‌نام باشگاه مشتریان
+  const [showMemberModal, setShowMemberModal] = useState(false)
+  const [memberName, setMemberName] = useState('')
+  const [memberId, setMemberId] = useState('')
+  const [memberPhone, setMemberPhone] = useState('')
+  const [acceptRules, setAcceptRules] = useState(false)
+  const [registerLoading, setRegisterLoading] = useState(false)
+  const [registerMsg, setRegisterMsg] = useState<{ type: 'success' | 'error', text: string } | null>(null)
+
+  // ✅ State های مربوط به سازمان‌ها و عضویت
+  const [organizations, setOrganizations] = useState<{ id: string; name: string }[]>([])
+  const [selectedOrgId, setSelectedOrgId] = useState<string>('general')
+  const [membership, setMembership] = useState<{ orgId: string, orgName: string } | null>(null)
+
+  // ✅ State مربوط به قوانین پویا
+  const [rules, setRules] = useState<{ general: string; org: string }>({
+    general: 'در حال بارگذاری...',
+    org: 'در حال بارگذاری...'
+  })
+
   useEffect(() => {
     async function loadData() {
       try {
@@ -69,11 +89,28 @@ export default function MyOrdersClient() {
         if (meData.customer) {
           setCustomer(meData.customer)
         }
+        if (meData.membership) {
+          setMembership(meData.membership)
+        }
 
         const ordersRes = await fetch('/api/customer/orders', { cache: 'no-store' })
         const ordersData = await ordersRes.json()
         if (ordersData.orders) {
           setOrders(ordersData.orders)
+        }
+
+        // ✅ گرفتن لیست سازمان‌های فعال
+        const orgsRes = await fetch('/api/membership/organizations', { cache: 'no-store' })
+        const orgsData = await orgsRes.json()
+        if (orgsData.organizations) {
+          setOrganizations(orgsData.organizations)
+        }
+
+        // ✅ گرفتن قوانین از دیتابیس
+        const rulesRes = await fetch('/api/membership/rules', { cache: 'no-store' })
+        const rulesData = await rulesRes.json()
+        if (rulesData.general) {
+          setRules({ general: rulesData.general, org: rulesData.org })
         }
       } catch {
         // silent fail
@@ -110,6 +147,54 @@ export default function MyOrdersClient() {
     }, 800)
   }
 
+  // ✅ ارسال فرم ثبت‌نام
+    // ✅ ارسال فرم ثبت‌نام
+  const handleRegisterSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!acceptRules) {
+      return setRegisterMsg({ type: 'error', text: 'لطفاً قوانین و شرایط را بپذیرید.' })
+    }
+    
+    setRegisterLoading(true)
+    setRegisterMsg(null)
+
+    try {
+      const res = await fetch('/api/membership/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fullName: memberName,
+          memberId: selectedOrgId !== 'general' ? memberId : null,
+          phone: memberPhone,
+          orgId: selectedOrgId,
+        }),
+      })
+
+      // ✅ خواندن پاسخ به صورت متن و سپس پارس کردن آن
+      const text = await res.text()
+      let data
+      try {
+        data = JSON.parse(text)
+      } catch (parseErr) {
+        console.error('Server returned HTML instead of JSON:', text)
+        throw new Error('خطای سرور رخ داده است. لطفاً به ترمینال (VS Code) مراجعه کنید.')
+      }
+
+      if (!res.ok || data.success === false) {
+        throw new Error(data.error || data.message || 'خطا در ثبت‌نام')
+      }
+
+      setRegisterMsg({ type: 'success', text: data.message })
+      setTimeout(() => {
+        setShowMemberModal(false)
+        window.location.reload()
+      }, 3000)
+    } catch (err: any) {
+      setRegisterMsg({ type: 'error', text: err.message })
+    } finally {
+      setRegisterLoading(false)
+    }
+  }
   if (loading) {
     return (
       <div className="my-orders-page">
@@ -140,7 +225,7 @@ export default function MyOrdersClient() {
         <span style={{ width: 60 }} />
       </div>
 
-      {customer ? (
+      {customer && (
         <div className="my-orders-user">
           <div className="my-orders-user-icon">👤</div>
           <div>
@@ -148,9 +233,38 @@ export default function MyOrdersClient() {
             <small dir="ltr">{customer.phone}</small>
           </div>
         </div>
+      )}
+
+      {/* ✅ بنر باشگاه مشتریان (هوشمند) */}
+      {membership ? (
+        <div style={{ background: '#e5f0e6', border: '1.5px solid #477052', borderRadius: '14px', padding: '16px', display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+          <div style={{ fontSize: '28px' }}>✅</div>
+          <div>
+            <strong style={{ fontSize: '14px', color: '#2d5d3e', display: 'block' }}>شما عضو باشگاه {membership.orgName} هستید</strong>
+            <small style={{ fontSize: '11px', color: '#3d6b48' }}>تخفیف‌های سازمانی شما به این دستگاه متصل است و در زمان سفارش به‌صورت خودکار اعمال می‌شود.</small>
+          </div>
+        </div>
       ) : (
-        <div className="my-orders-empty" style={{ marginBottom: '16px' }}>
-          هنوز سفارشی با این دستگاه ثبت نکردی. برای دیدن تاریخچه، یک سفارش ثبت کن!
+        <div 
+          onClick={() => setShowMemberModal(true)}
+          style={{
+            background: 'linear-gradient(135deg, #fdf6e3 0%, #fef8e8 100%)',
+            border: '1.5px solid #d99f59',
+            borderRadius: '14px',
+            padding: '16px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+            cursor: 'pointer',
+            marginBottom: '16px',
+            boxShadow: '0 4px 12px rgba(217, 159, 89, 0.1)'
+          }}
+        >
+          <div style={{ fontSize: '28px' }}>🎓</div>
+          <div>
+            <strong style={{ fontSize: '14px', color: '#6b4f3a', display: 'block' }}>عضویت در باشگاه مشتریان و سازمان‌ها</strong>
+            <small style={{ fontSize: '11px', color: '#766f64' }}>با ثبت‌نام، از تخفیف‌های ویژه و خودکار بهره‌مند شوید.</small>
+          </div>
         </div>
       )}
 
@@ -250,6 +364,94 @@ export default function MyOrdersClient() {
       )}
 
       {toast && <div className="toast">{toast}</div>}
+
+      {/* ✅ مودال ثبت‌نام باشگاه مشتریان */}
+      {showMemberModal && (
+        <div className="modal-overlay" onClick={() => !registerLoading && setShowMemberModal(false)}>
+          <div className="modal-container modal-md" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div className="modal-header-content">
+                <h2>🎓 ثبت‌نام در باشگاه مشتریان</h2>
+                <p>لطفاً نوع عضویت خود را انتخاب کرده و اطلاعات را وارد کنید.</p>
+              </div>
+              <button type="button" className="modal-close-btn" onClick={() => setShowMemberModal(false)} disabled={registerLoading}>✕</button>
+            </div>
+            <div className="modal-body">
+              <form onSubmit={handleRegisterSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                
+                <div className="field">
+                  <label>نوع عضویت / سازمان *</label>
+                  <select
+                    value={selectedOrgId}
+                    onChange={(e) => setSelectedOrgId(e.target.value)}
+                    style={{
+                      width: '100%', padding: '12px 14px', borderRadius: '10px',
+                      border: '1px solid #d8d0c4', background: '#fffdf9',
+                      fontFamily: 'inherit', fontSize: '14px', color: '#29251f',
+                      outline: 'none', cursor: 'pointer'
+                    }}
+                  >
+                    <option value="general">👤 باشگاه مشتریان کافه پارک (عادی)</option>
+                    {organizations.map(org => (
+                      <option key={org.id} value={org.id}>🎓 {org.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="field">
+                  <label>نام و نام خانوادگی *</label>
+                  <input type="text" value={memberName} onChange={(e) => setMemberName(e.target.value)} required />
+                </div>
+
+                {selectedOrgId !== 'general' && (
+                  <div className="field">
+                    <label>شماره دانشجویی / پرسنلی *</label>
+                    <input 
+                      type="text" 
+                      value={memberId} 
+                      onChange={(e) => setMemberId(e.target.value)} 
+                      required={selectedOrgId !== 'general'} 
+                    />
+                  </div>
+                )}
+
+                <div className="field">
+                  <label>شماره تلفن همراه *</label>
+                  <input type="tel" value={memberPhone} onChange={(e) => setMemberPhone(e.target.value)} dir="ltr" required />
+                </div>
+
+                {/* ✅ نمایش قوانین پویا داخل مودال */}
+                <div style={{ background: '#fbf9f5', border: '1px dashed #d8d0c4', borderRadius: '8px', padding: '12px', fontSize: '12px', color: '#766f64', lineHeight: 1.8 }}>
+                  <strong style={{ color: '#6b4f3a', display: 'block', marginBottom: '6px' }}>📜 شرایط استفاده:</strong>
+                  <div style={{ whiteSpace: 'pre-line' }}>
+                    {selectedOrgId === 'general' ? rules.general : rules.org}
+                  </div>
+                  <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px dashed #d8d0c4', color: '#9b3c32', fontSize: '11px' }}>
+                    ⚠️ پذیرفتن این قوانین به منزله اجرای همیشگی آن‌ها نیست. کافه پارک حق تغییر این شرایط را بر اساس شرایط اقتصادی برای خود محفوظ می‌دارد.
+                  </div>
+                </div>
+
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px' }}>
+                  <input type="checkbox" checked={acceptRules} onChange={(e) => setAcceptRules(e.target.checked)} />
+                  <span>شرایط فوق را خوانده‌ام و اطلاعات وارد شده مربوط به خودم است.</span>
+                </label>
+
+                {registerMsg && (
+                  <div style={{ padding: '10px', borderRadius: '8px', background: registerMsg.type === 'success' ? '#e5f0e6' : '#fde8e6', color: registerMsg.type === 'success' ? '#2d5d3e' : '#9b3c32', fontSize: '12px', fontWeight: 700, textAlign: 'center' }}>
+                    {registerMsg.text}
+                  </div>
+                )}
+
+                <div style={{ marginTop: '10px', display: 'flex', gap: '8px' }}>
+                  <button type="submit" className="checkout-btn" style={{ flex: 1 }} disabled={registerLoading || !acceptRules}>
+                    {registerLoading ? 'در حال بررسی...' : '✅ ثبت‌نام'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -1,7 +1,8 @@
+import 'server-only'
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
-import crypto from 'crypto'
+import { supabaseAdmin } from '@/lib/supabase/server'
+import { hashData } from '@/lib/utils/hash'
 
 export const dynamic = 'force-dynamic'
 
@@ -11,18 +12,14 @@ export async function GET() {
     const deviceToken = cookieStore.get('cafe_device_token')?.value
 
     if (!deviceToken) {
-      return NextResponse.json({ customer: null }, { headers: { 'Cache-Control': 'no-store' } })
+      return NextResponse.json({ customer: null, membership: null }, { headers: { 'Cache-Control': 'no-store' } })
     }
 
-    const deviceIdHash = crypto.createHash('sha256').update(deviceToken).digest('hex')
-    
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const key = process.env.SUPABASE_SERVICE_ROLE_KEY
-    if (!url || !key) throw new Error('Missing Supabase admin env')
-    
-    const db = createClient(url, key, { auth: { persistSession: false } })
+    const deviceIdHash = hashData(deviceToken)
+    const db = supabaseAdmin()
 
-    const { data } = await db
+    // ۱. گرفتن اطلاعات مشتری از آخرین سفارش
+    const { data: orderData } = await db
       .from('orders')
       .select('customer_name, customer_phone')
       .eq('device_id_hash', deviceIdHash)
@@ -30,15 +27,36 @@ export async function GET() {
       .limit(1)
       .maybeSingle()
 
-    if (data) {
-      return NextResponse.json(
-        { customer: { name: data.customer_name, phone: data.customer_phone } },
-        { headers: { 'Cache-Control': 'no-store' } }
-      )
+    let customer = null
+    if (orderData) {
+      customer = { name: orderData.customer_name, phone: orderData.customer_phone }
     }
 
-    return NextResponse.json({ customer: null }, { headers: { 'Cache-Control': 'no-store' } })
+    // ۲. گرفتن اطلاعات عضویت سازمانی
+    let membership = null
+    const { data: memberData } = await db
+      .from('organization_members')
+      .select(`
+        organization_id,
+        organizations ( name )
+      `)
+      .eq('device_id_hash', deviceIdHash)
+      .eq('is_registered', true)
+      .maybeSingle()
+
+    if (memberData && memberData.organizations) {
+      membership = {
+        orgId: memberData.organization_id,
+        orgName: (memberData.organizations as any).name
+      }
+    }
+
+    return NextResponse.json(
+      { customer, membership },
+      { headers: { 'Cache-Control': 'no-store' } }
+    )
   } catch (err: any) {
-    return NextResponse.json({ customer: null }, { status: 500 })
+    console.error('[Customer ME Error]:', err)
+    return NextResponse.json({ customer: null, membership: null }, { status: 500 })
   }
 }
