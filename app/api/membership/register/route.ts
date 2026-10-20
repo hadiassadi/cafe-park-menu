@@ -16,7 +16,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'لطفاً همه فیلدهای ضروری را پر کنید' }, { status: 400 })
     }
 
-    const cookieStore = await cookies()
+    const cookieStore = await cookies() // 👈 اینجا کلمه await اضافه شد
     const deviceToken = cookieStore.get('cafe_device_token')?.value
     
     if (!deviceToken) {
