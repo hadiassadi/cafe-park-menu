@@ -19,24 +19,29 @@ export async function GET() {
     
     const db = createClient(url, key, { auth: { persistSession: false } })
 
-    // ۱. اطلاعات مشتری
+    // ۱. اطلاعات مشتری از آخرین سفارش
     const { data: orderData } = await db.from('orders').select('customer_name, customer_phone').eq('device_id_hash', deviceIdHash).order('created_at', { ascending: false }).limit(1).maybeSingle()
 
-    // ۲. اطلاعات عضویت
+    let customer = null
+    if (orderData) customer = { name: orderData.customer_name, phone: orderData.customer_phone }
+
+    // ۲. چک کردن عضویت سازمانی
     let membership = null
     const { data: memberData } = await db.from('organization_members').select('organization_id, metadata').eq('device_id_hash', deviceIdHash).eq('is_registered', true).maybeSingle()
-
-    let customer = null
-    if (orderData) {
-      customer = { name: orderData.customer_name, phone: orderData.customer_phone }
-    } else if (memberData && memberData.metadata && memberData.metadata._display_name) {
-      // ✅ اگر سفارش نداشت، از اطلاعات ثبت‌نام استفاده کن
-      customer = { name: memberData.metadata._display_name, phone: memberData.metadata._phone || '' }
-    }
 
     if (memberData && memberData.organization_id) {
       const { data: orgData } = await db.from('organizations').select('name').eq('id', memberData.organization_id).single()
       if (orgData) membership = { orgId: memberData.organization_id, orgName: orgData.name }
+      if (!customer && memberData.metadata?._display_name) {
+        customer = { name: memberData.metadata._display_name, phone: memberData.metadata._phone || '' }
+      }
+    } else {
+      // ✅ چک کردن عضویت عادی
+      const { data: generalMember } = await db.from('customers').select('phone').eq('device_id_hash', deviceIdHash).maybeSingle()
+      if (generalMember) {
+        membership = { orgId: 'general', orgName: 'باشگاه مشتریان کافه پارک' }
+        if (!customer) customer = { name: 'کاربر', phone: generalMember.phone }
+      }
     }
 
     return NextResponse.json({ customer, membership }, { headers: { 'Cache-Control': 'no-store' } })

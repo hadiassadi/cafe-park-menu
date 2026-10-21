@@ -26,12 +26,51 @@ export async function POST(req: Request) {
     const deviceIdHash = hashData(deviceToken)
     const db = supabaseAdmin()
 
-    if (orgId === 'general') {
-      // ...
-      return NextResponse.json({ success: true, message: 'تبریک! شما به باشگاه مشتریان پیوستید.' })
+    // ✅ ۱. چک کردن اینکه آیا این دستگاه قبلاً ثبت‌نام کرده است یا نه
+    const { data: alreadyRegistered } = await db
+      .from('organization_members')
+      .select('id')
+      .eq('device_id_hash', deviceIdHash)
+      .eq('is_registered', true)
+      .maybeSingle()
+
+    const { data: alreadyGeneral } = await db
+      .from('customers')
+      .select('phone')
+      .eq('device_id_hash', deviceIdHash)
+      .maybeSingle()
+
+    if (alreadyRegistered || alreadyGeneral) {
+      return NextResponse.json({ 
+        error: 'شما یکبار ثبت‌نام کرده‌اید. برای ثبت سفارش تخفیف‌دار سازمانی باید از همان دستگاه (موبایل، تبلت یا سیستم) استفاده کنید؛ در غیر این صورت هیچ تخفیفی به شما تعلق نخواهد گرفت.' 
+      }, { status: 400 })
     }
 
-    if (!memberId) return NextResponse.json({ error: 'شماره دانشجویی الزامی است' }, { status: 400 })
+    // ═══════════════════════════════════════════════
+    // حالت اول: مشتری عادی (باشگاه مشتریان)
+    // ═══════════════════════════════════════════════
+    if (orgId === 'general') {
+      const phoneClean = phone.trim()
+      
+      const { error: custError } = await db.from('customers').upsert({
+        phone: phoneClean,
+        device_id_hash: deviceIdHash, // ✅ ذخیره شناسه دستگاه
+        notes: `ثبت‌نام در باشگاه مشتریان`,
+        tags: ['عضو باشگاه مشتریان'],
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'phone' })
+
+      if (custError) {
+        console.error('General Register Error:', custError)
+        return NextResponse.json({ error: 'خطا در ثبت‌نام باشگاه' }, { status: 500 })
+      }
+      return NextResponse.json({ success: true, message: 'تبریک! شما به باشگاه مشتریان کافه پارک پیوستید.' })
+    }
+
+    // ═══════════════════════════════════════════════
+    // حالت دوم: سازمانی
+    // ═══════════════════════════════════════════════
+    if (!memberId) return NextResponse.json({ error: 'شماره دانشجویی/پرسنلی الزامی است' }, { status: 400 })
 
     const nameHash = hashData(fullName)
     const memberIdHash = hashData(memberId)
@@ -51,13 +90,15 @@ export async function POST(req: Request) {
 
     if (!member) {
       const { data: org } = await db.from('organizations').select('name').eq('id', orgId).single()
-      await db.from('membership_requests').insert({ full_name: fullName, phone, member_id: memberId, organization_name: org?.name || 'نامشخص', status: 'pending' })
+      await db.from('membership_requests').insert({ 
+        full_name: fullName, phone, member_id: memberId, 
+        organization_name: org?.name || 'نامشخص', status: 'pending' 
+      })
       return NextResponse.json({ success: false, message: 'اطلاعات شما در لیست سازمان یافت نشد. درخواست شما جهت بررسی دستی ثبت شد.' })
     }
 
-    if (member.is_registered) return NextResponse.json({ error: 'این کد قبلاً در سیستم ثبت‌نام شده است.' }, { status: 400 })
+    if (member.is_registered) return NextResponse.json({ error: 'این کد دانشجویی قبلاً توسط دستگاه دیگری ثبت‌نام شده است.' }, { status: 400 })
 
-    // ✅ ذخیره اسم و شماره به صورت Plain Text در metadata برای نمایش بعدی
     const newMetadata = { 
       ...(member.metadata || {}), 
       _display_name: fullName, 

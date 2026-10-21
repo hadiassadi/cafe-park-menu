@@ -8,11 +8,24 @@ import persian from 'react-date-object/calendars/persian'
 import persian_fa from 'react-date-object/locales/persian_fa'
 
 type Organization = {
-  id: string; name: string; discount_percent: number; max_daily_orders: number; max_total_orders: number; expires_at: string; is_active: boolean
+  id: string
+  name: string
+  discount_percent: number
+  max_daily_orders: number
+  max_total_orders: number
+  expires_at: string
+  is_active: boolean
+}
+
+type GeneralMember = {
+  phone: string
+  updated_at: string
+  notes: string | null
 }
 
 const toLatinDigits = (s: string) =>
-  s.replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06f0)).replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660))
+  s.replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06f0))
+   .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660))
 
 export default function MembershipsManager({ initialOrgs }: { initialOrgs: Organization[] }) {
   const router = useRouter()
@@ -43,19 +56,23 @@ export default function MembershipsManager({ initialOrgs }: { initialOrgs: Organ
   const [showEditModal, setShowEditModal] = useState(false)
   const [editOrg, setEditOrg] = useState<Organization | null>(null)
 
-  // درخواست‌ها
+  // درخواست‌ها و قوانین
   const [requests, setRequests] = useState<any[]>([])
   const [reqLoading, setReqLoading] = useState<string | null>(null)
-
-  // ✅ استیت‌های جدید برای ویرایش قوانین
+  
   const [rulesGeneral, setRulesGeneral] = useState('')
   const [rulesOrg, setRulesOrg] = useState('')
   const [rulesLoading, setRulesLoading] = useState(false)
   const [rulesMsg, setRulesMsg] = useState<string | null>(null)
 
+  // ✅ اعضای عادی باشگاه
+  const [generalMembers, setGeneralMembers] = useState<GeneralMember[]>([])
+  const [generalLoading, setGeneralLoading] = useState(true)
+
   useEffect(() => {
     fetchRequests()
     fetchRules()
+    fetchGeneralMembers()
   }, [])
 
   const fetchRequests = () => {
@@ -73,6 +90,15 @@ export default function MembershipsManager({ initialOrgs }: { initialOrgs: Organ
         if (data.membership_rules_org) setRulesOrg(data.membership_rules_org)
       })
       .catch(() => {})
+  }
+
+  const fetchGeneralMembers = () => {
+    setGeneralLoading(true)
+    fetch('/api/admin/memberships/general')
+      .then(res => res.json())
+      .then(data => { if (data.members) setGeneralMembers(data.members) })
+      .catch(() => {})
+      .finally(() => setGeneralLoading(false))
   }
 
   const handleSaveRules = async () => {
@@ -114,7 +140,6 @@ export default function MembershipsManager({ initialOrgs }: { initialOrgs: Organ
     }
   }
 
-  // --- بقیه توابع آپلود و ویرایش ---
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -194,16 +219,16 @@ export default function MembershipsManager({ initialOrgs }: { initialOrgs: Organ
   return (
     <div className="admin-card" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       
-      {/* داشبورد آماری */}
+      {/* ۱. داشبورد آماری */}
       <div className="stats-grid" style={{ marginBottom: '10px' }}>
         <div className="stat-card"><div className="stat-icon" style={{ background: '#f5f0e9', color: '#6b4f3a' }}>🏢</div><div className="stat-content"><div className="stat-value">{initialOrgs.length.toLocaleString('fa-IR')}</div><div className="stat-label">کل سازمان‌ها</div></div></div>
-        <div className="stat-card"><div className="stat-icon" style={{ background: '#e5f0e6', color: '#2d5d3e' }}>✅</div><div className="stat-content"><div className="stat-value">{initialOrgs.filter(o => o.is_active).length.toLocaleString('fa-IR')}</div><div className="stat-label">سازمان‌های فعال</div></div></div>
+        <div className="stat-card"><div className="stat-icon" style={{ background: '#e5f0e6', color: '#2d5d3e' }}>👤</div><div className="stat-content"><div className="stat-value">{generalMembers.length.toLocaleString('fa-IR')}</div><div className="stat-label">اعضای عادی باشگاه</div></div></div>
         <div className="stat-card" style={{ borderColor: requests.length > 0 ? '#9b3c32' : undefined }}><div className="stat-icon" style={{ background: requests.length > 0 ? '#fde8e6' : '#eee9e4', color: requests.length > 0 ? '#9b3c32' : '#766f64' }}>⚠️</div><div className="stat-content"><div className="stat-value" style={{ color: requests.length > 0 ? '#9b3c32' : undefined }}>{requests.length.toLocaleString('fa-IR')}</div><div className="stat-label">درخواست بررسی دستی</div></div></div>
       </div>
 
       <hr style={{ border: 0, borderTop: '1px solid #ebe6de' }} />
 
-      {/* ✅ بخش جدید: ویرایش قوانین */}
+      {/* ۲. ویرایش قوانین */}
       <div>
         <h2 className="card-title" style={{ marginBottom: '16px' }}>📜 ویرایش قوانین باشگاه</h2>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -226,7 +251,7 @@ export default function MembershipsManager({ initialOrgs }: { initialOrgs: Organ
 
       <hr style={{ border: 0, borderTop: '1px solid #ebe6de' }} />
 
-      {/* بخش آپلود و ویرایش اکسل */}
+      {/* ۳. بخش آپلود و ویرایش اکسل */}
       <div>
         <h2 className="card-title" style={{ marginBottom: '16px' }}>📤 آپلود لیست جدید</h2>
         {step === 1 && (
@@ -259,7 +284,7 @@ export default function MembershipsManager({ initialOrgs }: { initialOrgs: Organ
 
       <hr style={{ border: 0, borderTop: '1px solid #ebe6de' }} />
 
-      {/* سازمان‌های فعال */}
+      {/* ۴. سازمان‌های فعال */}
       <div>
         <h3 style={{ fontSize: '16px', fontWeight: 800, marginBottom: '14px' }}>📋 سازمان‌های فعال</h3>
         {initialOrgs.length === 0 ? <p className="empty-admin">هنوز هیچ سازمانی ثبت نشده است.</p> : (
@@ -284,7 +309,30 @@ export default function MembershipsManager({ initialOrgs }: { initialOrgs: Organ
 
       <hr style={{ border: 0, borderTop: '1px solid #ebe6de' }} />
 
-      {/* درخواست‌های بررسی دستی */}
+      {/* ۵. اعضای عادی باشگاه */}
+      <div>
+        <h3 style={{ fontSize: '16px', fontWeight: 800, marginBottom: '14px' }}>👤 اعضای عادی باشگاه مشتریان</h3>
+        {generalLoading ? <p className="empty-admin">در حال بارگذاری...</p> : generalMembers.length === 0 ? <p className="empty-admin">هنوز هیچ مشتری عادی ثبت‌نام نکرده است.</p> : (
+          <div className="table-responsive" style={{ overflowX: 'auto' }}>
+            <table className="sales-table" style={{ minWidth: '500px' }}>
+              <thead><tr><th>شماره تلفن</th><th>تاریخ ثبت‌نام</th><th>یادداشت</th></tr></thead>
+              <tbody>
+                {generalMembers.map((m, idx) => (
+                  <tr key={idx}>
+                    <td dir="ltr" style={{ textAlign: 'right' }}><strong>{m.phone}</strong></td>
+                    <td dir="ltr" style={{ textAlign: 'right', fontSize: '12px' }}>{new Date(m.updated_at).toLocaleDateString('fa-IR')}</td>
+                    <td style={{ fontSize: '12px', color: '#766f64' }}>{m.notes}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      <hr style={{ border: 0, borderTop: '1px solid #ebe6de' }} />
+
+      {/* ۶. درخواست‌های بررسی دستی */}
       <div>
         <h3 style={{ fontSize: '16px', fontWeight: 800, marginBottom: '14px', color: '#9b3c32' }}>⚠️ درخواست‌های بررسی دستی</h3>
         {requests.length === 0 ? <p className="empty-admin">هیچ درخواستی وجود ندارد.</p> : (
