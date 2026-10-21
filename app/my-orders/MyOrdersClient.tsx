@@ -124,7 +124,6 @@ export default function MyOrdersClient() {
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <div className="my-orders-user-icon">👤</div>
             <div>
-              {/* ✅ اگر اسم کاربر 'کاربر' بود، ننویسد کاربر عزیز */}
               <strong style={{ fontSize: '18px' }}>
                 خوش اومدی، {customer.name && customer.name !== 'کاربر' ? `${customer.name} عزیز` : 'دوست عزیز'}! 🌟
               </strong>
@@ -143,7 +142,6 @@ export default function MyOrdersClient() {
             </div>
             <div style={{ background: '#fff', padding: '12px', borderRadius: '10px', textAlign: 'center', border: '1px solid #ebe6de' }}>
               <div style={{ fontSize: '11px', color: '#766f64', marginBottom: '4px' }}>تخفیفات</div>
-              {/* ✅ اصلاح نمایش صفر (نقطه) */}
               <strong style={{ fontSize: '14px', color: '#9b3c32' }}>
                 {totalDiscount > 0 ? formatPrice(totalDiscount) : '-'} <small>ت</small>
               </strong>
@@ -161,6 +159,7 @@ export default function MyOrdersClient() {
           </div>
         </div>
       ) : (
+        // ✅ اگر عضو نبود، بنر زرد ثبت‌نام نمایش داده می‌شود
         <div onClick={() => setShowMemberModal(true)} style={{ background: 'linear-gradient(135deg, #fdf6e3 0%, #fef8e8 100%)', border: '1.5px solid #d99f59', borderRadius: '14px', padding: '16px', display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer', marginBottom: '16px', boxShadow: '0 4px 12px rgba(217, 159, 89, 0.1)' }}>
           <div style={{ fontSize: '28px' }}>🎓</div>
           <div>

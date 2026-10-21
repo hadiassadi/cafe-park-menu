@@ -26,36 +26,30 @@ export async function POST(req: Request) {
     const deviceIdHash = hashData(deviceToken)
     const db = supabaseAdmin()
 
-    // ✅ ۱. چک کردن اینکه آیا این دستگاه قبلاً ثبت‌نام کرده است یا نه
-    const { data: alreadyRegistered } = await db
-      .from('organization_members')
-      .select('id')
-      .eq('device_id_hash', deviceIdHash)
-      .eq('is_registered', true)
-      .maybeSingle()
-
-    const { data: alreadyGeneral } = await db
-      .from('customers')
-      .select('phone')
-      .eq('device_id_hash', deviceIdHash)
-      .maybeSingle()
-
-    if (alreadyRegistered || alreadyGeneral) {
-      return NextResponse.json({ 
-        error: 'شما یکبار ثبت‌نام کرده‌اید. برای ثبت سفارش تخفیف‌دار سازمانی باید از همان دستگاه (موبایل، تبلت یا سیستم) استفاده کنید؛ در غیر این صورت هیچ تخفیفی به شما تعلق نخواهد گرفت.' 
-      }, { status: 400 })
-    }
-
-        // ═══════════════════════════════════════════════
+    // ═══════════════════════════════════════════════
     // حالت اول: مشتری عادی (باشگاه مشتریان)
     // ═══════════════════════════════════════════════
     if (orgId === 'general') {
       const phoneClean = phone.trim()
       
+      // ✅ چک می‌کنیم آیا این شماره تلفن قبلاً ثبت‌نام کرده است یا نه
+      const { data: existingCustomer } = await db
+        .from('customers')
+        .select('device_id_hash')
+        .eq('phone', phoneClean)
+        .maybeSingle()
+
+      if (existingCustomer && existingCustomer.device_id_hash) {
+        return NextResponse.json({ 
+          error: 'شما یکبار ثبت‌نام کرده‌اید. برای استفاده از تخفیف باید از همان دستگاه قبلی (موبایل/تبلت/سیستم) استفاده کنید؛ در غیر این صورت تخفیفی تعلق نمی‌گیرد.' 
+        }, { status: 400 })
+      }
+
+      // اگر قبلاً ثبت‌نام نکرده بود، ثبت‌نام را انجام می‌دهیم
       const { error: custError } = await db.from('customers').upsert({
         phone: phoneClean,
-        name: fullName, // ✅ ذخیره اسم مشتری
-        device_id_hash: deviceIdHash, 
+        name: fullName,
+        device_id_hash: deviceIdHash,
         notes: `ثبت‌نام در باشگاه مشتریان`,
         tags: ['عضو باشگاه مشتریان'],
         updated_at: new Date().toISOString()
@@ -77,6 +71,21 @@ export async function POST(req: Request) {
     const memberIdHash = hashData(memberId)
     const phoneHash = hashData(phone)
 
+    // ✅ ۱. چک می‌کنیم آیا این شماره دانشجویی قبلاً توسط کسی ثبت‌نام شده است یا نه
+    const { data: existingMember } = await db
+      .from('organization_members')
+      .select('id')
+      .eq('member_id_hash', memberIdHash)
+      .eq('is_registered', true)
+      .maybeSingle()
+
+    if (existingMember) {
+      return NextResponse.json({ 
+        error: 'این شماره دانشجویی/پرسنلی قبلاً ثبت‌نام کرده است. برای استفاده از تخفیف باید از همان دستگاه قبلی استفاده کنید.' 
+      }, { status: 400 })
+    }
+
+    // ✅ ۲. تطبیق با لیست اکسل
     const { data: memberArray, error: findError } = await db
       .from('organization_members')
       .select('id, is_registered, metadata')
@@ -97,8 +106,6 @@ export async function POST(req: Request) {
       })
       return NextResponse.json({ success: false, message: 'اطلاعات شما در لیست سازمان یافت نشد. درخواست شما جهت بررسی دستی ثبت شد.' })
     }
-
-    if (member.is_registered) return NextResponse.json({ error: 'این کد دانشجویی قبلاً توسط دستگاه دیگری ثبت‌نام شده است.' }, { status: 400 })
 
     const newMetadata = { 
       ...(member.metadata || {}), 
