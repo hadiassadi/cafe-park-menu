@@ -24,8 +24,9 @@ export async function POST(req: Request) {
     const { count: dailyCount } = await db.from('redemption_logs').select('*', { count: 'exact', head: true }).eq('member_id', member.id).gte('created_at', `${today}T00:00:00Z`)
     const { count: totalCount } = await db.from('redemption_logs').select('*', { count: 'exact', head: true }).eq('member_id', member.id)
 
-    if (dailyCount >= org.max_daily_orders) return NextResponse.json({ discount: 0, discountPercent: 0, message: 'سقف روزانه پر شده', eligibleProductIds: [] })
-    if (totalCount >= org.max_total_orders) return NextResponse.json({ discount: 0, discountPercent: 0, message: 'سقف کل پر شده', eligibleProductIds: [] })
+    // ✅ استفاده از ?? 0 برای جلوگیری از خطای null
+    if ((dailyCount ?? 0) >= org.max_daily_orders) return NextResponse.json({ discount: 0, discountPercent: 0, message: 'سقف روزانه پر شده', eligibleProductIds: [] })
+    if ((totalCount ?? 0) >= org.max_total_orders) return NextResponse.json({ discount: 0, discountPercent: 0, message: 'سقف کل پر شده', eligibleProductIds: [] })
 
     const productIds = items.map((i: any) => i.product_id)
     const { data: products } = await db.from('products').select('id, coupon_eligible, categories(coupon_eligible)').in('id', productIds)
@@ -37,7 +38,11 @@ export async function POST(req: Request) {
     for (const item of items) {
       const p = productMap.get(item.product_id)
       if (!p) continue
-      const eligible = p.coupon_eligible !== null ? p.coupon_eligible : p.categories?.coupon_eligible
+      // ✅ استفاده از as any برای رفع خطای TypeScript در کوئری تودرتو
+      const isProductEligible = p.coupon_eligible
+      const isCategoryEligible = (p.categories as any)?.coupon_eligible
+      const eligible = isProductEligible !== null ? isProductEligible : isCategoryEligible
+      
       if (eligible) {
         eligibleSubtotal += (item.unit_price * item.quantity)
         eligibleProductIds.push(item.product_id)

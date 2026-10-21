@@ -173,7 +173,6 @@ function CheckoutForm() {
 
       <form onSubmit={handleSubmit} className="checkout-form">
         
-        {/* ۱. بنر خوش‌آمدگویی */}
         {customerInfo && (
           <div style={{ padding: '16px', borderRadius: '12px', background: '#fffdf9', border: '1px solid #d99f59', marginBottom: '16px', textAlign: 'center' }}>
             <strong style={{ fontSize: '16px', color: '#6b4f3a', display: 'block', marginBottom: '4px' }}>خوش اومدی، {customerInfo.name} عزیز! 🌟</strong>
@@ -185,17 +184,15 @@ function CheckoutForm() {
           </div>
         )}
 
-        {/* ۲. بنر تخفیف باشگاه */}
         {membershipInfo?.orgName && (
-          <div style={{ padding: '12px', borderRadius: '10px', background: membershipInfo.discount > 0 ? '#e5f0e6' : '#fde8e6', color: membershipInfo.discount > 0 ? '#2d5d3e' : '#9b3c32', fontSize: '13px', fontWeight: 700, marginBottom: '16px', textAlign: 'center' }}>
-            {membershipInfo.discount > 0 
+          <div style={{ padding: '12px', borderRadius: '10px', background: (membershipInfo.discount || 0) > 0 ? '#e5f0e6' : '#fde8e6', color: (membershipInfo.discount || 0) > 0 ? '#2d5d3e' : '#9b3c32', fontSize: '13px', fontWeight: 700, marginBottom: '16px', textAlign: 'center' }}>
+            {(membershipInfo.discount || 0) > 0 
               ? `🎉 کاربر گرامی، سفارش شما به عنوان عضو ${membershipInfo.orgName} شامل تخفیف ویژه است.`
               : `⚠️ ${membershipInfo.message || 'سقف تخفیف شما پر شده است.'}`
             }
           </div>
         )}
 
-        {/* ۳. محل سرویس */}
         <div className="checkout-card">
           <div className="checkout-card-title">🪑 محل سرویس</div>
           <div className="checkout-field">
@@ -205,7 +202,6 @@ function CheckoutForm() {
           <div className="checkout-field"><label htmlFor="note">توضیحات (اختیاری)</label><textarea id="note" value={note} onChange={(e) => setNote(e.target.value)} placeholder="مثلاً: قند جدا، بدون شکر..." rows={2} disabled={saving} /></div>
         </div>
 
-        {/* ۴. خلاصه سفارش */}
         <div className="checkout-card">
           <div className="checkout-card-title">🧾 خلاصه سفارش ({formatPrice(totalItems)} قلم)</div>
           <ul className="checkout-items">
@@ -242,10 +238,8 @@ function CheckoutForm() {
               )
             })}
           </ul>
-          {/* ✅ حذف شد: مبلغ جمع کل از اینجا حذف شد تا در خلاصه نهایی فقط یک بار دیده شود */}
         </div>
 
-        {/* ۵. اطلاعات مشتری */}
         {!loadingUser && !customerInfo && (
           <div className="checkout-card">
             <div className="checkout-card-title">📋 اطلاعات شما</div>
@@ -254,7 +248,6 @@ function CheckoutForm() {
           </div>
         )}
 
-        {/* ۶. روش پرداخت */}
         {!settingsLoading && (
           <div className="checkout-card">
             <div className="checkout-card-title">💳 روش پرداخت</div>
@@ -290,7 +283,6 @@ function CheckoutForm() {
           </div>
         )}
 
-        {/* ۷. خلاصه نهایی */}
         <div className="checkout-card">
           <div className="checkout-card-title">💰 خلاصه نهایی</div>
           
@@ -299,18 +291,17 @@ function CheckoutForm() {
             <strong>{formatPrice(totalPrice)} تومان</strong>
           </div>
           
-          {membershipInfo?.discount > 0 && (
+          {(membershipInfo?.discount || 0) > 0 && (
             <div className="checkout-total-row" style={{ borderBottom: 'none', padding: '8px 0', color: '#2d5d3e' }}>
               <span style={{ fontWeight: 'bold' }}>تخفیف شما:</span>
-              <strong>− {formatPrice(membershipInfo.discount)} تومان</strong>
+              <strong>− {formatPrice(membershipInfo?.discount || 0)} تومان</strong>
             </div>
           )}
 
           <div className="checkout-total-row final" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '10px', paddingTop: '16px' }}>
             <span style={{ fontSize: '16px', fontWeight: 800 }}>قابل پرداخت:</span>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              {/* ✅ مبلغ خط‌خورده کنار مبلغ نهایی قرار گرفت */}
-              {membershipInfo?.discount > 0 && (
+              {(membershipInfo?.discount || 0) > 0 && (
                 <span style={{ textDecoration: 'line-through', color: '#aaa', fontSize: '13px', fontWeight: 'normal' }}>
                   {formatPrice(totalPrice)}
                 </span>

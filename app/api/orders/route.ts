@@ -31,7 +31,6 @@ export async function POST(request: NextRequest) {
     
     const deviceIdHash = hashData(deviceToken)
 
-    // ✅ ۱. بررسی تخفیف باشگاه (محاسبه مجدد سمت سرور برای امنیت)
     let membershipDiscount = 0
     let membershipMemberId = null
 
@@ -46,12 +45,11 @@ export async function POST(request: NextRequest) {
       const org = member.organizations as any
       const today = new Date().toISOString().split('T')[0]
       
-      // چک کردن تاریخ انقضا و سقف‌ها
       const { count: dailyCount } = await db.from('redemption_logs').select('*', { count: 'exact', head: true }).eq('member_id', member.id).gte('created_at', `${today}T00:00:00Z`)
       const { count: totalCount } = await db.from('redemption_logs').select('*', { count: 'exact', head: true }).eq('member_id', member.id)
 
-      if (new Date(org.expires_at) > new Date() && dailyCount < org.max_daily_orders && totalCount < org.max_total_orders) {
-        // محاسبه اقلام مجاز
+      // ✅ استفاده از ?? 0
+      if (new Date(org.expires_at) > new Date() && (dailyCount ?? 0) < org.max_daily_orders && (totalCount ?? 0) < org.max_total_orders) {
         const productIds = items.map((i: any) => i.product_id)
         const { data: products } = await db.from('products').select('id, coupon_eligible, categories(coupon_eligible)').in('id', productIds)
         const productMap = new Map(products?.map(p => [p.id, p]))
@@ -60,7 +58,8 @@ export async function POST(request: NextRequest) {
         for (const item of items) {
           const p = productMap.get(item.product_id)
           if (!p) continue
-          const eligible = p.coupon_eligible !== null ? p.coupon_eligible : p.categories?.coupon_eligible
+          // ✅ استفاده از as any
+          const eligible = p.coupon_eligible !== null ? p.coupon_eligible : (p.categories as any)?.coupon_eligible
           if (eligible) eligibleSubtotal += (item.unit_price * item.quantity)
         }
         
@@ -69,11 +68,9 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // ۲. تولید شماره سفارش
     const { data: lastOrder } = await db.from('orders').select('order_number').order('order_number', { ascending: false }).limit(1).maybeSingle()
     const nextOrderNumber = (lastOrder?.order_number || 1000) + 1
 
-    // ۳. ثبت سفارش
     const finalSubtotal = subtotal - membershipDiscount
 
     const { data: order, error: orderErr } = await db
@@ -94,12 +91,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'خطا در ثبت سفارش' }, { status: 500 })
     }
 
-    // ✅ ۴. ثبت در دفتر کل استفاده از تخفیف
     if (membershipMemberId && membershipDiscount > 0) {
       await db.from('redemption_logs').insert({ member_id: membershipMemberId, order_id: order.id })
     }
 
-    // ۵. ست کردن کوکی
     const response = NextResponse.json({ order })
     if (isNewToken) {
       response.cookies.set('cafe_device_token', deviceToken, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', maxAge: 60 * 60 * 24 * 365, path: '/' })
