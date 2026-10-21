@@ -150,12 +150,22 @@ export default function MyOrdersClient() {
         </div>
       )}
 
-      {membership ? (
+            {membership ? (
         <div style={{ background: '#e5f0e6', border: '1.5px solid #477052', borderRadius: '14px', padding: '16px', display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
           <div style={{ fontSize: '28px' }}>✅</div>
           <div>
-            <strong style={{ fontSize: '14px', color: '#2d5d3e', display: 'block' }}>شما عضو باشگاه {membership.orgName} هستید</strong>
-            <small style={{ fontSize: '11px', color: '#3d6b48' }}>تخفیف‌های سازمانی شما به این دستگاه متصل است.</small>
+            <strong style={{ fontSize: '14px', color: '#2d5d3e', display: 'block' }}>
+              {membership.orgId === 'general' 
+                ? 'شما عضو باشگاه مشتریان کافه پارک هستید' 
+                : `شما عضو باشگاه ${membership.orgName} هستید`
+              }
+            </strong>
+            <small style={{ fontSize: '11px', color: '#3d6b48' }}>
+              {membership.orgId === 'general'
+                ? 'اطلاعات شما در سیستم ثبت شده است و از اخبار و امکانات ویژه باخبر خواهید شد.'
+                : 'تخفیف‌های سازمانی شما به این دستگاه متصل است و در زمان سفارش اعمال می‌شود.'
+              }
+            </small>
           </div>
         </div>
       ) : (
