@@ -124,7 +124,10 @@ export default function MyOrdersClient() {
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <div className="my-orders-user-icon">👤</div>
             <div>
-              <strong style={{ fontSize: '18px' }}>خوش اومدی، {customer.name} عزیز! 🌟</strong>
+              {/* ✅ اگر اسم کاربر 'کاربر' بود، ننویسد کاربر عزیز */}
+              <strong style={{ fontSize: '18px' }}>
+                خوش اومدی، {customer.name && customer.name !== 'کاربر' ? `${customer.name} عزیز` : 'دوست عزیز'}! 🌟
+              </strong>
               <small dir="ltr">{customer.phone}</small>
             </div>
           </div>
@@ -140,7 +143,10 @@ export default function MyOrdersClient() {
             </div>
             <div style={{ background: '#fff', padding: '12px', borderRadius: '10px', textAlign: 'center', border: '1px solid #ebe6de' }}>
               <div style={{ fontSize: '11px', color: '#766f64', marginBottom: '4px' }}>تخفیفات</div>
-              <strong style={{ fontSize: '14px', color: '#9b3c32' }}>{formatPrice(totalDiscount)} <small>ت</small></strong>
+              {/* ✅ اصلاح نمایش صفر (نقطه) */}
+              <strong style={{ fontSize: '14px', color: '#9b3c32' }}>
+                {totalDiscount > 0 ? formatPrice(totalDiscount) : '-'} <small>ت</small>
+              </strong>
             </div>
           </div>
         </div>
@@ -197,7 +203,6 @@ export default function MyOrdersClient() {
                     <span>جمع کل:</span>
                     <strong>{formatPrice(order.subtotal)} تومان</strong>
                   </div>
-                  {/* ✅ نمایش تخفیف مشتری در کارت */}
                   {order.coupon_discount && order.coupon_discount > 0 ? (
                     <div style={{ fontSize: '12px', color: '#2d5d3e', marginTop: '6px', fontWeight: 'bold', background: '#e5f0e6', padding: '4px 8px', borderRadius: '6px', display: 'inline-block' }}>
                       🎁 تخفیف شما از این سفارش: {formatPrice(order.coupon_discount)} تومان

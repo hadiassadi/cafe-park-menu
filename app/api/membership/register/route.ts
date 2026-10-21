@@ -46,7 +46,7 @@ export async function POST(req: Request) {
       }, { status: 400 })
     }
 
-    // ═══════════════════════════════════════════════
+        // ═══════════════════════════════════════════════
     // حالت اول: مشتری عادی (باشگاه مشتریان)
     // ═══════════════════════════════════════════════
     if (orgId === 'general') {
@@ -54,7 +54,8 @@ export async function POST(req: Request) {
       
       const { error: custError } = await db.from('customers').upsert({
         phone: phoneClean,
-        device_id_hash: deviceIdHash, // ✅ ذخیره شناسه دستگاه
+        name: fullName, // ✅ ذخیره اسم مشتری
+        device_id_hash: deviceIdHash, 
         notes: `ثبت‌نام در باشگاه مشتریان`,
         tags: ['عضو باشگاه مشتریان'],
         updated_at: new Date().toISOString()

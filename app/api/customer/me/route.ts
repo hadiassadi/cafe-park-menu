@@ -35,12 +35,12 @@ export async function GET() {
       if (!customer && memberData.metadata?._display_name) {
         customer = { name: memberData.metadata._display_name, phone: memberData.metadata._phone || '' }
       }
-    } else {
+        } else {
       // ✅ چک کردن عضویت عادی
-      const { data: generalMember } = await db.from('customers').select('phone').eq('device_id_hash', deviceIdHash).maybeSingle()
+      const { data: generalMember } = await db.from('customers').select('phone, name').eq('device_id_hash', deviceIdHash).maybeSingle()
       if (generalMember) {
         membership = { orgId: 'general', orgName: 'باشگاه مشتریان کافه پارک' }
-        if (!customer) customer = { name: 'کاربر', phone: generalMember.phone }
+        if (!customer) customer = { name: generalMember.name || 'کاربر', phone: generalMember.phone }
       }
     }
 
