@@ -22,7 +22,7 @@ export async function GET() {
     
     const db = createClient(url, key, { auth: { persistSession: false } })
 
-    // ۱. اطلاعات مشتری از آخرین سفارش (جستجو با هر دو هش)
+    // ۱. اطلاعات مشتری از آخرین سفارش
     const { data: orderData } = await db
       .from('orders')
       .select('customer_name, customer_phone')
@@ -34,14 +34,50 @@ export async function GET() {
     let customer = null
     if (orderData) customer = { name: orderData.customer_name, phone: orderData.customer_phone }
 
-    // ۲. چک کردن عضویت
+    // ۲. چک کردن عضویت (اول با شماره تلفن، بعد با دستگاه)
     let membership = null
-    const { data: memberData } = await db
-      .from('organization_members')
-      .select('organization_id, metadata')
-      .in('device_id_hash', [deviceIdHashOld, deviceIdHashNew])
-      .eq('is_registered', true)
-      .maybeSingle()
+    let memberData = null
+    let generalMember = null
+
+    // اگر شماره تلفن داریم، با شماره تلفن توی جدول مشتریان و سازمان‌ها می‌گردیم
+    if (customer && customer.phone) {
+      const phoneHash = hashData(customer.phone)
+      
+      // چک کردن عضویت سازمانی با شماره تلفن
+      const { data: m } = await db
+        .from('organization_members')
+        .select('organization_id, metadata')
+        .eq('phone_hash', phoneHash)
+        .eq('is_registered', true)
+        .maybeSingle()
+      memberData = m
+
+      // چک کردن عضویت عادی با شماره تلفن
+      const { data: gm } = await db
+        .from('customers')
+        .select('phone, name')
+        .eq('phone', customer.phone)
+        .maybeSingle()
+      generalMember = gm
+    } 
+    
+    // اگر با شماره تلفن پیدا نشد، با شناسه دستگاه می‌گردیم
+    if (!memberData && !generalMember) {
+      const { data: m } = await db
+        .from('organization_members')
+        .select('organization_id, metadata')
+        .in('device_id_hash', [deviceIdHashOld, deviceIdHashNew])
+        .eq('is_registered', true)
+        .maybeSingle()
+      memberData = m
+
+      const { data: gm } = await db
+        .from('customers')
+        .select('phone, name')
+        .in('device_id_hash', [deviceIdHashOld, deviceIdHashNew])
+        .maybeSingle()
+      generalMember = gm
+    }
 
     if (memberData && memberData.organization_id) {
       const { data: orgData } = await db.from('organizations').select('name').eq('id', memberData.organization_id).single()
@@ -49,22 +85,14 @@ export async function GET() {
       if (!customer && memberData.metadata?._display_name) {
         customer = { name: memberData.metadata._display_name, phone: memberData.metadata._phone || '' }
       }
-    } else {
-      // ✅ چک کردن عضویت عادی
-      const { data: generalMember } = await db
-        .from('customers')
-        .select('phone, name')
-        .in('device_id_hash', [deviceIdHashOld, deviceIdHashNew])
-        .maybeSingle()
-
-      if (generalMember) {
-        membership = { orgId: 'general', orgName: 'باشگاه مشتریان کافه پارک' }
-        if (!customer) customer = { name: generalMember.name || 'کاربر', phone: generalMember.phone }
-      }
+    } else if (generalMember) {
+      membership = { orgId: 'general', orgName: 'باشگاه مشتریان کافه پارک' }
+      if (!customer) customer = { name: generalMember.name || 'کاربر', phone: generalMember.phone }
     }
 
     return NextResponse.json({ customer, membership }, { headers: { 'Cache-Control': 'no-store' } })
   } catch (err: any) {
+    console.error('ME API Error:', err)
     return NextResponse.json({ customer: null, membership: null }, { status: 500 })
   }
 }
