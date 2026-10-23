@@ -46,11 +46,11 @@ export async function updateOrderStatus(formData: FormData) {
     if (note) updateData.cancellation_note = String(note)
   }
 
-    const { error } = await db.from('orders').update(updateData).eq('id', id)
+  const { error } = await db.from('orders').update(updateData).eq('id', id)
 
   if (error) return { error: error.message }
 
-  // 🔔 Push notification (fire and forget — منتظر جواب نمی‌مونیم)
+  // 🔔 Push notification
   if (
     ['confirmed', 'preparing', 'ready', 'delivered', 'cancelled'].includes(
       status
@@ -63,8 +63,10 @@ export async function updateOrderStatus(formData: FormData) {
 
   revalidatePath('/admin/orders')
   revalidatePath('/admin')
+  revalidatePath(`/order/${id}`)
   return { success: true }
 }
+
 // ─────────────────────────────────────────────
 // پاکسازی سفارش‌های قدیمی (بیشتر از N روز)
 // ─────────────────────────────────────────────
@@ -212,26 +214,42 @@ export async function updatePaymentStatus(
       payment_status: newStatus,
     }
 
+    let autoConfirmed = false
+
     if (newStatus === 'paid') {
       updates.payment_verified_at = new Date().toISOString()
+      
+      // ✅ باگ‌فیکس نهایی: اگر پرداخت تایید شد و سفارش pending بود، وضعیت رو به confirmed تغییر بده
+      const { data: currentOrder } = await db
+        .from('orders')
+        .select('status')
+        .eq('id', orderId)
+        .single()
+
+      if (currentOrder && currentOrder.status === 'pending') {
+        updates.status = 'confirmed'
+        updates.confirmed_at = new Date().toISOString()
+        autoConfirmed = true
+      }
     }
 
-    if (note) {
-      updates.payment_note = note
-    }
+    if (note) updates.payment_note = note
+    if (method) updates.payment_method = method
 
-    if (method) {
-      updates.payment_method = method
-    }
-
-    const { error } = await db
-      .from('orders')
-      .update(updates)
-      .eq('id', orderId)
+    const { error } = await db.from('orders').update(updates).eq('id', orderId)
 
     if (error) return { error: error.message }
 
+    // 🔔 اگر وضعیت به صورت خودکار تغییر کرد، پوش هم ارسال بشه
+    if (autoConfirmed) {
+      sendPushToOrder(orderId, 'confirmed').catch((err) =>
+        console.error('[updatePaymentStatus] push failed:', err)
+      )
+    }
+
     revalidatePath('/admin/orders')
+    revalidatePath('/admin')
+    revalidatePath(`/order/${orderId}`) 
     return { success: true }
   } catch (err: any) {
     return { error: err?.message || 'خطای غیرمنتظره' }

@@ -52,6 +52,8 @@ export async function POST(req: NextRequest) {
       cancellation_reason_label: reasonLabel || null,
       cancellation_note: note || null,
     }
+	    // ✅ آزادسازی سهمیه تخفیف (در صورت وجود)
+    await db.from('redemption_logs').delete().eq('order_id', orderId)
 
     const { error: updateError } = await db
       .from('orders')

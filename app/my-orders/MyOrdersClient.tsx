@@ -8,10 +8,8 @@ import { formatPersianDate } from '@/lib/format-date'
 const formatPrice = (n: number) => new Intl.NumberFormat('fa-IR').format(Math.round(n))
 
 type OrderItem = { product_name: string; option_name: string | null; unit_price: number; quantity: number; variant_option_id?: string | null; variant_group_id?: string | null; product_id?: string | null; image_url?: string | null }
-type Order = { id: string; order_number: number; items: OrderItem[]; subtotal: number; original_subtotal: number | null; coupon_code: string | null; coupon_discount: number | null; status: string; created_at: string; cancelled_by: string | null; cancellation_reason_label: string | null; customer_name: string; customer_phone: string }
-type Filter = 'all' | 'active' | 'delivered' | 'cancelled'
+type Order = { id: string; order_number: number; items: OrderItem[]; subtotal: number; original_subtotal: number | null; coupon_code: string | null; coupon_discount: number | null; status: string; created_at: string; cancelled_by: string | null; cancellation_reason_label: string | null; customer_name: string; customer_phone: string; payment_status?: string; payment_method?: string }
 
-const FILTER_LABELS: Record<Filter, string> = { all: 'همه', active: 'در جریان', delivered: 'تحویل شده', cancelled: 'لغو شده' }
 const STATUS_INFO: Record<string, { label: string; color: string; icon: string }> = {
   pending: { label: 'در انتظار تأیید', color: '#9a6b3f', icon: '⏳' },
   confirmed: { label: 'تأیید شده', color: '#4a7c9b', icon: '✓' },
@@ -21,11 +19,22 @@ const STATUS_INFO: Record<string, { label: string; color: string; icon: string }
   cancelled: { label: 'لغو شده', color: '#9b3c32', icon: '❌' },
 }
 
+const getPaymentMethodLabel = (method: string | null | undefined) => {
+  if (method === 'online') return 'آنلاین';
+  if (method === 'cash') return 'نقدی';
+  if (method === 'card') return 'کارت‌خوان';
+  if (method === 'transfer') return 'کارت به کارت';
+  return 'نامشخص';
+};
+
 export default function MyOrdersClient() {
   const { addItem } = useCart()
   const [orders, setOrders] = useState<Order[]>([])
   const [loading, setLoading] = useState(true)
-  const [filter, setFilter] = useState<Filter>('all')
+  
+  // ✅ تب‌های اصلی (سفارش‌های باز / تاریخچه)
+  const [activeTab, setActiveTab] = useState<'open' | 'history'>('open')
+
   const [customer, setCustomer] = useState<{ name: string; phone: string } | null>(null)
   const [toast, setToast] = useState<string | null>(null)
 
@@ -102,25 +111,57 @@ export default function MyOrdersClient() {
   const totalSpent = validOrders.reduce((sum, o) => sum + o.subtotal, 0)
   const totalDiscount = validOrders.reduce((sum, o) => sum + (o.coupon_discount || 0), 0)
 
-  const filtered = orders.filter((o) => {
-    if (filter === 'all') return true
-    if (filter === 'active') return ['pending', 'confirmed', 'preparing', 'ready'].includes(o.status)
-    if (filter === 'delivered') return o.status === 'delivered'
-    if (filter === 'cancelled') return o.status === 'cancelled'
-    return true
+  // ✅ فیلتر کردن سفارش‌ها بر اساس تب فعال
+  const filteredOrders = orders.filter((o) => {
+    if (activeTab === 'open') {
+      return ['pending', 'confirmed', 'preparing', 'ready'].includes(o.status)
+    } else {
+      return ['delivered', 'cancelled'].includes(o.status)
+    }
   })
 
   return (
     <div className="my-orders-page">
-      <div className="my-orders-header">
-        <Link href="/" className="my-orders-back">← منو</Link>
-        <h1>سفارش‌های من</h1>
-        <span style={{ width: 60 }} />
+      {/* ✅ هدر بازطراحی شده */}
+      <div className="my-orders-header" style={{ flexDirection: 'column', alignItems: 'stretch', padding: '0', borderBottom: 'none' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 0', borderBottom: '1px solid #e3ddd2' }}>
+          <Link href="/" className="my-orders-back" style={{ padding: '6px 12px', fontSize: '13px' }}>← منو</Link>
+          <h1 style={{ margin: 0, fontSize: '18px', color: '#29251f' }}>پنل مشتری</h1>
+          <span style={{ width: '60px' }} />
+        </div>
+
+        {/* ✅ تب‌های جدید */}
+        <div style={{ display: 'flex', width: '100%', borderBottom: '1px solid #e3ddd2' }}>
+          <button
+            onClick={() => setActiveTab('open')}
+            style={{
+              flex: 1, padding: '14px 10px', fontSize: '14px', fontWeight: 'bold',
+              background: 'transparent', border: 'none', 
+              borderBottom: activeTab === 'open' ? '3px solid #6b4f3a' : '3px solid transparent',
+              color: activeTab === 'open' ? '#6b4f3a' : '#766f64', 
+              cursor: 'pointer', transition: 'all 0.2s ease'
+            }}
+          >
+            🛍️ سفارش‌های باز
+          </button>
+          <button
+            onClick={() => setActiveTab('history')}
+            style={{
+              flex: 1, padding: '14px 10px', fontSize: '14px', fontWeight: 'bold',
+              background: 'transparent', border: 'none', 
+              borderBottom: activeTab === 'history' ? '3px solid #6b4f3a' : '3px solid transparent',
+              color: activeTab === 'history' ? '#6b4f3a' : '#766f64', 
+              cursor: 'pointer', transition: 'all 0.2s ease'
+            }}
+          >
+            📜 تاریخچه سفارشات
+          </button>
+        </div>
       </div>
 
       {/* ✅ کارت خوش‌آمدگویی و آمار */}
       {customer && (
-        <div className="my-orders-user" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '16px', background: 'linear-gradient(135deg, #fffdf9 0%, #fbf9f5 100%)', border: '1px solid #e3ddd2' }}>
+        <div className="my-orders-user" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '16px', background: 'linear-gradient(135deg, #fffdf9 0%, #fbf9f5 100%)', border: '1px solid #e3ddd2', marginTop: '16px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <div className="my-orders-user-icon">👤</div>
             <div>
@@ -150,7 +191,7 @@ export default function MyOrdersClient() {
         </div>
       )}
 
-            {membership ? (
+      {membership ? (
         <div style={{ background: '#e5f0e6', border: '1.5px solid #477052', borderRadius: '14px', padding: '16px', display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
           <div style={{ fontSize: '28px' }}>✅</div>
           <div>
@@ -169,7 +210,6 @@ export default function MyOrdersClient() {
           </div>
         </div>
       ) : (
-        // ✅ اگر عضو نبود، بنر زرد ثبت‌نام نمایش داده می‌شود
         <div onClick={() => setShowMemberModal(true)} style={{ background: 'linear-gradient(135deg, #fdf6e3 0%, #fef8e8 100%)', border: '1.5px solid #d99f59', borderRadius: '14px', padding: '16px', display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer', marginBottom: '16px', boxShadow: '0 4px 12px rgba(217, 159, 89, 0.1)' }}>
           <div style={{ fontSize: '28px' }}>🎓</div>
           <div>
@@ -179,19 +219,15 @@ export default function MyOrdersClient() {
         </div>
       )}
 
-      {orders.length > 0 && (
-        <div className="my-orders-filters">
-          {(Object.keys(FILTER_LABELS) as Filter[]).map((f) => (
-            <button key={f} type="button" className={`filter-chip ${filter === f ? 'active' : ''}`} onClick={() => setFilter(f)}>{FILTER_LABELS[f]}</button>
-          ))}
+      {filteredOrders.length === 0 ? (
+        <div className="my-orders-empty">
+          {activeTab === 'open' 
+            ? 'در حال حاضر هیچ سفارش بازی ندارید.' 
+            : 'هنوز سابقه سفارشی (تحویل شده یا لغو شده) ندارید.'}
         </div>
-      )}
-
-      {filtered.length === 0 ? (
-        <div className="my-orders-empty">{orders.length === 0 ? 'هنوز سفارشی ثبت نکردی.' : 'سفارشی با این فیلتر پیدا نشد.'}</div>
       ) : (
-        <div className="my-orders-list">
-          {filtered.map((order) => {
+        <div className="my-orders-list" style={{ marginTop: '16px' }}>
+          {filteredOrders.map((order) => {
             const info = STATUS_INFO[order.status] || STATUS_INFO.pending
             return (
               <div key={order.id} className="my-order-card">
@@ -199,7 +235,24 @@ export default function MyOrdersClient() {
                   <div className="my-order-num">🧾 سفارش #{formatPrice(order.order_number)}</div>
                   <span className="my-order-status" style={{ background: info.color + '20', color: info.color }}>{info.icon} {info.label}</span>
                 </div>
-                <div className="my-order-date">📅 {formatPersianDate(order.created_at)}</div>
+                
+                <div className="my-order-date" style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span>📅 {formatPersianDate(order.created_at)}</span>
+                  {order.payment_status === 'paid' ? (
+                    <span style={{ color: '#2d5d3e', fontWeight: 'bold', fontSize: '11px', background: '#e5f0e6', padding: '2px 6px', borderRadius: '4px' }}>
+                      ✅ تسویه شد ({getPaymentMethodLabel(order.payment_method)})
+                    </span>
+                  ) : order.payment_status === 'pending_review' ? (
+                    <span style={{ color: '#9a6b3f', fontWeight: 'bold', fontSize: '11px', background: '#fff4d9', padding: '2px 6px', borderRadius: '4px' }}>
+                      ⏳ در انتظار تایید رسید
+                    </span>
+                  ) : (
+                    <span style={{ color: '#9b3c32', fontWeight: 'bold', fontSize: '11px', background: '#fde8e6', padding: '2px 6px', borderRadius: '4px' }}>
+                      ⏱ پرداخت نشده
+                    </span>
+                  )}
+                </div>
+
                 <div className="my-order-items">
                   {order.items.slice(0, 3).map((item, idx) => (
                     <div key={idx} className="my-order-item"><span>{formatPrice(item.quantity)}× {item.product_name}{item.option_name && <small> ({item.option_name})</small>}</span></div>
@@ -210,7 +263,13 @@ export default function MyOrdersClient() {
                 <div className="my-order-total">
                   <div>
                     <span>جمع کل:</span>
-                    <strong>{formatPrice(order.subtotal)} تومان</strong>
+                    {order.status === 'cancelled' ? (
+                      <strong style={{ textDecoration: 'line-through', color: '#9b3c32' }}>
+                        {formatPrice(order.subtotal)} تومان
+                      </strong>
+                    ) : (
+                      <strong>{formatPrice(order.subtotal)} تومان</strong>
+                    )}
                   </div>
                   {order.coupon_discount && order.coupon_discount > 0 ? (
                     <div style={{ fontSize: '12px', color: '#2d5d3e', marginTop: '6px', fontWeight: 'bold', background: '#e5f0e6', padding: '4px 8px', borderRadius: '6px', display: 'inline-block' }}>
@@ -219,8 +278,10 @@ export default function MyOrdersClient() {
                   ) : null}
                 </div>
 
-                {order.status === 'cancelled' && order.cancelled_by === 'admin' && (
-                  <div className="my-order-cancel-reason">دلیل لغو: {order.cancellation_reason_label || 'نامشخص'}</div>
+                {order.status === 'cancelled' && (
+                  <div className="my-order-cancel-reason">
+                    ❌ سفارش لغو شده {order.cancellation_reason_label ? `به دلیل: ${order.cancellation_reason_label}` : ''}
+                  </div>
                 )}
                 <div className="my-orders-actions" style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
                   <button type="button" className="my-order-btn primary" style={{ flex: 1 }} onClick={() => handleReorder(order)}>🔄 سفارش مجدد</button>

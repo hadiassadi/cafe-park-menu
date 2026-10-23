@@ -31,6 +31,24 @@ export async function POST(request: NextRequest) {
     
     const deviceIdHash = hashData(deviceToken)
 
+    // ✅ فاز ۱: قفل سفارش (Order Locking)
+    // چک می‌کنیم آیا این دستگاه سفارش فعالی داره یا نه
+    const { data: activeOrders, error: activeError } = await db
+      .from('orders')
+      .select('id, status')
+      .eq('device_id_hash', deviceIdHash)
+      .in('status', ['pending', 'confirmed', 'preparing', 'ready'])
+      .limit(1)
+
+    if (activeError) {
+      console.error('[Order Lock] Error checking active orders:', activeError)
+    } else if (activeOrders && activeOrders.length > 0) {
+      return NextResponse.json({ 
+        error: 'شما یک سفارش در جریان دارید. برای ثبت سفارش جدید، لطفاً تا تحویل سفارش قبلی صبر کنید یا با پرسنل کافه هماهنگ کنید.' 
+      }, { status: 400 })
+    }
+
+    // --- ادامه فرآیند ثبت سفارش (تخفیف باشگاه و ثبت در دیتابیس) ---
     let membershipDiscount = 0
     let membershipMemberId = null
 
@@ -48,7 +66,6 @@ export async function POST(request: NextRequest) {
       const { count: dailyCount } = await db.from('redemption_logs').select('*', { count: 'exact', head: true }).eq('member_id', member.id).gte('created_at', `${today}T00:00:00Z`)
       const { count: totalCount } = await db.from('redemption_logs').select('*', { count: 'exact', head: true }).eq('member_id', member.id)
 
-      // ✅ استفاده از ?? 0
       if (new Date(org.expires_at) > new Date() && (dailyCount ?? 0) < org.max_daily_orders && (totalCount ?? 0) < org.max_total_orders) {
         const productIds = items.map((i: any) => i.product_id)
         const { data: products } = await db.from('products').select('id, coupon_eligible, categories(coupon_eligible)').in('id', productIds)
@@ -58,7 +75,6 @@ export async function POST(request: NextRequest) {
         for (const item of items) {
           const p = productMap.get(item.product_id)
           if (!p) continue
-          // ✅ استفاده از as any
           const eligible = p.coupon_eligible !== null ? p.coupon_eligible : (p.categories as any)?.coupon_eligible
           if (eligible) eligibleSubtotal += (item.unit_price * item.quantity)
         }

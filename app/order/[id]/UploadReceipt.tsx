@@ -16,10 +16,11 @@ export default function UploadReceipt({
   const [mode, setMode] = useState<'image' | 'text'>('image')
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [preview, setPreview] = useState<string | null>(initialUrl ?? null)
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [noteText, setNoteText] = useState('')
 
-  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+  // ✅ فقط فایل رو انتخاب می‌کنیم (بدون آپلود)
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
 
@@ -27,18 +28,24 @@ export default function UploadReceipt({
       setError('فقط عکس مجاز است (JPG، PNG، WEBP)')
       return
     }
-
     if (file.size > 3 * 1024 * 1024) {
       setError('حجم عکس نباید بیشتر از ۳ مگابایت باشه')
       return
     }
 
     setError(null)
+    setSelectedFile(file)
+  }
+
+  // ✅ آپلود با کلیک روی دکمه ارسال
+  async function handleUploadImage() {
+    if (!selectedFile) return
     setUploading(true)
+    setError(null)
 
     try {
       const formData = new FormData()
-      formData.append('file', file)
+      formData.append('file', selectedFile)
       formData.append('orderId', orderId)
 
       const res = await fetch('/api/upload-receipt', {
@@ -51,10 +58,7 @@ export default function UploadReceipt({
       try {
         data = JSON.parse(text)
       } catch {
-        console.error('Raw server response:', text)
-        throw new Error(
-          'خطا در پردازش پاسخ سرور. ممکن است حجم عکس زیاد باشد یا سرور شلوغ باشد. لطفاً از عکس کوچکتری استفاده کنید.'
-        )
+        throw new Error('خطا در پردازش پاسخ سرور. لطفاً دوباره تلاش کنید.')
       }
 
       if (!res.ok || !data.url) {
@@ -69,8 +73,8 @@ export default function UploadReceipt({
 
       if (!updateRes.ok) throw new Error('خطا در ذخیره رسید')
 
-      setPreview(data.url)
       onSuccess(data.url, null)
+      setSelectedFile(null) 
     } catch (err) {
       setError(err instanceof Error ? err.message : 'خطا در آپلود')
     } finally {
@@ -107,18 +111,13 @@ export default function UploadReceipt({
     }
   }
 
-  function handleReplaceReceipt() {
-    setPreview(null)
-    setError(null)
-  }
-
   return (
     <div className="receipt-upload-box">
       <div className="receipt-mode-tabs">
         <button
           type="button"
           className={`receipt-mode-tab ${mode === 'image' ? 'active' : ''}`}
-          onClick={() => setMode('image')}
+          onClick={() => { setMode('image'); setError(null) }}
           disabled={uploading}
         >
           📸 عکس رسید
@@ -126,7 +125,7 @@ export default function UploadReceipt({
         <button
           type="button"
           className={`receipt-mode-tab ${mode === 'text' ? 'active' : ''}`}
-          onClick={() => setMode('text')}
+          onClick={() => { setMode('text'); setError(null) }}
           disabled={uploading}
         >
           📝 متن رسید
@@ -134,43 +133,49 @@ export default function UploadReceipt({
       </div>
 
       {mode === 'image' ? (
-        preview ? (
-          <div className="receipt-preview">
-            <img src={preview} alt="رسید واریز" />
-            <div className="receipt-preview-hint">
-              ✅ رسید آپلود شد — در انتظار تأیید کافه
+        <>
+          {initialUrl ? (
+            <div style={{ padding: '12px', background: '#e5f0e6', color: '#2d5d3e', borderRadius: '8px', fontSize: '13px', textAlign: 'center', fontWeight: 'bold' }}>
+              ✅ شما قبلاً رسید را آپلود کرده‌اید.
             </div>
-            <button
-              type="button"
-              className="receipt-replace-btn"
-              onClick={handleReplaceReceipt}
-              disabled={uploading}
-            >
-              🔄 تغییر رسید
-            </button>
-          </div>
-        ) : (
-          <>
-            <label className="receipt-upload-label" htmlFor="receipt-input">
-              <div className="receipt-upload-icon">📸</div>
-              <div className="receipt-upload-text">
-                <strong>آپلود عکس رسید</strong>
-                <small>JPG، PNG — حداکثر ۳ مگابایت</small>
-              </div>
-              <input
-                id="receipt-input"
-                type="file"
-                accept="image/*"
-                onChange={handleFileChange}
-                disabled={uploading}
-                style={{ display: 'none' }}
-              />
-            </label>
-            {uploading && (
-              <div className="receipt-upload-progress">⏳ در حال آپلود...</div>
-            )}
-          </>
-        )
+          ) : (
+            <>
+              <label className="receipt-upload-label" htmlFor="receipt-input">
+                <div className="receipt-upload-icon">📸</div>
+                <div className="receipt-upload-text">
+                  <strong>انتخاب عکس رسید</strong>
+                  <small>JPG، PNG — حداکثر ۳ مگابایت</small>
+                </div>
+                <input
+                  id="receipt-input"
+                  type="file"
+                  accept="image/*"
+                  onChange={handleFileChange}
+                  disabled={uploading}
+                  style={{ display: 'none' }}
+                />
+              </label>
+
+              {/* ✅ نمایش نام فایل انتخاب شده */}
+              {selectedFile && (
+                <div style={{ marginTop: '10px', fontSize: '12px', color: '#6b4f3a', background: '#f5f0e9', padding: '8px', borderRadius: '6px' }}>
+                  📎 فایل انتخاب شده: {selectedFile.name}
+                </div>
+              )}
+
+              {/* ✅ دکمه ارسال دستی */}
+              <button
+                type="button"
+                className="receipt-submit-btn"
+                onClick={handleUploadImage}
+                disabled={!selectedFile || uploading}
+                style={{ marginTop: '10px', width: '100%' }}
+              >
+                {uploading ? 'در حال آپلود...' : '📤 ارسال رسید'}
+              </button>
+            </>
+          )}
+        </>
       ) : (
         <>
           <textarea
@@ -186,8 +191,9 @@ export default function UploadReceipt({
             className="receipt-submit-btn"
             onClick={handleSubmitText}
             disabled={uploading || !noteText.trim()}
+            style={{ marginTop: '10px', width: '100%' }}
           >
-            {uploading ? '...' : '✅ ارسال رسید'}
+            {uploading ? '...' : '✅ ارسال متن رسید'}
           </button>
         </>
       )}
