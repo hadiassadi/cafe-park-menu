@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { requireAdmin } from '@/lib/admin/require-admin'
 
 export const dynamic = 'force-dynamic'
 
@@ -12,8 +13,12 @@ function createAdminDb() {
 
 export async function GET() {
   try {
+    const denied = await requireAdmin()
+    if (denied) return denied
+
     const db = createAdminDb()
     const now = new Date()
+
     const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
 
     // خواندن همه سفارش‌ها
