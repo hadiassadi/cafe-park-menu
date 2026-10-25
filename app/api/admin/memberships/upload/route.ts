@@ -19,13 +19,17 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'لیست اعضا خالی است' }, { status: 400 })
     }
 
+    if (!orgName || typeof orgName !== 'string' || !orgName.trim()) {
+      return NextResponse.json({ error: 'نام سازمان الزامی است' }, { status: 400 })
+    }
+
     const db = supabaseAdmin()
 
     // ۱. ثبت یا آپدیت سازمان
     const { data: org, error: orgError } = await db
       .from('organizations')
       .upsert({
-        name: orgName,
+        name: orgName.trim(),
         discount_percent: discount,
         max_daily_orders: maxDaily,
         max_total_orders: maxTotal,
@@ -54,7 +58,15 @@ export async function POST(req: Request) {
     }))
 
     // ۳. پاک کردن لیست قبلی این سازمان
-    await db.from('organization_members').delete().eq('organization_id', org.id)
+    const { error: deleteError } = await db
+      .from('organization_members')
+      .delete()
+      .eq('organization_id', org.id)
+
+    if (deleteError) {
+      console.error('Delete Old Members Error:', deleteError)
+      return NextResponse.json({ error: 'خطا در پاک کردن لیست قبلی' }, { status: 500 })
+    }
 
     // ۴. درج اعضای جدید
     const { error: insertError } = await db.from('organization_members').insert(membersToInsert)

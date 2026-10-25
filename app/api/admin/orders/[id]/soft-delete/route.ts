@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { supabaseAdmin } from '@/lib/supabase/server'
+import { requireAdmin } from '@/lib/admin/require-admin'
 import {
   verifyStepUpToken,
   getStepUpCookieName,
@@ -13,6 +14,9 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const denied = await requireAdmin()
+    if (denied) return denied
+
     const { id } = await params
 
     // ۱. چک کردن step-up

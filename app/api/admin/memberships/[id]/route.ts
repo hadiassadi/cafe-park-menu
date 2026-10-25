@@ -1,9 +1,13 @@
 import 'server-only'
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase/server'
+import { requireAdmin } from '@/lib/admin/require-admin'
 
 // ✅ متد PATCH برای ویرایش تنظیمات (همون که قبلا داشتیم)
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const denied = await requireAdmin()
+  if (denied) return denied
+
   const { id } = await params
   const body = await req.json()
   const db = supabaseAdmin()
@@ -23,6 +27,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 // ✅ متد DELETE اصلاح‌شده برای حذف امن (اول اعضا، بعد سازمان)
 export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
+    const denied = await requireAdmin()
+    if (denied) return denied
+
     const { id } = await params
     const db = supabaseAdmin()
 

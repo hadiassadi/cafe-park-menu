@@ -9,3 +9,8 @@ backups/
 # بکاپ‌های محلی
 backups/
 backups-server/
+
+dump/
+allfile.bat
+tree.txt
+tsconfig.tsbuildinfo

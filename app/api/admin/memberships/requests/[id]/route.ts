@@ -2,11 +2,15 @@ import 'server-only'
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase/server'
 import { hashData } from '@/lib/utils/hash'
+import { requireAdmin } from '@/lib/admin/require-admin'
 
 export const dynamic = 'force-dynamic'
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
+    const denied = await requireAdmin()
+    if (denied) return denied
+
     const { id } = await params
     const { action } = await req.json() // 'approve' یا 'reject'
     const db = supabaseAdmin()
