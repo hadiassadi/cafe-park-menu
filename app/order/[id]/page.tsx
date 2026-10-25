@@ -2,6 +2,7 @@
 
 import { useCart } from '@/lib/cart-context'
 import { useEffect, useState, use } from 'react'
+import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import UploadReceipt from './UploadReceipt'
 import EnablePushCard from '@/app/components/EnablePushCard'
@@ -42,7 +43,7 @@ type Order = {
   ineligible_subtotal: number | null
   status: string
   created_at: string
-  customer_confirmed?: boolean // ✅ اضافه شد
+  customer_confirmed?: boolean
   cancellation_reason_label: string | null
   cancellation_note: string | null
   cancelled_by: string | null
@@ -61,6 +62,22 @@ const STATUS_STEPS = [
   { key: 'delivered', label: 'تحویل شد', icon: '🎉' },
 ]
 
+const STATUS_LABELS: Record<string, string> = {
+  pending: 'جدید',
+  confirmed: 'تأیید شده',
+  preparing: 'در حال آماده‌سازی',
+  ready: 'آماده تحویل',
+  delivered: 'تحویل شده',
+  cancelled: 'لغو شده',
+}
+
+const PAYMENT_STATUS_LABELS: Record<string, string> = {
+  paid: 'پرداخت شده',
+  unpaid: 'پرداخت نشده',
+  pending_review: 'در انتظار تأیید',
+  failed: 'ناموفق',
+}
+
 export default function OrderPage({
   params,
 }: {
@@ -78,6 +95,11 @@ export default function OrderPage({
   const [cancelSuccess, setCancelSuccess] = useState(false)
   const [canCancel, setCanCancel] = useState(false)
   const [secondsLeft, setSecondsLeft] = useState(0)
+
+  const [bannerDismissed, setBannerDismissed] = useState(false)
+  
+  const [mounted, setMounted] = useState(false)
+  const [printOrder, setPrintOrder] = useState<Order | null>(null)
 
   const [reasons, setReasons] = useState<
     Array<{ id: string; label: string; icon: string | null }>
@@ -99,7 +121,9 @@ export default function OrderPage({
     payment_transfer_enabled: boolean
   } | null>(null)
 
-  const [showSuccessBanner, setShowSuccessBanner] = useState(false)
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   useEffect(() => {
     async function load() {
@@ -111,13 +135,6 @@ export default function OrderPage({
           setError(data.error || 'سفارش پیدا نشد')
         } else {
           setOrder(data.order as Order)
-          try {
-            const key = `cafe-park-order-success-${id}`
-            if (sessionStorage.getItem(key)) {
-              setShowSuccessBanner(true)
-              sessionStorage.removeItem(key)
-            }
-          } catch {}
         }
       } catch {
         setError('خطا در ارتباط با سرور')
@@ -129,6 +146,38 @@ export default function OrderPage({
   }, [id])
 
   useEffect(() => {
+    if (!id) return
+    let isMounted = true
+
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/orders/${id}`, { cache: 'no-store' })
+        if (!res.ok) return
+        const data = await res.json()
+        if (isMounted && data.order) {
+          setOrder(data.order as Order)
+        }
+      } catch {}
+    }, 5000)
+
+    return () => {
+      isMounted = false
+      clearInterval(interval)
+    }
+  }, [id])
+
+  useEffect(() => {
+    if (!printOrder) return
+    const handleAfterPrint = () => setPrintOrder(null)
+    window.addEventListener('afterprint', handleAfterPrint)
+    const timer = setTimeout(() => window.print(), 500)
+    return () => {
+      clearTimeout(timer)
+      window.removeEventListener('afterprint', handleAfterPrint)
+    }
+  }, [printOrder])
+
+  useEffect(() => {
     fetch('/api/payment/settings', { cache: 'no-store' })
       .then((res) => res.json())
       .then((data) => setPaymentSettings(data))
@@ -136,19 +185,6 @@ export default function OrderPage({
   }, [])
 
   useEffect(() => {
-    if (!order) return
-    const interval = setInterval(async () => {
-      try {
-        const res = await fetch(`/api/orders/${id}`, { cache: 'no-store' })
-        const data = await res.json()
-        if (data.order) setOrder(data.order as Order)
-      } catch {}
-    }, 10000)
-    return () => clearInterval(interval)
-  }, [id, order])
-
-  useEffect(() => {
-    // ✅ اگر سفارش تایید مشتری شده باشد، تایمر نمایش داده نمی‌شود
     if (!order || order.status !== 'pending' || order.customer_confirmed) {
       setCanCancel(false)
       setSecondsLeft(0)
@@ -193,8 +229,7 @@ export default function OrderPage({
           setLoadingReasons(false)
         }
       })
-      .catch((err) => {
-        console.error(err)
+      .catch(() => {
         if (!cancelled) setLoadingReasons(false)
       })
 
@@ -203,7 +238,6 @@ export default function OrderPage({
     }
   }, [showCancelConfirm, reasons.length])
 
-  // ✅ تابع تایید مشتری (بدون تغییر وضعیت)
   async function handleConfirmOrder() {
     if (!order) return
     setCancelling(true)
@@ -374,6 +408,21 @@ export default function OrderPage({
     paymentSettings?.payment_enabled === true &&
     (needsOnlinePayment || needsTransferReceipt || isFailed)
 
+  const shouldShowBanner = !bannerDismissed && (isPaid || isCash || isCard)
+
+  // ✅ محاسبه تخفیف: اول از original_subtotal، اگه نبود از جمع آیتم‌ها
+  const itemsSubtotal = Array.isArray(order.items)
+    ? order.items.reduce((sum, item) => sum + (item.unit_price * item.quantity), 0)
+    : 0
+  
+  const originalSum = (order.original_subtotal && order.original_subtotal > order.subtotal) 
+                      ? order.original_subtotal 
+                      : itemsSubtotal
+
+  const finalSubtotal = order.subtotal
+  const discountAmount = originalSum > finalSubtotal ? (originalSum - finalSubtotal) : 0
+  const hasDiscount = discountAmount > 0
+
   let badgeType = 'unpaid'
   let badgeText = '⏱ پرداخت نشده'
   const showBadge = !isCancelled
@@ -411,17 +460,26 @@ export default function OrderPage({
         <Link href="/my-orders" className="btn" style={{ padding: '6px 10px', fontSize: '12px', background: '#f5f0e9', borderColor: '#d8d0c4' }}>سفارش‌های من →</Link>
       </div>
 
-      {showSuccessBanner && (
+      {shouldShowBanner && (
         <div className="order-success-banner">
           <div className="order-success-icon">✅</div>
           <div className="order-success-body">
-            <p className="order-success-title">سفارش شما با موفقیت ثبت شد!</p>
+            <p className="order-success-title">
+              {isPaid && order.payment_method === 'transfer'
+                ? '✅ پرداخت شما با موفقیت تأیید شد!'
+                : 'سفارش شما با موفقیت ثبت شد!'}
+            </p>
             <p className="order-success-text">
-              سفارش <strong>#{formatPrice(order.order_number)}</strong>
-              {order.table_number && (
-                <> برای <strong>میز شماره {formatPrice(order.table_number)}</strong></>
-              )}{' '}
-              ثبت شد و در صف آماده‌سازی قرار گرفت.
+              {isPaid && order.payment_method === 'transfer' ? (
+                <>رسید پرداخت سفارش <strong>#{formatPrice(order.order_number)}</strong> تایید شد و سفارش در صف آماده‌سازی قرار گرفت.</>
+              ) : (
+                <>سفارش <strong>#{formatPrice(order.order_number)}</strong>
+                  {order.table_number && (
+                    <> برای <strong>میز شماره {formatPrice(order.table_number)}</strong></>
+                  )}{' '}
+                  ثبت شد و در صف آماده‌سازی قرار گرفت.
+                </>
+              )}
             </p>
             <p className="order-success-hint">
               🙏 لطفاً برای جلوگیری از تداخل در سرویس‌دهی،{' '}
@@ -432,7 +490,7 @@ export default function OrderPage({
           <button
             type="button"
             className="order-success-close"
-            onClick={() => setShowSuccessBanner(false)}
+            onClick={() => setBannerDismissed(true)}
             aria-label="بستن"
           >
             ✕
@@ -566,8 +624,19 @@ export default function OrderPage({
             const isCurrent = index === currentIndex
             return (
               <div key={step.key} className={`step-item ${isDone ? 'done' : ''} ${isCurrent ? 'active' : ''}`}>
-                <div className="step-dot">{isDone ? step.icon : ''}</div>
-                <span>{step.label}</span>
+                <div
+                  className="step-dot"
+                  style={{
+                    backgroundColor: isDone ? (isCurrent ? '#d99f59' : '#477052') : '#e3ddd2',
+                    boxShadow: isCurrent ? '0 0 0 4px rgba(217, 159, 89, 0.2)' : 'none',
+                    color: isDone ? '#fff' : '#aaa',
+                  }}
+                >
+                  {isDone ? step.icon : ''}
+                </div>
+                <span style={{ color: isCurrent ? '#29251f' : (isDone ? '#477052' : '#766f64'), fontWeight: isCurrent ? 800 : 600 }}>
+                  {step.label}
+                </span>
               </div>
             )
           })}
@@ -597,26 +666,31 @@ export default function OrderPage({
           <span>تاریخ ثبت:</span>
           <strong>{formatPersianDate(order.created_at)}</strong>
         </div>
-        
-        {order.coupon_code && order.coupon_discount ? (
+
+        {/* ✅ بخش خلاصه پرداخت با محاسبه تخفیف */}
+        {hasDiscount ? (
           <div className="order-payment-summary">
             <div className="info-row">
               <span>جمع اقلام:</span>
-              <strong>{formatPrice(order.original_subtotal ?? order.subtotal)} تومان</strong>
+              <strong>{formatPrice(originalSum)} تومان</strong>
             </div>
             <div className="info-row discount">
-              <span>🎟️ تخفیف ({order.coupon_code}):</span>
-              <strong>− {formatPrice(order.coupon_discount)} تومان</strong>
+              <span>
+                {order.coupon_code
+                  ? `🎟️ تخفیف (${order.coupon_code}):`
+                  : '🎉 تخفیف باشگاه:'}
+              </span>
+              <strong>− {formatPrice(discountAmount)} تومان</strong>
             </div>
             <div className="total-row">
               <span>قابل پرداخت</span>
-              <span>{formatPrice(order.subtotal)} تومان</span>
+              <span>{formatPrice(finalSubtotal)} تومان</span>
             </div>
           </div>
         ) : (
           <div className="total-row">
             <span>جمع کل</span>
-            <span>{formatPrice(order.subtotal)} تومان</span>
+            <span>{formatPrice(finalSubtotal)} تومان</span>
           </div>
         )}
       </div>
@@ -630,7 +704,6 @@ export default function OrderPage({
         )}
       </div>
 
-      {/* ✅ دکمه نهایی کردن و لغو (فقط اگر مشتری تایید نکرده باشد) */}
       {canCancel && !isPaid && !order.customer_confirmed && (
         <div className="order-cancel-section" style={{ display: 'flex', flexDirection: 'column', gap: '8px', background: '#fdf9f4', padding: '16px', borderRadius: '12px', border: '1px solid #f2d5c5' }}>
           <button 
@@ -706,11 +779,144 @@ export default function OrderPage({
         </div>
       )}
 
-      <div className="sticky-action-bar">
-        <a href={whatsappUrl} target="_blank" rel="noopener noreferrer" className="btn-whatsapp">
+      <div className="sticky-action-bar" style={{ display: 'flex', gap: '8px' }}>
+        <button 
+          type="button" 
+          onClick={() => setPrintOrder(order)} 
+          className="btn" 
+          style={{ flex: '0 0 auto', background: '#f5f0e9', border: '1px solid #d8d0c4', color: '#29251f', borderRadius: '10px', padding: '0 16px', fontSize: '14px', fontWeight: 'bold' }}
+        >
+          🖨️ چاپ
+        </button>
+        <a href={whatsappUrl} target="_blank" rel="noopener noreferrer" className="btn-whatsapp" style={{ flex: 1 }}>
           💬 ارسال سفارش در واتساپ
         </a>
       </div>
+
+      {mounted && printOrder && createPortal(
+        <div className="print-invoice">
+          <div className="print-invoice-header">
+            <h1 className="print-invoice-title">کافه پارک</h1>
+            <p className="print-invoice-subtitle">
+              فاکتور سفارش {printOrder.status === 'cancelled' ? '(لغو شده)' : ''}
+            </p>
+          </div>
+
+          <div className="print-invoice-meta">
+            <div className="print-invoice-meta-row">
+              <span>شماره سفارش:</span>
+              <strong>#{formatPrice(printOrder.order_number)}</strong>
+            </div>
+            <div className="print-invoice-meta-row">
+              <span>تاریخ و ساعت:</span>
+              <strong>{formatPersianDate(printOrder.created_at)}</strong>
+            </div>
+            <div className="print-invoice-meta-row">
+              <span>وضعیت:</span>
+              <strong>{STATUS_LABELS[printOrder.status]}</strong>
+            </div>
+            <div className="print-invoice-meta-row">
+              <span>وضعیت پرداخت:</span>
+              <strong>{PAYMENT_STATUS_LABELS[printOrder.payment_status || 'unpaid']}</strong>
+            </div>
+            {printOrder.status === 'cancelled' && printOrder.cancellation_reason_label && (
+              <div className="print-invoice-meta-row">
+                <span>دلیل لغو:</span>
+                <strong>{printOrder.cancellation_reason_label}</strong>
+              </div>
+            )}
+          </div>
+
+          <div className="print-invoice-customer">
+            <h3>اطلاعات مشتری</h3>
+            <div className="print-invoice-meta-row">
+              <span>نام:</span>
+              <strong>{printOrder.customer_name}</strong>
+            </div>
+            <div className="print-invoice-meta-row">
+              <span>شماره تماس:</span>
+              <strong dir="ltr">{printOrder.customer_phone}</strong>
+            </div>
+            {printOrder.table_number && (
+              <div className="print-invoice-meta-row">
+                <span>شماره میز:</span>
+                <strong>{formatPrice(printOrder.table_number)}</strong>
+              </div>
+            )}
+            {printOrder.note && (
+              <div className="print-invoice-meta-row">
+                <span>توضیحات:</span>
+                <strong>{printOrder.note}</strong>
+              </div>
+            )}
+          </div>
+
+          <div className="print-invoice-items">
+            <h3>اقلام سفارش</h3>
+            <table className="print-invoice-table">
+              <thead>
+                <tr>
+                  <th style={{ width: '36px' }}>#</th>
+                  <th>نام محصول</th>
+                  <th style={{ width: '50px', textAlign: 'center' }}>تعداد</th>
+                  <th style={{ width: '100px', textAlign: 'left' }}>قیمت</th>
+                </tr>
+              </thead>
+              <tbody>
+                {printOrder.items.map((item: any, idx) => (
+                  <tr key={idx}>
+                    <td>{formatPrice(idx + 1)}</td>
+                    <td>
+                      {item.product_name}
+                      {item.option_name && (
+                        <small style={{ color: '#666', display: 'block' }}>({item.option_name})</small>
+                      )}
+                    </td>
+                    <td style={{ textAlign: 'center' }}>{formatPrice(item.quantity)}</td>
+                    <td style={{ textAlign: 'left', fontWeight: 700 }}>
+                      {formatPrice(item.unit_price * item.quantity)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                {hasDiscount ? (
+                  <>
+                    <tr className="invoice-summary-row">
+                      <td colSpan={3}>جمع اقلام:</td>
+                      <td>{formatPrice(originalSum)} تومان</td>
+                    </tr>
+                    <tr className="invoice-summary-row invoice-discount-row">
+                      <td colSpan={3}>
+                        {printOrder.coupon_code ? `🎟️ تخفیف (${printOrder.coupon_code}):` : '🎉 تخفیف باشگاه:'}
+                      </td>
+                      <td>− {formatPrice(discountAmount)} تومان</td>
+                    </tr>
+                    <tr className="invoice-summary-row invoice-total-row">
+                      <td colSpan={3}>قابل پرداخت:</td>
+                      <td>{formatPrice(printOrder.subtotal)} تومان</td>
+                    </tr>
+                  </>
+                ) : (
+                  <tr className="invoice-summary-row invoice-total-row">
+                    <td colSpan={3}>جمع کل:</td>
+                    <td>{formatPrice(printOrder.subtotal)} تومان</td>
+                  </tr>
+                )}
+              </tfoot>
+            </table>
+          </div>
+
+          <div className="print-invoice-footer">
+            {printOrder.status === 'cancelled' && (
+              <p style={{ color: '#dc2626', fontWeight: 'bold' }}>❌ این سفارش لغو شده است</p>
+            )}
+            <p>با تشکر از سفارش شما 🌹</p>
+            <p className="print-invoice-footer-small">کافه پارک — پارک سلامت شیراز</p>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   )
 }

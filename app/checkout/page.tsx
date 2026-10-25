@@ -28,11 +28,26 @@ function CheckoutForm() {
   const [submitted, setSubmitted] = useState(false)
 
   const [membershipInfo, setMembershipInfo] = useState<{ discount: number, orgName: string | null, discountPercent?: number, message?: string, eligibleProductIds?: string[] } | null>(null)
+  
+  // ✅ State کوپن
+  const [couponCode, setCouponCode] = useState('')
+  const [appliedCoupon, setAppliedCoupon] = useState<{ code: string; discount: number } | null>(null)
+  const [couponError, setCouponError] = useState<string | null>(null)
+  const [couponLoading, setCouponLoading] = useState(false)
+
   const [paymentSettings, setPaymentSettings] = useState<PaymentSettings | null>(null)
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash')
   const [settingsLoading, setSettingsLoading] = useState(true)
 
-  const finalTotal = totalPrice - (membershipInfo?.discount || 0)
+  // ✅ تخفیف باشگاه فقط برای اعضای سازمانی
+  const isOrgMember = !!(membershipInfo?.orgName && membershipInfo.orgName !== 'باشگاه مشتریان')
+  const membershipDiscount = isOrgMember ? (membershipInfo?.discount || 0) : 0
+  
+  // ✅ کوپن فقط برای مشتریان عادی
+  const couponDiscount = !isOrgMember ? (appliedCoupon?.discount || 0) : 0
+  
+  const totalDiscount = membershipDiscount + couponDiscount
+  const finalTotal = Math.max(0, totalPrice - totalDiscount)
 
   useEffect(() => {
     fetch('/api/customer/me', { cache: 'no-store' })
@@ -74,6 +89,15 @@ function CheckoutForm() {
       .catch(() => setMembershipInfo(null))
   }, [items])
 
+  // اگر کاربر سازمانی شد، کوپن را پاک کن
+  useEffect(() => {
+    if (isOrgMember) {
+      setAppliedCoupon(null)
+      setCouponCode('')
+      setCouponError(null)
+    }
+  }, [isOrgMember])
+
   const [tableAutoDetected, setTableAutoDetected] = useState(false)
 
   useEffect(() => {
@@ -93,6 +117,45 @@ function CheckoutForm() {
   useEffect(() => {
     if (items.length === 0 && !submitted) router.replace('/cart')
   }, [items.length, router, submitted])
+
+  async function handleApplyCoupon() {
+    if (!couponCode.trim()) return
+    setCouponLoading(true)
+    setCouponError(null)
+    try {
+      const res = await fetch('/api/coupons/validate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          code: couponCode.trim().toUpperCase(), 
+          subtotal: totalPrice,
+          items: items.map(i => ({ product_id: i.productId, quantity: i.quantity, unit_price: i.unitPrice }))
+        })
+      })
+      const data = await res.json()
+      
+      if (!res.ok || !data.success) {
+        setCouponError(data.error || 'کد تخفیف معتبر نیست')
+        return
+      }
+      
+      setAppliedCoupon({ 
+        code: data.coupon.code, 
+        discount: data.discount 
+      })
+      setCouponCode('')
+    } catch {
+      setCouponError('خطا در بررسی کد تخفیف')
+    } finally {
+      setCouponLoading(false)
+    }
+  }
+
+  function handleRemoveCoupon() {
+    setAppliedCoupon(null)
+    setCouponCode('')
+    setCouponError(null)
+  }
 
   if (items.length === 0) return null
 
@@ -115,7 +178,10 @@ function CheckoutForm() {
           table_number: tableNumber ? Number(tableNumber) : null,
           note: note.trim() || null,
           items: items.map((item) => ({ product_id: item.productId, product_name: item.productName, option_id: item.selectedOptionId, option_name: item.selectedOptionName, group_name: item.selectedGroupName, unit_price: item.unitPrice, quantity: item.quantity })),
-          subtotal: totalPrice,
+          subtotal: finalTotal,
+          original_subtotal: totalPrice,
+          coupon_code: !isOrgMember && appliedCoupon ? appliedCoupon.code : null,
+          coupon_discount: !isOrgMember && couponDiscount > 0 ? couponDiscount : null,
         }),
       })
 
@@ -184,11 +250,11 @@ function CheckoutForm() {
           </div>
         )}
 
-        {membershipInfo?.orgName && (
-          <div style={{ padding: '12px', borderRadius: '10px', background: (membershipInfo.discount || 0) > 0 ? '#e5f0e6' : '#fde8e6', color: (membershipInfo.discount || 0) > 0 ? '#2d5d3e' : '#9b3c32', fontSize: '13px', fontWeight: 700, marginBottom: '16px', textAlign: 'center' }}>
-            {(membershipInfo.discount || 0) > 0 
-              ? `🎉 کاربر گرامی، سفارش شما به عنوان عضو ${membershipInfo.orgName} شامل تخفیف ویژه است.`
-              : `⚠️ ${membershipInfo.message || 'سقف تخفیف شما پر شده است.'}`
+        {isOrgMember && (
+          <div style={{ padding: '12px', borderRadius: '10px', background: (membershipInfo?.discount || 0) > 0 ? '#e5f0e6' : '#fde8e6', color: (membershipInfo?.discount || 0) > 0 ? '#2d5d3e' : '#9b3c32', fontSize: '13px', fontWeight: 700, marginBottom: '16px', textAlign: 'center' }}>
+            {(membershipInfo?.discount || 0) > 0 
+              ? `🎉 کاربر گرامی، سفارش شما به عنوان عضو ${membershipInfo?.orgName} شامل تخفیف ویژه است.`
+              : `⚠️ ${membershipInfo?.message || 'سقف تخفیف شما پر شده است.'}`
             }
           </div>
         )}
@@ -206,7 +272,7 @@ function CheckoutForm() {
           <div className="checkout-card-title">🧾 خلاصه سفارش ({formatPrice(totalItems)} قلم)</div>
           <ul className="checkout-items">
             {items.map((item) => {
-              const isEligible = membershipInfo?.eligibleProductIds?.includes(item.productId)
+              const isEligible = isOrgMember && membershipInfo?.eligibleProductIds?.includes(item.productId)
               const itemTotal = item.unitPrice * item.quantity
               const discountPerItem = isEligible ? Math.round((itemTotal * (membershipInfo?.discountPercent || 0)) / 100) : 0
               const finalItemTotal = itemTotal - discountPerItem
@@ -239,6 +305,55 @@ function CheckoutForm() {
             })}
           </ul>
         </div>
+
+        {/* ✅ بخش کد تخفیف: فقط برای مشتریان عادی */}
+        {!isOrgMember && (
+          <div className="checkout-card">
+            <div className="checkout-card-title">🎟️ کد تخفیف</div>
+            {appliedCoupon ? (
+              <div className="coupon-applied">
+                <div className="coupon-applied-info">
+                  <span className="coupon-applied-code">{appliedCoupon.code}</span>
+                  <small>تخفیف: {formatPrice(appliedCoupon.discount)} تومان</small>
+                </div>
+                <button 
+                  type="button" 
+                  className="coupon-remove-btn" 
+                  onClick={handleRemoveCoupon}
+                  disabled={saving}
+                >
+                  ✕
+                </button>
+              </div>
+            ) : (
+              <div className="coupon-input-row">
+                <input
+                  type="text"
+                  value={couponCode}
+                  onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      handleApplyCoupon()
+                    }
+                  }}
+                  placeholder="کد تخفیف را وارد کنید"
+                  disabled={couponLoading || saving}
+                  dir="ltr"
+                />
+                <button
+                  type="button"
+                  className="coupon-apply-btn"
+                  onClick={handleApplyCoupon}
+                  disabled={couponLoading || !couponCode.trim() || saving}
+                >
+                  {couponLoading ? '...' : 'اعمال'}
+                </button>
+              </div>
+            )}
+            {couponError && <div className="coupon-error">{couponError}</div>}
+          </div>
+        )}
 
         {!loadingUser && !customerInfo && (
           <div className="checkout-card">
@@ -291,17 +406,22 @@ function CheckoutForm() {
             <strong>{formatPrice(totalPrice)} تومان</strong>
           </div>
           
-          {(membershipInfo?.discount || 0) > 0 && (
-            <div className="checkout-total-row" style={{ borderBottom: 'none', padding: '8px 0', color: '#2d5d3e' }}>
-              <span style={{ fontWeight: 'bold' }}>تخفیف شما:</span>
-              <strong>− {formatPrice(membershipInfo?.discount || 0)} تومان</strong>
+          {/* ✅ ردیف تخفیف با عنوان داینامیک */}
+          {totalDiscount > 0 && (
+            <div className="checkout-total-row discount" style={{ borderBottom: 'none', padding: '8px 0' }}>
+              <span style={{ fontWeight: 'bold' }}>
+                {isOrgMember 
+                  ? 'تخفیف باشگاه:' 
+                  : `تخفیف کد تخفیف (${appliedCoupon?.code || ''}):`}
+              </span>
+              <strong>− {formatPrice(totalDiscount)} تومان</strong>
             </div>
           )}
 
           <div className="checkout-total-row final" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '10px', paddingTop: '16px' }}>
             <span style={{ fontSize: '16px', fontWeight: 800 }}>قابل پرداخت:</span>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              {(membershipInfo?.discount || 0) > 0 && (
+              {totalDiscount > 0 && (
                 <span style={{ textDecoration: 'line-through', color: '#aaa', fontSize: '13px', fontWeight: 'normal' }}>
                   {formatPrice(totalPrice)}
                 </span>

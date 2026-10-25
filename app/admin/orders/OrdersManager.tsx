@@ -582,37 +582,58 @@ export default function OrdersManager({
   }
 
   async function handleStatusChange(order: Order, newStatus: string) {
-    if (newStatus === 'delivered' && order.payment_status !== 'paid') {
-      openSettleModal(order, true)
+  if (newStatus === 'delivered' && order.payment_status !== 'paid') {
+    openSettleModal(order, true)
+    return
+  }
+
+  // ✅ اگه وضعیت به confirmed تغییر می‌کنه و پرداخت در انتظار تاییده، بپرس آیا تایید می‌کنه
+  let shouldApprovePayment = false
+  if (newStatus === 'confirmed' && order.payment_status === 'pending_review') {
+    shouldApprovePayment = window.confirm(
+      `سفارش #${order.order_number} رسید پرداخت آپلود کرده.\n\nآیا رسید پرداخت رو هم تایید می‌کنی؟\n\n(اگه تایید کنی، وضعیت پرداخت به «پرداخت شده» تغییر می‌کنه و پیغام تایید برای مشتری نمایش داده می‌شه)`
+    )
+  }
+
+  setLoading(true)
+  try {
+    const formData = new FormData()
+    formData.append('id', order.id)
+    formData.append('status', newStatus)
+    const result = await updateOrderStatus(formData)
+    if (result?.error) {
+      alert('❌ ' + result.error)
       return
     }
 
-    setLoading(true)
-    try {
-      const formData = new FormData()
-      formData.append('id', order.id)
-      formData.append('status', newStatus)
-      const result = await updateOrderStatus(formData)
-      if (result?.error) {
-        alert('❌ ' + result.error)
-        return
+    // ✅ اگه ادمین تایید کرد، payment_status رو هم paid کن
+    if (shouldApprovePayment) {
+      const payResult = await updatePaymentStatus(order.id, 'paid', 'تایید رسید در پنل ادمین')
+      if (payResult.error) {
+        alert('❌ خطا در تایید پرداخت: ' + payResult.error)
       }
-
-      setOrders((prev) =>
-        prev.map((o) =>
-          o.id === order.id ? { ...o, status: newStatus } : o
-        )
-      )
-      if (selectedOrder?.id === order.id) {
-        setSelectedOrder({ ...selectedOrder, status: newStatus })
-      }
-    } catch {
-      alert('❌ خطا در تغییر وضعیت')
-    } finally {
-      setLoading(false)
     }
-  }
 
+    // ✅ آپدیت UI
+    const updatedFields: Partial<Order> = { status: newStatus }
+    if (shouldApprovePayment) {
+      updatedFields.payment_status = 'paid'
+    }
+
+    setOrders((prev) =>
+      prev.map((o) =>
+        o.id === order.id ? { ...o, ...updatedFields } : o
+      )
+    )
+    if (selectedOrder?.id === order.id) {
+      setSelectedOrder({ ...selectedOrder, ...updatedFields })
+    }
+  } catch {
+    alert('❌ خطا در تغییر وضعیت')
+  } finally {
+    setLoading(false)
+  }
+}
   async function handleApprovePayment(order: Order) {
     setApprovingPayment(true)
     try {

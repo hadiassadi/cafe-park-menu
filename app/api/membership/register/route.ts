@@ -35,7 +35,7 @@ export async function POST(req: Request) {
       // ✅ چک می‌کنیم آیا این شماره تلفن قبلاً ثبت‌نام کرده است یا نه
       const { data: existingCustomer } = await db
         .from('customers')
-        .select('device_id_hash')
+        .select('device_id_hash, tags')
         .eq('phone', phoneClean)
         .maybeSingle()
 
@@ -45,13 +45,19 @@ export async function POST(req: Request) {
         }, { status: 400 })
       }
 
+      // ✅ مدیریت تگ‌ها: تگ‌های قبلی رو پاک نکن، فقط تگ جدید رو اضافه کن
+      const currentTags = existingCustomer?.tags || []
+      const newTags = currentTags.includes('عضو باشگاه مشتریان')
+        ? currentTags
+        : [...currentTags, 'عضو باشگاه مشتریان']
+
       // اگر قبلاً ثبت‌نام نکرده بود، ثبت‌نام را انجام می‌دهیم
       const { error: custError } = await db.from('customers').upsert({
         phone: phoneClean,
         name: fullName,
         device_id_hash: deviceIdHash,
         notes: `ثبت‌نام در باشگاه مشتریان`,
-        tags: ['عضو باشگاه مشتریان'],
+        tags: newTags,
         updated_at: new Date().toISOString()
       }, { onConflict: 'phone' })
 
@@ -98,11 +104,14 @@ export async function POST(req: Request) {
 
     const member = memberArray && memberArray.length > 0 ? memberArray[0] : null
 
+    // گرفتن نام سازمان برای استفاده در CRM
+    const { data: org } = await db.from('organizations').select('name').eq('id', orgId).single()
+    const orgName = org?.name || 'سازمان ناشناس'
+
     if (!member) {
-      const { data: org } = await db.from('organizations').select('name').eq('id', orgId).single()
       await db.from('membership_requests').insert({ 
         full_name: fullName, phone, member_id: memberId, 
-        organization_name: org?.name || 'نامشخص', status: 'pending' 
+        organization_name: orgName, status: 'pending' 
       })
       return NextResponse.json({ success: false, message: 'اطلاعات شما در لیست سازمان یافت نشد. درخواست شما جهت بررسی دستی ثبت شد.' })
     }
@@ -118,6 +127,31 @@ export async function POST(req: Request) {
     }).eq('id', member.id)
 
     if (updateError) return NextResponse.json({ error: `خطا در فعال‌سازی: ${updateError.message}` }, { status: 500 })
+
+    // ✅ ۳. ثبت خودکار در CRM (جدول مشتریان)
+    try {
+      const phoneClean = phone.trim()
+      const { data: existingCust } = await db.from('customers').select('tags').eq('phone', phoneClean).maybeSingle()
+
+      const currentTags = existingCust?.tags || []
+      const orgTag = `عضو ${orgName}`
+      
+      let newTags = [...currentTags]
+      if (!newTags.includes('عضو باشگاه سازمانی')) newTags.push('عضو باشگاه سازمانی')
+      if (!newTags.includes(orgTag)) newTags.push(orgTag)
+
+      await db.from('customers').upsert({
+        phone: phoneClean,
+        name: fullName,
+        device_id_hash: deviceIdHash,
+        notes: `ثبت‌نام در باشگاه سازمانی (${orgName})`,
+        tags: newTags,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'phone' })
+    } catch (crmErr) {
+      // اگر ثبت در CRM خطا داد، ثبت‌نام اصلی مشتری (B2B) رو متوقف نمی‌کنیم
+      console.error('CRM Sync Error:', crmErr)
+    }
 
     return NextResponse.json({ success: true, message: 'تبریک! عضویت شما فعال شد.' })
   } catch (err: any) {

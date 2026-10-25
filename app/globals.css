@@ -4548,10 +4548,10 @@ body {
 .order-detail-container {
   max-width: 600px;
   margin: 0 auto;
-  padding: 16px 16px 100px; /* پدینگ پایین برای دکمه ثابت */
+  padding: 12px 12px 90px; /* پدینگ از 16 و 100 به 12 و 90 کاهش یافت */
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 12px; /* فاصله بین کادرها از 20 به 12 کاهش یافت */
 }
 
 /* استپر وضعیت سفارش */
@@ -4559,8 +4559,8 @@ body {
   display: flex;
   justify-content: space-between;
   background: #fffdf9;
-  padding: 16px 10px;
-  border-radius: 14px;
+  padding: 10px 6px; /* فشرده‌تر شد */
+  border-radius: 10px; /* گوشه‌ها کمتر گرد شد */
   border: 1px solid #e3ddd2;
   position: relative;
 }
@@ -4569,17 +4569,17 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   flex: 1;
   z-index: 2;
-  font-size: 11px;
+  font-size: 10px; /* فونت کوچک‌تر */
   color: #766f64;
   text-align: center;
 }
 
 .step-dot {
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
   border-radius: 50%;
   background: #e3ddd2;
   display: flex;
@@ -4589,58 +4589,42 @@ body {
   color: #fff;
 }
 
-.step-item.active .step-dot {
-  background: #d99f59;
-  box-shadow: 0 0 0 4px rgba(217, 159, 89, 0.2);
-}
-.step-item.done .step-dot {
-  background: #477052;
-}
-.step-item.active {
-  color: #29251f;
-  font-weight: 700;
-}
-
 /* باکس‌های اطلاعات */
 .info-card {
   background: #fffdf9;
-  border: 1px solid #e3ddd2;
-  border-radius: 14px;
-  padding: 16px;
+  border: 1px solid #e8e4dc; /* حاشیه ملایم‌تر */
+  border-radius: 10px; /* گوشه‌های تیزتر به جای 14 */
+  padding: 12px 14px; /* پدینگ داخلی کمتر */
+  box-shadow: none; /* حذف سایه برای حالت تخت */
 }
+
 .info-card h3 {
-  margin: 0 0 12px 0;
-  font-size: 14px;
+  margin: 0 0 8px 0;
+  font-size: 13px; /* فونت کوچک‌تر */
   color: #6b4f3a;
   border-bottom: 1px solid #ebe6de;
-  padding-bottom: 8px;
+  padding-bottom: 6px;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
 .info-row {
   display: flex;
   justify-content: space-between;
-  padding: 8px 0;
-  font-size: 13px;
+  padding: 6px 0; /* فشرده‌تر */
+  font-size: 12px; /* فونت کوچک‌تر */
   color: #4a443d;
   border-bottom: 1px dashed #ebe6de;
-}
-.info-row:last-child {
-  border-bottom: 0;
-}
-.info-row strong {
-  color: #29251f;
 }
 
 .total-row {
   display: flex;
   justify-content: space-between;
-  padding-top: 12px;
-  margin-top: 8px;
+  padding-top: 10px;
+  margin-top: 4px;
   border-top: 2px solid #ebe6de;
-  font-size: 15px;
+  font-size: 14px; /* از 15 کمتر شد */
   font-weight: 800;
   color: #6b4f3a;
 }
@@ -4651,26 +4635,11 @@ body {
   bottom: 0;
   left: 0;
   right: 0;
-  padding: 16px;
+  padding: 10px 16px; /* از 16 کمتر شد */
   background: #fffdf9;
   border-top: 1px solid #e3ddd2;
   box-shadow: 0 -4px 12px rgba(0,0,0,0.05);
   z-index: 50;
-}
-.btn-whatsapp {
-  width: 100%;
-  min-height: 48px;
-  background: #25D366;
-  color: #fff;
-  border: none;
-  border-radius: 10px;
-  font-size: 15px;
-  font-weight: 700;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  cursor: pointer;
 }
 /* ========================================
    39. ADMIN TABLES (مدیریت میزها)
@@ -13228,190 +13197,40 @@ body {
    80. ORDER PAYMENT (بخش پرداخت در صفحه سفارش)
    ======================================== */
 
-/* ─── بج وضعیت پرداخت ─── */
-.order-payment-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 14px;
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 800;
-  margin-bottom: 12px;
-  align-self: center;
-  width: fit-content;
-  margin-inline: auto;
-}
-
-.order-payment-badge.paid {
-  background: #e5f0e6;
-  color: #2d5d3e;
-}
-
-.order-payment-badge.pending {
-  background: #fff4d9;
-  color: #9a6b3f;
-}
-
-.order-payment-badge.failed {
-  background: #fde8e6;
-  color: #9b3c32;
-}
-
-.order-payment-badge.unpaid {
-  background: #eee9e4;
-  color: #766f64;
-}
-
-.order-payment-badge-ref {
-  font-family: 'Courier New', monospace;
-  font-size: 10px;
-  letter-spacing: 0.5px;
-  opacity: 0.85;
-}
-
 /* ─── بخش پرداخت ─── */
 .order-payment-section {
-  padding: 18px;
+  padding: 14px; /* از 18 کمتر شد */
   background: #fffdf9;
-  border: 2px solid #6b4f3a;
-  border-radius: 16px;
+  border: 1px solid #6b4f3a; /* از 2px به 1px کاهش یافت تا ضخیم نباشه */
+  border-radius: 12px; /* از 16 به 12 کاهش یافت */
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  box-shadow: 0 8px 24px rgba(107, 79, 58, 0.08);
+  gap: 10px;
+  box-shadow: none; /* حذف سایه */
 }
 
 .order-payment-section-title {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 800;
   color: #6b4f3a;
-  padding-bottom: 10px;
+  padding-bottom: 8px;
   border-bottom: 1px dashed #d8d0c4;
 }
 
 .order-payment-section-desc {
   margin: 0;
-  font-size: 13px;
+  font-size: 12px; /* فونت کوچک‌تر */
   color: #4a443d;
-  line-height: 1.9;
-}
-
-.order-payment-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+  line-height: 1.8;
 }
 
 .order-payment-btn {
-  min-height: 52px;
-  padding: 12px 20px;
-  border-radius: 12px;
-  font: inherit;
-  font-size: 15px;
-  font-weight: 800;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-}
-
-.order-payment-btn.primary {
-  background: #6b4f3a;
-  color: #fff;
-  border: 0;
-  box-shadow: 0 4px 16px rgba(107, 79, 58, 0.25);
-}
-
-.order-payment-btn.primary:hover:not(:disabled) {
-  background: #5a4230;
-  transform: translateY(-1px);
-}
-
-.order-payment-btn.secondary {
-  background: #fffdf9;
-  color: #6b4f3a;
-  border: 1.5px solid #d8d0c4;
-}
-
-.order-payment-btn.secondary:hover:not(:disabled) {
-  background: #f5f0e9;
-  border-color: #b8ad9c;
-}
-
-.order-payment-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-  box-shadow: none;
-}
-
-/* ─── روش‌های پرداخت جایگزین ─── */
-.order-payment-methods {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.order-payment-method-btn {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 12px 14px;
-  border: 1.5px solid #d8d0c4;
-  border-radius: 12px;
-  background: #fffdf9;
-  color: #29251f;
-  font: inherit;
-  text-align: right;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  min-height: 64px;
-}
-
-.order-payment-method-btn:hover:not(:disabled) {
-  border-color: #6b4f3a;
-  background: #f5f0e9;
-}
-
-.order-payment-method-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.order-payment-method-icon {
-  width: 36px;
-  height: 36px;
-  flex: 0 0 36px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #f5f0e9;
+  min-height: 46px; /* از 52 کمتر شد */
+  padding: 10px 16px;
   border-radius: 10px;
-  font-size: 18px;
+  font-size: 14px;
+  /* بقیه موارد بدون تغییر */
 }
-
-.order-payment-method-btn strong {
-  display: block;
-  font-size: 13px;
-  font-weight: 800;
-  margin-bottom: 2px;
-}
-
-.order-payment-method-btn small {
-  display: block;
-  font-size: 11px;
-  color: #766f64;
-}
-
-/* ─── موبایل ─── */
-@media (max-width: 500px) {
-  .order-payment-methods {
-    grid-template-columns: 1fr;
-  }
-}
-
 /* ========================================
    82. RECEIPT UPLOAD (آپلود رسید)
    ======================================== */

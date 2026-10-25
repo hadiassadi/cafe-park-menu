@@ -4,7 +4,8 @@ import localFont from 'next/font/local'
 import { getSettings } from '@/lib/menu'
 import { SITE_URL } from '@/lib/site'
 import { CartProvider } from '@/lib/cart-context'
-import CartFloatingBar from './components/CartFloatingBar' // ✅ اضافه شد
+// ✅ تغییر: به جای CartFloatingBar، رپر آن را ایمپورت می‌کنیم
+import CartFloatingBarWrapper from './components/CartFloatingBarWrapper'
 
 const vazir = localFont({
   src: './fonts/Vazirmatn-Regular.woff2',
@@ -133,8 +134,8 @@ export default function RootLayout({
       <body>
         <CartProvider>
           {children}
-          {/* ✅ نوار شناور سبد خرید در تمام صفحات */}
-          <CartFloatingBar />
+          {/* ✅ تغییر: از رپر استفاده می‌کنیم تا در صفحات غیرضروری مخفی شود */}
+          <CartFloatingBarWrapper />
         </CartProvider>
       </body>
     </html>
