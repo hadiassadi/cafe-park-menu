@@ -1,3 +1,4 @@
+import { requireAdmin } from '@/lib/admin/require-admin'
 import 'server-only'
 import { sendPushToOrder } from '@/lib/push/send-push'
 
@@ -5,6 +6,9 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 export async function POST(req: Request) {
+  const denied = await requireAdmin()
+  if (denied) return denied
+
   try {
     const { orderId, status } = await req.json()
     if (!orderId || !status) {
