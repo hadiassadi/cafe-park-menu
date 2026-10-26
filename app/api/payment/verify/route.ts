@@ -118,10 +118,11 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(
       `${origin}/payment/callback?status=success&orderId=${order.id}&refId=${result.refId}`
     )
-  } catch (err: any) {
-    console.error('[payment/verify] error:', err)
-    return NextResponse.redirect(
-      `${origin}/payment/callback?status=error&message=${encodeURIComponent(err?.message || 'خطای غیرمنتظره')}`
-    )
-  }
+  } catch (err) {
+  console.error('[payment/verify]', err)
+  return NextResponse.redirect(
+    `${origin}/payment/callback?status=error&message=${encodeURIComponent('خطای غیرمنتظره')}`
+  )
+}
+
 }

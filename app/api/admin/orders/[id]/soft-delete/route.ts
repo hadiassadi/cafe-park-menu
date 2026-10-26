@@ -1,3 +1,4 @@
+import { apiError } from '@/lib/api-error'
 import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { supabaseAdmin } from '@/lib/supabase/server'
@@ -61,7 +62,7 @@ export async function POST(
       .select('id')
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return apiError(error, 'خطای پایگاه داده')
     }
     if (!data || data.length === 0) {
       return NextResponse.json(
@@ -72,9 +73,6 @@ export async function POST(
 
     return NextResponse.json({ success: true })
   } catch (err: any) {
-    return NextResponse.json(
-      { error: err?.message || 'خطای غیرمنتظره' },
-      { status: 500 }
-    )
+    return apiError(err)
   }
 }

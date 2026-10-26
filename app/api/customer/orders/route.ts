@@ -1,3 +1,4 @@
+import { apiError } from '@/lib/api-error'
 import 'server-only'
 import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
@@ -32,7 +33,7 @@ export async function GET() {
 
     if (error) {
       console.error('Orders Error:', error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return apiError(error, 'خطای پایگاه داده')
     }
 
     return NextResponse.json({ orders: data || [] })

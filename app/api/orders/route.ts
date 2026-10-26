@@ -1,3 +1,4 @@
+import { apiError } from '@/lib/api-error'
 import 'server-only'
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
@@ -119,6 +120,6 @@ export async function POST(request: NextRequest) {
     return response
   } catch (err: any) {
     console.error('[orders POST] unexpected:', err)
-    return NextResponse.json({ error: err?.message || 'خطای غیرمنتظره' }, { status: 500 })
+    return apiError(err)
   }
 }

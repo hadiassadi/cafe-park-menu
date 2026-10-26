@@ -1,3 +1,4 @@
+import { apiError } from '@/lib/api-error'
 import { NextRequest, NextResponse } from 'next/server'
 import { getSalesReport, type SalesReportFilter } from '@/lib/stats'
 
@@ -144,9 +145,6 @@ export async function GET(request: NextRequest) {
     })
   } catch (err: any) {
     console.error('[export/sales] error:', err)
-    return NextResponse.json(
-      { error: err?.message || 'خطای غیرمنتظره' },
-      { status: 500 }
-    )
+    return apiError(err)
   }
 }

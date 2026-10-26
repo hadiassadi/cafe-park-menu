@@ -1,3 +1,4 @@
+import { apiError } from '@/lib/api-error'
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { requestZarinPalPayment } from '@/lib/payment/zarinpal'
@@ -104,6 +105,6 @@ export async function POST(req: NextRequest) {
     })
   } catch (err: any) {
     console.error('[payment/request] error:', err)
-    return NextResponse.json({ error: err?.message || 'خطای غیرمنتظره' }, { status: 500 })
+    return apiError(err)
   }
 }

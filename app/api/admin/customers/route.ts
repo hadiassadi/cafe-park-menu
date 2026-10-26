@@ -1,3 +1,4 @@
+import { apiError } from '@/lib/api-error'
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { requireAdmin } from '@/lib/admin/require-admin'
@@ -118,6 +119,6 @@ export async function GET() {
       headers: { 'Cache-Control': 'no-store' },
     })
   } catch (err: any) {
-    return NextResponse.json({ error: err?.message || 'خطای غیرمنتظره' }, { status: 500 })
+    return apiError(err)
   }
 }

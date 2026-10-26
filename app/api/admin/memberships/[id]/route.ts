@@ -1,3 +1,4 @@
+import { apiError } from '@/lib/api-error'
 import 'server-only'
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase/server'
@@ -20,7 +21,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     is_active: body.is_active
   }).eq('id', id)
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return apiError(error, 'خطای پایگاه داده')
   return NextResponse.json({ success: true })
 }
 

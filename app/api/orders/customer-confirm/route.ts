@@ -1,3 +1,4 @@
+import { apiError } from '@/lib/api-error'
 import 'server-only'
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase/server'
@@ -18,7 +19,7 @@ export async function POST(req: Request) {
       .eq('id', orderId)
       .eq('status', 'pending')
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    if (error) return apiError(error, 'خطای پایگاه داده')
     return NextResponse.json({ success: true })
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 })

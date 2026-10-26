@@ -1,3 +1,4 @@
+import { apiError } from '@/lib/api-error'
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
@@ -48,11 +49,11 @@ export async function POST(req: NextRequest) {
 
     if (error) {
       console.error('[customers/update]', error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return apiError(error, 'خطای پایگاه داده')
     }
 
     return NextResponse.json({ success: true })
   } catch (err: any) {
-    return NextResponse.json({ error: err?.message || 'خطای غیرمنتظره' }, { status: 500 })
+    return apiError(err)
   }
 }

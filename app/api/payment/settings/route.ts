@@ -1,3 +1,4 @@
+import { apiError } from '@/lib/api-error'
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
@@ -23,16 +24,13 @@ export async function GET() {
 
     if (error) {
       console.error('[payment/settings]', error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return apiError(error, 'خطای پایگاه داده')
     }
 
     return NextResponse.json(data, {
       headers: { 'Cache-Control': 'no-store' },
     })
   } catch (err: any) {
-    return NextResponse.json(
-      { error: err?.message || 'خطای غیرمنتظره' },
-      { status: 500 }
-    )
+    return apiError(err)
   }
 }
