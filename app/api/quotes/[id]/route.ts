@@ -1,3 +1,4 @@
+import { requireAdmin } from '@/lib/admin/require-admin'
 import { apiError } from '@/lib/api-error'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase/server'
@@ -8,6 +9,9 @@ type Params = { params: Promise<{ id: string }> }
 
 // PATCH: ویرایش جمله
 export async function PATCH(request: Request, { params }: Params) {
+  const denied = await requireAdmin()
+  if (denied) return denied
+
   const db = await supabaseServer()
   const { id } = await params
 
@@ -57,6 +61,9 @@ export async function PATCH(request: Request, { params }: Params) {
 
 // DELETE: حذف جمله
 export async function DELETE(_request: Request, { params }: Params) {
+  const denied = await requireAdmin()
+  if (denied) return denied
+
   const db = await supabaseServer()
   const { id } = await params
 

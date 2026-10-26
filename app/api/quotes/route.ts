@@ -1,3 +1,4 @@
+import { requireAdmin } from '@/lib/admin/require-admin'
 import { apiError } from '@/lib/api-error'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase/server'
@@ -6,6 +7,9 @@ export const dynamic = 'force-dynamic'
 
 // GET: خواندن جملات
 export async function GET() {
+  const denied = await requireAdmin()
+  if (denied) return denied
+
   const db = await supabaseServer()
 
   const { data, error } = await db
@@ -23,6 +27,9 @@ export async function GET() {
 
 // POST: اضافه کردن جمله جدید (ادمین)
 export async function POST(request: Request) {
+  const denied = await requireAdmin()
+  if (denied) return denied
+
   const db = await supabaseServer()
 
   const {
