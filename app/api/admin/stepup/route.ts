@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { createClient } from '@supabase/supabase-js'
+import { requireAdmin } from '@/lib/admin/require-admin'
 import {
   createStepUpToken,
   getStepUpCookieName,
@@ -11,28 +12,31 @@ import {
 export const dynamic = 'force-dynamic'
 
 export async function POST(req: NextRequest) {
-  try {
-    const body = await req.json()
-    const password = String(body?.password || '')
+  // 1) نگهبان ادمین: در حالت رد شدن یک پاسخ برمی‌گرداند، در حالت موفق null
+  const guard = await requireAdmin()
+  if (guard) return guard
 
-    if (!password) {
-      return NextResponse.json(
-        { error: 'رمز عبور الزامی است' },
-        { status: 400 }
-      )
+  try {
+    let body: any
+    try {
+      body = await req.json()
+    } catch {
+      return NextResponse.json({ error: 'درخواست نامعتبر است' }, { status: 400 })
     }
 
-    const cookieStore = await cookies()
+    const password = String(body?.password || '')
+    if (!password) {
+      return NextResponse.json({ error: 'رمز عبور الزامی است' }, { status: 400 })
+    }
+
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL
     const anonKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
-
     if (!url || !anonKey) {
-      return NextResponse.json(
-        { error: 'تنظیمات سرور ناقص است' },
-        { status: 500 }
-      )
+      return NextResponse.json({ error: 'تنظیمات سرور ناقص است' }, { status: 500 })
     }
 
+    // 2) ایمیل کاربر را از نشست می‌گیریم
+    const cookieStore = await cookies()
     const supabaseSession = createServerClient(url, anonKey, {
       cookies: {
         getAll: () => cookieStore.getAll(),
@@ -43,32 +47,28 @@ export async function POST(req: NextRequest) {
     const { data: userData, error: userError } =
       await supabaseSession.auth.getUser()
 
-    if (userError || !userData?.user?.email) {
+    const email = userData?.user?.email
+    if (userError || !email) {
       return NextResponse.json(
         { error: 'جلسه منقضی شده. دوباره وارد شو.' },
         { status: 401 }
       )
     }
 
+    // 3) بررسی رمز عبور
     const testClient = createClient(url, anonKey, {
       auth: { persistSession: false, autoRefreshToken: false },
     })
 
     const { data: signInData, error: signInError } =
-      await testClient.auth.signInWithPassword({
-        email: userData.user.email,
-        password,
-      })
+      await testClient.auth.signInWithPassword({ email, password })
 
     if (signInError || !signInData?.user) {
-      return NextResponse.json(
-        { error: 'رمز عبور اشتباه است' },
-        { status: 401 }
-      )
+      return NextResponse.json({ error: 'رمز عبور اشتباه است' }, { status: 401 })
     }
 
-    const token = createStepUpToken(userData.user.email)
-
+    // 4) صدور توکن Step-up
+    const token = createStepUpToken(email)
     const response = NextResponse.json({ success: true })
     response.cookies.set(getStepUpCookieName(), token, {
       httpOnly: true,
@@ -77,13 +77,9 @@ export async function POST(req: NextRequest) {
       maxAge: Math.floor(getStepUpTtlMs() / 1000),
       path: '/',
     })
-
     return response
-  } catch (err: any) {
+  } catch (err) {
     console.error('[stepup] unexpected:', err)
-    return NextResponse.json(
-      { error: err?.message || 'خطای غیرمنتظره' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'خطای غیرمنتظره' }, { status: 500 })
   }
 }

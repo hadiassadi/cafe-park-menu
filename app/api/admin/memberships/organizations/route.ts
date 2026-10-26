@@ -1,12 +1,16 @@
 import 'server-only'
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase/server'
+import { requireAdmin } from '@/lib/admin/require-admin'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 export async function GET() {
   try {
+    const denied = await requireAdmin()
+    if (denied) return denied
+
     const db = supabaseAdmin()
     const now = new Date().toISOString()
 

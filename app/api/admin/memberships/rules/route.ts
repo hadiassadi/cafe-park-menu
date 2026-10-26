@@ -1,10 +1,14 @@
 import 'server-only'
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase/server'
+import { requireAdmin } from '@/lib/admin/require-admin'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET() {
+  const denied = await requireAdmin()
+  if (denied) return denied
+
   const db = supabaseAdmin()
   const { data } = await db.from('settings').select('membership_rules_general, membership_rules_org').eq('id', 1).single()
   return NextResponse.json(data || {})
@@ -12,6 +16,9 @@ export async function GET() {
 
 export async function POST(req: Request) {
   try {
+    const denied = await requireAdmin()
+    if (denied) return denied
+
     const body = await req.json()
     const db = supabaseAdmin()
     

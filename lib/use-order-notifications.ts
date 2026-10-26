@@ -71,18 +71,36 @@ export function useOrderNotifications(enabled: boolean = true) {
     if (!enabled) return
 
     let cancelled = false
+    let interval: ReturnType<typeof setInterval> | undefined
+
+    function stopPolling() {
+      cancelled = true
+      if (interval) clearInterval(interval)
+    }
 
     async function checkOrders() {
       if (cancelled) return
 
       try {
-        // ✅ دریافت دیتا از API امن سرور به جای اتصال مستقیم به دیتابیس
-        const res = await fetch('/api/admin/orders/pending', { cache: 'no-store' })
+        const res = await fetch('/api/admin/orders/pending', {
+          cache: 'no-store',
+          credentials: 'same-origin',
+        })
+
+        // نشست منقضی یا بدون دسترسی ادمین: polling را متوقف کن
+        if (res.status === 401 || res.status === 403) {
+          console.warn('[orders] دسترسی ادمین معتبر نیست، polling متوقف شد:', res.status)
+          stopPolling()
+          if (isMountedRef.current) setPendingCount(0)
+          return
+        }
+
+        // خطای موقتی (مثلاً 5xx): دور بعد دوباره تلاش می‌شود
         if (!res.ok) return
-        
+
         const json = await res.json()
         if (cancelled || !json.orders) return
-        
+
         const data = json.orders
 
         const newOnes = data.filter((o: any) => !knownOrderIdsRef.current.has(o.id))
@@ -130,11 +148,10 @@ export function useOrderNotifications(enabled: boolean = true) {
     }
 
     checkOrders()
-    const interval = setInterval(checkOrders, 10000)
+    interval = setInterval(checkOrders, 10000)
 
     return () => {
-      cancelled = true
-      clearInterval(interval)
+      stopPolling()
       if (flashTimerRef.current) clearTimeout(flashTimerRef.current)
     }
   }, [enabled])
