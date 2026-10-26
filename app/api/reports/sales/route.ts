@@ -1,3 +1,4 @@
+import { requireAdmin } from '@/lib/admin/require-admin'
 import { apiError } from '@/lib/api-error'
 import { NextRequest, NextResponse } from 'next/server'
 import { getSalesReport, type SalesReportFilter } from '@/lib/stats'
@@ -5,6 +6,9 @@ import { getSalesReport, type SalesReportFilter } from '@/lib/stats'
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: NextRequest) {
+  const denied = await requireAdmin()
+  if (denied) return denied
+
   try {
     const { searchParams } = new URL(request.url)
     const filter = (searchParams.get('filter') || 'month') as SalesReportFilter
