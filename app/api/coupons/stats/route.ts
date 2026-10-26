@@ -1,9 +1,13 @@
+import { requireAdmin } from '@/lib/admin/require-admin'
 import { NextResponse } from 'next/server'
 import { getCouponStats } from '@/lib/stats'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: Request) {
+  const denied = await requireAdmin()
+  if (denied) return denied
+
   const { searchParams } = new URL(request.url)
   const filter = searchParams.get('filter') || 'month'
 

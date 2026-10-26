@@ -1,9 +1,13 @@
+import { requireAdmin } from '@/lib/admin/require-admin'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase/server'
 
 export const dynamic = 'force-dynamic'
 
 export async function POST(request: Request) {
+  const denied = await requireAdmin()
+  if (denied) return denied
+
   const db = await supabaseServer()
 
   const {
