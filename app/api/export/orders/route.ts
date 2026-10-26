@@ -1,3 +1,4 @@
+import { apiError } from '@/lib/api-error'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase/server'
 
@@ -89,10 +90,7 @@ export async function GET(request: Request) {
 
     if (error) {
       console.error('[export orders] error:', error)
-      return NextResponse.json(
-        { error: error.message },
-        { status: 500 }
-      )
+      return apiError(error, 'خطای پایگاه داده')
     }
 
     // ─── ساخت CSV ───

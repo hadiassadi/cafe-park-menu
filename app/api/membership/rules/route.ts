@@ -1,3 +1,4 @@
+import { apiError } from '@/lib/api-error'
 import 'server-only'
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase/server'
@@ -16,7 +17,7 @@ export async function GET() {
 
     if (error) {
       console.error('Rules Error:', error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return apiError(error, 'خطای پایگاه داده')
     }
 
     return NextResponse.json({ 

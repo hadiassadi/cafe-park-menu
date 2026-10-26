@@ -13,9 +13,9 @@ export async function GET() {
 
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL
     const key = process.env.SUPABASE_SERVICE_ROLE_KEY
-    
+
     if (!url || !key) throw new Error('Missing Supabase admin env')
-    
+
     const db = createClient(url, key, { auth: { persistSession: false } })
 
     const { data, error } = await db
@@ -31,17 +31,16 @@ export async function GET() {
       .limit(20)
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      console.error('[orders/pending] db error:', error)
+      return NextResponse.json({ error: 'خطای پایگاه داده' }, { status: 500 })
     }
 
     return NextResponse.json(
       { orders: data ?? [] },
       { headers: { 'Cache-Control': 'no-store' } }
     )
-  } catch (err: any) {
-    return NextResponse.json(
-      { error: err?.message || 'خطای غیرمنتظره' },
-      { status: 500 }
-    )
+  } catch (err) {
+    console.error('[orders/pending] unexpected:', err)
+    return NextResponse.json({ error: 'خطای غیرمنتظره' }, { status: 500 })
   }
 }

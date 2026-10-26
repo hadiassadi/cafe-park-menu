@@ -1,3 +1,4 @@
+import { apiError } from '@/lib/api-error'
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase/server'
 
@@ -45,7 +46,7 @@ export async function POST(req: NextRequest) {
 
     if (error) {
       console.error('[payment/set-method] error:', error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return apiError(error, 'خطای پایگاه داده')
     }
 
     if (!data || data.length === 0) {
@@ -56,9 +57,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: true })
   } catch (err: any) {
     console.error('[payment/set-method] unexpected:', err)
-    return NextResponse.json(
-      { error: err?.message || 'خطای غیرمنتظره' },
-      { status: 500 }
-    )
+    return apiError(err)
   }
 }

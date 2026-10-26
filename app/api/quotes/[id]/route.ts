@@ -1,3 +1,4 @@
+import { apiError } from '@/lib/api-error'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase/server'
 
@@ -48,7 +49,7 @@ export async function PATCH(request: Request, { params }: Params) {
     .single()
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return apiError(error, 'خطای پایگاه داده')
   }
 
   return NextResponse.json(data)
@@ -70,7 +71,7 @@ export async function DELETE(_request: Request, { params }: Params) {
   const { error } = await db.from('quotes').delete().eq('id', id)
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return apiError(error, 'خطای پایگاه داده')
   }
 
   return NextResponse.json({ success: true })

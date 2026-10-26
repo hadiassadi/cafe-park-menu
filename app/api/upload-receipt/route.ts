@@ -1,3 +1,4 @@
+import { apiError } from '@/lib/api-error'
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase/server'
 
@@ -79,9 +80,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ url: signedUrlData.signedUrl })
   } catch (err: any) {
     console.error('[upload-receipt] unexpected:', err)
-    return NextResponse.json(
-      { error: err?.message || 'خطای غیرمنتظره' },
-      { status: 500 }
-    )
+    return apiError(err)
   }
 }

@@ -1,3 +1,4 @@
+import { apiError } from '@/lib/api-error'
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase/server'
 
@@ -50,10 +51,7 @@ export async function GET(request: Request) {
 
     if (error) {
       console.error('[coupon orders] error:', error)
-      return NextResponse.json(
-        { error: error.message },
-        { status: 500 }
-      )
+      return apiError(error, 'خطای پایگاه داده')
     }
 
     return NextResponse.json({ orders: data ?? [] })

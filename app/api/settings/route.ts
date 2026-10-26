@@ -1,3 +1,4 @@
+import { apiError } from '@/lib/api-error'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase/server'
 
@@ -13,7 +14,7 @@ export async function GET() {
     .maybeSingle()
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return apiError(error, 'خطای پایگاه داده')
   }
 
   return NextResponse.json(data ?? {})
@@ -181,12 +182,7 @@ export async function PATCH(request: Request) {
   if (error) {
     console.error('Supabase error:', error)
     return NextResponse.json(
-      {
-        error: error.message,
-        code: error.code,
-        details: error.details,
-        hint: error.hint,
-      },
+      { error: 'خطا در ذخیره تنظیمات' },
       { status: 500 }
     )
   }

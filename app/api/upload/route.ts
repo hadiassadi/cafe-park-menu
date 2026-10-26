@@ -93,15 +93,12 @@ export async function POST(request: Request) {
       originalSize: file.size,
     })
   } catch (error) {
-    console.error('Image processing error:', error)
-    return NextResponse.json(
-      {
-        error:
-          error instanceof Error
-            ? error.message
-            : 'خطا در پردازش عکس',
-      },
-      { status: 500 }
-    )
-  }
+  console.error('Image processing error:', error)
+  return NextResponse.json(
+    { error: 'خطا در پردازش عکس' },
+    { status: 500 }
+  )
+}
+
+
 }
