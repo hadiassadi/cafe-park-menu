@@ -404,10 +404,18 @@ export default function OrderPage({
   // ✅ رسید (عکس یا متن) ارسال شده و منتظر تعیین‌تکلیف مدیر هستیم
   const receiptSubmitted =
     isTransfer && isPendingReview && !!(order.payment_receipt_url || order.payment_note)
+  // ✅ سفارش تحویل‌شده و تسویه‌نشده (بدهی)
+  const isDebt =
+    order.status === 'delivered' && !isPaid && !isCancelled
+  const canPayDebtOnline =
+    isDebt &&
+    paymentSettings?.payment_enabled === true &&
+    paymentSettings?.payment_online_enabled === true
 
   const showPaymentSection =
     !isCancelled &&
     !isPaid &&
+    order.status !== 'delivered' &&
     paymentSettings?.payment_enabled === true &&
     (needsOnlinePayment || needsTransferReceipt || isFailed)
 
@@ -541,6 +549,33 @@ export default function OrderPage({
           )}
         </div>
       )}
+      {isDebt && (
+        <div className="order-payment-section">
+          <div className="order-payment-section-title">💸 این سفارش هنوز تسویه نشده است</div>
+          <p className="order-payment-section-desc">
+            مبلغ {formatPrice(order.subtotal)} تومان باقی مانده است.
+            {canPayDebtOnline
+              ? ' می‌تونی همین حالا آنلاین پرداخت کنی.'
+              : ' لطفاً هنگام مراجعهٔ بعدی به کافه تسویه کن.'}
+          </p>
+
+          {paymentError && (
+            <div className="checkout-error" style={{ marginBottom: '12px' }}>❌ {paymentError}</div>
+          )}
+
+          {canPayDebtOnline && (
+            <button
+              type="button"
+              className="order-payment-btn primary"
+              onClick={handlePayOnline}
+              disabled={paying}
+            >
+              {paying ? '...' : `💳 پرداخت آنلاین ${formatPrice(order.subtotal)} تومان`}
+            </button>
+          )}
+        </div>
+      )}
+
 
       {showPaymentSection && (
         <div className="order-payment-section">

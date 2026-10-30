@@ -33,11 +33,9 @@ export default function MyOrdersClient() {
   const [loading, setLoading] = useState(true)
   
   // ✅ تب‌های اصلی (سفارش‌های باز / تاریخچه)
-  const [activeTab, setActiveTab] = useState<'open' | 'history'>('open')
-
+  const [activeTab, setActiveTab] = useState<'open' | 'history' | 'debt'>('open')
   const [customer, setCustomer] = useState<{ name: string; phone: string } | null>(null)
   const [toast, setToast] = useState<string | null>(null)
-
   const [showMemberModal, setShowMemberModal] = useState(false)
   const [memberName, setMemberName] = useState('')
   const [memberId, setMemberId] = useState('')
@@ -112,13 +110,22 @@ export default function MyOrdersClient() {
   const totalDiscount = validOrders.reduce((sum, o) => sum + (o.coupon_discount || 0), 0)
 
   // ✅ فیلتر کردن سفارش‌ها بر اساس تب فعال
+    // ✅ بدهی = تحویل‌شده و تسویه‌نشده
+  const debtOrders = orders.filter(
+    (o) => o.status === 'delivered' && o.payment_status !== 'paid'
+  )
+  const debtTotal = debtOrders.reduce((sum, o) => sum + o.subtotal, 0)
+
   const filteredOrders = orders.filter((o) => {
     if (activeTab === 'open') {
       return ['pending', 'confirmed', 'preparing', 'ready'].includes(o.status)
-    } else {
-      return ['delivered', 'cancelled'].includes(o.status)
     }
+    if (activeTab === 'debt') {
+      return o.status === 'delivered' && o.payment_status !== 'paid'
+    }
+    return ['delivered', 'cancelled'].includes(o.status)
   })
+
 
   return (
     <div className="my-orders-page">
@@ -156,6 +163,19 @@ export default function MyOrdersClient() {
           >
             📜 تاریخچه سفارشات
           </button>
+		            <button
+            onClick={() => setActiveTab('debt')}
+            style={{
+              flex: 1, padding: '14px 10px', fontSize: '14px', fontWeight: 'bold',
+              background: 'transparent', border: 'none',
+              borderBottom: activeTab === 'debt' ? '3px solid #9b3c32' : '3px solid transparent',
+              color: activeTab === 'debt' ? '#9b3c32' : '#766f64',
+              cursor: 'pointer', transition: 'all 0.2s ease'
+            }}
+          >
+            💸 بدهی‌ها{debtOrders.length > 0 ? ` (${debtOrders.length.toLocaleString('fa-IR')})` : ''}
+          </button>
+
         </div>
       </div>
 
@@ -221,12 +241,20 @@ export default function MyOrdersClient() {
 
       {filteredOrders.length === 0 ? (
         <div className="my-orders-empty">
-          {activeTab === 'open' 
-            ? 'در حال حاضر هیچ سفارش بازی ندارید.' 
-            : 'هنوز سابقه سفارشی (تحویل شده یا لغو شده) ندارید.'}
+                    {activeTab === 'open'
+            ? 'در حال حاضر هیچ سفارش بازی ندارید.'
+            : activeTab === 'debt'
+              ? '🎉 هیچ سفارش تسویه‌نشده‌ای ندارید.'
+              : 'هنوز سابقه سفارشی (تحویل شده یا لغو شده) ندارید.'}
         </div>
       ) : (
         <div className="my-orders-list" style={{ marginTop: '16px' }}>
+		          {activeTab === 'debt' && (
+            <div style={{ background: '#fde8e6', border: '1px solid #e8b8b2', color: '#9b3c32', borderRadius: '12px', padding: '12px 14px', fontSize: '13px', fontWeight: 700, textAlign: 'center' }}>
+              مجموع مبلغ تسویه‌نشده: {formatPrice(debtTotal)} تومان
+            </div>
+          )}
+
           {filteredOrders.map((order) => {
             const info = STATUS_INFO[order.status] || STATUS_INFO.pending
             return (
@@ -283,7 +311,17 @@ export default function MyOrdersClient() {
                     ❌ سفارش لغو شده {order.cancellation_reason_label ? `به دلیل: ${order.cancellation_reason_label}` : ''}
                   </div>
                 )}
-                <div className="my-orders-actions" style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
+                                {activeTab === 'debt' && (
+                  <Link
+                    href={`/order/${order.id}`}
+                    className="my-order-btn primary"
+                    style={{ display: 'block', textAlign: 'center', marginTop: '10px' }}
+                  >
+                    💳 مشاهده و تسویه
+                  </Link>
+                )}
+
+				<div className="my-orders-actions" style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
                   <button type="button" className="my-order-btn primary" style={{ flex: 1 }} onClick={() => handleReorder(order)}>🔄 سفارش مجدد</button>
                   <Link href={`/order/${order.id}`} className="my-order-btn" style={{ flex: 1, textAlign: 'center' }}>👁️ جزئیات</Link>
                 </div>
