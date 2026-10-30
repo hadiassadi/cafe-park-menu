@@ -1,18 +1,10 @@
+import 'server-only'
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { supabaseAdmin } from '@/lib/supabase/server'
+import { UUID_RE } from '@/lib/orders/owner'
 import { verifyZarinPalPayment } from '@/lib/payment/zarinpal'
 
 export const dynamic = 'force-dynamic'
-
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-
-function createDb() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
-  if (!url || !key) throw new Error('Missing Supabase env')
-  return createClient(url, key, { auth: { persistSession: false } })
-}
 
 function siteUrl() {
   return (process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000').replace(/\/$/, '')
@@ -30,52 +22,63 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url)
     const authority = searchParams.get('Authority')
     const status = searchParams.get('Status')
-    const orderId = searchParams.get('orderId')
+    const paymentId = searchParams.get('paymentId')
 
     if (!authority || authority.length > 64) {
       return back('error', undefined, { code: 'no_authority' })
     }
-    if (!orderId || !UUID_RE.test(orderId)) {
+    if (!paymentId || !UUID_RE.test(paymentId)) {
       return back('error', undefined, { code: 'bad_order' })
     }
 
-    const db = createDb()
+    const db = supabaseAdmin()
 
-    const { data: order, error: orderErr } = await db
-      .from('orders')
-      .select('id, payment_status, payment_authority, payment_amount')
-      .eq('id', orderId)
-      .single()
+    const { data: payment, error: payErr } = await db
+      .from('order_payments')
+      .select('id, order_id, method, amount, status, authority')
+      .eq('id', paymentId)
+      .maybeSingle()
 
-    if (orderErr || !order) {
+    if (payErr || !payment) {
       return back('error', undefined, { code: 'order_not_found' })
     }
+    const orderId = payment.order_id as string
 
-    // قبلاً پرداخت شده: هیچ تغییری روی سفارش انجام نشود
-    if (order.payment_status === 'paid') {
-      return back('already-paid', order.id)
+    if (payment.method !== 'online' || !payment.authority || payment.authority !== authority) {
+      console.error('[payment/verify] authority mismatch', { paymentId })
+      return back('error', orderId, { code: 'authority_mismatch' })
     }
 
-    // Authority باید همان چیزی باشد که برای این سفارش ساخته شده
-    if (!order.payment_authority || order.payment_authority !== authority) {
-      console.error('[payment/verify] authority mismatch', { orderId: order.id })
-      return back('error', order.id, { code: 'authority_mismatch' })
+    // قبلاً تأیید شده
+    if (payment.status === 'confirmed') {
+      return back('already-paid', orderId)
+    }
+    // فقط پرداخت در حال انتظار قابل تأیید است
+    if (payment.status !== 'pending') {
+      return back('error', orderId, { code: 'verify_failed' })
     }
 
-    // کاربر لغو کرد
+    const markFinal = async (newStatus: 'failed', reason: string) => {
+      const { error } = await db.rpc('set_order_payment_status', {
+        p_payment_id: payment.id,
+        p_new_status: newStatus,
+        p_reason: reason,
+      })
+      if (error && !String(error.message).includes('payment_already_final')) {
+        console.error('[payment/verify] mark failed:', error)
+      }
+    }
+
+    // کاربر در درگاه انصراف داد
     if (status !== 'OK') {
-      await db
-        .from('orders')
-        .update({ payment_status: 'failed' })
-        .eq('id', order.id)
-        .eq('payment_authority', authority)
-        .neq('payment_status', 'paid')
-      return back('cancelled', order.id)
+      await markFinal('failed', 'user_cancelled')
+      return back('cancelled', orderId)
     }
 
-    if (!Number.isInteger(order.payment_amount) || order.payment_amount <= 0) {
-      console.error('[payment/verify] invalid stored amount', { orderId: order.id })
-      return back('error', order.id, { code: 'bad_amount' })
+    const amount = Number(payment.amount)
+    if (!Number.isInteger(amount) || amount <= 0) {
+      console.error('[payment/verify] invalid stored amount', { paymentId })
+      return back('error', orderId, { code: 'bad_amount' })
     }
 
     const { data: settings, error: settingsErr } = await db
@@ -85,7 +88,7 @@ export async function GET(req: NextRequest) {
       .single()
 
     if (settingsErr || !settings?.payment_merchant_id) {
-      return back('error', order.id, { code: 'settings' })
+      return back('error', orderId, { code: 'settings' })
     }
 
     const result = await verifyZarinPalPayment(
@@ -94,52 +97,41 @@ export async function GET(req: NextRequest) {
         sandbox: !!settings.payment_sandbox_mode,
       },
       authority,
-      order.payment_amount
+      amount
     )
 
     if (!result.success) {
       if (result.retryable) {
-        // وضعیت نامعلوم است؛ سفارش را failed نکنید
-        console.error('[payment/verify] retryable failure', { orderId: order.id })
-        return back('pending', order.id)
+        // وضعیت نامعلوم است؛ ردیف را failed نکنید
+        console.error('[payment/verify] retryable failure', { paymentId })
+        return back('pending', orderId)
       }
-      await db
-        .from('orders')
-        .update({ payment_status: 'failed' })
-        .eq('id', order.id)
-        .eq('payment_authority', authority)
-        .neq('payment_status', 'paid')
-      return back('error', order.id, { code: 'verify_failed' })
+      await markFinal('failed', 'verify_rejected')
+      return back('error', orderId, { code: 'verify_failed' })
     }
 
-    // ثبت موفقیت: فقط اگر هنوز paid نشده باشد
-    const { data: updated, error: updErr } = await db
-      .from('orders')
-      .update({
-        payment_status: 'paid',
-        payment_ref_id: result.refId,
-        payment_verified_at: new Date().toISOString(),
-      })
-      .eq('id', order.id)
-      .eq('payment_authority', authority)
-      .neq('payment_status', 'paid')
-      .select('id')
+    // ثبت موفقیت (اتمیک)
+    const { error: confirmErr } = await db.rpc('set_order_payment_status', {
+      p_payment_id: payment.id,
+      p_new_status: 'confirmed',
+      p_ref_id: result.refId,
+    })
 
-    if (updErr) {
+    if (confirmErr) {
+      if (String(confirmErr.message).includes('payment_already_final')) {
+        return back('already-paid', orderId)
+      }
       // پول تأیید شده ولی ثبت نشد: حتماً در لاگ بماند
       console.error('[payment/verify] CRITICAL paid but not saved', {
-        orderId: order.id,
+        paymentId,
+        orderId,
         refId: result.refId,
-        updErr,
+        confirmErr,
       })
-      return back('error', order.id, { code: 'save_failed', refId: result.refId })
+      return back('error', orderId, { code: 'save_failed', refId: result.refId })
     }
 
-    if (!updated || updated.length === 0) {
-      return back('already-paid', order.id)
-    }
-
-    return back('success', order.id, { refId: result.refId })
+    return back('success', orderId, { refId: result.refId })
   } catch (err) {
     console.error('[payment/verify]', err)
     return back('error', undefined, { code: 'unexpected' })
