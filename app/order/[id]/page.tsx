@@ -411,7 +411,8 @@ export default function OrderPage({
     paymentSettings?.payment_enabled === true &&
     (needsOnlinePayment || needsTransferReceipt || isFailed)
 
-  const shouldShowBanner = !bannerDismissed && (isPaid || isCash || isCard)
+  const shouldShowBanner = !bannerDismissed && !isCancelled && (isPaid || isCash || isCard)
+
 
   // ✅ محاسبه تخفیف: اول از original_subtotal، اگه نبود از جمع آیتم‌ها
   const itemsSubtotal = Array.isArray(order.items)
@@ -451,6 +452,44 @@ export default function OrderPage({
   }
 
   const whatsappMessage = buildWhatsAppMessage(order)
+    const isTransferPaid = isPaid && order.payment_method === 'transfer'
+  const bannerOrderNo = formatPrice(order.order_number)
+  const bannerTableText = order.table_number
+    ? ` برای میز شماره ${formatPrice(order.table_number)}`
+    : ''
+
+  let bannerIcon = '✅'
+  let bannerTitle = 'سفارش شما با موفقیت ثبت شد!'
+  let bannerText = `سفارش #${bannerOrderNo}${bannerTableText} ثبت شد.`
+  let bannerShowHint = true
+
+  if (order.status === 'pending') {
+    if (isTransferPaid) {
+      bannerTitle = 'پرداخت شما با موفقیت تأیید شد!'
+      bannerText = `رسید پرداخت سفارش #${bannerOrderNo} تأیید شد و سفارش ثبت شد.`
+    } else {
+      bannerTitle = 'سفارش شما با موفقیت ثبت شد!'
+      bannerText = `سفارش #${bannerOrderNo}${bannerTableText} ثبت شد و منتظر تأیید است.`
+    }
+  } else if (order.status === 'confirmed') {
+    bannerIcon = '✅'
+    bannerTitle = 'سفارش شما تأیید شد'
+    bannerText = `سفارش #${bannerOrderNo} تأیید شد و به‌زودی آماده‌سازی شروع می‌شود.`
+  } else if (order.status === 'preparing') {
+    bannerIcon = '⏳'
+    bannerTitle = 'در حال آماده‌سازی'
+    bannerText = `سفارش #${bannerOrderNo} در حال آماده‌سازی است.`
+  } else if (order.status === 'ready') {
+    bannerIcon = '🔔'
+    bannerTitle = 'سفارش شما آماده است'
+    bannerText = `سفارش #${bannerOrderNo} آماده تحویل است و به‌زودی به میز شما می‌رسد.`
+  } else if (order.status === 'delivered') {
+    bannerIcon = '🎉'
+    bannerTitle = 'نوش جان!'
+    bannerText = `سفارش #${bannerOrderNo} تحویل داده شد. امیدواریم لذت ببرید.`
+    bannerShowHint = false
+  }
+
   const whatsappUrl = `https://wa.me/989301817098?text=${encodeURIComponent(whatsappMessage)}`
 
   return (
@@ -465,30 +504,17 @@ export default function OrderPage({
 
       {shouldShowBanner && (
         <div className="order-success-banner">
-          <div className="order-success-icon">✅</div>
+          <div className="order-success-icon">{bannerIcon}</div>
           <div className="order-success-body">
-            <p className="order-success-title">
-              {isPaid && order.payment_method === 'transfer'
-                ? '✅ پرداخت شما با موفقیت تأیید شد!'
-                : 'سفارش شما با موفقیت ثبت شد!'}
-            </p>
-            <p className="order-success-text">
-              {isPaid && order.payment_method === 'transfer' ? (
-                <>رسید پرداخت سفارش <strong>#{formatPrice(order.order_number)}</strong> تایید شد و سفارش در صف آماده‌سازی قرار گرفت.</>
-              ) : (
-                <>سفارش <strong>#{formatPrice(order.order_number)}</strong>
-                  {order.table_number && (
-                    <> برای <strong>میز شماره {formatPrice(order.table_number)}</strong></>
-                  )}{' '}
-                  ثبت شد و در صف آماده‌سازی قرار گرفت.
-                </>
-              )}
-            </p>
-            <p className="order-success-hint">
-              🙏 لطفاً برای جلوگیری از تداخل در سرویس‌دهی،{' '}
-              <strong>میز خود را ترک نکنید</strong> و منتظر بمانید.
-              می‌تونید وضعیت سفارش رو از همین صفحه پیگیری کنید.
-            </p>
+            <p className="order-success-title">{bannerTitle}</p>
+            <p className="order-success-text">{bannerText}</p>
+            {bannerShowHint && (
+              <p className="order-success-hint">
+                🙏 لطفاً برای جلوگیری از تداخل در سرویس‌دهی،{' '}
+                <strong>میز خود را ترک نکنید</strong> و منتظر بمانید.
+                می‌تونید وضعیت سفارش رو از همین صفحه پیگیری کنید.
+              </p>
+            )}
           </div>
           <button
             type="button"
@@ -500,8 +526,8 @@ export default function OrderPage({
           </button>
         </div>
       )}
-
       {!isCancelled && order && order.status !== 'delivered' && order.status !== 'cancelled' && (
+
         <EnablePushCard orderId={order.id} />
       )}
 

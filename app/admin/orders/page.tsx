@@ -27,11 +27,15 @@ export default async function OrdersPage() {
   const db = createClient(url, key, { auth: { persistSession: false } })
 
   const [ordersResult, settingsResult] = await Promise.all([
-    db
+        db
       .from('orders')
       .select('*')
+      .or(
+        'payment_method.in.(cash,card),payment_method.is.null,payment_status.eq.paid,and(payment_status.eq.pending_review,or(payment_receipt_url.not.is.null,payment_note.not.is.null))'
+      )
       .order('created_at', { ascending: false })
       .limit(200),
+
     db
       .from('settings')
       .select('admin_allow_delete_orders')
