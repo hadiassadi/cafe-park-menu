@@ -71,7 +71,11 @@ export default function UploadReceipt({
         body: JSON.stringify({ orderId, receiptUrl: data.url }),
       })
 
-      if (!updateRes.ok) throw new Error('خطا در ذخیره رسید')
+      if (!updateRes.ok) {
+        const errData = await updateRes.json().catch(() => null)
+        throw new Error(errData?.error || 'خطا در ذخیره رسید')
+      }
+
 
       onSuccess(data.url, null)
       setSelectedFile(null) 
@@ -101,9 +105,13 @@ export default function UploadReceipt({
         }),
       })
 
-      if (!res.ok) throw new Error('خطا در ذخیره رسید')
+      if (!res.ok) {
+        const errData = await res.json().catch(() => null)
+        throw new Error(errData?.error || 'خطا در ذخیره رسید')
+      }
 
       onSuccess(null, noteText.trim())
+
     } catch (err) {
       setError(err instanceof Error ? err.message : 'خطا')
     } finally {

@@ -63,17 +63,12 @@ export async function POST(req: NextRequest) {
 
     const db = supabaseAdmin()
 
-    // سفارش باید متعلق به همین دستگاه و هنوز قابل ویرایش باشد
+        // سفارش باید متعلق به همین دستگاه باشد
     const { data: order, error: findError } = await db
       .from('orders')
-      .select('id')
+      .select('id, status, payment_status, payment_method, payment_receipt_url, payment_note')
       .eq('id', orderId)
       .eq('device_id_hash', deviceHash)
-      .neq('payment_status', 'paid')
-	  .eq('payment_method', 'transfer')
-      .is('payment_receipt_url', null)
-      .is('payment_note', null)
-      .in('status', ['pending', 'confirmed', 'preparing', 'ready'])
       .is('deleted_at', null)
       .maybeSingle()
 
@@ -84,6 +79,40 @@ export async function POST(req: NextRequest) {
     if (!order) {
       return NextResponse.json({ error: 'سفارش پیدا نشد' }, { status: 404 })
     }
+
+    if (order.status === 'delivered') {
+      // بدهی: سفارش تحویل‌شده و تسویه‌نشده
+      if (order.payment_status === 'paid') {
+        return NextResponse.json({ error: 'این سفارش قبلاً تسویه شده' }, { status: 400 })
+      }
+      const { count, error: pendErr } = await db
+        .from('order_payments')
+        .select('id', { count: 'exact', head: true })
+        .eq('order_id', order.id)
+        .eq('status', 'pending_review')
+      if (pendErr) {
+        console.error('[upload-receipt] pending check:', pendErr)
+        return apiError(pendErr, 'خطای پایگاه داده')
+      }
+      if ((count ?? 0) > 0) {
+        return NextResponse.json(
+          { error: 'رسید شما قبلاً ارسال شده و در انتظار تأیید مدیر است.' },
+          { status: 409 }
+        )
+      }
+    } else {
+      // مسیر قبلی برای سفارش‌های باز
+      const editable =
+        order.payment_status !== 'paid' &&
+        order.payment_method === 'transfer' &&
+        !order.payment_receipt_url &&
+        !order.payment_note &&
+        ['pending', 'confirmed', 'preparing', 'ready'].includes(order.status)
+      if (!editable) {
+        return NextResponse.json({ error: 'سفارش پیدا نشد' }, { status: 404 })
+      }
+    }
+
 
     const fileName = `receipt-${orderId}-${Date.now()}.${detected.ext}`
 
