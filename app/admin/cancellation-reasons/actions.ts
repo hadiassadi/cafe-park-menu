@@ -1,9 +1,11 @@
 'use server'
+import { assertAdmin } from '@/lib/admin/assert-admin'
 
 import { supabaseServer } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 
 export async function addReason(formData: FormData) {
+  await assertAdmin()
   const db = await supabaseServer()
 
   const label = String(formData.get('label') || '').trim()
@@ -32,6 +34,7 @@ export async function addReason(formData: FormData) {
 }
 
 export async function updateReason(formData: FormData) {
+  await assertAdmin()
   const db = await supabaseServer()
 
   const id = String(formData.get('id') || '')
@@ -63,6 +66,7 @@ export async function updateReason(formData: FormData) {
 }
 
 export async function deleteReason(formData: FormData) {
+  await assertAdmin()
   const db = await supabaseServer()
   const id = String(formData.get('id') || '')
 
@@ -80,6 +84,7 @@ export async function deleteReason(formData: FormData) {
 }
 
 export async function toggleReasonActive(formData: FormData) {
+  await assertAdmin()
   const db = await supabaseServer()
   const id = String(formData.get('id') || '')
   const isActive = formData.get('is_active') === 'true'

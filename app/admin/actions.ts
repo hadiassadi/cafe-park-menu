@@ -1,4 +1,5 @@
 'use server'
+import { assertAdmin } from '@/lib/admin/assert-admin'
 
 import { revalidatePath } from 'next/cache'
 import { supabaseServer } from '@/lib/supabase/server'
@@ -8,6 +9,7 @@ import { supabaseServer } from '@/lib/supabase/server'
 // نوع 'layout' باعث می‌شود متای صفحه (پیش‌نمایش لینک) هم دوباره ساخته شود.
 // فقط برای کاربر واردشده کار می‌کند.
 export async function revalidateMenu() {
+  await assertAdmin()
   const db = await supabaseServer()
   const {
     data: { user },

@@ -176,6 +176,7 @@ function CheckoutForm() {
           customer_name: name.trim(),
           customer_phone: cleanPhone,
           table_number: tableNumber ? Number(tableNumber) : null,
+          payment_method: paymentMethod,
           note: note.trim() || null,
           items: items.map((item) => ({ product_id: item.productId, product_name: item.productName, option_id: item.selectedOptionId, option_name: item.selectedOptionName, group_name: item.selectedGroupName, unit_price: item.unitPrice, quantity: item.quantity })),
           subtotal: finalTotal,

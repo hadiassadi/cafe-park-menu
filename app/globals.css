@@ -14728,3 +14728,55 @@ a.cat {
     padding: 1px 6px !important;
   }
 }
+.order-payment-methods {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.order-payment-method-btn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 14px;
+  background: #fffdf9;
+  border: 1px solid #d8d0c4;
+  border-radius: 12px;
+  cursor: pointer;
+  text-align: right;
+  font-family: inherit;
+  color: #29251f;
+}
+
+.order-payment-method-btn:hover:not(:disabled) {
+  border-color: #d99f59;
+  background: #fdf6ec;
+}
+
+.order-payment-method-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.order-payment-method-icon {
+  font-size: 24px;
+  flex: 0 0 auto;
+}
+
+.order-payment-method-btn > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.order-payment-method-btn strong {
+  font-size: 14px;
+}
+
+.order-payment-method-btn small {
+  display: block;
+  font-size: 12px;
+  font-weight: normal;
+  color: #766f64;
+}

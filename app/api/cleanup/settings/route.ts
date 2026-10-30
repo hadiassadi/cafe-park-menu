@@ -1,6 +1,7 @@
 import { apiError } from '@/lib/api-error'
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { requireAdmin } from '@/lib/admin/require-admin'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,14 +16,35 @@ function createAdminDb() {
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
-    const enabled = Boolean(body.enabled)
-    const daysKept = Number(body.days_kept) || 90
+    const denied = await requireAdmin()
+    if (denied) return denied
 
-    // اعتبارسنجی
-    if (daysKept < 7 || daysKept > 365) {
+    let body: unknown
+    try {
+      body = await request.json()
+    } catch {
       return NextResponse.json(
-        { error: 'بازه نگهداری باید بین ۷ تا ۳۶۵ روز باشه' },
+        { error: 'درخواست نامعتبر است' },
+        { status: 400 }
+      )
+    }
+
+    const { enabled, days_kept } = (body ?? {}) as {
+      enabled?: unknown
+      days_kept?: unknown
+    }
+
+    if (typeof enabled !== 'boolean') {
+      return NextResponse.json(
+        { error: 'مقدار فعال‌سازی نامعتبر است' },
+        { status: 400 }
+      )
+    }
+
+    const daysKept = Number(days_kept)
+    if (!Number.isInteger(daysKept) || daysKept < 7 || daysKept > 365) {
+      return NextResponse.json(
+        { error: 'بازه نگهداری باید یک عدد صحیح بین ۷ تا ۳۶۵ روز باشد' },
         { status: 400 }
       )
     }

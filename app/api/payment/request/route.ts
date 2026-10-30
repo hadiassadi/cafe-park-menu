@@ -5,6 +5,9 @@ import { requestZarinPalPayment } from '@/lib/payment/zarinpal'
 
 export const dynamic = 'force-dynamic'
 
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 function createDb() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -14,16 +17,27 @@ function createDb() {
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json()
-    const orderId = body.orderId
+    let body: any
+    try {
+      body = await req.json()
+    } catch {
+      return NextResponse.json({ error: 'درخواست نامعتبر است' }, { status: 400 })
+    }
 
-    if (!orderId) {
-      return NextResponse.json({ error: 'شناسه سفارش الزامی است' }, { status: 400 })
+    const orderId = body?.orderId
+    if (typeof orderId !== 'string' || !UUID_RE.test(orderId)) {
+      return NextResponse.json({ error: 'شناسه سفارش نامعتبر است' }, { status: 400 })
+    }
+
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL
+    if (!siteUrl) {
+      console.error('[payment/request] NEXT_PUBLIC_SITE_URL is not set')
+      return NextResponse.json({ error: 'خطای پیکربندی سرور' }, { status: 500 })
     }
 
     const db = createDb()
 
-    // ۱. خواندن سفارش
+    // جایگزینی ۱ از ۳: اگر ستون مبلغ نهایی دارید، subtotal را اینجا عوض کنید
     const { data: order, error: orderErr } = await db
       .from('orders')
       .select('id, order_number, subtotal, payment_status, customer_phone')
@@ -34,11 +48,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'سفارش پیدا نشد' }, { status: 404 })
     }
 
+    // TODO: سفارش لغوشده یا soft-delete‌شده را هم رد کنید
+
     if (order.payment_status === 'paid') {
       return NextResponse.json({ error: 'این سفارش قبلاً پرداخت شده' }, { status: 400 })
     }
 
-    // ۲. خواندن تنظیمات (✅ ستون payment_merchant_id برگشت)
+    // جایگزینی ۲ از ۳
+    if (!Number.isInteger(order.subtotal) || order.subtotal <= 0) {
+      return NextResponse.json({ error: 'مبلغ سفارش نامعتبر است' }, { status: 400 })
+    }
+
     const { data: settings, error: settingsErr } = await db
       .from('settings')
       .select('payment_enabled, payment_online_enabled, payment_gateway, payment_merchant_id, payment_sandbox_mode')
@@ -54,27 +74,19 @@ export async function POST(req: NextRequest) {
     }
 
     if (settings.payment_gateway !== 'zarinpal') {
-      return NextResponse.json({ error: `درگاه «${settings.payment_gateway}» هنوز پیاده‌سازی نشده` }, { status: 400 })
+      return NextResponse.json({ error: 'درگاه پرداخت پشتیبانی نمی‌شود' }, { status: 400 })
     }
 
-    // ✅ استفاده از دیتابیس به جای متغیر محیطی (چون جدول قفل شده و امن است)
-    const merchantId = settings.payment_merchant_id
-
-    if (!merchantId) {
+    if (!settings.payment_merchant_id) {
       return NextResponse.json({ error: 'Merchant ID در تنظیمات پرداخت ثبت نشده است' }, { status: 400 })
     }
 
-    // ۳. ساخت callback URL
-    const origin =
-      req.headers.get('origin') ||
-      process.env.NEXT_PUBLIC_SITE_URL ||
-      'http://localhost:3000'
-    const callbackUrl = `${origin}/api/payment/verify?orderId=${orderId}`
+    const callbackUrl = `${siteUrl.replace(/\/$/, '')}/api/payment/verify?orderId=${order.id}`
 
-    // ۴. درخواست پرداخت
+    // جایگزینی ۳ از ۳: مبلغ ارسالی به درگاه
     const result = await requestZarinPalPayment(
       {
-        merchantId,
+        merchantId: settings.payment_merchant_id,
         sandbox: !!settings.payment_sandbox_mode,
       },
       order.subtotal,
@@ -84,11 +96,11 @@ export async function POST(req: NextRequest) {
     )
 
     if (!result.success) {
-      return NextResponse.json({ error: result.error }, { status: 500 })
+      console.error('[payment/request] gateway error:', result.error)
+      return NextResponse.json({ error: 'ایجاد تراکنش ناموفق بود' }, { status: 502 })
     }
 
-    // ۵. ذخیره authority در سفارش
-    await db
+    const { error: saveErr } = await db
       .from('orders')
       .update({
         payment_method: 'online',
@@ -96,13 +108,15 @@ export async function POST(req: NextRequest) {
         payment_authority: result.authority,
         payment_amount: order.subtotal,
       })
-      .eq('id', orderId)
+      .eq('id', order.id)
+      .neq('payment_status', 'paid')
 
-    return NextResponse.json({
-      success: true,
-      paymentUrl: result.paymentUrl,
-      authority: result.authority,
-    })
+    if (saveErr) {
+      console.error('[payment/request] save authority failed:', saveErr)
+      return NextResponse.json({ error: 'خطا در ثبت تراکنش' }, { status: 500 })
+    }
+
+    return NextResponse.json({ success: true, paymentUrl: result.paymentUrl })
   } catch (err: any) {
     console.error('[payment/request] error:', err)
     return apiError(err)

@@ -1,15 +1,24 @@
 import { requireAdmin } from '@/lib/admin/require-admin'
 import { apiError } from '@/lib/api-error'
+import 'server-only'
 import { NextResponse } from 'next/server'
-import { supabaseServer } from '@/lib/supabase/server'
+import { supabaseAdmin } from '@/lib/supabase/server'
 
 export const dynamic = 'force-dynamic'
+
+// شناسه‌ی درگاه پرداخت هرگز نباید از این مسیر خارج شود
+// (فقط مسیرهای پرداخت سمت سرور آن را می‌خوانند)
+function stripSecrets(row: Record<string, unknown> | null) {
+  const safe: Record<string, unknown> = { ...(row ?? {}) }
+  delete safe.payment_merchant_id
+  return safe
+}
 
 export async function GET() {
   const denied = await requireAdmin()
   if (denied) return denied
 
-  const db = await supabaseServer()
+  const db = supabaseAdmin()
 
   const { data, error } = await db
     .from('settings')
@@ -21,7 +30,9 @@ export async function GET() {
     return apiError(error, 'خطای پایگاه داده')
   }
 
-  return NextResponse.json(data ?? {})
+  return NextResponse.json(
+    stripSecrets(data as Record<string, unknown> | null)
+  )
 }
 
 const TEXT_FIELDS = [
@@ -114,29 +125,28 @@ export async function PATCH(request: Request) {
   const denied = await requireAdmin()
   if (denied) return denied
 
-  const db = await supabaseServer()
+  const db = supabaseAdmin()
 
-  const {
-    data: { user },
-  } = await db.auth.getUser()
-
-  if (!user) {
-    return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  let body: Record<string, unknown>
+  try {
+    body = await request.json()
+  } catch {
+    return NextResponse.json({ error: 'invalid body' }, { status: 400 })
   }
-
-  const body = await request.json()
 
   const updates: Record<string, string | boolean | number | string[] | null> = {}
 
   for (const key of TEXT_FIELDS) {
-    if (typeof body[key] === 'string') {
-      updates[key] = body[key].trim().slice(0, 1000)
+    const v = body[key]
+    if (typeof v === 'string') {
+      updates[key] = v.trim().slice(0, 1000)
     }
   }
 
   for (const key of URL_FIELDS) {
-    if (typeof body[key] === 'string') {
-      const value = body[key].trim().slice(0, 1000)
+    const v = body[key]
+    if (typeof v === 'string') {
+      const value = v.trim().slice(0, 1000)
       if (value && !isHttpUrl(value)) {
         return NextResponse.json(
           { error: 'آدرس‌ها باید با http:// یا https:// شروع شوند.' },
@@ -148,14 +158,16 @@ export async function PATCH(request: Request) {
   }
 
   for (const key of BOOL_FIELDS) {
-    if (typeof body[key] === 'boolean') {
-      updates[key] = body[key]
+    const v = body[key]
+    if (typeof v === 'boolean') {
+      updates[key] = v
     }
   }
 
   for (const [key, allowed] of Object.entries(ENUM_FIELDS)) {
-    if (typeof body[key] === 'string' && allowed.includes(body[key])) {
-      updates[key] = body[key]
+    const v = body[key]
+    if (typeof v === 'string' && allowed.includes(v)) {
+      updates[key] = v
     }
   }
 
@@ -194,5 +206,7 @@ export async function PATCH(request: Request) {
     )
   }
 
-  return NextResponse.json(data)
+  return NextResponse.json(
+    stripSecrets(data as Record<string, unknown> | null)
+  )
 }

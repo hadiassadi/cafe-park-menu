@@ -1,9 +1,11 @@
 'use server'
+import { assertAdmin } from '@/lib/admin/assert-admin'
 
 import { supabaseServer } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 
 export async function addTable(formData: FormData) {
+  await assertAdmin()
   const db = await supabaseServer()
 
   const number = Number(formData.get('number') || 0)
@@ -33,6 +35,7 @@ export async function addTable(formData: FormData) {
 }
 
 export async function updateTable(formData: FormData) {
+  await assertAdmin()
   const db = await supabaseServer()
 
   const id = String(formData.get('id') || '')
@@ -68,6 +71,7 @@ export async function updateTable(formData: FormData) {
 }
 
 export async function deleteTable(formData: FormData) {
+  await assertAdmin()
   const db = await supabaseServer()
   const id = String(formData.get('id') || '')
 

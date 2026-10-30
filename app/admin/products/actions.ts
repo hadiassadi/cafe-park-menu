@@ -1,4 +1,5 @@
 'use server'
+import { assertAdmin } from '@/lib/admin/assert-admin'
 
 import { supabaseServer } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
@@ -113,6 +114,7 @@ async function saveVariantGroups(
 }
 
 export async function addProduct(formData: FormData) {
+  await assertAdmin()
   const db = await supabaseServer()
 
   const categoryId = String(formData.get('category_id') || '')
@@ -196,6 +198,7 @@ export async function addProduct(formData: FormData) {
 }
 
 export async function updateProduct(formData: FormData) {
+  await assertAdmin()
   const db = await supabaseServer()
 
   const id = String(formData.get('id') || '')

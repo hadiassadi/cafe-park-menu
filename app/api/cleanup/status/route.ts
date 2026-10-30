@@ -1,6 +1,7 @@
 import { apiError } from '@/lib/api-error'
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { requireAdmin } from '@/lib/admin/require-admin'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,6 +16,9 @@ function createAdminDb() {
 
 export async function GET() {
   try {
+    const denied = await requireAdmin()
+    if (denied) return denied
+
     const db = createAdminDb()
     const { data, error } = await db.rpc('get_cleanup_status')
 

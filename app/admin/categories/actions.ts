@@ -1,9 +1,11 @@
 'use server'
+import { assertAdmin } from '@/lib/admin/assert-admin'
 
 import { supabaseServer } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 
 export async function addCategory(formData: FormData) {
+  await assertAdmin()
   const db = await supabaseServer()
 
   const name = String(formData.get('name') || '').trim()
@@ -36,6 +38,7 @@ export async function addCategory(formData: FormData) {
 }
 
 export async function updateCategory(formData: FormData) {
+  await assertAdmin()
   const db = await supabaseServer()
 
   const id = String(formData.get('id') || '')

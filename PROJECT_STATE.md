@@ -3,8 +3,9 @@
 > این فایل سند زنده پروژه است. هر بار که تغییری اعمال شد،
 > بخش «۵. کارهای باقی‌مانده»، «۸. لاگ تغییرات» و «بالای فایل» رو آپدیت کن.
 > در چت جدید، فقط همین فایل را برای AI پیوست کن.
+> ⚠️ هیچ مقدار واقعی رازی (HASH_SALT، کلیدها) در این فایل نوشته نشود.
 
-**آخرین آپدیت:** ۱۴۰۵/۰۷/۲۷ (2026-10-19)
+**آخرین آپدیت:** ۱۴۰۵/۰۸/۰۸ (2026-10-30)
 
 ---
 
@@ -12,7 +13,7 @@
 
 - **نام پکیج:** `cafe-park-menu` (پوشه پروژه: `Cofe-Park`)
 - **تکنولوژی:** Next.js 16 (App Router) + React 19 + TypeScript + Supabase + `globals.css` (بدون Tailwind)
-- **هدف:** مشتری‌ها با اسکن QR روی میز، منو را باز می‌کنند، سفارش می‌دهند و از طریق واتساپ به کافه می‌فرستند. صاحب کافه هم از پنل ادمین، سفارش‌ها، منو، میزها، تم‌ها و تنظیمات را مدیریت می‌کند. مشتری‌ها می‌توانند بدون کد و فقط با شناسه دستگاه (کوکی امن)، سفارش‌های قبلی خود را ببینند. سیستم پرداخت چندگانه پیاده‌سازی شده است. همچنین مشتری‌ها می‌توانند Web Push Notification (اعلان مرورگر) را فعال کنند تا وضعیت سفارششان حتی وقتی سایت بسته است به آن‌ها اطلاع داده شود.
+- **هدف:** مشتری‌ها با اسکن QR روی میز، منو را باز می‌کنند، سفارش می‌دهند و از طریق واتساپ به کافه می‌فرستند. صاحب کافه هم از پنل ادمین، سفارش‌ها، منو، میزها، تم‌ها و تنظیمات را مدیریت می‌کند. مشتری‌ها می‌توانند بدون کد و فقط با شناسه دستگاه (کوکی امن)، سفارش‌های قبلی خود را ببینند. سیستم پرداخت چندگانه پیاده‌سازی شده است (آنلاین زرین‌پال، پرداخت در محل، کارت‌به‌کارت با رسید). مشتری‌ها می‌توانند Web Push Notification (اعلان مرورگر) را فعال کنند و در **باشگاه مشتریان سازمانی (B2B)** ثبت‌نام کنند تا تخفیف اختصاصی دریافت کنند.
 - **دیتابیس:** Supabase (PostgreSQL) + Realtime برای لیست سفارش‌ها + **Polling برای اعلان‌ها** + **pg_cron برای پاکسازی خودکار** + **Storage برای رسیدها** + **RLS کاملاً قفل‌شده برای جداول حساس**
 - **ریپازیتوری:** `https://github.com/hadiassadi/cafe-park-menu.git` (branch: `main`)
 - **مسیر لوکال:** `D:\Cafe Park\Menu\New Menu\CafePark-Menu\Cofe-Park`
@@ -28,17 +29,17 @@ Cofe-Park/
 │   ├── page.tsx                    ← صفحه اصلی (SSR + JSON-LD)
 │   ├── MenuClient.tsx              ← کلاینت منوی مشتری (+ دکمه سفارش‌های من + نوار شناور سبد)
 │   ├── layout.tsx                  ← Root Layout (فونت + متادیتای SEO)
-│   ├── globals.css                 ← ✅ تنها فایل استایل پروژه (۹۲ بخش)
+│   ├── globals.css                 ← ✅ تنها فایل استایل پروژه (۹۴ بخش)
 │   ├── manifest.ts                 ← PWA Manifest
 │   ├── robots.ts                   ← robots.txt
 │   ├── sitemap.ts                  ← sitemap.xml
 │   ├── cart/page.tsx               ← صفحه سبد خرید (+ خواندن شماره میز از QR)
-│   ├── checkout/page.tsx           ← صفحه ثبت سفارش + کوپن + انتخاب پرداخت
-│   ├── my-orders/                  ← ✅ پنل مشتری (بدون OTP)
+│   ├── checkout/page.tsx           ← ثبت سفارش + کوپن + انتخاب پرداخت + تخفیف باشگاه (payment_method همراه سفارش ارسال می‌شود)
+│   ├── my-orders/                  ← ✅ پنل مشتری (داشبورد + تاریخچه + ثبت‌نام باشگاه؛ بدون OTP)
 │   │   ├── page.tsx
 │   │   └── MyOrdersClient.tsx      ← تاریخچه سفارش‌ها با کوکی دستگاه
-│   ├── order/[id]/                 ← جزئیات سفارش مشتری
-│   │   ├── page.tsx                ← صفحه اصلی سفارش + وضعیت پرداخت
+│   ├── order/[id]/                 ← جزئیات سفارش مشتری + کارت فعال‌سازی Push
+│   │   ├── page.tsx                ← صفحه اصلی سفارش + وضعیت پرداخت (polling هر ۵ ثانیه برای باز/قفل‌شدن دکمه‌ها)
 │   │   └── UploadReceipt.tsx       ← ✅ آپلود رسید (عکس/متن + نمایش رسید قبلی + دکمه تغییر)
 │   ├── payment/callback/           ← ✅ بازگشت از درگاه پرداخت
 │   │   ├── page.tsx
@@ -46,20 +47,23 @@ Cofe-Park/
 │   ├── api/
 │   │   ├── admin/                  ← ✅ APIهای امن ادمین
 │   │   │   ├── customers/route.ts  ← دریافت لیست CRM
-│   │   │   └── orders/pending/route.ts ← اعلان‌ها
+│   │   │   ├── orders/pending/route.ts ← اعلان‌ها (واریز فقط وقتی رسید عکس/متن دارد)
+│   │   │   └── memberships/        ← ✅ APIهای ادمین باشگاه (آپلود اکسل، تنظیمات، تأیید درخواست)
 │   │   ├── orders/
-│   │   │   ├── route.ts            ← API ثبت سفارش (ست کردن کوکی دستگاه)
-│   │   │   ├── [id]/route.ts       ← دریافت سفارش (با Service Role)
-│   │   │   └── cancel/route.ts     ← API لغو سفارش
+│   │   │   ├── route.ts            ← API ثبت سفارش (کوکی دستگاه + payment_method واقعی از body + اعمال تخفیف باشگاه)
+│   │   │   ├── [id]/route.ts       ← دریافت سفارش (نسخه مالکیت‌محور پیشنهاد شده؛ نصب/تست 404 باقی است)
+│   │   │   └── cancel/route.ts     ← API لغو سفارش (نسخه مالکیت‌محور پیشنهاد شده؛ نصب/تست باقی است)
 │   │   ├── customer/               ← ✅ API پنل مشتری (با Service Role)
 │   │   │   ├── me/route.ts         ← اطلاعات دستگاه فعلی
 │   │   │   └── orders/route.ts     ← سفارش‌های دستگاه فعلی
+│   │   ├── membership/             ← ✅ API باشگاه (register, calculate, organizations, rules)
 │   │   ├── payment/                ← ✅ API پرداخت (با Service Role)
 │   │   │   ├── settings/route.ts   
 │   │   │   ├── request/route.ts    
 │   │   │   ├── verify/route.ts     
-│   │   │   ├── set-method/route.ts 
-│   │   │   └── upload-receipt/route.ts 
+│   │   │   ├── set-method/route.ts ← انتخاب روش پرداخت؛ واریز را فقط unpaid می‌کند (هرگز pending_review)
+│   │   │   └── upload-receipt/route.ts ← ثبت رسید + قفل سمت سرور؛ تنها مسیر ورود به pending_review
+│   │   ├── push/                   ← ✅ Web Push (subscribe, send)
 │   │   ├── upload-receipt/route.ts ← آپلود به Storage (Signed URL)
 │   │   ├── coupons/                
 │   │   ├── cancellation-reasons/   ← با Service Role
@@ -69,12 +73,15 @@ Cofe-Park/
 │   │   ├── cleanup/                
 │   │   └── export/                 
 │   ├── components/                 
+│   │   ├── EnablePushCard.tsx      ← ✅ کارت فعال‌سازی اعلان مرورگر
+│   │   └── CartFloatingBar.tsx     ← ✅ نوار شناور سبد
 │   └── admin/
 │       ├── layout.tsx              ← هدر موبایل + drawer + اعلان سفارش
+│       ├── memberships/            ← ✅ پنل مدیریت باشگاه مشتریان (سازمان‌ها، اعضا، درخواست‌ها، قوانین)
 │       ├── orders/                 ← مدیریت سفارش‌ها
 │       │   ├── page.tsx            ← لود مستقیم با Service Role
-│       │   ├── OrdersManager.tsx   ← لیست + جستجو + فیلتر + مودال تسویه
-│       │   └── actions.ts          ← اکشن‌ها با Service Role
+│       │   ├── OrdersManager.tsx   ← لیست + جستجو + فیلتر + مودال تسویه + دکمه «عدم تأیید رسید»
+│       │   └── actions.ts          ← اکشن‌ها با Service Role (+ rejectReceipt)
 │       ├── customers/
 │       │   ├── page.tsx
 │       │   └── CustomersManager.tsx ← دریافت دیتا از API امن
@@ -94,11 +101,18 @@ Cofe-Park/
 │   ├── menu.ts                     ← لود تنظیمات با Service Role (سرور)
 │   ├── site.ts
 │   ├── stats.ts
+│   ├── api-error.ts                ← apiError(): پاسخ خطای استاندارد (بدون نشت جزئیات)
+│   ├── orders/owner.ts             ← getDeviceHash() + UUID_RE (مالکیت سفارش با کوکی دستگاه)
+│   ├── utils/hash.ts               ← ✅ hashData(): هش با Salt + نرمال‌سازی فارسی
+│   ├── push/send-push.ts           ← ✅ ارسال پوش با web-push
 │   ├── payment/zarinpal.ts         ← توابع ارتباط با زرین‌پال
 │   ├── use-order-notifications.ts  ← Polling از API امن
 │   ├── use-pwa-badge.ts            
 │   ├── use-document-title.ts
 │   └── supabase/
+├── public/
+│   ├── sw.js                       ← ✅ Service Worker (کش + دریافت پوش)
+│   └── icons/
 ├── supabase/
 │   └── cron-cleanup.sql            ← SQL راه‌اندازی pg_cron
 ├── proxy.ts                        ← محافظت سرور-side از /admin
@@ -122,8 +136,8 @@ Cofe-Park/
 | `--text-color` | `#29251f` | خاکستری تیره |
 | `--muted-text-color` | `#766f64` | خاکستری متوسط |
 | `--secondary-color` | `#f3eee7` (theme) / `#e3ddd2` (ادمین) | بوردها |
-| **رنگ تخفیف / موفقیت** | `#2d5d3e` / `#477052` | متن تخفیف‌ها (سبز) |
-| **رنگ کوپن غیرفعال / لغو / خطا** | `#9b3c32` | هشدارها، بج‌های منفی، لغو |
+| **رنگ تخفیف / موفقیت** | `#2d5d3e` / `#477052` | متن تخفیف‌ها (سبز)، بنر سبز باشگاه |
+| **رنگ کوپن غیرفعال / لغو / خطا** | `#9b3c32` | هشدارها، بج‌های منفی، لغو، دکمه «عدم تأیید رسید» |
 | **رنگ اعلان** | `#dc2626` / `#ef4444` (dark) | Badge و Alert سفارش جدید |
 | **رنگ در انتظار (پرداخت)** | `#9a6b3f` | بج‌های در انتظار تأیید |
 
@@ -188,24 +202,9 @@ Cofe-Park/
 
 **پنل مشتری:** `.my-orders-page` / `.my-orders-header` / `.my-orders-back` / `.my-orders-logout` / `.my-orders-user` / `.my-orders-user-icon` / `.my-orders-filters` / `.my-orders-list` / `.my-orders-empty` / `.my-order-card` / `.my-order-header` / `.my-order-num` / `.my-order-status` / `.my-order-date` / `.my-order-items` / `.my-order-item` / `.my-order-item-more` / `.my-order-total` / `.my-order-cancel-reason` / `.my-order-actions` / `.my-order-btn` / `.customer-login-card` / `.customer-login-icon` / `.customer-login-hint` / `.customer-login-field` / `.customer-login-btn` / `.customer-login-link` / `.customer-login-error` / `.customer-login-code-display` / `.hero-my-orders-btn`
 
-**تنظیمات پرداخت:** `.payment-settings-page` / `.payment-section` / `.payment-section-header` / `.payment-section-icon` / `.payment-section-title` / `.payment-section-hint` / `.payment-warning` / `.payment-sandbox-warning` / `.payment-methods-grid` / `.payment-method-card` / `.payment-method-icon` / `.payment-method-info` / `.payment-gateway-options` / `.payment-gateway-option` / `.payment-toggle-row` / `.payment-toggle-info` / `.payment-coming-soon` / `.payment-save-bar`
+> کلاس‌های باشگاه مشتریان (فرم ثبت‌نام، داشبورد، بنر سبز، پنل ادمین باشگاه) و کارت Push (`EnablePushCard`، بخش ۹۳ CSS) در این فایل فهرست نشده‌اند؛ برای فهرست دقیق، `globals.css` را جستجو کن.
 
-**انتخاب پرداخت (Checkout):** `.payment-methods-selector` / `.payment-method-option` / `.payment-method-option-icon` / `.payment-method-option-info` / `.payment-method-option-check` / `.payment-transfer-info` / `.payment-transfer-info-title` / `.payment-transfer-row` / `.payment-transfer-hint`
-
-**بازگشت از درگاه:** `.payment-callback-page` / `.payment-callback-card` / `.payment-callback-icon` / `.payment-callback-desc` / `.payment-callback-ref` / `.payment-callback-actions`
-
-**پرداخت در صفحه سفارش (مشتری):** `.order-payment-badge` / `.order-payment-badge.in-place` / `.order-payment-badge-ref` / `.order-payment-section` / `.order-payment-section-title` / `.order-payment-section-desc` / `.order-payment-actions` / `.order-payment-btn` / `.order-payment-methods` / `.order-payment-method-btn` / `.order-payment-method-icon`
-
-**پرداخت در پنل ادمین:** `.order-card--unpaid` / `.order-card--pending` / `.order-card--paid` / `.order-card--failed` / `.order-payment-badge-inline` / `.order-payment-ref-id` / `.order-receipt-link` / `.payment-status-text` / `.payment-approve-form` / `.orders-search-box`
-
-**آپلود رسید:** `.receipt-upload-box` / `.receipt-mode-tabs` / `.receipt-mode-tab` / `.receipt-upload-label` / `.receipt-upload-icon` / `.receipt-upload-text` / `.receipt-upload-progress` / `.receipt-upload-error` / `.receipt-preview` / `.receipt-preview-hint` / `.receipt-note-input` / `.receipt-submit-btn` / `.receipt-replace-btn`
-
-**بنر موفقیت سفارش:** `.order-success-banner` / `.order-success-icon` / `.order-success-body` / `.order-success-title` / `.order-success-text` / `.order-success-hint` / `.order-success-close`
-
-**لغو سفارش (تکمیلی):** `.order-cancel-success` / `.order-cancel-btn` / `.order-cancel-hint` / `.cancellation-info-box` / `.cancellation-info-label` / `.cancellation-info-note` / `.cancellation-info-by`
-
-**خلاصه مبلغ پرداخت:** `.order-payment-summary` / `.discount` / `.total-row`
-
+**تنظیمات پرداخت:** `.payment-settings-page` / `.payment-section` / `.payment-section-header` / `.payment-section-icon` / `.payment-section-title` / `.payment-section-hint` / `.payment-warning` / `.payment-sandbox-warning` / `.payment
 ### شماره‌گذاری بخش‌های `globals.css`:
 | بخش | عنوان |
 |---|---|
@@ -259,7 +258,7 @@ Cofe-Park/
 | 77 | CUSTOMER PANEL (پنل مشتری) |
 | 78 | PAYMENT SETTINGS (تنظیمات پرداخت در ادمین) |
 | 79 | PAYMENT (انتخاب روش پرداخت + بازگشت از درگاه) |
-| 80 | ORDER PAYMENT (بخش پرداخت در صفحه سفارش) |
+| 80 | ORDER PAYMENT (بخش پرداخت در صفحه سفارش + چیدمان ستونی دکمه‌های تغییر روش) |
 | 82 | RECEIPT UPLOAD (آپلود رسید + دکمه تغییر) |
 | 83 | ADMIN ORDER PAYMENT COLORS (رنگ‌بندی کارت‌های ادمین) |
 | 84 | ADMIN ORDERS SEARCH (نوار جستجوی سفارش‌ها) |
@@ -273,22 +272,52 @@ Cofe-Park/
 | 91 | CATEGORIES GRID (صفحه اصلی - نسخه categories-grid) |
 | 91b | CATEGORIES GRID - cat-grid (نسخه cat-card) |
 | 92 | CATEGORY PAGE HEADER (هدر صفحه دسته) |
+| 93 | ENABLE PUSH CARD (کارت فعال‌سازی اعلان مرورگر) |
+| 94 | MOBILE COMPACT HOMEPAGE (بهینه‌سازی موبایل: حذف بک‌گراند، هدر کوچک، گرید ۳ ستونه) |
 
 ---
 
 ## ✅ ۴. کارهای انجام‌شده
 
-### 🔒 امنیت (فاز جدید)
-- [x] **قفل کردن کامل RLS روی جداول حساس:** `orders`, `coupons`, `customers`, `cancellation_reasons`, `settings`. (حذف Policyهای عمومی)
-- [x] **انتقال همه APIها به `SERVICE_ROLE_KEY`:** ثبت سفارش، پرداخت، لغو، CRM، آپلود رسید و دریافت تنظیمات. (کلید فقط روی سرور است)
-- [x] **جایگزینی OTP با «کوکی دستگاه»:** مشتری بدون کد، فقط با کوکی امن `cafe_device_token` سفارش‌های دستگاه خودش را می‌بیند.
+### 🎓 باشگاه مشتریان سازمانی (B2B Loyalty)
+- [x] **دیتابیس:** جداول `organizations`، `organization_members` (با هش)، `redemption_logs`، `membership_requests`.
+- [x] **آپلود اکسل:** با تطبیق ستون‌ها (Column Mapping) و ویرایش تک‌تک سلول‌ها قبل از ثبت (پردازش سمت کلاینت با `xlsx`).
+- [x] **مدیریت سازمان:** مشاهده لیست اعضا، ویرایش تنظیمات (تخفیف، سقف، تاریخ با تقویم شمسی)، حذف کامل.
+- [x] **ثبت‌نام مشتری:** دراپ‌داون انتخاب سازمان، فیلد مشروط شماره دانشجویی، نمایش قوانین پویا.
+- [x] **هش امن:** `SHA-256` + Salt + نرمال‌سازی فارسی (`hashData` در `lib/utils/hash.ts`) برای تطبیق دقیق.
+- [x] **پنل ادمین باشگاه:** ویرایش قوانین، تأیید/رد درخواست‌های دستی، مشاهده اعضای عادی و سازمانی.
+- [x] **اعمال تخفیف در Checkout:** کسر خودکار، نمایش آیتم‌های شامل/غیرشامل، خط‌خوردن مبلغ اولیه، ثبت در `redemption_logs`.
+- [x] **داشبورد مشتری:** «خوش اومدی»، آمار (کل سفارش‌ها، مجموع خرید، تخفیف‌ها) و بنر سبز هوشمند برای مشتری عادی/سازمانی.
+- [x] **جلوگیری از ثبت‌نام تکراری:** با چک شماره تلفن و شماره دانشجویی.
+
+### 🔔 وب پوش (Web Push Notification)
+- [x] پیاده‌سازی با `web-push`، VAPID Keys، Service Worker یکپارچه (`public/sw.js`) و کارت فعال‌سازی (`EnablePushCard`).
+- [x] ارسال خودکار در تغییر وضعیت سفارش از پنل ادمین.
+
+### 💳 جریان پرداخت کارت‌به‌کارت (تکمیل‌شده در ۱۴۰۵/۰۸/۰۸)
+- [x] **تفکیک وضعیت‌ها:** انتخاب واریز = `payment_method: transfer` + `payment_status: unpaid` (منتظر رسید). فقط `upload-receipt` سفارش را به `pending_review` می‌برد.
+- [x] **ثبت سفارش با روش واقعی:** `checkout` فیلد `payment_method` را همراه سفارش می‌فرستد و `orders/route.ts` آن را (از فهرست مجاز `cash/card/transfer/online`، پیش‌فرض `cash`) ثبت می‌کند. دیگر سفارش واریز لحظه‌ای «نقدی» دیده نمی‌شود.
+- [x] **قفل سمت سرور رسید:** `upload-receipt` فقط وقتی می‌نویسد که روش `transfer` باشد، هنوز رسیدی (`payment_receipt_url` و `payment_note` هر دو null) ثبت نشده باشد و وضعیت `unpaid/failed/pending_review` باشد.
+- [x] **اکشن `rejectReceipt` در `app/admin/orders/actions.ts`:** وضعیت را به `unpaid` برمی‌گرداند و `payment_receipt_url` و `payment_note` را پاک می‌کند (فقط برای `transfer` + `pending_review`).
+- [x] **دکمه «❌ عدم تأیید رسید» در `OrdersManager.tsx`** (با confirm قبل از اجرا). بعد از رد، مشتری ظرف ۵ ثانیه فرم رسید و «تغییر روش پرداخت» را دوباره می‌بیند.
+- [x] **فیلتر اعلان ادمین (`admin/orders/pending`):** سفارش واریز فقط وقتی اعلان می‌دهد که عکس یا متن رسید داشته باشد.
+- [x] **هماهنگی نام فیلد یادداشت رسید:** API هر دو `receiptNote` و `note` را می‌خواند.
+- [x] **تست انجام‌شده:** ارسال رسید متنی و تصویری → قفل → رد ادمین → بازشدن مجدد کنترل‌ها.
+- [x] **رفع ظاهر دکمه‌های «تغییر روش پرداخت»:** CSS ستونی/تمام‌عرض.
+
+### 🔒 امنیت
+- [x] **قفل کردن کامل RLS روی جداول حساس:** `orders`, `coupons`, `customers`, `cancellation_reasons`, `settings`. (حذف Policyهای عمومی) — ⚠️ جداول جدید باشگاه باید جداگانه تأیید شوند (بخش ۵).
+- [x] **انتقال همه APIها به `SERVICE_ROLE_KEY`:** ثبت سفارش، پرداخت، لغو، CRM، آپلود رسید و دریافت تنظیمات.
+- [x] **جایگزینی OTP با «کوکی دستگاه»:** مشتری بدون کد، فقط با کوکی امن `cafe_device_token` (`httpOnly`) سفارش‌های دستگاه خودش را می‌بیند.
 - [x] **حذف جدول `customer_sessions` و فایل‌های OTP.**
-- [x] **خصوصی کردن Storage `receipts`:** استفاده از Signed URL برای مشاهده رسید.
-- [x] **ذخیره `payment_merchant_id` در دیتابیس:** حالا با RLS امن شده و از پنل ادمین قابل تنظیم است.
-- [x] **آپدیت `dev.bat`:** بیلد اجباری قبل از پوش برای جلوگیری از خرابی سایت.
-- [x] Web Push Notification (اعلان مرورگر): کارت فعال‌سازی، ثبت اشتراک، ارسال خودکار از پنل ادمین.
+- [x] **خصوصی کردن Storage `receipts`:** استفاده از Signed URL.
+- [x] **ذخیره `payment_merchant_id` در دیتابیس** با RLS امن و تنظیم از پنل ادمین.
+- [x] **آپدیت `dev.bat`:** بیلد اجباری قبل از پوش.
+- [x] **مالکیت سفارش با هش دستگاه (`device_id_hash`):** در ثبت سفارش و `payment/upload-receipt` اعمال شده (از `lib/orders/owner.ts`). برای بقیه مسیرهای مشتری به بخش ۵ مراجعه شود.
 
-
+### 🎨 بهینه‌سازی UI و UX
+- [x] **ادغام پرداخت حضوری:** «نقدی» و «کارت‌خوان» در UI یک گزینه «پرداخت در محل».
+- [x] **بهینه‌سازی موبایل صفحه اصلی:** حذف بک‌گراند در موبایل، هدر کوچک‌تر، گرید دسته‌ها ۳ ستونه.
 
 ### منوی مشتری
 - [x] صفحه اصلی با هدر داینامیک + JSON-LD
@@ -301,15 +330,15 @@ Cofe-Park/
 - [x] ارسال سفارش به واتساپ
 - [x] **پنل مشتری (بدون کد):** تاریخچه سفارش‌ها با کوکی دستگاه + سفارش مجدد
 - [x] **دکمه «سفارش‌های من» در هدر منو**
-- [x] **انتخاب روش پرداخت در Checkout** (آنلاین، نقدی، کارت‌خوان، واریز)
+- [x] **انتخاب روش پرداخت در Checkout** (آنلاین، پرداخت در محل، واریز)
 - [x] **اجباری شدن شماره میز در Checkout**
 - [x] **صفحه بازگشت از درگاه** (`/payment/callback`)
 - [x] **آپلود رسید (عکس/متن)** برای پرداخت واریزی
 - [x] **بخش پرداخت در صفحه سفارش**
 - [x] **بنر موفقیت بعد از ثبت سفارش** (با `sessionStorage`)
-- [x] **شماره میز خودکار از لینک QR:** موقع باز شدن `/?table=N`، مقدار `table` خونده می‌شه، در `sessionStorage` ذخیره می‌شه، در Cart با بج نمایش داده می‌شه و در Checkout با «✅ از QR تشخیص داده شد» به‌طور خودکار پر می‌شه.
-- [x] **نوار شناور سبد خرید (sticky):** در تمام صفحات منو (Hero، دسته‌بندی، محصولات) دیده می‌شه و بعد از اسکرول هم ثابت می‌مونه.
-- [x] **ادغام روش‌های پرداخت حضوری:** نقدی و کارت‌خوان حالا به عنوان یک گزینه واحد «پرداخت در محل» نمایش داده می‌شن.
+- [x] **شماره میز خودکار از لینک QR:** `/?table=N` در `sessionStorage` ذخیره، در Cart با بج نمایش و در Checkout با «✅ از QR تشخیص داده شد» پر می‌شود.
+- [x] **نوار شناور سبد خرید (sticky):** در تمام صفحات منو.
+
 ### پنل ادمین
 - [x] Layout با سایدبار + هدر موبایل + drawer کشویی
 - [x] لاگین + محافظت سرور-side + متادیتای `noindex`
@@ -318,7 +347,7 @@ Cofe-Park/
 - [x] **گزارش فروش و مالیات** (۳ تب + ۶ فیلتر + خروجی CSV)
 - [x] **مدیریت سفارش‌ها** + Realtime + فاکتور چاپی
 - [x] **مدیریت سفارش‌ها: جستجو، فیلتر، رنگ‌بندی، تسویه سریع و مودال تسویه**
-- [x] **مدیریت سفارش‌ها: نمایش رسید واریز**
+- [x] **مدیریت سفارش‌ها: نمایش رسید واریز + رد رسید**
 - [x] **مدیریت محصولات، دسته‌ها، میزها، تم‌ها، جملات**
 - [x] **مدیریت کدهای تخفیف** + گزارش پیشرفته
 - [x] **خروجی Excel/CSV**
@@ -329,8 +358,8 @@ Cofe-Park/
 - [x] **تایتل داینامیک + favicon**
 - [x] **PWA Badge**
 - [x] **تنظیمات پرداخت** (فعال/غیرفعال، Merchant ID، Sandbox، حساب بانکی)
-- [x] **تحویل بدون تسویه:** در مودال تسویه ادمین — سفارش بدون تغییر وضعیت پرداخت تحویل داده می‌شه.
-- [x] **حذف نرم سفارش:** APIهای `soft-delete` و `restore` برای حذف قابل بازگشت.
+- [x] **تحویل بدون تسویه:** در مودال تسویه ادمین.
+- [x] **حذف نرم سفارش:** APIهای `soft-delete` و `restore`.
 
 ### زیرساخت و ابزارها
 - [x] سیستم تم داینامیک + Supabase Server/Browser Client + Cart Context
@@ -341,6 +370,7 @@ Cofe-Park/
 - [x] pg_cron
 - [x] Storage Bucket (`receipts` - Private)
 - [x] درگاه زرین‌پال
+- [x] کوپن: تریگر آزادسازی ظرفیت هنگام لغو سفارش (تست‌شده با لغو سفارش نقدی توسط مدیر)
 
 ### رفع باگ‌ها
 - [x] رفع باگ‌های مربوط به به‌هم‌ریختگی صفحات
@@ -357,37 +387,108 @@ Cofe-Park/
 - [x] رفع خطای `updated_at` در جدول `customers`
 - [x] رفع خطای `column settings.payment_merchant_id does not exist`
 - [x] رفع باگ نمایش صفر در داشبورد، آمار لغوها و گزارش فروش (stats.ts → Service Role)
-- [x] **رفع باگ آپلود رسید (فاز ۱):** انتقال API به `supabaseAdmin`، مدیریت خطای JSON سرور، کاهش محدودیت حجم به ۳MB و نمایش مجدد عکس در صفحه سفارش.
-- [x] **افزودن دکمه «تحویل بدون تسویه»:** به مودال تسویه ادمین اضافه شد تا سفارش بدون تغییر وضعیت پرداخت تحویل داده شود.
-- [x] **رفع باگ گزارش کوپن‌ها:** مودال سفارش‌های کوپن که خالی نمایش داده می‌شد، به `supabaseAdmin` منتقل شد.
-- [x] **رفع باگ دراور ادمین:** اسکرول پس‌زمینه قفل شد و هدر موبایل با `position: fixed` ثابت ماند.
-- [x] **یکدست‌سازی تب‌های ادمین:** کلاس‌های `stat-tabs` ایجاد شد تا در همه صفحات (سفارش‌ها، CRM، گزارش‌ها) مشترک باشد.
+- [x] **رفع باگ آپلود رسید (فاز ۱):** انتقال API به `supabaseAdmin`، مدیریت خطای JSON سرور، کاهش محدودیت حجم به ۳MB و نمایش مجدد عکس.
+- [x] **افزودن دکمه «تحویل بدون تسویه»** به مودال تسویه.
+- [x] **رفع باگ گزارش کوپن‌ها:** مودال سفارش‌های کوپن به `supabaseAdmin` منتقل شد.
+- [x] **رفع باگ دراور ادمین:** قفل اسکرول پس‌زمینه و هدر موبایل `position: fixed`.
+- [x] **یکدست‌سازی تب‌های ادمین:** کلاس‌های `stat-tabs`.
 - [x] **رفع باگ قطع ارتباط داشبورد با دیتابیس:** `lib/stats.ts` به `SUPABASE_SERVICE_ROLE_KEY` و `server-only` منتقل شد.
-- [x] **رفع باگ نمایش تکراری تاریخ ثبت سفارش:** «تاریخ ثبت» که اشتباهاً داخل `order.items.map()` بود، به بیرون حلقه منتقل شد تا فقط یک بار نمایش داده شود.
-- [x] **افزودن نمایش رسید قبلی در `UploadReceipt`:** پراپ `initialUrl` به `Props` اضافه شد تا اگر مشتری قبلاً رسید آپلود کرده باشد، همان عکس نمایش داده شود (نه فرم خالی).
-- [x] **افزودن دکمه «🔄 تغییر رسید»:** اگر کاربر قبلاً رسید آپلود کرده باشد، با زدن این دکمه می‌تواند رسید جدید آپلود کند (قبلاً گیر می‌کرد).
-- [x] **رفع خطای TypeScript `Duplicate identifier` در `menu-types.ts`:** فیلدهای تکراری `floating_enabled` و `floating_side` در interface `Settings` حذف شدند.
-- [x] **رفع خطای بیلد CSS (Missing Braces):** دو `}` اضافه که موقع پاک‌کردن بلاک‌های تکراری مونده بود، حذف شد.
-- [x] **رفع باگ ۳ فیلد تکراری در Checkout:** فیلدهای «شماره تماس»، «شماره میز» و «توضیحات» دو بار نمایش داده می‌شدند — حذف شدند.
-- [x] **پاکسازی `globals.css` از ۹ مشکل ساختاری:** دو بلوک تکراری بخش ۴۰ و ۴۵، دو `85` و دو `91`، `.receipt-replace-btn` و `.cart-table-badge` و `.order-payment-badge.in-place` شناور، کامنت دوبل بخش ۴۳، و `@media` تکراری بخش ۵۱.
+- [x] **رفع باگ نمایش تکراری تاریخ ثبت سفارش** در ریز اقلام.
+- [x] **افزودن نمایش رسید قبلی در `UploadReceipt`** (پراپ `initialUrl`).
+- [x] **افزودن دکمه «🔄 تغییر رسید».**
+- [x] **رفع خطای TypeScript `Duplicate identifier` در `menu-types.ts`.**
+- [x] **رفع خطای بیلد CSS (Missing Braces).**
+- [x] **رفع باگ ۳ فیلد تکراری در Checkout.**
+- [x] **پاکسازی `globals.css` از ۹ مشکل ساختاری.**
 - [x] **رفع خطاهای Build نهایی:** `✓ Compiled successfully` روی Next.js 16.3.8.
+- [x] **رفع خطای build در `payment/set-method`:** `Cannot find name 'updates'`.
+- [x] **رفع ظهور زودهنگام سفارش واریز در پنل ادمین** (دو علت: `pending_review` زودهنگام + ثبت اولیه با `cash`).
+- [x] **رفع نبود دکمه رد رسید در ادمین.**
+- [x] **رفع باگ فیلتر اعلان:** سفارش دارای فقط «متن رسید» اعلان نمی‌داد.
+- [x] **رفع ظاهر خراب دکمه‌های «تغییر روش پرداخت».**
 
 ---
 
 ## 🚧 ۵. کارهای باقی‌مانده
 
-> اولویت‌ها: 🔴 بالا / 🟡 متوسط / 🟢 پایین
+> اولویت‌ها: 🔴 بالا / 🟠 متوسط / 🟡 سخت‌سازی / 🟢 پایین
 
-- [ ] 🔴 **تست کامل روی موبایل واقعی** (iOS Safari + Chrome Android)
-- [ ] 🔴 **تست کامل جریان سفارش** از ابتدا تا انتها (با همه روش‌های پرداخت)
-- [ ] 🟡 **بررسی نهایی آپلود عکس در پرداخت کارت‌به‌کارت** با گوشی واقعی (تست‌های چت قبلی ناتمام موندن)
-- [ ] 🟢 **ایمیل/SMS اطلاع‌رسانی** برای سفارش‌های جدید و تحویل شده
+### 🔴 اولویت بالا (امنیت داده و پول)
+- [ ] 🔴 **چرخش `HASH_SALT`:** مقدار قبلی در فایل مستندات نوشته شده بود و باید «سوخته» حساب شود. Salt جدید بساز، در Vercel و `.env.local` بگذار و قبل از ورود داده واقعی، لیست اعضا را دوباره با اکسل بارگذاری کن (هش‌های قبلی بی‌اعتبار می‌شوند).
+- [ ] 🔴 **تغییر هش به `HMAC-SHA256`** با کلید مخفی سروری به‌جای `sha256(salt + data)` (فضای جستجوی تلفن و شماره دانشجویی کوچک است و brute force ممکن است).
+- [ ] 🔴 **قفل RLS روی ۴ جدول جدید باشگاه:** `organizations`، `organization_members`، `redemption_logs`، `membership_requests` (فقط Service Role) و تأیید آن.
+- [ ] 🔴 **RPC اتمیک برای ثبت سفارش + لاگ مصرف + بررسی سقف:** شمارش `max_daily_orders` و `max_total_orders` نباید با «اول بخوان، بعد بنویس» در Next.js باشد (رقابت هم‌زمان). `redemption_logs` باید `unique(order_id)` و ستون `created_at` داشته باشد؛ روز به وقت `Asia/Tehran` حساب شود.
+- [ ] 🔴 **برگشت سهمیه هنگام لغو سفارش** (یا شکست ثبت سفارش بعد از ثبت لاگ): لغو، ردیف `redemption_logs` را `voided` یا حذف کند و شمارش‌ها فقط ردیف‌های فعال را بشمارند.
+- [ ] 🔴 **محاسبه تخفیف باشگاه فقط سروری:** `orders/route.ts` خودش تخفیف را دوباره حساب کند و به مقدار کلاینت اعتماد نکند؛ `/api/membership/calculate` فقط پیش‌نمایش است.
+- [ ] 🔴 **مالکیت سفارش در مسیرهای مشتری:** `GET /api/orders/[id]` با `service_role` و `select('*')` سفارش را بدون بررسی مالکیت برمی‌گرداند. نسخه محدودشده با `device_id_hash` پیشنهاد شده ولی نصب نهایی نامشخص است. همین کار برای `orders/cancel` و `customer-confirm` (و تأیید `set-method`) لازم است.
+- [ ] 🔴 **تست `404` بدون کوکی / روی دستگاه یا مرورگر دیگر** برای همه مسیرهای مشتری.
+- [ ] 🔴 **تابع `reset_test_data(boolean, boolean, boolean)`** با `SECURITY DEFINER` هنوز برای `authenticated` قابل اجراست → بعد از پایان تست‌ها حذف شود.
+- [ ] 🔴 **فعال‌کردن Leaked Password Protection** در Supabase (Auth).
+- [ ] 🔴 **بررسی دسترسی `cancel_order_by_customer`** و تست `cleanup/status` مثل `cleanup/settings`.
+- [ ] 🔴 **تست Actionهای ادمین** با ادمین و بعد از logout (بعد از logout همه باید رد شوند).
+- [ ] 🔴 **تست کامل روی موبایل واقعی** (iOS Safari + Chrome Android) — شامل ثبت‌نام باشگاه تا سفارش
+- [ ] 🔴 **تست کامل جریان سفارش** از ابتدا تا انتها (با همه روش‌های پرداخت) + `npm run build` نهایی بعد از همه تغییرات
+
+### 🟠 اولویت متوسط (درستی منطق)
+- [ ] 🟠 **ترکیب تخفیف باشگاه و کوپن (تصمیم ۹۳):** تخفیف باشگاه اولویت دارد و هم‌زمان با کوپن اعمال نمی‌شود. باید پیاده‌سازی و تست شود: وقتی تخفیف باشگاه اعمال می‌شود، ظرفیت کوپن مصرف نشود (یا با `release_coupon` برگردد) و UI کوپن را «غیرفعال» نشان دهد، نه اینکه بی‌صدا حذف شود.
+- [ ] 🟠 **`max_total_orders`:** فرض پیشنهادی: سقف کل هم برای هر عضو است (مثل سقف روزانه) و در فرم ساخت/ویرایش سازمان انتخاب می‌شود. تأیید شود و در UI ادمین و متن قوانین ثبت‌نام همین عبارت نوشته شود.
+- [ ] 🟠 **فرم ساخت و ویرایش سازمان:** فیلد «سقف سفارش روزانه برای هر عضو» (عدد یا «بدون محدودیت») هم در فرم ایجاد و هم در ویرایش باشد. مقدارش در RPC خوانده شود، نه ثابت در کد.
+- [ ] 🟠 **تاریخ انقضا:** تاریخ شمسی به «پایان همان روز به وقت تهران» تبدیل شود.
+- [ ] 🟠 **حریم خصوصی `membership_requests`:** نام، تلفن و شماره عضویت بدون هش‌اند؛ زمان نگهداری تعریف شود (حذف پس از تأیید/رد یا بعد از ۳۰ روز).
+- [ ] 🟠 **پیام‌های ثبت‌نام یکسان** (جلوگیری از لو رفتن عضویت افراد با «قبلاً ثبت شده») + **Rate Limiting** روی `membership/register` و `membership/calculate`.
+- [ ] 🟠 **مسیر «انتقال دستگاه» برای عضو:** با پاک‌شدن کوکی یا عوض‌شدن گوشی، عضویت از دست می‌رود؛ بازیابی با شماره عضویت + تلفن و ثبت در لاگ.
+- [ ] 🟠 **اتصال ثبت‌نام باشگاه به CRM:** ثبت خودکار در `customers` با تگ مربوط.
+- [ ] 🟠 **پاک‌سازی سفارش‌های قدیمی واریز:** اجرای SQL زیر (اگر اجرا نشده):
+  ```sql
+  update public.orders
+  set payment_status = 'unpaid'
+  where payment_method = 'transfer'
+    and payment_status = 'pending_review'
+    and payment_receipt_url is null
+    and payment_note is null;
+  ```
+- [ ] 🟠 **تغییر روش از واریز به نقدی بعد از ثبت رسید:** `payment_receipt_url` و `payment_note` باید پاک شوند.
+- [ ] 🟠 **تریگر SQL پاک‌کردن رسید** هنگام `pending_review → unpaid/failed`: نصب و تست نهایی نشده (فعلاً `rejectReceipt` خودش رسید را پاک می‌کند).
+- [ ] 🟠 **قفل لغو مشتری:** لغو فقط وقتی رسیدی ارسال نشده و پرداخت نشده مجاز باشد (ملاک: وجود رسید، نه `pending_review`).
+- [ ] 🟠 **فهرست اصلی `OrdersManager`:** سفارش واریز بدون رسید نمایش داده نشود یا برچسب «منتظر رسید» بگیرد.
+- [ ] 🟠 **کوپن:** تست استفاده مجدد با همان تلفن/دستگاه، لغو سفارش کارت‌به‌کارت و برگشت ظرفیت، و دو درخواست هم‌زمان.
+- [ ] 🟠 **تصمیم کوپن:** محدودیت «یک‌بار برای هر مشتری» برای همه کوپن‌هاست یا فقط `max_uses === 1`؟
+- [ ] 🟠 **نصب توابع کوپن:** `consume_coupon` و `release_coupon` باید واقعاً نصب باشند؛ کد کوپن uppercase شود.
+- [ ] 🟠 **زرین‌پال:** تست کامل sandbox و callback تکراری.
+- [ ] 🟡 **تست آپلود رسید با گوشی واقعی** (متن و تصویر در تست دسکتاپ/مرورگر موفق بود).
+
+### 🟡 سخت‌سازی و نگهداری
+| حوزه | کار |
+|---|---|
+| وابستگی `xlsx` | نسخه npm در `0.18.5` مانده (CVE-2023-30533، prototype pollution)؛ نسخه رسمی از CDN خود SheetJS نصب شود یا مهاجرت به `exceljs`؛ محدودیت حجم فایل و تعداد ردیف اضافه شود |
+| ورودی‌ها | اعتبارسنجی JSON در `variant_groups` و `cancellation-reasons`؛ محدودیت حجم و نوع فایل برای تصویر محصول و فونت |
+| Rate Limiting | ورود ادمین، کوپن، عضویت، APIهای عمومی و ثبت سفارش |
+| رازها | چرخش `HASH_SALT` و `STEPUP_SECRET`؛ بررسی نشت `SUPABASE_SERVICE_ROLE_KEY` و `VAPID_PRIVATE_KEY` |
+| هدرها | HSTS و CSP |
+| وابستگی‌ها | `npm audit` و بررسی نسخه Next.js |
+| بکاپ | تهیه بکاپ و یک بار آزمون بازیابی |
+| فایل‌های رسید | فایل‌های رسیدِ ردشده در باکت `receipts` می‌مانند → پاک‌سازی دوره‌ای |
+| CSS | دکمه «عدم تأیید رسید» فعلاً استایل inline دارد → به کلاس در `globals.css` منتقل شود (قانون ۳) |
+
+### 🟢 اولویت پایین
+- [ ] 🟢 **ایمیل/SMS اطلاع‌رسانی** برای سفارش‌های جدید و تحویل شده / تغییر وضعیت
 - [ ] 🟢 **تست بار (Load Test)** روی Supabase
 - [ ] 🟢 **آیکون PWA با badge برای مشتری**
 - [ ] 🟢 **اتصال به درگاه پرداخت‌های دیگر** (آیدی‌پی، نکست‌پی) — زیرساخت آماده است
 - [ ] 🟢 **اتصال به نرم‌افزار حسابداری پارسیان**
-- [ ] 🟢 **سیستم پیامک (SMS) برای OTP** (جایگزینی کوکی دستگاه در آینده)
+- [ ] 🟢 **پنل اختصاصی مشتری (Login / SMS OTP)** برای دسترسی به تاریخچه از هر دستگاهی
 - [ ] 🟢 **افزودن جزئیات بیشتر به مودال تسویه**
+
+### 🎯 ترتیب پیشنهادی
+1. چرخش `HASH_SALT` + تغییر به HMAC
+2. قفل RLS ۴ جدول باشگاه
+3. RPC اتمیک ثبت سفارش/لاگ مصرف/سقف + برگشت سهمیه هنگام لغو
+4. پیاده‌سازی قانون «تخفیف باشگاه یا کوپن» (تصمیم ۹۳) + سقف روزانه هر عضو (تصمیم ۹۲)
+5. بستن مالکیت `orders/[id]`، `cancel` و `customer-confirm`
+6. حذف `reset_test_data` + فعال‌کردن Leaked Password Protection
+7. Rate Limiting + پیام‌های یکسان ثبت‌نام + هدرهای امنیتی
+8. تست کوپن و زرین‌پال، سپس تست کامل روی موبایل
+9. بکاپ، `npm audit` و جایگزینی `xlsx`
 
 ---
 
@@ -410,10 +511,16 @@ Cofe-Park/
 15. **در کوئری سفارش‌های مشتری، با چند فرمت شماره جستجو کن.**
 16. **برای عملیات‌های حساس (دیتابیس)، حتماً از API Route یا Server Action با کلید مخفی استفاده کن.**
 17. **هر فایل سروری که با SERVICE_ROLE_KEY کار می‌کند، حتماً `import 'server-only'` داشته باشد.**
-18. **برای عملیات دیتابیسی در سرور (API ها)، به‌جای ساخت کلاینت جدید، همیشه از تابع `supabaseAdmin()` از فایل `lib/supabase/server.ts` استفاده شود.** (به دلیل قفل بودن RLS)
-19. **پراپ‌های کامپوننت باید در `type Props` تعریف شوند — اضافه کردن پراپ جدید بدون تعریف در `Props`، خطای بیلد می‌دهد.**
-20. **بعد از هر پاکسازی یا جابجایی بلوک‌های CSS، حتماً `npm run build` بزن** تا خطاهای `Missing Braces` یا `Duplicate Identifier` گرفته شوند.
-
+18. **برای عملیات دیتابیسی در سرور (API ها)، به‌جای ساخت کلاینت جدید، همیشه از تابع `supabaseAdmin()` از فایل `lib/supabase/server.ts` استفاده شود.**
+19. **پراپ‌های کامپوننت باید در `type Props` تعریف شوند** — اضافه کردن پراپ جدید بدون تعریف در `Props`، خطای بیلد می‌دهد.
+20. **بعد از هر پاکسازی یا جابجایی بلوک‌های CSS، حتماً `npm run build` بزن.**
+21. **قانون وضعیت پرداخت واریز:** `unpaid` = روش انتخاب شده و رسیدی نیست؛ `pending_review` = رسید (عکس/متن) ثبت شده و ادمین باید تصمیم بگیرد. **فقط** `payment/upload-receipt` حق دارد `pending_review` بنویسد؛ `set-method` و ثبت سفارش هرگز.
+22. **روش پرداخت را همراه ثبت سفارش بفرست** (`payment_method` در body `/api/orders`) تا سفارش در هیچ لحظه‌ای با روش اشتباه دیده نشود.
+23. **هر API مشتری باید مالکیت را با `device_id_hash` (`getDeviceHash()`) بررسی کند** و برای سفارش دیگران `404` بدهد.
+24. **PowerShell:** برای خواندن فایل‌ها همیشه `Get-Content ... -Encoding UTF8` همراه `[Console]::OutputEncoding = [Text.Encoding]::UTF8` استفاده کن.
+25. **برای هش کردن اطلاعات هویتی، فقط از `hashData` در `lib/utils/hash.ts` استفاده شود** (هیچ هش پراکنده‌ای در کد نباشد).
+26. **هیچ مقدار واقعی راز (`HASH_SALT`، کلیدها) در فایل‌های مستندات، چت یا Git نوشته نشود.**
+27. **سقف‌ها و سهمیه‌ها (باشگاه، کوپن) فقط داخل تابع SQL اتمیک (RPC) شمرده و مصرف شوند** و هر مسیر لغو/شکست باید سهمیه را برگرداند.
 ---
 
 ## 📝 ۷. متن آماده برای شروع چت جدید
@@ -430,7 +537,7 @@ Cofe-Park/
 2. هر کلاس جدیدی که در JSX استفاده می‌شود، باید در globals.css تعریف شود.
 3. پالت رنگ از متغیرهای CSS می‌آید، نه رنگ hex مستقیم.
 4. مودال‌ها از کلاس‌های modal-overlay + modal-container استفاده کنند.
-5. بخش‌های globals.css شماره‌گذاری شده‌اند (۱ تا ۹۲ با زیرشماره‌ها).
+5. بخش‌های globals.css شماره‌گذاری شده‌اند (۱ تا ۹۴ با زیرشماره‌ها).
 6. برای اعلان‌ها از Polling استفاده شود، نه Realtime (تحریم ایران).
 7. محافظت ادمین با proxy.ts (نه middleware.ts در Next.js 16).
 8. در fetch های API از cache: 'no-store' استفاده شود.
@@ -438,12 +545,18 @@ Cofe-Park/
 10. به دلیل قفل بودن RLS، همه APIهای حساس باید از SERVICE_ROLE_KEY استفاده کنند.
 11. هر پراپ جدید کامپوننت باید در `type Props` تعریف شود، وگرنه بیلد fail می‌شود.
 12. بعد از هر پاکسازی CSS، `npm run build` بزن تا خطاهای braces گرفته شوند.
+13. وضعیت پرداخت واریز: unpaid = منتظر رسید، pending_review = رسید ثبت شده. فقط upload-receipt حق نوشتن pending_review دارد.
+14. همه APIهای مشتری باید مالکیت سفارش را با device_id_hash (lib/orders/owner.ts) چک کنند و برای غیرمالک 404 بدهند.
+15. تمام هش‌ها فقط با hashData در lib/utils/hash.ts؛ هیچ راز واقعی در فایل/چت نوشته نشود.
+16. باشگاه B2B: سقف روزانه برای هر عضو است و تنظیم هر سازمان (قابل انتخاب/ویرایش در پنل)؛ تخفیف باشگاه اولویت دارد و با کوپن ترکیب نمی‌شود؛ سقف‌ها فقط در RPC اتمیک شمرده شوند.
+
 
 📁 ابزارهای موجود در پروژه:
-- dev.bat → منوی همه‌کاره توسعه
-- end-of-day.bat → اسکریپت پایان روز
+- dev.bat / end-of-day.bat
 - npm run backup / backup:server / backup:clean
 - npm run build:icons / transparent
+- Web Push (VAPID)
+- xlsx (آپلود اکسل)، react-multi-date-picker (تقویم شمسی)
 - supabase/cron-cleanup.sql → SQL پاکسازی خودکار
 
 درخواست فعلی من:
@@ -494,6 +607,7 @@ Cofe-Park/
 | 1405/07/27 | افزودن فیلتر تعداد لغو در CRM |
 | 1405/07/28 | بازطراحی ناوبری موبایل ادمین |
 | 1405/08/01 | افزودن پنل مشتری (ورود OTP + تاریخچه + سفارش مجدد) |
+| 1405/08/01 | **فاز بزرگ باشگاه مشتریان B2B:** جداول جدید، آپلود اکسل، هش امن، فرم ثبت‌نام، پنل مدیریت باشگاه، اعمال تخفیف در Checkout، داشبورد مشتری + بهینه‌سازی UI موبایل صفحه اصلی |
 | 1405/08/02 | افزودن PWA Badge |
 | 1405/08/02 | پیاده‌سازی کامل سیستم پرداخت چندگانه (زرین‌پال + نقدی + کارت‌خوان + واریز) |
 | 1405/08/02 | افزودن تنظیمات پرداخت در پنل ادمین |
@@ -506,10 +620,13 @@ Cofe-Park/
 | 1405/08/03 | **بهینه‌سازی امنیتی بزرگ:** قفل RLS + انتقال APIها به Service Role + جایگزینی OTP با کوکی دستگاه + انتقال Merchant ID به دیتابیس قفل‌شده + آپدیت dev.bat برای جلوگیری از پوش خراب |
 | 1405/08/03 | رفع باگ قطع ارتباط داشبورد/آمار لغوها/گزارش فروش با دیتابیس (انتقال stats.ts به Service Role) |
 | 1405/08/03 | **تکمیل فاز ۱ (Quick Wins):** رفع باگ آپلود رسید (E)، دکمه تحویل بدون تسویه (C)، گزارش کوپن (M)، دراور ادمین (H)، تب‌های سفارش (I) و رفع نهایی باگ RLS در `stats.ts`. |
-| 1405/08/04 | **آپدیت `PROJECT_STATE.md`:** افزودن بنر موفقیت سفارش، بهبود UX آپلود رسید (نمایش رسید قبلی + دکمه تغییر)، رفع باگ نمایش تکراری تاریخ در ریز اقلام، و حذف فیلدهای تکراری `floating_*` در `menu-types.ts`. |
-| 1405/08/05 | **فاز Quick Wins ۲:** شماره میز خودکار از لینک QR (Cart + Checkout)، نوار شناور sticky سبد خرید در `MenuClient`، رفع ۳ فیلد تکراری در Checkout، پاکسازی `globals.css` از ۹ مشکل ساختاری (بلوک‌های تکراری + braces جاافتاده)، و **Build موفق** روی Next.js 16.3.8. |
+| 1405/08/04 | **آپدیت `PROJECT_STATE.md`:** افزودن بنر موفقیت سفارش، بهبود UX آپلود رسید، رفع باگ نمایش تکراری تاریخ در ریز اقلام، و حذف فیلدهای تکراری `floating_*` در `menu-types.ts`. |
+| 1405/08/05 | **فاز Quick Wins ۲:** شماره میز خودکار از QR، نوار شناور sticky سبد خرید، رفع ۳ فیلد تکراری در Checkout، پاکسازی `globals.css` از ۹ مشکل ساختاری، و **Build موفق** روی Next.js 16.3.8. |
 | 1405/08/06 | پیاده‌سازی کامل Web Push Notification (VAPID، جدول اشتراک‌ها، Service Worker و کارت فعال‌سازی) |
 | 1405/08/07 | ادغام روش‌های پرداخت «نقدی» و «کارت‌خوان» به یک گزینه واحد «پرداخت در محل» در Checkout، صفحه سفارش و پنل ادمین. |
+| 1405/08/08 | **تکمیل جریان رسید کارت‌به‌کارت:** مالکیت سفارش با `device_id_hash` (ثبت سفارش + upload-receipt)، قفل سمت سرور رسید، تفکیک `unpaid` از `pending_review`، اکشن `rejectReceipt` + دکمه «❌ عدم تأیید رسید»، ثبت سفارش با `payment_method` واقعی، اصلاح فیلتر اعلان (شامل متن رسید)، هماهنگی `receiptNote`/`note`، رفع خطای build در `set-method`، و اصلاح CSS دکمه‌های تغییر روش پرداخت. تست متن و تصویر رسید → قفل → رد → بازشدن مجدد موفق. |
+| 1405/08/08 | **ممیزی باقی‌مانده‌ها:** فهرست اولویت‌دار امنیت/منطق/سخت‌سازی به بخش ۵ اضافه شد. |
+| 1405/08/08 | **ادغام مستندات باشگاه B2B در این فایل** + ممیزی باشگاه (چرخش `HASH_SALT`، HMAC، RPC اتمیک، برگشت سهمیه، RLS جداول جدید، پیام‌های یکسان، `xlsx`) + ثبت دو تصمیم: **سقف روزانه برای هر عضو** و **اولویت تخفیف باشگاه بر کوپن (بدون ترکیب)**. |
 
 ---
 
@@ -536,6 +653,12 @@ git pull origin main --rebase --autostash
 git add . && git commit -m "پیام" && git push origin main
 ```
 
+### PowerShell (خواندن فایل با فارسی سالم):
+```powershell
+[Console]::OutputEncoding = [Text.Encoding]::UTF8
+Get-Content "app\api\orders\route.ts" -Encoding UTF8 | Select-String -Pattern "payment_method" | Select-Object LineNumber, Line
+```
+
 ### متغیرهای محیطی (`.env.local` و Vercel):
 ```env
 NEXT_PUBLIC_SUPABASE_URL=https://xxx.supabase.co
@@ -545,6 +668,8 @@ NEXT_PUBLIC_SITE_URL=https://cafe-park-menu.vercel.app
 VAPID_PUBLIC_KEY=BEl62iUYgUivx...
 VAPID_PRIVATE_KEY=UUxI4O8-Fb...
 VAPID_SUBJECT=mailto:hadiassadi@gmail.com
+HASH_SALT=...            # نمک/کلید هش هویت اعضا و device_id (باید چرخانده شود؛ هرگز در کد/چت/مستندات ننویس)
+STEPUP_SECRET=...        # راز step-up ادمین (چرخش لازم است)
 ```
 
 ---
@@ -577,20 +702,25 @@ VAPID_SUBJECT=mailto:hadiassadi@gmail.com
 | `products` | محصولات | `id`, `category_id`, `name`, `price`, `image_url`, `is_featured`, `is_new`, `is_available`, `size`, `calories`, `prep_time_minutes`, `ingredients`, `allergens`, `dietary_info`, `coupon_eligible` |
 | `variant_groups` | گروه‌های تنوع | `id`, `product_id`, `name`, `is_required`, `sort_order` |
 | `variant_options` | گزینه‌های هر گروه | `id`, `group_id`, `name`, `price_modifier`, `is_default`, `is_available`, `sort_order` |
-| `orders` | سفارش‌ها | `id`, `order_number`, `customer_name`, `customer_phone`, `table_number`, `note`, `items` (JSONB), `subtotal`, `status`, `original_subtotal`, `coupon_code`, `coupon_discount`, `eligible_subtotal`, `ineligible_subtotal`, `cancellation_reason_id`, `cancellation_reason_label`, `cancellation_note`, `cancelled_by`, **`payment_method`**, **`payment_status`**, **`payment_authority`**, **`payment_ref_id`**, **`payment_amount`**, **`payment_receipt_url`**, **`payment_verified_at`**, **`payment_note`**, **`device_id_hash`**, `created_at`, `confirmed_at`, `preparing_at`, `ready_at`, `delivered_at`, `cancelled_at` |
+| `orders` | سفارش‌ها | `id`, `order_number`, `customer_name`, `customer_phone`, `table_number`, `note`, `items` (JSONB), `subtotal`, `status`, `original_subtotal`, `coupon_code` (برای تخفیف باشگاه مقدار `MEMBERSHIP`)، `coupon_discount`, `eligible_subtotal`, `ineligible_subtotal`, `cancellation_reason_id`, `cancellation_reason_label`, `cancellation_note`, `cancelled_by`, **`payment_method`**, **`payment_status`**, **`payment_authority`**, **`payment_ref_id`**, **`payment_amount`**, **`payment_receipt_url`**, **`payment_verified_at`**, **`payment_note`**, **`device_id_hash`**, `created_at`, `confirmed_at`, `preparing_at`, `ready_at`, `delivered_at`, `cancelled_at` |
 | `tables` | میزها | `id`, `number`, `name`, `description`, `capacity`, `location`, `sort_order`, `is_active`, `qr_token` |
 | `quotes` | جملات | `id`, `text`, `author`, `is_active` |
 | `themes` | تم‌ها | رنگ‌ها + font_url‌ها + `font_metadata` (JSONB), `border_radius`, `is_active` |
-| `settings` | تنظیمات سایت (id=1) | `cafe_name`, `tagline`, `hero_*`, `footer_text`, `address`, `phone`, `instagram`, `working_hours`, `logo_url`, `maps_url`, `og_*`, `show_*`, `*_in_header/footer/floating`, `auto_cleanup_enabled`, `auto_cleanup_days`, **`payment_enabled`**, **`payment_online_enabled`**, **`payment_cash_enabled`**, **`payment_card_enabled`**, **`payment_transfer_enabled`**, **`payment_gateway`**, **`payment_merchant_id`**, **`payment_sandbox_mode`**, **`payment_min_online_amount`**, **`payment_transfer_bank_name`**, **`payment_transfer_account_number`**, **`payment_transfer_card_number`**, **`payment_transfer_account_holder`**, **`payment_transfer_requires_review`**, **`payment_transfer_auto_verify`**, **`admin_allow_delete_orders`** |
+| `settings` | تنظیمات سایت (id=1) | `cafe_name`, `tagline`, `hero_*`, `footer_text`, `address`, `phone`, `instagram`, `working_hours`, `logo_url`, `maps_url`, `og_*`, `show_*`, `*_in_header/footer/floating`, `auto_cleanup_enabled`, `auto_cleanup_days`, **`payment_enabled`**, **`payment_online_enabled`**, **`payment_cash_enabled`**, **`payment_card_enabled`**, **`payment_transfer_enabled`**, **`payment_gateway`**, **`payment_merchant_id`**, **`payment_sandbox_mode`**, **`payment_min_online_amount`**, **`payment_transfer_bank_name`**, **`payment_transfer_account_number`**, **`payment_transfer_card_number`**, **`payment_transfer_account_holder`**, **`payment_transfer_requires_review`**, **`payment_transfer_auto_verify`**, **`admin_allow_delete_orders`**, **`membership_rules_general`**, **`membership_rules_org`** |
 | `coupons` | کدهای تخفیف | `id`, `code`, `description`, `discount_type`, `discount_value`, `min_order_amount`, `max_order_amount`, `max_discount`, `max_uses`, `used_count`, `valid_from`, `valid_until`, `is_active` |
-| `customers` | مشتریان (از سفارش‌ها) | `phone`, `notes`, `tags`, `updated_at` |
+| `customers` | مشتریان (CRM) | `phone`, `name`, `notes`, `tags`, `device_id_hash`, `updated_at` |
 | `cancellation_reasons` | دلایل لغو | `id`, `label`, `target`, `icon`, `sort_order`, `is_active` |
-| push_subscriptions | اشتراک‌های اعلان مرورگر | id, device_id_hash, endpoint, p256dh, auth, user_agent, is_active, created_at, last_used_at |
+| `push_subscriptions` | اشتراک‌های اعلان مرورگر | `id`, `device_id_hash`, `endpoint`, `p256dh`, `auth`, `user_agent`, `is_active`, `created_at`, `last_used_at` |
+| **`organizations`** | تنظیمات کلی سازمان‌ها (باشگاه B2B) | `id`, `name`, `discount_percent`, `max_daily_orders` (**سقف روزانه برای هر عضو**)، `max_total_orders` (⚠️ تعریف نهایی باقی است)، `expires_at`, `is_active` |
+| **`organization_members`** | اعضای تأیید‌شده سازمان‌ها | `id`, `organization_id`, `full_name_hash`, `phone_hash`, `member_id_hash`, `device_id_hash`, `is_registered`, `metadata` |
+| **`redemption_logs`** | دفتر کل استفاده از تخفیف (Ledger) | `id`, `member_id`, `order_id`, `created_at` — ⚠️ باید `unique(order_id)` + مکانیزم `voided`/حذف هنگام لغو داشته باشد |
+| **`membership_requests`** | درخواست‌های ناموفق/دستی | `id`, `full_name`, `phone`, `member_id`, `organization_name`, `status` — ⚠️ متن ساده؛ زمان نگهداری باید تعریف شود |
+| **`organizations`** | تنظیمات هر سازمان (باشگاه B2B) | `id`, `name`, `discount_percent`, `max_daily_orders` (**سقف روزانه برای هر عضو؛ null = نامحدود؛ قابل انتخاب موقع ساخت و قابل ویرایش در پنل**)، `max_total_orders` (⚠️ تعریف نهایی باقی است)، `expires_at`, `is_active` |
 
-
+> ⚠️ ۴ جدول باشگاه (`organizations`، `organization_members`، `redemption_logs`، `membership_requests`) باید مثل `orders` با RLS قفل و فقط از Service Role در دسترس باشند (تأیید نشده).
 
 ### Storage Buckets:
-- **`receipts`** (Private) — برای ذخیره عکس رسیدهای واریز بانکی (با Signed URL).
+- **`receipts`** (Private) — عکس رسیدهای واریز (Signed URL). فایل رسیدهای ردشده در باکت می‌مانند (فقط ارجاع در `orders` پاک می‌شود).
 
 ### وضعیت سفارش‌ها (status):
 ```
@@ -600,9 +730,24 @@ pending → confirmed → preparing → ready → delivered
 
 ### وضعیت پرداخت (payment_status):
 ```
-unpaid → paid (تأیید آنلاین یا دستی)
-       ↘ failed (پرداخت ناموفق)
-       ↘ pending_review (واریز با رسید، منتظر تأیید ادمین)
+unpaid  = روش انتخاب شده و رسیدی ثبت نشده (برای واریز: «منتظر آپلود رسید»)
+  ↘ pending_review = رسید (عکس/متن) ثبت شده؛ فقط upload-receipt می‌نویسد؛ رسید قفل می‌شود
+        ↘ paid   (تأیید ادمین)
+        ↘ unpaid (رد رسید توسط ادمین → payment_receipt_url و payment_note پاک می‌شوند)
+  ↘ paid   (تأیید آنلاین یا دستی)
+  ↘ failed (پرداخت ناموفق)
+
+اعلان ادمین (pending): payment_method in (cash, card) یا null، یا payment_status = paid،
+یا (pending_review با payment_receipt_url یا payment_note غیر null)
+```
+
+### قانون تخفیف سفارش (باشگاه و کوپن):
+```
+اگر عضو باشگاه واجد تخفیف باشد:
+  → تخفیف باشگاه اعمال می‌شود، coupon_code = 'MEMBERSHIP'
+  → کوپن هم‌زمان اعمال نمی‌شود (ظرفیت کوپن مصرف نشود / با release_coupon برگردد)
+سقف max_daily_orders برای هر عضو است (روز به وقت Asia/Tehran)
+مصرف هر تخفیف در redemption_logs ثبت می‌شود؛ لغو سفارش سهمیه را برمی‌گرداند
 ```
 
 ### توابع PostgreSQL:
@@ -610,6 +755,11 @@ unpaid → paid (تأیید آنلاین یا دستی)
 cleanup_old_orders()                    -- پاکسازی سفارش‌های قدیمی
 get_cleanup_status()                    -- وضعیت پاکسازی خودکار
 update_cleanup_settings(p_enabled, p_days)
+consume_coupon(p_code)                  -- مصرف ظرفیت کوپن (بررسی نصب لازم)
+release_coupon(p_code)                  -- آزادسازی ظرفیت کوپن هنگام لغو/شکست ثبت (بررسی نصب لازم)
+cancel_order_by_customer(...)           -- لغو مشتری (بررسی دسترسی لازم)
+reset_test_data(boolean, boolean, boolean) -- ⚠️ فقط تست؛ SECURITY DEFINER؛ باید حذف شود
+-- (برنامه‌ریزی‌شده) RPC اتمیک ثبت سفارش + لاگ مصرف باشگاه + بررسی سقف‌ها
 ```
 
 ### pg_cron Setup:
@@ -623,7 +773,6 @@ select cron.schedule(
   $$select cleanup_old_orders()$$
 );
 ```
-
 ---
 
 ## 🛠️ ۱۲. ابزارهای توسعه
@@ -645,9 +794,16 @@ select cron.schedule(
 | **گزارش فروش** | `app/admin/reports/sales/` | ۳ تب + CSV |
 | **دلایل لغو** | `app/admin/cancellation-reasons/` | مدیریت |
 | **آمار لغو** | `app/admin/cancellations/` | گزارش |
-| **پنل مشتری** | `app/my-orders/MyOrdersClient.tsx` | بدون OTP (کوکی) |
+| **پنل مشتری** | `app/my-orders/MyOrdersClient.tsx` | داشبورد + تاریخچه + ثبت‌نام باشگاه |
+| **مدیریت باشگاه** | `app/admin/memberships/` + `app/api/admin/memberships/` | سازمان‌ها، آپلود اکسل، درخواست‌ها، قوانین |
+| **API باشگاه (مشتری)** | `app/api/membership/` | register, calculate, organizations, rules |
+| **هش هویت** | `lib/utils/hash.ts` | `hashData()` (Salt + نرمال‌سازی فارسی) |
+| **Web Push** | `lib/push/send-push.ts` + `public/sw.js` + `EnablePushCard.tsx` | ارسال و دریافت اعلان مرورگر |
+| **مالکیت سفارش** | `lib/orders/owner.ts` | `getDeviceHash()` + `UUID_RE` |
+| **خطای API** | `lib/api-error.ts` | `apiError()` پاسخ خطای امن |
 | **پرداخت زرین‌پال** | `lib/payment/zarinpal.ts` | Request + Verify |
 | **تنظیمات پرداخت** | `app/admin/settings/payment/` | فعال/غیرفعال + Merchant ID |
+| **رد رسید (ادمین)** | `app/admin/orders/actions.ts` → `rejectReceipt` | برگرداندن به unpaid + پاک‌کردن رسید |
 | **محافظت ادمین** | `proxy.ts` | server-side |
 | **pg_cron Setup** | `supabase/cron-cleanup.sql` | راه‌اندازی |
 
@@ -668,6 +824,8 @@ react-dom              ^19.3.0
 sharp                  ^0.35.5
 web-push               ^3.6.7
 @types/web-push        ^3.6.4
+xlsx                   (نسخه دقیق را از package.json چک کن؛ ⚠️ نسخه npm آسیب‌پذیر است)
+react-multi-date-picker (نسخه دقیق را از package.json چک کن)
 ```
 
 ### DevDependencies:
@@ -714,11 +872,17 @@ backups-server/
 
 ## 🐛 ۱۵. باگ‌های شناخته‌شده
 
-> هیچ باگ باز فعلی وجود ندارد.
+> هیچ باگ عملکردی باز وجود ندارد. موارد امنیتی و منطقی باز در «بخش ۵. کارهای باقی‌مانده» ثبت شده‌اند.
 
 | تاریخ | توضیح | وضعیت |
 |---|---|---|
-| — | — | — |
+| 1405/08/08 | سفارش کارت‌به‌کارت بدون ارسال رسید در پنل/اعلان ادمین ظاهر می‌شد | ✅ رفع شد (`unpaid` + ثبت با روش واقعی + فیلتر اعلان) |
+| 1405/08/08 | نبود دکمه «عدم تأیید رسید» در ادمین | ✅ رفع شد (`rejectReceipt` + دکمه) |
+| 1405/08/08 | سفارش دارای فقط متن رسید اعلان نمی‌داد | ✅ رفع شد |
+| 1405/08/08 | قفل رسید سمت سرور در `upload-receipt` اعمال نمی‌شد (`neq('paid')`) | ✅ رفع شد |
+| 1405/08/08 | خطای build `Cannot find name 'updates'` در `set-method` | ✅ رفع شد |
+| 1405/08/08 | دکمه‌های «تغییر روش پرداخت» با ظاهر خراب (متن چسبیده) | ✅ رفع شد (CSS) |
+| 1405/08/08 | `HASH_SALT` در فایل مستندات نوشته شده بود | ⚠️ از فایل حذف شد؛ چرخش مقدار هنوز باقی است (بخش ۵) |
 
 ---
 
@@ -727,7 +891,7 @@ backups-server/
 1. **بدون Tailwind:** تمام استایل‌ها در `globals.css`.
 2. **Realtime Supabase:** برای لیست سفارش‌ها در ادمین.
 3. **Polling برای اعلان سفارش‌ها:** هر ۱۰ ثانیه (تحریم WebSocket).
-4. **Polling در صفحه جزئیات سفارش:** هر ۱۰ ثانیه.
+4. **Polling در صفحه جزئیات سفارش:** هر ۱۰ ثانیه (برای وضعیت پرداخت واریز: هر ۵ ثانیه).
 5. **QR Token برای میزها:** `?table=N`.
 6. **فونت داینامیک از دیتابیس.**
 7. **localStorage برای سبد خرید.**
@@ -791,13 +955,31 @@ backups-server/
 65. **جستجو و فیلتر در لیست سفارش‌ها.**
 66. **رنگ‌بندی کارت‌های سفارش.**
 67. **`dev.bat` با Build قبل از Push:** جلوگیری از خراب شدن سایت زنده.
-68. **`stats.ts` کاملاً سروری است:** همه توابع آماری (`getOrderStats`, `getCancellationStats`, `getSalesReport`, `getCouponStats`, `getCustomersData`) با Service Role کار می‌کنند و `server-only` دارند.
-69. **تابع `supabaseAdmin()`:** یک تابع مشترک در `lib/supabase/server.ts` ایجاد شد تا در تمام APIها به جای `createClient` تکراری استفاده شود و همیشه RLS را دور بزند.
-70. **بنر موفقیت با `sessionStorage`:** بعد از redirect از Checkout به صفحه سفارش، یک فلگ `cafe-park-order-success-${id}` در `sessionStorage` ست می‌شه و در `order/[id]/page.tsx` فقط یک بار خونده و پاک می‌شه (بهبود UX، جلوگیری از نمایش مکرر).
-71. **رسید قبلی در `UploadReceipt`:** با پراپ `initialUrl`، اگر رسید قبلی وجود داشته باشد در پیش‌نمایش نمایش داده می‌شود — جلوگیری از آپلود مکرر.
-72. **دکمه «تغییر رسید»:** با کلاس `.receipt-replace-btn` کاربر می‌تواند رسید آپلود شده را جایگزین کند (قبلاً چون `preview` از `initialUrl` پر می‌شد، دکمه آپلود مجدد مخفی می‌ماند و کاربر گیر می‌کرد).
-73. **شماره میز خودکار از QR:** `MenuClient` مقدار `?table=N` را از URL می‌خواند و در `sessionStorage` ذخیره می‌کند. Cart آن را می‌خواند و هم بج نمایش می‌دهد هم در لینک Checkout پاس می‌دهد. Checkout از URL یا `sessionStorage` پر می‌کند و برچسب «✅ از QR تشخیص داده شد» می‌زند.
-74. **نوار شناور sticky سبد خرید:** کلاس `.cart-floating-bar` در `MenuClient` با `position: fixed` — همیشه در دسترس، حتی بعد از اسکرول. الگوی `pointer-events: none` برای پس‌زمینه + `pointer-events: auto` برای خود دکمه (تا مانع کلیک روی محصولات نشود).
-75. **پاکسازی ساختاری `globals.css`:** حذف بلوک‌های تکراری (۴۰، ۴۵، ۸۵، ۹۱) و اصلاح شماره‌گذاری (۸۵b، ۹۱b) + حذف braces جاافتاده که باعث خطای `Missing Braces` می‌شدند. بعد از هر پاکسازی، `npm run build` اجباری است.
-76. **`Suspense` برای `useSearchParams`:** در Next.js 16، کامپوننت‌هایی که از `useSearchParams` استفاده می‌کنند باید داخل `<Suspense>` باشند (به همین دلیل `CartPage` به دو بخش `CartPage` + `CartContent` تقسیم شد).
-77. **ادغام پرداخت نقدی و کارت‌خوان:** از نظر کاربر نهایی، این دو روش تفاوتی ندارن و هر دو یعنی «تسویه حضوری». بنابراین در UI مشتری و ادمین با عنوان «پرداخت در محل» یکی شدن (اما دیتابیس همچنان هر دو را پشتیبانی می‌کنه).
+68. **`stats.ts` کاملاً سروری است:** همه توابع آماری با Service Role کار می‌کنند و `server-only` دارند.
+69. **تابع `supabaseAdmin()`:** یک تابع مشترک در `lib/supabase/server.ts` برای همه APIها.
+70. **بنر موفقیت با `sessionStorage`:** فلگ `cafe-park-order-success-${id}` فقط یک بار خوانده و پاک می‌شود.
+71. **رسید قبلی در `UploadReceipt`:** با پراپ `initialUrl` نمایش داده می‌شود.
+72. **دکمه «تغییر رسید»:** با کلاس `.receipt-replace-btn`.
+73. **شماره میز خودکار از QR:** `MenuClient` → `sessionStorage` → Cart → Checkout با برچسب «✅ از QR تشخیص داده شد».
+74. **نوار شناور sticky سبد خرید:** `.cart-floating-bar` با `position: fixed` و الگوی `pointer-events`.
+75. **پاکسازی ساختاری `globals.css`:** حذف بلوک‌های تکراری؛ بعد از هر پاکسازی `npm run build` اجباری است.
+76. **`Suspense` برای `useSearchParams`:** در Next.js 16 الزامی است (`CartPage` به `CartPage` + `CartContent` تقسیم شد).
+77. **ادغام پرداخت نقدی و کارت‌خوان:** در UI مشتری و ادمین «پرداخت در محل»؛ دیتابیس هر دو را پشتیبانی می‌کند.
+78. **مالکیت سفارش با کوکی دستگاه:** `cafe_device_token` در سرور به `device_id_hash` تبدیل و در `orders` ذخیره می‌شود. APIهای مشتری با `getDeviceHash()` فقط سفارش همان دستگاه را برمی‌گردانند؛ برای بقیه `404`. (پیامد: لینک سفارش روی دستگاه دیگر باز نمی‌شود.)
+79. **تفکیک `unpaid` و `pending_review` برای واریز:** انتخاب روش واریز، سفارش را وارد صف بررسی ادمین نمی‌کند؛ فقط ثبت رسید از `upload-receipt` وضعیت را به `pending_review` می‌برد. فیلتر اعلان ادمین هر دو شرط را چک می‌کند.
+80. **قفل رسید سمت سرور:** در `upload-receipt` شرط‌های `payment_method = transfer`، وضعیت `unpaid/failed/pending_review` و خالی‌بودن هر دو فیلد رسید در خود کوئری `update` اعمال می‌شود (اتمیک؛ عکس و متن باید در یک درخواست بیایند).
+81. **رد رسید توسط ادمین (`rejectReceipt`):** وضعیت `unpaid` می‌شود و ارجاع رسید پاک می‌شود (فایل در باکت می‌ماند)؛ صفحه مشتری با polling هر ۵ ثانیه دکمه‌ها را دوباره باز می‌کند.
+82. **ثبت سفارش با روش پرداخت واقعی:** `payment_method` از body خوانده و با فهرست مجاز (`cash/card/transfer/online`) اعتبارسنجی می‌شود؛ پیش‌فرض `cash`. فراخوانی بعدی `set-method` بی‌ضرر و idempotent است.
+83. **قفل لغو بر پایه وجود رسید:** لغو مشتری با «ارسال‌نشدن رسید و پرداخت‌نشدن» سنجیده شود، نه با `pending_review` به‌تنهایی (طراحی؛ پیاده‌سازی نهایی باقی است).
+84. **خروجی PowerShell:** خرابی نمایش فارسی در کنسول مشکل رمزگذاری نمایش است، نه فایل؛ با `-Encoding UTF8` خوانده شود.
+85. **معماری باشگاه مشتریان (Ledger Pattern):** سابقه استفاده از تخفیف‌ها در `redemption_logs` ثبت می‌شود تا باگ Race Condition پیش نیاید. (شمارش واقعی باید داخل RPC اتمیک باشد.)
+86. **هش کردن داده‌های حساس:** نام، تلفن و شماره دانشجویی با `SHA-256` + `Salt` (`HASH_SALT`) هش می‌شوند. (هدف: مهاجرت به `HMAC-SHA256` با کلید مخفی سروری.)
+87. **نرمال‌سازی قبل از هش:** حروف عربی (ي، ك) به فارسی، نیم‌فاصله حذف و فاصله‌های اضافی اصلاح می‌شوند.
+88. **پردازش اکسل سمت کلاینت:** خواندن فایل با `xlsx` در مرورگر انجام می‌شود تا ادمین قبل از ثبت، داده‌ها را ویرایش کند.
+89. **ریسپانسیو اختصاصی موبایل:** صفحه اصلی منو در موبایل با CSS بهینه شد (حذف بک‌گراند، هدر کوچک، گرید ۳ ستونه).
+90. **تقویم شمسی:** `react-multi-date-picker` برای تاریخ انقضای قرارداد در پنل ادمین (تبدیل به پایان روز تهران باقی است).
+91. **جلوگیری از ثبت‌نام تکراری:** هر شماره تلفن یا شماره دانشجویی فقط یک بار می‌تواند ثبت‌نام کند.
+92. **سقف روزانه باشگاه برای هر شخص (عضو) در سازمان است**، نه برای کل سازمان. این مقدار تنظیم هر سازمان است: هنگام ساخت سازمان انتخاب می‌شود و بعداً در پنل ادمین قابل ویرایش است. مقدار خالی (`null`) یعنی بدون محدودیت. روز به وقت `Asia/Tehran` حساب می‌شود و تغییر سقف فقط روی سفارش‌های بعدی اثر دارد.
+93. **تخفیف باشگاه اولویت دارد و با کوپن ترکیب نمی‌شود:** وقتی تخفیف باشگاه اعمال شود، `coupon_code = 'MEMBERSHIP'` ثبت می‌شود و کوپن اعمال نمی‌شود؛ ظرفیت کوپن نباید مصرف شود (یا با `release_coupon` برگردد) و UI کوپن را غیرفعال نشان می‌دهد.
+94. **محاسبه تخفیف باشگاه فقط سروری:** `orders/route.ts` تخفیف را دوباره حساب می‌کند؛ `/api/membership/calculate` فقط پیش‌نمایش است.
+95. **برگشت سهمیه:** لغو سفارش یا شکست ثبت سفارش بعد از ثبت لاگ، سهمیه عضو را برمی‌گرداند (ردیف `redemption_logs` حذف یا `voided` می‌شود و شمارش‌ها فقط ردیف‌های فعال را می‌شمارند).

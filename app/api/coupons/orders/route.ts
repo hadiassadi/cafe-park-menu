@@ -1,3 +1,4 @@
+import { requireAdmin } from '@/lib/admin/require-admin'
 import { apiError } from '@/lib/api-error'
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase/server'

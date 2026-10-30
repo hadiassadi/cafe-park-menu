@@ -1,9 +1,8 @@
 'use client'
-
+import { createBrowserClient } from '@supabase/ssr'
 import { useState, useEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
-import { createClient } from '@supabase/supabase-js'
-import { updateOrderStatus, updatePaymentStatus } from './actions'
+import { updateOrderStatus, updatePaymentStatus, rejectReceipt /* بقیه‌ی import های فعلی */ } from './actions'
 import { formatPersianDate } from '@/lib/format-date'
 import { useStepUp } from '@/lib/admin/use-step-up'
 import StepUpModal from '../components/StepUpModal'
@@ -184,12 +183,11 @@ export default function OrdersManager({
   const [cancelNote, setCancelNote] = useState('')
   const [loadingReasons, setLoadingReasons] = useState(false)
   const [cancelling, setCancelling] = useState(false)
-
   const [approvingPayment, setApprovingPayment] = useState(false)
+  const [rejectingReceipt, setRejectingReceipt] = useState(false)
   const [paymentNote, setPaymentNote] = useState('')
   const [showApprovePayment, setShowApprovePayment] = useState(false)
-
-  const [settleOrder, setSettleOrder] = useState<Order | null>(null)
+	const [settleOrder, setSettleOrder] = useState<Order | null>(null)
   const [settleMethod, setSettleMethod] = useState<'cash' | 'card'>('cash')
   const [settleNote, setSettleNote] = useState('')
   const [settling, setSettling] = useState(false)
@@ -204,7 +202,7 @@ export default function OrdersManager({
     const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
     if (!url || !key) return
 
-    const supabase = createClient(url, key)
+    const supabase = createBrowserClient(url, key)
     const channel = supabase
       .channel('orders-changes')
       .on(
@@ -663,6 +661,35 @@ export default function OrdersManager({
       alert('❌ خطا در تأیید پرداخت')
     } finally {
       setApprovingPayment(false)
+    }
+  }
+  async function handleRejectReceipt(order: Order) {
+    const ok = window.confirm(
+      `رسید سفارش #${order.order_number} رد شود؟\n\nرسید فعلی پاک می‌شود و مشتری می‌تواند دوباره رسید بفرستد یا روش پرداخت را تغییر دهد.`
+    )
+    if (!ok) return
+
+    setRejectingReceipt(true)
+    try {
+      const result = await rejectReceipt(order.id)
+      if (result.error) {
+        alert('❌ ' + result.error)
+        return
+      }
+
+      const updated = {
+        ...order,
+        payment_status: 'unpaid',
+        payment_receipt_url: null,
+        payment_note: null,
+      }
+
+      setOrders((prev) => prev.map((o) => (o.id === order.id ? updated : o)))
+      setSelectedOrder(updated)
+    } catch {
+      alert('❌ خطا در رد رسید')
+    } finally {
+      setRejectingReceipt(false)
     }
   }
 
@@ -1194,6 +1221,22 @@ export default function OrdersManager({
                       {formatPersianDate(selectedOrder.created_at)}
                     </strong>
                   </div>
+                  {selectedOrder.payment_method === 'transfer' &&
+                    selectedOrder.payment_status === 'pending_review' &&
+                    selectedOrder.status !== 'cancelled' &&
+                    !selectedOrder.deleted_at && (
+                      <div style={{ marginTop: '12px' }}>
+                        <button
+                          type="button"
+                          className="btn"
+                          style={{ width: '100%', background: '#9b3c32', color: '#fff', border: 0 }}
+                          onClick={() => handleRejectReceipt(selectedOrder)}
+                          disabled={rejectingReceipt}
+                        >
+                          {rejectingReceipt ? '...' : '❌ عدم تأیید رسید'}
+                        </button>
+                      </div>
+                    )}
 
                   {selectedOrder.payment_status !== 'paid' &&
                     selectedOrder.status !== 'cancelled' &&
