@@ -2,9 +2,15 @@
 
 import { supabaseServer } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
+import { guardAdmin } from '@/lib/admin/assert-admin'
+
+type ActionResult = { success?: boolean; error?: string }
 
 // ✅ افزودن کوپن جدید
-export async function addCoupon(formData: FormData) {
+export async function addCoupon(formData: FormData): Promise<ActionResult> {
+  const denied = await guardAdmin()
+  if (denied) return denied
+
   const db = await supabaseServer()
 
   const code = String(formData.get('code') || '').trim().toUpperCase()
@@ -21,9 +27,17 @@ export async function addCoupon(formData: FormData) {
   const isActive = formData.get('is_active') === 'on'
 
   if (!code) return { error: 'کد تخفیف الزامی است' }
-  if (discountValue <= 0) return { error: 'مقدار تخفیف باید مثبت باشد' }
+  if (!['percent', 'fixed'].includes(discountType)) {
+    return { error: 'نوع تخفیف نامعتبر است' }
+  }
+  if (!Number.isFinite(discountValue) || discountValue <= 0) {
+    return { error: 'مقدار تخفیف باید مثبت باشد' }
+  }
   if (discountType === 'percent' && discountValue > 100) {
     return { error: 'درصد تخفیف نمی‌تواند بیشتر از ۱۰۰ باشد' }
+  }
+  if (!Number.isFinite(minOrderAmount) || minOrderAmount < 0) {
+    return { error: 'حداقل مبلغ سفارش نامعتبر است' }
   }
 
   const { error } = await db.from('coupons').insert({
@@ -51,7 +65,10 @@ export async function addCoupon(formData: FormData) {
 }
 
 // ✅ ویرایش کوپن
-export async function updateCoupon(formData: FormData) {
+export async function updateCoupon(formData: FormData): Promise<ActionResult> {
+  const denied = await guardAdmin()
+  if (denied) return denied
+
   const db = await supabaseServer()
 
   const id = String(formData.get('id') || '')
@@ -70,9 +87,17 @@ export async function updateCoupon(formData: FormData) {
 
   if (!id) return { error: 'شناسه کوپن مشخص نیست' }
   if (!code) return { error: 'کد تخفیف الزامی است' }
-  if (discountValue <= 0) return { error: 'مقدار تخفیف باید مثبت باشد' }
+  if (!['percent', 'fixed'].includes(discountType)) {
+    return { error: 'نوع تخفیف نامعتبر است' }
+  }
+  if (!Number.isFinite(discountValue) || discountValue <= 0) {
+    return { error: 'مقدار تخفیف باید مثبت باشد' }
+  }
   if (discountType === 'percent' && discountValue > 100) {
     return { error: 'درصد تخفیف نمی‌تواند بیشتر از ۱۰۰ باشد' }
+  }
+  if (!Number.isFinite(minOrderAmount) || minOrderAmount < 0) {
+    return { error: 'حداقل مبلغ سفارش نامعتبر است' }
   }
 
   const { error } = await db
@@ -104,7 +129,10 @@ export async function updateCoupon(formData: FormData) {
 }
 
 // ✅ حذف کوپن
-export async function deleteCoupon(formData: FormData) {
+export async function deleteCoupon(formData: FormData): Promise<ActionResult> {
+  const denied = await guardAdmin()
+  if (denied) return denied
+
   const db = await supabaseServer()
   const id = String(formData.get('id') || '')
 
@@ -119,7 +147,12 @@ export async function deleteCoupon(formData: FormData) {
 }
 
 // ✅ تغییر وضعیت فعال/غیرفعال
-export async function toggleCouponActive(formData: FormData) {
+export async function toggleCouponActive(
+  formData: FormData
+): Promise<ActionResult> {
+  const denied = await guardAdmin()
+  if (denied) return denied
+
   const db = await supabaseServer()
   const id = String(formData.get('id') || '')
   const isActive = formData.get('is_active') === 'true'

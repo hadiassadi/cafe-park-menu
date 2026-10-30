@@ -24,9 +24,10 @@ export async function GET() {
         'id, order_number, customer_name, customer_phone, table_number, subtotal, items, created_at, status, payment_method, payment_status, payment_receipt_url'
       )
       .eq('status', 'pending')
-      .or(
-        'payment_method.in.(cash,card),payment_method.is.null,payment_status.eq.paid,and(payment_status.eq.pending_review,payment_receipt_url.not.is.null)'
+            .or(
+        'payment_method.in.(cash,card),payment_method.is.null,payment_status.eq.paid,and(payment_status.eq.pending_review,or(payment_receipt_url.not.is.null,payment_note.not.is.null))'
       )
+
       .order('created_at', { ascending: false })
       .limit(20)
 

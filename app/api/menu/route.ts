@@ -1,11 +1,63 @@
 import { NextResponse } from 'next/server'
-import { supabaseServer } from '@/lib/supabase/server'
+import 'server-only'
+import { supabaseServer, supabaseAdmin } from '@/lib/supabase/server'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
+// فقط ستون‌های عمومی تنظیمات (هم‌خوان با lib/menu.ts)
+// ستون‌های پرداخت، کلید درگاه و تنظیمات داخلی عمداً اینجا نیستند.
+const PUBLIC_SETTINGS_COLUMNS = [
+  'cafe_name',
+  'tagline',
+  'hero_title',
+  'hero_subtitle',
+  'footer_text',
+  'address',
+  'phone',
+  'instagram',
+  'working_hours',
+  'logo_url',
+  'maps_url',
+  'og_title',
+  'og_description',
+  'og_image_url',
+  'og_enabled',
+  'show_address',
+  'show_phone',
+  'show_instagram',
+  'show_working_hours',
+  'show_quote',
+  'show_share_button',
+  'show_featured_filter',
+  'show_product_images',
+  'show_product_size',
+  'show_footer',
+  'hero_bg_mode',
+  'hero_bg_image_url',
+  'hero_overlay',
+  'bg_enabled',
+  'bg_image_url',
+  'bg_overlay',
+  'contact_header_style',
+  'address_in_header',
+  'address_in_footer',
+  'address_in_floating',
+  'phone_in_header',
+  'phone_in_footer',
+  'phone_in_floating',
+  'instagram_in_header',
+  'instagram_in_footer',
+  'instagram_in_floating',
+  'hours_in_header',
+  'hours_in_footer',
+  'floating_enabled',
+  'floating_side',
+].join(',')
+
 export async function GET() {
   const db = await supabaseServer()
+  const adminDb = supabaseAdmin()
 
   const [
     catsRes,
@@ -33,7 +85,11 @@ export async function GET() {
 
     db.from('themes').select('*').eq('is_active', true).maybeSingle(),
 
-    db.from('settings').select('*').eq('id', 1).maybeSingle(),
+    adminDb
+      .from('settings')
+      .select(PUBLIC_SETTINGS_COLUMNS)
+      .eq('id', 1)
+      .maybeSingle(),
 
     db.from('quotes').select('id,text,author').eq('is_active', true),
 
@@ -53,6 +109,10 @@ export async function GET() {
       { error: 'خطا در دریافت منو' },
       { status: 500 }
     )
+  }
+
+  if (settingsRes.error) {
+    console.error('[api/menu] settings error:', settingsRes.error)
   }
 
   // ✅ گروه‌بندی واریانت‌ها بر اساس product_id
@@ -78,7 +138,9 @@ export async function GET() {
       categories: catsRes.data ?? [],
       products,
       theme: themeRes.data ?? null,
-      settings: settingsRes.data ?? null,
+      settings:
+        (settingsRes.data as unknown as Record<string, unknown> | null) ??
+        null,
       quotes: quotesRes.data ?? [],
     },
     {

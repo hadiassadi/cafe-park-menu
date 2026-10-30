@@ -1,3 +1,5 @@
+import { cookies } from 'next/headers'
+import { hashData } from '@/lib/utils/hash'
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
@@ -47,6 +49,22 @@ export async function POST(request: Request) {
     const now = new Date()
     if (coupon.valid_from && new Date(coupon.valid_from) > now) return NextResponse.json({ error: 'این کد تخفیف هنوز فعال نشده است' }, { status: 400 })
     if (coupon.valid_until && new Date(coupon.valid_until) < now) return NextResponse.json({ error: 'این کد تخفیف منقضی شده است' }, { status: 400 })
+		    const store = await cookies()
+    const token = store.get('cafe_device_token')?.value
+    if (token) {
+      const { data: prevUse } = await db
+        .from('orders')
+        .select('id')
+        .eq('coupon_code', coupon.code)
+        .eq('device_id_hash', hashData(token))
+        .is('deleted_at', null)
+        .not('status', 'in', '(cancelled,canceled)')
+        .limit(1)
+      if (prevUse && prevUse.length > 0) {
+        return NextResponse.json({ error: 'شما قبلاً از این کد تخفیف استفاده کرده‌اید' }, { status: 400 })
+      }
+    }
+
     if (coupon.max_uses && coupon.used_count >= coupon.max_uses) return NextResponse.json({ error: 'ظرفیت استفاده از این کد تخفیف پر شده است' }, { status: 400 })
     if (coupon.min_order_amount && subtotal < coupon.min_order_amount) return NextResponse.json({ error: `حداقل مبلغ سفارش برای این کد ${coupon.min_order_amount.toLocaleString('fa-IR')} تومان است` }, { status: 400 })
     if (coupon.max_order_amount && subtotal > coupon.max_order_amount) return NextResponse.json({ error: `این کد فقط برای سفارش‌های زیر ${coupon.max_order_amount.toLocaleString('fa-IR')} تومان است` }, { status: 400 })

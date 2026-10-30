@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Modal from '../components/Modal'
+import DangerZone from '../components/DangerZone'
 import { revalidateMenu } from '../actions'
 
 /* ============================================================
@@ -915,6 +916,12 @@ export default function SettingsPage() {
           </button>
         ))}
       </div>
+
+      {/* ⚠️ منطقه‌ی خطر: عمداً بیرون از Modal و form */}
+      <div style={{ marginTop: 32 }}>
+        <DangerZone />
+      </div>
+
       <Modal isOpen={activeSection !== null} onClose={closeSection}
         title={activeMeta?.title ?? ''} subtitle={activeMeta?.desc ?? ''}
         footer={

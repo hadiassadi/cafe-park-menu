@@ -4,16 +4,36 @@ import { Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+const ERROR_MESSAGES: Record<string, string> = {
+  no_authority: 'کد تراکنش دریافت نشد.',
+  bad_order: 'شناسه سفارش نامعتبر است.',
+  order_not_found: 'سفارش پیدا نشد.',
+  authority_mismatch: 'اطلاعات تراکنش با سفارش مطابقت ندارد.',
+  bad_amount: 'مبلغ سفارش نامعتبر است.',
+  settings: 'خطا در تنظیمات پرداخت.',
+  verify_failed: 'تأیید پرداخت ناموفق بود.',
+  save_failed:
+    'پرداخت انجام شد ولی ثبت نشد. لطفاً با کافه تماس بگیرید و شماره پیگیری را اعلام کنید.',
+  unexpected: 'متأسفانه در فرآیند پرداخت خطایی رخ داد.',
+}
+
 function CallbackContent() {
   const searchParams = useSearchParams()
   const status = searchParams.get('status')
-  const orderId = searchParams.get('orderId')
-  const refId = searchParams.get('refId')
-  const message = searchParams.get('message')
+  const code = searchParams.get('code') || ''
+
+  const rawOrderId = searchParams.get('orderId')
+  const orderId = rawOrderId && UUID_RE.test(rawOrderId) ? rawOrderId : null
+
+  const rawRefId = searchParams.get('refId')
+  const refId = rawRefId && /^\d{1,20}$/.test(rawRefId) ? rawRefId : null
 
   let icon = '❓'
-  let title = 'در حال بررسی...'
-  let description = 'لطفاً صبر کنید...'
+  let title = 'وضعیت نامشخص'
+  let description = 'نتیجه پرداخت مشخص نیست. لطفاً وضعیت سفارش را بررسی کنید.'
   let color = '#766f64'
   let showOrder = false
   let showRetry = false
@@ -38,15 +58,29 @@ function CallbackContent() {
     color = '#9b3c32'
     showOrder = true
     showRetry = true
+  } else if (status === 'pending') {
+    icon = '⏳'
+    title = 'تأیید پرداخت هنوز کامل نشده'
+    description =
+      'اگر مبلغ از حساب شما کسر شده، چند دقیقه بعد وضعیت سفارش را بررسی کنید یا با کافه تماس بگیرید. لطفاً دوباره پرداخت نکنید.'
+    color = '#a8741a'
+    showOrder = true
   } else if (status === 'error') {
     icon = '⚠️'
     title = 'خطا در پرداخت'
     description =
-      message || 'متأسفانه در فرآیند پرداخت خطایی رخ داد.'
+      ERROR_MESSAGES[code] ?? 'متأسفانه در فرآیند پرداخت خطایی رخ داد.'
     color = '#9b3c32'
+    // پس از save_failed نباید پرداخت مجدد پیشنهاد شود
     showOrder = !!orderId
-    showRetry = !!orderId
+    showRetry = !!orderId && code !== 'save_failed'
   }
+
+  const showRef =
+    refId &&
+    (status === 'success' ||
+      status === 'already-paid' ||
+      code === 'save_failed')
 
   return (
     <div className="payment-callback-page">
@@ -60,7 +94,7 @@ function CallbackContent() {
         <h1 style={{ color }}>{title}</h1>
         <p className="payment-callback-desc">{description}</p>
 
-        {refId && (status === 'success' || status === 'already-paid') && (
+        {showRef && (
           <div className="payment-callback-ref">
             <span>شماره پیگیری:</span>
             <strong dir="ltr">{refId}</strong>

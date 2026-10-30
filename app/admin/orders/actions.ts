@@ -3,6 +3,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { revalidatePath } from 'next/cache'
 import { sendPushToOrder } from '@/lib/push/send-push'
+import { assertAdmin, guardAdmin } from '@/lib/admin/assert-admin'
 
 function createAdminDb() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -11,10 +12,39 @@ function createAdminDb() {
   return createClient(url, key, { auth: { persistSession: false } })
 }
 
+const ALLOWED_STATUSES = [
+  'pending',
+  'confirmed',
+  'preparing',
+  'ready',
+  'delivered',
+  'cancelled',
+]
+const ALLOWED_PAYMENT_STATUSES = ['paid', 'unpaid', 'failed']
+const ALLOWED_PAYMENT_METHODS = ['cash', 'card', 'online', 'transfer']
+
+function isValidDays(days: unknown): days is number {
+  return (
+    typeof days === 'number' &&
+    Number.isInteger(days) &&
+    days >= 7 &&
+    days <= 365
+  )
+}
+
+type ActionResult = { success?: boolean; error?: string }
+type CleanupResult = ActionResult & { deletedCount?: number; message?: string }
+type CountResult = { count?: number; error?: string }
+
 // ─────────────────────────────────────────────
 // تغییر وضعیت سفارش (با پشتیبانی از دلایل لغو)
 // ─────────────────────────────────────────────
-export async function updateOrderStatus(formData: FormData) {
+export async function updateOrderStatus(
+  formData: FormData
+): Promise<ActionResult> {
+  const denied = await guardAdmin()
+  if (denied) return denied
+
   const db = createAdminDb()
 
   const id = String(formData.get('id') || '')
@@ -22,6 +52,9 @@ export async function updateOrderStatus(formData: FormData) {
 
   if (!id) return { error: 'شناسه سفارش مشخص نیست' }
   if (!status) return { error: 'وضعیت مشخص نیست' }
+  if (!ALLOWED_STATUSES.includes(status)) {
+    return { error: 'وضعیت نامعتبر است' }
+  }
 
   const updateData: Record<string, unknown> = { status }
 
@@ -34,8 +67,8 @@ export async function updateOrderStatus(formData: FormData) {
 
   if (status === 'cancelled') {
     updateData.cancelled_at = now
-    updateData.cancelled_by =
-      String(formData.get('cancelled_by') || 'admin') || 'admin'
+    // فقط ادمین به این Action دسترسی دارد، پس مقدار ثابت است
+    updateData.cancelled_by = 'admin'
 
     const reasonId = formData.get('cancellation_reason_id')
     const reasonLabel = formData.get('cancellation_reason_label')
@@ -70,7 +103,16 @@ export async function updateOrderStatus(formData: FormData) {
 // ─────────────────────────────────────────────
 // پاکسازی سفارش‌های قدیمی (بیشتر از N روز)
 // ─────────────────────────────────────────────
-export async function cleanupOldOrders(days: number = 30) {
+export async function cleanupOldOrders(
+  days: number = 30
+): Promise<CleanupResult> {
+  const denied = await guardAdmin()
+  if (denied) return denied
+
+  if (!isValidDays(days)) {
+    return { error: 'بازه نامعتبر است (بین ۷ تا ۳۶۵ روز)' }
+  }
+
   const db = createAdminDb()
 
   const cutoffDate = new Date()
@@ -118,7 +160,14 @@ export async function cleanupOldOrders(days: number = 30) {
 // ─────────────────────────────────────────────
 // شمارش سفارش‌های قدیمی (برای پیش‌نمایش)
 // ─────────────────────────────────────────────
-export async function countOldOrders(days: number = 30) {
+export async function countOldOrders(days: number = 30): Promise<CountResult> {
+  const denied = await guardAdmin()
+  if (denied) return denied
+
+  if (!isValidDays(days)) {
+    return { error: 'بازه نامعتبر است (بین ۷ تا ۳۶۵ روز)' }
+  }
+
   const db = createAdminDb()
 
   const cutoffDate = new Date()
@@ -159,6 +208,8 @@ export async function getCleanupStatus(): Promise<{
   error?: string
 }> {
   try {
+    await assertAdmin()
+
     const db = createAdminDb()
     const { data, error } = await db.rpc('get_cleanup_status')
 
@@ -179,7 +230,12 @@ export async function updateCleanupSettings(
   daysKept: number
 ): Promise<{ data?: CleanupStatus; error?: string }> {
   try {
-    if (daysKept < 7 || daysKept > 365) {
+    await assertAdmin()
+
+    if (typeof enabled !== 'boolean') {
+      return { error: 'مقدار فعال‌سازی نامعتبر است' }
+    }
+    if (!isValidDays(daysKept)) {
       return { error: 'بازه نگهداری باید بین ۷ تا ۳۶۵ روز باشه' }
     }
 
@@ -208,6 +264,18 @@ export async function updatePaymentStatus(
   method?: 'cash' | 'card' | 'online' | 'transfer'
 ): Promise<{ success?: boolean; error?: string }> {
   try {
+    await assertAdmin()
+
+    if (!orderId || typeof orderId !== 'string') {
+      return { error: 'شناسه سفارش مشخص نیست' }
+    }
+    if (!ALLOWED_PAYMENT_STATUSES.includes(newStatus)) {
+      return { error: 'وضعیت پرداخت نامعتبر است' }
+    }
+    if (method && !ALLOWED_PAYMENT_METHODS.includes(method)) {
+      return { error: 'روش پرداخت نامعتبر است' }
+    }
+
     const db = createAdminDb()
 
     const updates: Record<string, any> = {
@@ -218,8 +286,8 @@ export async function updatePaymentStatus(
 
     if (newStatus === 'paid') {
       updates.payment_verified_at = new Date().toISOString()
-      
-      // ✅ باگ‌فیکس نهایی: اگر پرداخت تایید شد و سفارش pending بود، وضعیت رو به confirmed تغییر بده
+
+      // ✅ اگر پرداخت تایید شد �� سفارش pending بود، وضعیت رو به confirmed تغییر بده
       const { data: currentOrder } = await db
         .from('orders')
         .select('status')
@@ -233,7 +301,7 @@ export async function updatePaymentStatus(
       }
     }
 
-    if (note) updates.payment_note = note
+    if (note) updates.payment_note = String(note).slice(0, 500)
     if (method) updates.payment_method = method
 
     const { error } = await db.from('orders').update(updates).eq('id', orderId)
@@ -249,7 +317,44 @@ export async function updatePaymentStatus(
 
     revalidatePath('/admin/orders')
     revalidatePath('/admin')
-    revalidatePath(`/order/${orderId}`) 
+    revalidatePath(`/order/${orderId}`)
+    return { success: true }
+  } catch (err: any) {
+    return { error: err?.message || 'خطای غیرمنتظره' }
+  }
+}
+export async function rejectReceipt(
+  orderId: string
+): Promise<{ success?: boolean; error?: string }> {
+  try {
+    await assertAdmin()
+
+    if (!orderId || typeof orderId !== 'string') {
+      return { error: 'شناسه سفارش مشخص نیست' }
+    }
+
+    const db = createAdminDb()
+
+    const { data, error } = await db
+      .from('orders')
+      .update({
+        payment_status: 'unpaid',
+        payment_receipt_url: null,
+        payment_note: null,
+      })
+      .eq('id', orderId)
+      .eq('payment_method', 'transfer')
+      .eq('payment_status', 'pending_review')
+      .select('id')
+
+    if (error) return { error: error.message }
+    if (!data || data.length === 0) {
+      return { error: 'این سفارش رسید در انتظار بررسی ندارد' }
+    }
+
+    revalidatePath('/admin/orders')
+    revalidatePath('/admin')
+    revalidatePath(`/order/${orderId}`)
     return { success: true }
   } catch (err: any) {
     return { error: err?.message || 'خطای غیرمنتظره' }

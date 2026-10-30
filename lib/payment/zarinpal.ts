@@ -11,7 +11,9 @@ export type ZarinPalRequestResult =
 
 export type ZarinPalVerifyResult =
   | { success: true; refId: string; cardPan?: string }
-  | { success: false; error: string }
+  | { success: false; error: string; retryable: boolean }
+
+const TIMEOUT_MS = 10_000
 
 const PROD_REQUEST = 'https://api.zarinpal.com/pg/v4/payment/request.json'
 const PROD_VERIFY = 'https://api.zarinpal.com/pg/v4/payment/verify.json'
@@ -55,6 +57,7 @@ export async function requestZarinPalPayment(
         description,
         metadata: mobile ? { mobile } : undefined,
       }),
+      signal: AbortSignal.timeout(TIMEOUT_MS),
     })
 
     const data = await res.json()
@@ -68,13 +71,11 @@ export async function requestZarinPalPayment(
       }
     }
 
-    const errorMsg =
-      data?.errors?.message ||
-      data?.errors?.code ||
-      'خطا در ایجاد تراکنش زرین‌پال'
-    return { success: false, error: String(errorMsg) }
-  } catch (err: any) {
-    return { success: false, error: err?.message || 'خطای شبکه' }
+    console.error('[zarinpal/request] rejected:', data?.errors)
+    return { success: false, error: 'خطا در ایجاد تراکنش زرین‌پال' }
+  } catch (err) {
+    console.error('[zarinpal/request]', err)
+    return { success: false, error: 'ارتباط با درگاه برقرار نشد' }
   }
 }
 
@@ -102,12 +103,12 @@ export async function verifyZarinPalPayment(
         amount: amountRial,
         authority,
       }),
+      signal: AbortSignal.timeout(TIMEOUT_MS),
     })
 
     const data = await res.json()
 
-    // 100 = تأیید موفق
-    // 101 = قبلاً تأیید شده (idempotent)
+    // 100 = تأیید موفق، 101 = قبلاً تأیید شده
     if (data?.data?.code === 100 || data?.data?.code === 101) {
       return {
         success: true,
@@ -116,12 +117,18 @@ export async function verifyZarinPalPayment(
       }
     }
 
-    const errorMsg =
-      data?.errors?.message ||
-      data?.errors?.code ||
-      'پرداخت تأیید نشد'
-    return { success: false, error: String(errorMsg) }
-  } catch (err: any) {
-    return { success: false, error: err?.message || 'خطای شبکه' }
+    // رد قطعی از طرف درگاه
+    if (data?.errors && !Array.isArray(data.errors)) {
+      console.error('[zarinpal/verify] rejected:', data.errors)
+      return { success: false, error: 'rejected', retryable: false }
+    }
+
+    // پاسخ نامشخص: سفارش را failed نکنید
+    console.error('[zarinpal/verify] unknown response:', data)
+    return { success: false, error: 'unknown', retryable: true }
+  } catch (err) {
+    // timeout یا خطای شبکه: وضعیت پرداخت معلوم نیست
+    console.error('[zarinpal/verify] network:', err)
+    return { success: false, error: 'network', retryable: true }
   }
 }

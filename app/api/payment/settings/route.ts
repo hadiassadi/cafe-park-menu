@@ -1,19 +1,13 @@
 import { apiError } from '@/lib/api-error'
+import 'server-only'
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { supabaseAdmin } from '@/lib/supabase/server'
 
 export const dynamic = 'force-dynamic'
 
-function createDb() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
-  if (!url || !key) throw new Error('Missing Supabase env')
-  return createClient(url, key, { auth: { persistSession: false } })
-}
-
 export async function GET() {
   try {
-    const db = createDb()
+    const db = supabaseAdmin()
     const { data, error } = await db
       .from('settings')
       .select(

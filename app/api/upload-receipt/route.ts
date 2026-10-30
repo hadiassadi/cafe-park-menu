@@ -1,11 +1,13 @@
 import { apiError } from '@/lib/api-error'
+import 'server-only'
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase/server'
+import { getDeviceHash, UUID_RE } from '@/lib/orders/owner'
 
 export const dynamic = 'force-dynamic'
 
 const MAX_SIZE = 5 * 1024 * 1024
-const ORDER_ID_RE = /^[A-Za-z0-9_-]{1,64}$/
+const SIGNED_URL_TTL = 60 * 60 * 24 * 30 // سی روز
 
 function detectImage(b: Uint8Array): { mime: string; ext: string } | null {
   if (b.length < 12) return null
@@ -26,15 +28,15 @@ function detectImage(b: Uint8Array): { mime: string; ext: string } | null {
 
 export async function POST(req: NextRequest) {
   try {
-    const formData = await req.formData()
-    const file = formData.get('file')
-    const orderId = formData.get('orderId')
+    const formData = await req.formData().catch(() => null)
+    const file = formData?.get('file')
+    const orderId = formData?.get('orderId')
 
     if (!(file instanceof File) || typeof orderId !== 'string' || !orderId) {
       return NextResponse.json({ error: 'فایل و orderId الزامی' }, { status: 400 })
     }
 
-    if (!ORDER_ID_RE.test(orderId)) {
+    if (!UUID_RE.test(orderId)) {
       return NextResponse.json({ error: 'شناسه‌ی سفارش نامعتبر است' }, { status: 400 })
     }
 
@@ -54,15 +56,31 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    const deviceHash = await getDeviceHash()
+    if (!deviceHash) {
+      return NextResponse.json({ error: 'سفارش پیدا نشد' }, { status: 404 })
+    }
+
     const db = supabaseAdmin()
 
-    // سفارش باید واقعاً وجود داشته باشد
-    const { data: order } = await db
+    // سفارش باید متعلق به همین دستگاه و هنوز قابل ویرایش باشد
+    const { data: order, error: findError } = await db
       .from('orders')
       .select('id')
       .eq('id', orderId)
+      .eq('device_id_hash', deviceHash)
+      .neq('payment_status', 'paid')
+	  .eq('payment_method', 'transfer')
+      .is('payment_receipt_url', null)
+      .is('payment_note', null)
+      .in('status', ['pending', 'confirmed', 'preparing', 'ready'])
+      .is('deleted_at', null)
       .maybeSingle()
 
+    if (findError) {
+      console.error('[upload-receipt] find error:', findError)
+      return apiError(findError, 'خطای پایگاه داده')
+    }
     if (!order) {
       return NextResponse.json({ error: 'سفارش پیدا نشد' }, { status: 404 })
     }
@@ -80,10 +98,11 @@ export async function POST(req: NextRequest) {
 
     const { data: signedUrlData, error: signError } = await db.storage
       .from('receipts')
-      .createSignedUrl(fileName, 60 * 60 * 24 * 365)
+      .createSignedUrl(fileName, SIGNED_URL_TTL)
 
     if (signError || !signedUrlData) {
       console.error('[upload-receipt] sign url error:', signError)
+      await db.storage.from('receipts').remove([fileName])
       return NextResponse.json({ error: 'خطا در ساخت لینک رسید' }, { status: 500 })
     }
 

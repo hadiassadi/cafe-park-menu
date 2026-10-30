@@ -97,7 +97,7 @@ export default function OrderPage({
   const [secondsLeft, setSecondsLeft] = useState(0)
 
   const [bannerDismissed, setBannerDismissed] = useState(false)
-  
+
   const [mounted, setMounted] = useState(false)
   const [printOrder, setPrintOrder] = useState<Order | null>(null)
 
@@ -272,7 +272,6 @@ export default function OrderPage({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           orderId: order.id,
-          phone: order.customer_phone,
           reasonId: selectedReasonId,
           reasonLabel: selectedReason?.label || null,
           note: cancelNote.trim() || null,
@@ -352,7 +351,7 @@ export default function OrderPage({
       setOrder({
         ...order,
         payment_method: method,
-        payment_status: method === 'transfer' ? 'pending_review' : 'unpaid',
+                payment_status: 'unpaid',
       })
       setShowChangeMethod(false)
 
@@ -402,6 +401,10 @@ export default function OrderPage({
   const needsOnlinePayment = isOnline && (isUnpaid || isFailed)
   const needsTransferReceipt = isTransfer && (isUnpaid || isPendingReview || isFailed)
 
+  // ✅ رسید (عکس یا متن) ارسال شده و منتظر تعیین‌تکلیف مدیر هستیم
+  const receiptSubmitted =
+    isTransfer && isPendingReview && !!(order.payment_receipt_url || order.payment_note)
+
   const showPaymentSection =
     !isCancelled &&
     !isPaid &&
@@ -414,9 +417,9 @@ export default function OrderPage({
   const itemsSubtotal = Array.isArray(order.items)
     ? order.items.reduce((sum, item) => sum + (item.unit_price * item.quantity), 0)
     : 0
-  
-  const originalSum = (order.original_subtotal && order.original_subtotal > order.subtotal) 
-                      ? order.original_subtotal 
+
+  const originalSum = (order.original_subtotal && order.original_subtotal > order.subtotal)
+                      ? order.original_subtotal
                       : itemsSubtotal
 
   const finalSubtotal = order.subtotal
@@ -430,10 +433,10 @@ export default function OrderPage({
   if (isPaid) {
     badgeType = 'paid'
     badgeText = '✅ پرداخت شده'
-  } else if (isPendingReview) {
+  } else if (receiptSubmitted) {
     badgeType = 'pending'
     badgeText = '⏳ در انتظار تأیید رسید'
-  } else if (isTransfer && isUnpaid) {
+  } else if (isTransfer && (isUnpaid || isPendingReview)) {
     badgeType = 'pending'
     badgeText = '🏦 منتظر آپلود رسید'
   } else if (isFailed) {
@@ -497,7 +500,7 @@ export default function OrderPage({
           </button>
         </div>
       )}
-	  
+
       {!isCancelled && order && order.status !== 'delivered' && order.status !== 'cancelled' && (
         <EnablePushCard orderId={order.id} />
       )}
@@ -517,7 +520,7 @@ export default function OrderPage({
         <div className="order-payment-section">
           <div className="order-payment-section-title">💳 پرداخت سفارش</div>
 
-          {showChangeMethod ? (
+          {showChangeMethod && !receiptSubmitted ? (
             <>
               <p className="order-payment-section-desc">روش پرداخت جدید رو انتخاب کن:</p>
 
@@ -553,11 +556,13 @@ export default function OrderPage({
           ) : (
             <>
               <p className="order-payment-section-desc">
-                {needsTransferReceipt
-                  ? `🏦 برای تکمیل سفارش، لطفاً مبلغ ${formatPrice(order.subtotal)} تومان رو واریز کن و رسید رو توی صفحه سفارش آپلود کن.`
-                  : isFailed
-                    ? 'پرداخت قبلی ناموفق بود. می‌تونی دوباره امتحان کنی یا روش دیگه‌ای انتخاب کنی.'
-                    : 'برای نهایی شدن سفارش، لطفاً پرداخت رو انجام بده.'}
+                {receiptSubmitted
+                  ? '🏦 رسید شما دریافت شد. پس از بررسی مدیر، وضعیت پرداخت به‌روزرسانی می‌شود.'
+                  : needsTransferReceipt
+                    ? `🏦 برای تکمیل سفارش، لطفاً مبلغ ${formatPrice(order.subtotal)} تومان رو واریز کن و رسید رو توی صفحه سفارش آپلود کن.`
+                    : isFailed
+                      ? 'پرداخت قبلی ناموفق بود. می‌تونی دوباره امتحان کنی یا روش دیگه‌ای انتخاب کنی.'
+                      : 'برای نهایی شدن سفارش، لطفاً پرداخت رو انجام بده.'}
               </p>
 
               {paymentError && (
@@ -569,17 +574,27 @@ export default function OrderPage({
               )}
 
               {needsTransferReceipt && (
-                <UploadReceipt
-                  orderId={order.id}
-                  initialUrl={order.payment_receipt_url}
-                  onSuccess={(url, note) => {
-                    setOrder({
-                      ...order,
-                      payment_status: 'pending_review',
-                      payment_receipt_url: url || order.payment_receipt_url,
-                    } as any)
-                  }}
-                />
+                receiptSubmitted ? (
+                  <div style={{ padding: '12px', background: '#fff7e6', color: '#8a5a00', borderRadius: '8px', fontSize: '13px', textAlign: 'center', fontWeight: 'bold' }}>
+                    ⏳ رسید شما ارسال شد و در انتظار تأیید مدیر است.
+                    <div style={{ fontWeight: 'normal', marginTop: '4px' }}>
+                      اگر رد شود، می‌توانید دوباره رسید بفرستید یا روش پرداخت را تغییر دهید.
+                    </div>
+                  </div>
+                ) : (
+                  <UploadReceipt
+                    orderId={order.id}
+                    initialUrl={order.payment_receipt_url}
+                    onSuccess={(url, note) => {
+                      setOrder({
+                        ...order,
+                        payment_status: 'pending_review',
+                        payment_receipt_url: url || order.payment_receipt_url,
+                        payment_note: note || order.payment_note,
+                      } as any)
+                    }}
+                  />
+                )
               )}
 
               <div className="order-payment-actions" style={{ marginTop: '12px' }}>
@@ -588,7 +603,13 @@ export default function OrderPage({
                     {paying ? '...' : `💳 پرداخت آنلاین ${formatPrice(order.subtotal)} تومان`}
                   </button>
                 )}
-                <button type="button" className="order-payment-btn secondary" onClick={() => { setShowChangeMethod(true); setPaymentError(null); setPaymentSuccess(null) }} disabled={paying}>
+                <button
+                  type="button"
+                  className="order-payment-btn secondary"
+                  onClick={() => { setShowChangeMethod(true); setPaymentError(null); setPaymentSuccess(null) }}
+                  disabled={paying || receiptSubmitted}
+                  title={receiptSubmitted ? 'تا تعیین‌تکلیف رسید امکان‌پذیر نیست' : undefined}
+                >
                   🔀 تغییر روش پرداخت
                 </button>
               </div>
@@ -676,7 +697,7 @@ export default function OrderPage({
             </div>
             <div className="info-row discount">
               <span>
-                {order.coupon_code
+                {order.coupon_code && order.coupon_code !== 'MEMBERSHIP'
                   ? `🎟️ تخفیف (${order.coupon_code}):`
                   : '🎉 تخفیف باشگاه:'}
               </span>
@@ -704,12 +725,12 @@ export default function OrderPage({
         )}
       </div>
 
-      {canCancel && !isPaid && !order.customer_confirmed && (
+      {canCancel && !isPaid && !receiptSubmitted && !order.customer_confirmed && (
         <div className="order-cancel-section" style={{ display: 'flex', flexDirection: 'column', gap: '8px', background: '#fdf9f4', padding: '16px', borderRadius: '12px', border: '1px solid #f2d5c5' }}>
-          <button 
-            type="button" 
-            className="checkout-btn" 
-            onClick={handleConfirmOrder} 
+          <button
+            type="button"
+            className="checkout-btn"
+            onClick={handleConfirmOrder}
             disabled={cancelling}
             style={{ background: '#477052', color: '#fff', border: 'none', padding: '14px', borderRadius: '10px', width: '100%', fontWeight: 'bold', fontSize: '15px' }}
           >
@@ -719,7 +740,7 @@ export default function OrderPage({
           <button type="button" className="order-cancel-btn" onClick={() => setShowCancelConfirm(true)} disabled={cancelling} style={{ border: '1px solid #e8d0cd' }}>
             ❌ لغو یا ویرایش سفارش
           </button>
-          
+
           <p className="order-cancel-hint" style={{ margin: '4px 0 0 0' }}>
             ⏱ تا {formatCountdown(secondsLeft)} فرصت داری سفارشت رو لغو کنی
           </p>
@@ -765,7 +786,7 @@ export default function OrderPage({
                 <input type="checkbox" checked={returnToCart} onChange={(e) => setReturnToCart(e.target.checked)} disabled={cancelling} />
                 <span>مایلم آیتم‌های این سفارش به سبد خرید برگردند تا بتوانم آن را اصلاح کنم.</span>
               </label>
-              
+
               <div className="cancel-warning" style={{ marginTop: '12px' }}>⚠️ بعد از لغو، سفارش از سیستم حذف می‌شه و قابل بازگشت نیست.</div>
               {cancelError && <div className="checkout-error" style={{ marginTop: '12px' }}>❌ {cancelError}</div>}
             </div>
@@ -780,10 +801,10 @@ export default function OrderPage({
       )}
 
       <div className="sticky-action-bar" style={{ display: 'flex', gap: '8px' }}>
-        <button 
-          type="button" 
-          onClick={() => setPrintOrder(order)} 
-          className="btn" 
+        <button
+          type="button"
+          onClick={() => setPrintOrder(order)}
+          className="btn"
           style={{ flex: '0 0 auto', background: '#f5f0e9', border: '1px solid #d8d0c4', color: '#29251f', borderRadius: '10px', padding: '0 16px', fontSize: '14px', fontWeight: 'bold' }}
         >
           🖨️ چاپ
@@ -888,7 +909,9 @@ export default function OrderPage({
                     </tr>
                     <tr className="invoice-summary-row invoice-discount-row">
                       <td colSpan={3}>
-                        {printOrder.coupon_code ? `🎟️ تخفیف (${printOrder.coupon_code}):` : '🎉 تخفیف باشگاه:'}
+                        {printOrder.coupon_code && printOrder.coupon_code !== 'MEMBERSHIP'
+                          ? `🎟️ تخفیف (${printOrder.coupon_code}):`
+                          : '🎉 تخفیف باشگاه:'}
                       </td>
                       <td>− {formatPrice(discountAmount)} تومان</td>
                     </tr>

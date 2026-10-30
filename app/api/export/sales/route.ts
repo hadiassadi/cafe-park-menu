@@ -1,10 +1,18 @@
 import { apiError } from '@/lib/api-error'
 import { NextRequest, NextResponse } from 'next/server'
 import { getSalesReport, type SalesReportFilter } from '@/lib/stats'
+import { requireAdmin } from '@/lib/admin/require-admin'
 
 export const dynamic = 'force-dynamic'
 
 type ExportType = 'daily' | 'products' | 'categories' | 'summary'
+
+const ALLOWED_TYPES: readonly ExportType[] = [
+  'daily',
+  'products',
+  'categories',
+  'summary',
+]
 
 const FILTER_LABELS: Record<SalesReportFilter, string> = {
   today: 'today',
@@ -16,25 +24,49 @@ const FILTER_LABELS: Record<SalesReportFilter, string> = {
 }
 
 function toCsvNumber(n: number): string {
-  return String(Math.round(n))
+  return String(Math.round(Number(n) || 0))
 }
 
-function escapeCsv(value: string): string {
-  if (value.includes(',') || value.includes('"') || value.includes('\n')) {
-    return `"${value.replace(/"/g, '""')}"`
+// جلوگیری از Formula Injection در Excel
+function neutralize(str: string): string {
+  return /^[=+\-@\t\r]/.test(str) ? `'${str}` : str
+}
+
+// فقط یک بار escape؛ همه‌ی سلول‌ها از این تابع رد می‌شوند
+function cell(value: string): string {
+  const str = neutralize(String(value ?? ''))
+  if (/[",\n\r]/.test(str)) {
+    return `"${str.replace(/"/g, '""')}"`
   }
-  return value
+  return str
 }
 
 export async function GET(request: NextRequest) {
   try {
+    const denied = await requireAdmin()
+    if (denied) return denied
+
     const { searchParams } = new URL(request.url)
-    const type = (searchParams.get('type') || 'daily') as ExportType
-    const filter = (searchParams.get('filter') || 'month') as SalesReportFilter
+
+    const rawType = searchParams.get('type') || 'daily'
+    const rawFilter = searchParams.get('filter') || 'month'
+
+    const type: ExportType = (ALLOWED_TYPES as readonly string[]).includes(
+      rawType
+    )
+      ? (rawType as ExportType)
+      : 'daily'
+
+    const filter: SalesReportFilter = Object.prototype.hasOwnProperty.call(
+      FILTER_LABELS,
+      rawFilter
+    )
+      ? (rawFilter as SalesReportFilter)
+      : 'month'
 
     const report = await getSalesReport(filter)
     const dateStr = new Date().toISOString().split('T')[0]
-    const filterSlug = FILTER_LABELS[filter] || filter
+    const filterSlug = FILTER_LABELS[filter]
 
     let headers: string[] = []
     let rows: string[][] = []
@@ -61,7 +93,6 @@ export async function GET(request: NextRequest) {
         toCsvNumber(d.avg),
       ])
 
-      // ردیف جمع کل
       rows.push([
         'جمع کل',
         toCsvNumber(report.summary.total_orders),
@@ -75,7 +106,7 @@ export async function GET(request: NextRequest) {
       filename = `sales-products-${filterSlug}-${dateStr}.csv`
       headers = ['محصول', 'تعداد فروش', 'درآمد (تومان)', 'سهم درصدی']
       rows = report.products.map((p) => [
-        escapeCsv(p.product_name),
+        p.product_name,
         toCsvNumber(p.quantity),
         toCsvNumber(p.revenue),
         toCsvNumber(p.percentage) + '٪',
@@ -85,13 +116,12 @@ export async function GET(request: NextRequest) {
       filename = `sales-categories-${filterSlug}-${dateStr}.csv`
       headers = ['دسته‌بندی', 'تعداد فروش', 'درآمد (تومان)', 'سهم درصدی']
       rows = report.categories.map((c) => [
-        escapeCsv(c.category_name),
+        c.category_name,
         toCsvNumber(c.quantity),
         toCsvNumber(c.revenue),
         toCsvNumber(c.percentage) + '٪',
       ])
     } else {
-      // summary
       title = `خلاصه گزارش فروش — ${report.summary.period_label}`
       filename = `sales-summary-${filterSlug}-${dateStr}.csv`
       headers = ['عنوان', 'مقدار']
@@ -112,27 +142,10 @@ export async function GET(request: NextRequest) {
       ]
     }
 
-    // ساخت CSV با BOM برای Excel فارسی
     const BOM = '\uFEFF'
-    const titleLine = `"${title}"\n\n`
-    const headerLine = headers.map((h) => `"${h}"`).join(',') + '\n'
-    const bodyLines = rows
-      .map((row) =>
-        row
-          .map((cell) => {
-            if (
-              cell.includes(',') ||
-              cell.includes('"') ||
-              cell.includes('\n')
-            ) {
-              return `"${cell.replace(/"/g, '""')}"`
-            }
-            // اگه فقط عدد هست، بدون "" بذار تا Excel فرمول نخونه
-            return cell
-          })
-          .join(',')
-      )
-      .join('\n')
+    const titleLine = cell(title) + '\n\n'
+    const headerLine = headers.map(cell).join(',') + '\n'
+    const bodyLines = rows.map((row) => row.map(cell).join(',')).join('\n')
 
     const csv = BOM + titleLine + headerLine + bodyLines
 
