@@ -1,18 +1,24 @@
 import 'server-only'
-import { createHash } from 'crypto'
+import { createHmac } from 'crypto'
 
-const SALT = process.env.HASH_SALT || 'cafe-park-secret-salt-1405'
+function getSalt(): string {
+  const salt = process.env.HASH_SALT
+  if (!salt || salt.length < 32) {
+    throw new Error('HASH_SALT is missing or too short (min 32 chars)')
+  }
+  return salt
+}
 
 export function hashData(value: string): string {
   if (!value) return ''
-  
-  // ✅ نرمالایز کردن قوی: حذف فاصله‌های اضافی، تبدیل حروف عربی به فارسی، حذف نیم‌فاصله
+
+  // نرمالایز: حذف فاصله‌های اضافی، تبدیل حروف عربی به فارسی، حذف نیم‌فاصله
   const cleanValue = value
     .trim()
     .replace(/ي/g, 'ی')
     .replace(/ك/g, 'ک')
-    .replace(/\u200c/g, '') // حذف نیم‌فاصله (ZWNJ)
-    .replace(/\s+/g, ' ')   // تبدیل چند فاصله به یک فاصله
-    
-  return createHash('sha256').update(cleanValue + SALT).digest('hex')
+    .replace(/\u200c/g, '')
+    .replace(/\s+/g, ' ')
+
+  return createHmac('sha256', getSalt()).update(cleanValue).digest('hex')
 }
