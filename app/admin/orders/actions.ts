@@ -400,3 +400,118 @@ export async function rejectReceipt(
     return { error: err?.message || 'خطای غیرمنتظره' }
   }
 }
+// ─────────────────────────────────────────────
+// رسیدهای در انتظار روی دفتر پرداخت (بدهی)
+// ─────────────────────────────────────────────
+export type LedgerReceipt = {
+  id: string
+  amount: number
+  method: string
+  receipt_url: string | null
+  receipt_note: string | null
+  created_at: string
+}
+
+const LEDGER_UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+export async function getPendingLedgerReceipts(
+  orderId: string
+): Promise<{ data?: LedgerReceipt[]; error?: string }> {
+  try {
+    await assertAdmin()
+
+    if (!orderId || !LEDGER_UUID_RE.test(orderId)) {
+      return { error: 'شناسه سفارش نامعتبر است' }
+    }
+
+    const db = createAdminDb()
+    const { data, error } = await db
+      .from('order_payments')
+      .select('id, amount, method, receipt_url, receipt_note, created_at')
+      .eq('order_id', orderId)
+      .eq('status', 'pending_review')
+      .order('created_at', { ascending: true })
+
+    if (error) {
+      console.error('[getPendingLedgerReceipts]', error)
+      return { error: 'خطا در خواندن رسیدها' }
+    }
+
+    return {
+      data: (data ?? []).map((r) => ({ ...r, amount: Number(r.amount) })),
+    }
+  } catch (err: any) {
+    return { error: err?.message || 'خطای غیرمنتظره' }
+  }
+}
+
+export async function reviewLedgerReceipt(
+  paymentId: string,
+  decision: 'confirmed' | 'rejected',
+  reason?: string
+): Promise<{ success?: boolean; error?: string; paymentStatus?: string }> {
+  try {
+    await assertAdmin()
+
+    if (!paymentId || !LEDGER_UUID_RE.test(paymentId)) {
+      return { error: 'شناسه پرداخت نامعتبر است' }
+    }
+    if (decision !== 'confirmed' && decision !== 'rejected') {
+      return { error: 'تصمیم نامعتبر است' }
+    }
+
+    const db = createAdminDb()
+
+    const { data: row, error: rowErr } = await db
+      .from('order_payments')
+      .select('id, order_id, status')
+      .eq('id', paymentId)
+      .maybeSingle()
+
+    if (rowErr || !row) return { error: 'رسید پیدا نشد' }
+    if (row.status !== 'pending_review') {
+      return { error: 'این رسید قبلاً بررسی شده است' }
+    }
+
+    const cleanReason =
+      decision === 'rejected' && reason?.trim()
+        ? reason.trim().slice(0, 300)
+        : null
+
+    const { data: newStatus, error: rpcErr } = await db.rpc(
+      'set_order_payment_status',
+      {
+        p_payment_id: paymentId,
+        p_new_status: decision,
+        p_verified_by: null,
+        p_ref_id: null,
+        p_reason: cleanReason,
+      }
+    )
+
+    if (rpcErr) {
+      console.error('[reviewLedgerReceipt] rpc:', rpcErr)
+      if (rpcErr.message?.includes('payment_already_final')) {
+        return { error: 'این رسید قبلاً بررسی شده است' }
+      }
+      return { error: 'خطا در ثبت نتیجهٔ بررسی' }
+    }
+
+    // رسید واریزی تأییدشده: روش پرداخت سفارش هم «واریز» ثبت شود
+    if (decision === 'confirmed' && newStatus === 'paid') {
+      const { error: updErr } = await db
+        .from('orders')
+        .update({ payment_method: 'transfer' })
+        .eq('id', row.order_id)
+      if (updErr) console.error('[reviewLedgerReceipt] side fields:', updErr)
+    }
+
+    revalidatePath('/admin/orders')
+    revalidatePath('/admin')
+    revalidatePath(`/order/${row.order_id}`)
+    return { success: true, paymentStatus: String(newStatus) }
+  } catch (err: any) {
+    return { error: err?.message || 'خطای غیرمنتظره' }
+  }
+}
