@@ -4,6 +4,7 @@ import { createClient } from '@supabase/supabase-js'
 import { revalidatePath } from 'next/cache'
 import { sendPushToOrder } from '@/lib/push/send-push'
 import { assertAdmin, guardAdmin } from '@/lib/admin/assert-admin'
+import { paymentErrorMessage } from '@/lib/payment/methods'
 
 function createAdminDb() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -58,7 +59,6 @@ export async function updateOrderStatus(
 
   const updateData: Record<string, unknown> = { status }
 
-  // ✅ ثبت تاریخ‌های مربوط به هر وضعیت
   const now = new Date().toISOString()
   if (status === 'confirmed') updateData.confirmed_at = now
   if (status === 'preparing') updateData.preparing_at = now
@@ -257,6 +257,9 @@ export async function updateCleanupSettings(
   }
 }
 
+// ─────────────────────────────────────────────
+// ثبت پرداخت توسط مدیر (از طریق دفتر پرداخت)
+// ─────────────────────────────────────────────
 export async function updatePaymentStatus(
   orderId: string,
   newStatus: 'paid' | 'unpaid' | 'failed',
@@ -272,43 +275,79 @@ export async function updatePaymentStatus(
     if (!ALLOWED_PAYMENT_STATUSES.includes(newStatus)) {
       return { error: 'وضعیت پرداخت نامعتبر است' }
     }
+    if (newStatus !== 'paid') {
+      return { error: 'فعلاً فقط ثبت پرداخت پشتیبانی می‌شود' }
+    }
     if (method && !ALLOWED_PAYMENT_METHODS.includes(method)) {
       return { error: 'روش پرداخت نامعتبر است' }
     }
 
     const db = createAdminDb()
 
+    const { data: order, error: orderErr } = await db
+      .from('orders')
+      .select('id, subtotal, status, payment_method, deleted_at')
+      .eq('id', orderId)
+      .single()
+
+    if (orderErr || !order) return { error: 'سفارش پیدا نشد' }
+    if (order.deleted_at || order.status === 'cancelled') {
+      return { error: 'این سفارش لغو یا حذف شده است' }
+    }
+
+    // باقی‌مانده = مبلغ سفارش − پرداخت‌های تأییدشده
+    const { data: confirmedRows, error: sumErr } = await db
+      .from('order_payments')
+      .select('amount')
+      .eq('order_id', orderId)
+      .eq('status', 'confirmed')
+    if (sumErr) return { error: 'خطا در خواندن پرداخت‌ها' }
+
+    const paid = (confirmedRows ?? []).reduce((s, r) => s + Number(r.amount), 0)
+    const remaining = Number(order.subtotal) - paid
+
+    // اگر قبلاً تسویه شده، دوباره ردیف نساز
+    if (remaining <= 0) {
+      revalidatePath('/admin/orders')
+      revalidatePath(`/order/${orderId}`)
+      return { success: true }
+    }
+
+    const payMethod = method ?? (order.payment_method as string | null) ?? 'cash'
+
+    const { error: addErr } = await db.rpc('add_order_payment', {
+      p_order_id: orderId,
+      p_method: payMethod,
+      p_amount: remaining,
+      p_created_by: 'admin',
+      p_status: 'confirmed',
+    })
+    if (addErr) {
+      console.error('[updatePaymentStatus] add_order_payment:', addErr)
+      return { error: paymentErrorMessage(addErr.message) }
+    }
+
+    // فیلدهای جانبی سفارش (روش، زمان تأیید، یادداشت)
     const updates: Record<string, any> = {
-      payment_status: newStatus,
+      payment_method: payMethod,
+      payment_verified_at: new Date().toISOString(),
     }
-
-    let autoConfirmed = false
-
-    if (newStatus === 'paid') {
-      updates.payment_verified_at = new Date().toISOString()
-
-      // ✅ اگر پرداخت تایید شد �� سفارش pending بود، وضعیت رو به confirmed تغییر بده
-      const { data: currentOrder } = await db
-        .from('orders')
-        .select('status')
-        .eq('id', orderId)
-        .single()
-
-      if (currentOrder && currentOrder.status === 'pending') {
-        updates.status = 'confirmed'
-        updates.confirmed_at = new Date().toISOString()
-        autoConfirmed = true
-      }
-    }
-
     if (note) updates.payment_note = String(note).slice(0, 500)
-    if (method) updates.payment_method = method
 
-    const { error } = await db.from('orders').update(updates).eq('id', orderId)
+    // اگر سفارش جدید بود، با تأیید پرداخت تأیید شود
+    let autoConfirmed = false
+    if (order.status === 'pending') {
+      updates.status = 'confirmed'
+      updates.confirmed_at = new Date().toISOString()
+      autoConfirmed = true
+    }
 
-    if (error) return { error: error.message }
+    const { error: updErr } = await db.from('orders').update(updates).eq('id', orderId)
+    if (updErr) {
+      // پرداخت در دفتر ثبت شده؛ فقط فیلدهای جانبی ناموفق بوده‌اند
+      console.error('[updatePaymentStatus] side fields:', updErr)
+    }
 
-    // 🔔 اگر وضعیت به صورت خودکار تغییر کرد، پوش هم ارسال بشه
     if (autoConfirmed) {
       sendPushToOrder(orderId, 'confirmed').catch((err) =>
         console.error('[updatePaymentStatus] push failed:', err)
@@ -323,6 +362,7 @@ export async function updatePaymentStatus(
     return { error: err?.message || 'خطای غیرمنتظره' }
   }
 }
+
 export async function rejectReceipt(
   orderId: string
 ): Promise<{ success?: boolean; error?: string }> {
