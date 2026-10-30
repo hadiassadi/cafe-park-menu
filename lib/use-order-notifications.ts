@@ -104,7 +104,7 @@ export function useOrderNotifications(enabled: boolean = true) {
         const data = json.orders
 
         const newOnes = data.filter((o: any) => !knownOrderIdsRef.current.has(o.id))
-
+        newOnes.forEach((o: any) => knownOrderIdsRef.current.add(o.id))
         if (!isFirstLoadRef.current && newOnes.length > 0) {
           newOnes.forEach((order: any) => {
             const info: NewOrderInfo = {
@@ -118,10 +118,11 @@ export function useOrderNotifications(enabled: boolean = true) {
               created_at: order.created_at,
             }
 
-            if (isMountedRef.current) {
-              setNewOrders((prev) => [info, ...prev])
+                        if (isMountedRef.current) {
+              setNewOrders((prev) =>
+                prev.some((o) => o.id === info.id) ? prev : [info, ...prev]
+              )
             }
-
             playBeep(audioContextRef)
             showBrowserNotification(info.order_number, info.customer_name)
           })
