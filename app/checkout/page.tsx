@@ -356,13 +356,16 @@ function CheckoutForm() {
           </div>
         )}
 
-        {!loadingUser && !customerInfo && (
+                {!loadingUser && (!customerInfo || !customerInfo.phone) && (
           <div className="checkout-card">
             <div className="checkout-card-title">📋 اطلاعات شما</div>
-            <div className="checkout-field"><label>نام و نام خانوادگی *</label><input type="text" value={name} onChange={(e) => setName(e.target.value)} required autoComplete="name" disabled={saving} /></div>
+            {!customerInfo && (
+              <div className="checkout-field"><label>نام و نام خانوادگی *</label><input type="text" value={name} onChange={(e) => setName(e.target.value)} required autoComplete="name" disabled={saving} /></div>
+            )}
             <div className="checkout-field"><label>شماره تماس *</label><input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} required autoComplete="tel" inputMode="tel" dir="ltr" disabled={saving} /></div>
           </div>
         )}
+
 
         {!settingsLoading && (
           <div className="checkout-card">

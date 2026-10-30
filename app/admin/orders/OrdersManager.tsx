@@ -2,6 +2,7 @@
 import { createBrowserClient } from '@supabase/ssr'
 import { useState, useEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
+import { isOrderVisibleToAdmin } from '@/lib/orders/visibility'
 import { updateOrderStatus, updatePaymentStatus, rejectReceipt /* بقیه‌ی import های فعلی */ } from './actions'
 import { formatPersianDate } from '@/lib/format-date'
 import { useStepUp } from '@/lib/admin/use-step-up'
@@ -197,7 +198,7 @@ export default function OrdersManager({
     setMounted(true)
   }, [])
 
-  useEffect(() => {
+    useEffect(() => {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL
     const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
     if (!url || !key) return
@@ -210,15 +211,27 @@ export default function OrdersManager({
         { event: '*', schema: 'public', table: 'orders' },
         (payload) => {
           if (payload.eventType === 'INSERT') {
-            setOrders((prev) => [payload.new as Order, ...prev])
-          } else if (payload.eventType === 'UPDATE') {
+            const inserted = payload.new as Order
+            if (!isOrderVisibleToAdmin(inserted)) return
             setOrders((prev) =>
-              prev.map((o) =>
-                o.id === payload.new.id ? (payload.new as Order) : o
-              )
+              prev.some((o) => o.id === inserted.id)
+                ? prev
+                : [inserted, ...prev]
             )
+          } else if (payload.eventType === 'UPDATE') {
+            const updated = payload.new as Order
+            const visible = isOrderVisibleToAdmin(updated)
+            setOrders((prev) => {
+              const exists = prev.some((o) => o.id === updated.id)
+              if (visible && !exists) return [updated, ...prev]
+              if (!visible && exists)
+                return prev.filter((o) => o.id !== updated.id)
+              if (exists)
+                return prev.map((o) => (o.id === updated.id ? updated : o))
+              return prev
+            })
             setSelectedOrder((prev) =>
-              prev?.id === payload.new.id ? (payload.new as Order) : prev
+              prev?.id === updated.id ? updated : prev
             )
           } else if (payload.eventType === 'DELETE') {
             setOrders((prev) => prev.filter((o) => o.id !== payload.old.id))
