@@ -734,7 +734,7 @@ export default function OrdersManager({
 
       const updated = {
         ...order,
-        payment_status: 'unpaid',
+        payment_status: result.payment_status ?? 'unpaid',
         payment_receipt_url: null,
         payment_note: null,
       }
@@ -1386,9 +1386,9 @@ export default function OrdersManager({
                         </button>
                       </div>
                     )}
-
-                  {selectedOrder.payment_status !== 'paid' &&
+                    {selectedOrder.payment_status !== 'paid' &&
                     ledgerReceipts.length === 0 &&
+                    selectedOrder.status !== 'cancelled' &&
                     !selectedOrder.deleted_at && (
                       <div
                         style={{

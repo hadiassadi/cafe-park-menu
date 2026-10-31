@@ -315,7 +315,7 @@ export async function updatePaymentStatus(
 
     const payMethod = method ?? (order.payment_method as string | null) ?? 'cash'
 
-        const { error: addErr } = await db.rpc('add_order_payment', {
+    const { error: addErr } = await db.rpc('add_order_payment', {
       p_order_id: orderId,
       p_method: payMethod,
       p_amount: remaining,
@@ -365,9 +365,13 @@ export async function updatePaymentStatus(
   }
 }
 
+// ─────────────────────────────────────────────
+// رد رسید سفارش عادی (بدون ردیف pending در دفتر)
+// وضعیت جدید از جمع پرداخت‌های تأییدشده دفتر حساب می‌شود
+// ─────────────────────────────────────────────
 export async function rejectReceipt(
   orderId: string
-): Promise<{ success?: boolean; error?: string }> {
+): Promise<{ success?: boolean; error?: string; payment_status?: string }> {
   try {
     await assertAdmin()
 
@@ -377,10 +381,25 @@ export async function rejectReceipt(
 
     const db = createAdminDb()
 
+    // جمع پرداخت‌های تأییدشده در دفتر
+    const { data: pays, error: payErr } = await db
+      .from('order_payments')
+      .select('amount')
+      .eq('order_id', orderId)
+      .eq('status', 'confirmed')
+
+    if (payErr) return { error: payErr.message }
+
+    const confirmedTotal = (pays ?? []).reduce(
+      (sum, p: { amount: number }) => sum + Number(p.amount || 0),
+      0
+    )
+    const nextStatus = confirmedTotal > 0 ? 'partial' : 'unpaid'
+
     const { data, error } = await db
       .from('orders')
       .update({
-        payment_status: 'unpaid',
+        payment_status: nextStatus,
         payment_receipt_url: null,
         payment_note: null,
       })
@@ -397,11 +416,12 @@ export async function rejectReceipt(
     revalidatePath('/admin/orders')
     revalidatePath('/admin')
     revalidatePath(`/order/${orderId}`)
-    return { success: true }
+    return { success: true, payment_status: nextStatus }
   } catch (err: any) {
     return { error: err?.message || 'خطای غیرمنتظره' }
   }
 }
+
 // ─────────────────────────────────────────────
 // رسیدهای در انتظار روی دفتر پرداخت (بدهی)
 // ─────────────────────────────────────────────
@@ -454,7 +474,7 @@ export async function reviewLedgerReceipt(
   reason?: string
 ): Promise<{ success?: boolean; error?: string; paymentStatus?: string }> {
   try {
-        const adminId = await assertAdminId()
+    const adminId = await assertAdminId()
 
     if (!paymentId || !LEDGER_UUID_RE.test(paymentId)) {
       return { error: 'شناسه پرداخت نامعتبر است' }
