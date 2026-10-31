@@ -3,7 +3,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { revalidatePath } from 'next/cache'
 import { sendPushToOrder } from '@/lib/push/send-push'
-import { assertAdmin, guardAdmin } from '@/lib/admin/assert-admin'
+import { assertAdmin, assertAdminId, guardAdmin } from '@/lib/admin/assert-admin'
 import { paymentErrorMessage } from '@/lib/payment/methods'
 
 function createAdminDb() {
@@ -452,7 +452,7 @@ export async function reviewLedgerReceipt(
   reason?: string
 ): Promise<{ success?: boolean; error?: string; paymentStatus?: string }> {
   try {
-    await assertAdmin()
+        const adminId = await assertAdminId()
 
     if (!paymentId || !LEDGER_UUID_RE.test(paymentId)) {
       return { error: 'شناسه پرداخت نامعتبر است' }
@@ -484,7 +484,7 @@ export async function reviewLedgerReceipt(
       {
         p_payment_id: paymentId,
         p_new_status: decision,
-        p_verified_by: null,
+        p_verified_by: adminId,
         p_ref_id: null,
         p_reason: cleanReason,
       }
