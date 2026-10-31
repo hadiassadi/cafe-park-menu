@@ -8,7 +8,7 @@ import { formatPersianDate } from '@/lib/format-date'
 const formatPrice = (n: number) => new Intl.NumberFormat('fa-IR').format(Math.round(n))
 
 type OrderItem = { product_name: string; option_name: string | null; unit_price: number; quantity: number; variant_option_id?: string | null; variant_group_id?: string | null; product_id?: string | null; image_url?: string | null }
-type Order = { id: string; order_number: number; items: OrderItem[]; subtotal: number; original_subtotal: number | null; coupon_code: string | null; coupon_discount: number | null; status: string; created_at: string; cancelled_by: string | null; cancellation_reason_label: string | null; customer_name: string; customer_phone: string; payment_status?: string; payment_method?: string }
+type Order = { id: string; order_number: number; items: OrderItem[]; subtotal: number; original_subtotal: number | null; coupon_code: string | null; coupon_discount: number | null; status: string; created_at: string; cancelled_by: string | null; cancellation_reason_label: string | null; customer_name: string; customer_phone: string; payment_status?: string; payment_method?: string; paid_amount?: number }
 
 const STATUS_INFO: Record<string, { label: string; color: string; icon: string }> = {
   pending: { label: 'در انتظار تأیید', color: '#9a6b3f', icon: '⏳' },
@@ -33,11 +33,9 @@ export default function MyOrdersClient() {
   const [loading, setLoading] = useState(true)
   
   // ✅ تب‌های اصلی (سفارش‌های باز / تاریخچه)
-  const [activeTab, setActiveTab] = useState<'open' | 'history'>('open')
-
+  const [activeTab, setActiveTab] = useState<'open' | 'history' | 'debt'>('open')
   const [customer, setCustomer] = useState<{ name: string; phone: string } | null>(null)
   const [toast, setToast] = useState<string | null>(null)
-
   const [showMemberModal, setShowMemberModal] = useState(false)
   const [memberName, setMemberName] = useState('')
   const [memberId, setMemberId] = useState('')
@@ -112,13 +110,24 @@ export default function MyOrdersClient() {
   const totalDiscount = validOrders.reduce((sum, o) => sum + (o.coupon_discount || 0), 0)
 
   // ✅ فیلتر کردن سفارش‌ها بر اساس تب فعال
+    // ✅ بدهی = تحویل‌شده و تسویه‌نشده
+  const debtOrders = orders.filter(
+    (o) => o.status === 'delivered' && o.payment_status !== 'paid'
+  )
+  const debtTotal = debtOrders.reduce(
+  (sum, o) => sum + Math.max(0, o.subtotal - (o.paid_amount ?? 0)),
+  0
+)
   const filteredOrders = orders.filter((o) => {
     if (activeTab === 'open') {
       return ['pending', 'confirmed', 'preparing', 'ready'].includes(o.status)
-    } else {
-      return ['delivered', 'cancelled'].includes(o.status)
     }
+    if (activeTab === 'debt') {
+      return o.status === 'delivered' && o.payment_status !== 'paid'
+    }
+    return ['delivered', 'cancelled'].includes(o.status)
   })
+
 
   return (
     <div className="my-orders-page">
@@ -156,6 +165,19 @@ export default function MyOrdersClient() {
           >
             📜 تاریخچه سفارشات
           </button>
+		            <button
+            onClick={() => setActiveTab('debt')}
+            style={{
+              flex: 1, padding: '14px 10px', fontSize: '14px', fontWeight: 'bold',
+              background: 'transparent', border: 'none',
+              borderBottom: activeTab === 'debt' ? '3px solid #9b3c32' : '3px solid transparent',
+              color: activeTab === 'debt' ? '#9b3c32' : '#766f64',
+              cursor: 'pointer', transition: 'all 0.2s ease'
+            }}
+          >
+            💸 بدهی‌ها{debtOrders.length > 0 ? ` (${debtOrders.length.toLocaleString('fa-IR')})` : ''}
+          </button>
+
         </div>
       </div>
 
@@ -221,12 +243,20 @@ export default function MyOrdersClient() {
 
       {filteredOrders.length === 0 ? (
         <div className="my-orders-empty">
-          {activeTab === 'open' 
-            ? 'در حال حاضر هیچ سفارش بازی ندارید.' 
-            : 'هنوز سابقه سفارشی (تحویل شده یا لغو شده) ندارید.'}
+                    {activeTab === 'open'
+            ? 'در حال حاضر هیچ سفارش بازی ندارید.'
+            : activeTab === 'debt'
+              ? '🎉 هیچ سفارش تسویه‌نشده‌ای ندارید.'
+              : 'هنوز سابقه سفارشی (تحویل شده یا لغو شده) ندارید.'}
         </div>
       ) : (
         <div className="my-orders-list" style={{ marginTop: '16px' }}>
+		          {activeTab === 'debt' && (
+            <div style={{ background: '#fde8e6', border: '1px solid #e8b8b2', color: '#9b3c32', borderRadius: '12px', padding: '12px 14px', fontSize: '13px', fontWeight: 700, textAlign: 'center' }}>
+              مجموع مبلغ تسویه‌نشده: {formatPrice(debtTotal)} تومان
+            </div>
+          )}
+
           {filteredOrders.map((order) => {
             const info = STATUS_INFO[order.status] || STATUS_INFO.pending
             return (
@@ -246,11 +276,16 @@ export default function MyOrdersClient() {
                     <span style={{ color: '#9a6b3f', fontWeight: 'bold', fontSize: '11px', background: '#fff4d9', padding: '2px 6px', borderRadius: '4px' }}>
                       ⏳ در انتظار تایید رسید
                     </span>
+                                    ) : (order.paid_amount ?? 0) > 0 ? (
+                    <span style={{ color: '#9a6b3f', fontWeight: 'bold', fontSize: '11px', background: '#fff4d9', padding: '2px 6px', borderRadius: '4px' }}>
+                      💳 پرداخت بخشی
+                    </span>
                   ) : (
                     <span style={{ color: '#9b3c32', fontWeight: 'bold', fontSize: '11px', background: '#fde8e6', padding: '2px 6px', borderRadius: '4px' }}>
                       ⏱ پرداخت نشده
                     </span>
                   )}
+
                 </div>
 
                 <div className="my-order-items">
@@ -271,6 +306,12 @@ export default function MyOrdersClient() {
                       <strong>{formatPrice(order.subtotal)} تومان</strong>
                     )}
                   </div>
+				                    {order.status !== 'cancelled' && order.payment_status !== 'paid' && (order.paid_amount ?? 0) > 0 && (
+                    <div style={{ fontSize: '12px', color: '#9b3c32', marginTop: '6px', fontWeight: 'bold' }}>
+                      پرداخت‌شده: {formatPrice(order.paid_amount ?? 0)} تومان · باقی‌مانده: {formatPrice(Math.max(0, order.subtotal - (order.paid_amount ?? 0)))} تومان
+                    </div>
+                  )}
+
                   {order.coupon_discount && order.coupon_discount > 0 ? (
                     <div style={{ fontSize: '12px', color: '#2d5d3e', marginTop: '6px', fontWeight: 'bold', background: '#e5f0e6', padding: '4px 8px', borderRadius: '6px', display: 'inline-block' }}>
                       🎁 تخفیف شما از این سفارش: {formatPrice(order.coupon_discount)} تومان
@@ -283,7 +324,17 @@ export default function MyOrdersClient() {
                     ❌ سفارش لغو شده {order.cancellation_reason_label ? `به دلیل: ${order.cancellation_reason_label}` : ''}
                   </div>
                 )}
-                <div className="my-orders-actions" style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
+                                {activeTab === 'debt' && (
+                  <Link
+                    href={`/order/${order.id}`}
+                    className="my-order-btn primary"
+                    style={{ display: 'block', textAlign: 'center', marginTop: '10px' }}
+                  >
+                    💳 مشاهده و تسویه
+                  </Link>
+                )}
+
+				<div className="my-orders-actions" style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
                   <button type="button" className="my-order-btn primary" style={{ flex: 1 }} onClick={() => handleReorder(order)}>🔄 سفارش مجدد</button>
                   <Link href={`/order/${order.id}`} className="my-order-btn" style={{ flex: 1, textAlign: 'center' }}>👁️ جزئیات</Link>
                 </div>

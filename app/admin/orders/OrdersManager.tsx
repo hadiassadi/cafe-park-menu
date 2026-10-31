@@ -3,7 +3,15 @@ import { createBrowserClient } from '@supabase/ssr'
 import { useState, useEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { isOrderVisibleToAdmin } from '@/lib/orders/visibility'
-import { updateOrderStatus, updatePaymentStatus, rejectReceipt /* بقیه‌ی import های فعلی */ } from './actions'
+import {
+  updateOrderStatus,
+  updatePaymentStatus,
+  rejectReceipt,
+  getPendingLedgerReceipts,
+  reviewLedgerReceipt,
+  type LedgerReceipt,
+} from './actions'
+'./actions'
 import { formatPersianDate } from '@/lib/format-date'
 import { useStepUp } from '@/lib/admin/use-step-up'
 import StepUpModal from '../components/StepUpModal'
@@ -53,6 +61,7 @@ type Order = {
   note: string | null
   items: OrderItem[]
   subtotal: number
+  paid_amount?: number
   original_subtotal: number | null
   coupon_code: string | null
   coupon_discount: number | null
@@ -102,6 +111,8 @@ const PAYMENT_STATUS_LABELS: Record<string, string> = {
   unpaid: 'پرداخت نشده',
   pending_review: 'در انتظار تأیید',
   failed: 'ناموفق',
+  partial: 'پرداخت جزئی',
+
 }
 
 const NEXT_STATUS: Record<string, string | null> = {
@@ -121,6 +132,15 @@ const NEXT_LABEL: Record<string, string> = {
 }
 
 type Filter = 'all' | 'pending' | 'active' | 'done' | 'unpaid'
+const UNPAID_FILTER_STATUSES = ['unpaid', 'failed', 'partial', 'pending_review']
+
+function needsPaymentFollowUp(o: Order): boolean {
+  return (
+    UNPAID_FILTER_STATUSES.includes(o.payment_status || 'unpaid') &&
+    o.status !== 'cancelled'
+  )
+}
+
 type SearchType =
   | 'all'
   | 'order_number'
@@ -188,15 +208,41 @@ export default function OrdersManager({
   const [rejectingReceipt, setRejectingReceipt] = useState(false)
   const [paymentNote, setPaymentNote] = useState('')
   const [showApprovePayment, setShowApprovePayment] = useState(false)
-	const [settleOrder, setSettleOrder] = useState<Order | null>(null)
+  const [settleOrder, setSettleOrder] = useState<Order | null>(null)
   const [settleMethod, setSettleMethod] = useState<'cash' | 'card'>('cash')
   const [settleNote, setSettleNote] = useState('')
   const [settling, setSettling] = useState(false)
   const [settleAndDeliver, setSettleAndDeliver] = useState(false)
+  const [ledgerReceipts, setLedgerReceipts] = useState<LedgerReceipt[]>([])
+  const [loadingLedger, setLoadingLedger] = useState(false)
+  const [reviewingId, setReviewingId] = useState<string | null>(null)
 
   useEffect(() => {
     setMounted(true)
   }, [])
+  useEffect(() => {
+    if (!selectedOrder || selectedOrder.payment_status !== 'pending_review') {
+      setLedgerReceipts([])
+      return
+    }
+
+    let cancelled = false
+    setLoadingLedger(true)
+
+    getPendingLedgerReceipts(selectedOrder.id)
+      .then((res) => {
+        if (cancelled) return
+        setLedgerReceipts(res.data ?? [])
+        setLoadingLedger(false)
+      })
+      .catch(() => {
+        if (!cancelled) setLoadingLedger(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [selectedOrder?.id, selectedOrder?.payment_status])
 
     useEffect(() => {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -218,7 +264,7 @@ export default function OrdersManager({
                 ? prev
                 : [inserted, ...prev]
             )
-          } else if (payload.eventType === 'UPDATE') {
+                    } else if (payload.eventType === 'UPDATE') {
             const updated = payload.new as Order
             const visible = isOrderVisibleToAdmin(updated)
             setOrders((prev) => {
@@ -227,12 +273,15 @@ export default function OrdersManager({
               if (!visible && exists)
                 return prev.filter((o) => o.id !== updated.id)
               if (exists)
-                return prev.map((o) => (o.id === updated.id ? updated : o))
+                return prev.map((o) =>
+                  o.id === updated.id ? { ...o, ...updated } : o
+                )
               return prev
             })
             setSelectedOrder((prev) =>
-              prev?.id === updated.id ? updated : prev
+              prev?.id === updated.id ? { ...prev, ...updated } : prev
             )
+
           } else if (payload.eventType === 'DELETE') {
             setOrders((prev) => prev.filter((o) => o.id !== payload.old.id))
           }
@@ -319,13 +368,9 @@ export default function OrdersManager({
         ['confirmed', 'preparing', 'ready'].includes(o.status)
       ).length,
       done: activeOrders.filter((o) =>
-        ['delivered', 'cancelled'].includes(o.status)
+      ['delivered', 'cancelled'].includes(o.status)
       ).length,
-      unpaid: activeOrders.filter(
-        (o) =>
-          (o.payment_status === 'unpaid' || o.payment_status === 'failed') &&
-          o.status !== 'cancelled'
-      ).length,
+      unpaid: activeOrders.filter(needsPaymentFollowUp).length,
       all: activeOrders.length,
       deleted: orders.filter((o) => !!o.deleted_at).length,
     }
@@ -349,12 +394,8 @@ export default function OrdersManager({
         result = result.filter((o) =>
           ['delivered', 'cancelled'].includes(o.status)
         )
-      } else if (filter === 'unpaid') {
-        result = result.filter(
-          (o) =>
-            (o.payment_status === 'unpaid' || o.payment_status === 'failed') &&
-            o.status !== 'cancelled'
-        )
+            } else if (filter === 'unpaid') {
+        result = result.filter(needsPaymentFollowUp)
       }
     }
 
@@ -529,13 +570,15 @@ export default function OrdersManager({
         }
       }
 
-      const updated = {
+        const updated = {
         ...settleOrder,
         payment_status: 'paid',
         payment_method: settleMethod,
         payment_note: settleNote.trim() || settleOrder.payment_note,
+        paid_amount: settleOrder.subtotal,
         status: newStatus,
       }
+
 
       setOrders((prev) =>
         prev.map((o) => (o.id === settleOrder.id ? updated : o))
@@ -692,7 +735,7 @@ export default function OrdersManager({
 
       const updated = {
         ...order,
-        payment_status: 'unpaid',
+        payment_status: result.payment_status ?? 'unpaid',
         payment_receipt_url: null,
         payment_note: null,
       }
@@ -703,6 +746,42 @@ export default function OrdersManager({
       alert('❌ خطا در رد رسید')
     } finally {
       setRejectingReceipt(false)
+    }
+  }
+  async function handleReviewLedger(
+    order: Order,
+    receipt: LedgerReceipt,
+    decision: 'confirmed' | 'rejected'
+  ) {
+    let reason: string | undefined
+    if (decision === 'confirmed') {
+      const ok = window.confirm(
+        `رسید ${formatPrice(receipt.amount)} تومانی سفارش #${order.order_number} تأیید شود؟`
+      )
+      if (!ok) return
+    } else {
+      const input = window.prompt('دلیل رد رسید (اختیاری):')
+      if (input === null) return
+      reason = input
+    }
+
+    setReviewingId(receipt.id)
+    try {
+      const result = await reviewLedgerReceipt(receipt.id, decision, reason)
+      if (result.error) {
+        alert('❌ ' + result.error)
+        return
+      }
+
+      const newPaymentStatus = result.paymentStatus || 'unpaid'
+      const updated = { ...order, payment_status: newPaymentStatus }
+      setOrders((prev) => prev.map((o) => (o.id === order.id ? updated : o)))
+      setSelectedOrder(updated)
+      setLedgerReceipts((prev) => prev.filter((r) => r.id !== receipt.id))
+    } catch {
+      alert('❌ خطا در بررسی رسید')
+    } finally {
+      setReviewingId(null)
     }
   }
 
@@ -1234,8 +1313,66 @@ export default function OrdersManager({
                       {formatPersianDate(selectedOrder.created_at)}
                     </strong>
                   </div>
-                  {selectedOrder.payment_method === 'transfer' &&
+                                    {ledgerReceipts.map((r) => (
+                    <div
+                      key={r.id}
+                      style={{
+                        marginTop: '12px',
+                        padding: '12px',
+                        background: '#fff7e6',
+                        border: '1px solid #f2d99f',
+                        borderRadius: '10px',
+                      }}
+                    >
+                      <div style={{ fontWeight: 800, marginBottom: '8px' }}>
+                        🧾 رسید بدهی: {formatPrice(r.amount)} تومان
+                      </div>
+                      <div style={{ fontSize: '12px', color: '#766f64', marginBottom: '8px' }}>
+                        ارسال‌شده: {formatPersianDate(r.created_at)}
+                      </div>
+                      {r.receipt_url && (
+                        <div style={{ marginBottom: '8px' }}>
+                          <a
+                            href={r.receipt_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="order-receipt-link"
+                          >
+                            📸 مشاهده عکس رسید
+                          </a>
+                        </div>
+                      )}
+                      {r.receipt_note && (
+                        <div style={{ marginBottom: '8px' }}>📝 {r.receipt_note}</div>
+                      )}
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <button
+                          type="button"
+                          className="btn"
+                          style={{ flex: 1, background: '#9b3c32', color: '#fff', border: 0 }}
+                          onClick={() => handleReviewLedger(selectedOrder, r, 'rejected')}
+                          disabled={reviewingId === r.id}
+                        >
+                          {reviewingId === r.id ? '...' : '❌ رد رسید'}
+                        </button>
+                        <button
+                          type="button"
+                          className="btn primary-btn"
+                          style={{ flex: 1 }}
+                          onClick={() => handleReviewLedger(selectedOrder, r, 'confirmed')}
+                          disabled={reviewingId === r.id}
+                        >
+                          {reviewingId === r.id ? '...' : '✅ تأیید رسید'}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+
+                  {ledgerReceipts.length === 0 &&
+                    !loadingLedger &&
+                    selectedOrder.payment_method === 'transfer' &&
                     selectedOrder.payment_status === 'pending_review' &&
+
                     selectedOrder.status !== 'cancelled' &&
                     !selectedOrder.deleted_at && (
                       <div style={{ marginTop: '12px' }}>
@@ -1250,8 +1387,8 @@ export default function OrdersManager({
                         </button>
                       </div>
                     )}
-
-                  {selectedOrder.payment_status !== 'paid' &&
+                    {selectedOrder.payment_status !== 'paid' &&
+                    ledgerReceipts.length === 0 &&
                     selectedOrder.status !== 'cancelled' &&
                     !selectedOrder.deleted_at && (
                       <div
@@ -1269,7 +1406,7 @@ export default function OrdersManager({
                               width: '100%',
                               justifyContent: 'center',
                             }}
-                            onClick={() => setShowApprovePayment(true)}
+                            onClick={() => openSettleModal(selectedOrder, false)}
                           >
                             ✅ تأیید پرداخت (دستی)
                           </button>
@@ -1383,7 +1520,7 @@ export default function OrdersManager({
                         </span>
                       </div>
                     </>
-                  ) : (
+                                    ) : (
                     <div className="total-row">
                       <span>جمع کل</span>
                       <span>
@@ -1391,7 +1528,31 @@ export default function OrdersManager({
                       </span>
                     </div>
                   )}
+                  {(selectedOrder.paid_amount ?? 0) > 0 && (
+                    <>
+                      <div className="total-row">
+                        <span>پرداخت‌شده</span>
+                        <span>
+                          {formatPrice(selectedOrder.paid_amount ?? 0)} تومان
+                        </span>
+                      </div>
+                      <div className="total-row">
+                        <span>باقی‌مانده</span>
+                        <strong>
+                          {formatPrice(
+                            Math.max(
+                              0,
+                              selectedOrder.subtotal -
+                                (selectedOrder.paid_amount ?? 0)
+                            )
+                          )}{' '}
+                          تومان
+                        </strong>
+                      </div>
+                    </>
+                  )}
                 </div>
+
               </div>
 
               <div className="modal-footer">
@@ -1478,10 +1639,30 @@ export default function OrdersManager({
                     color: '#2d5d3e',
                   }}
                 >
-                  {formatPrice(settleOrder.subtotal)}{' '}
+                                    {formatPrice(
+                    Math.max(
+                      0,
+                      settleOrder.subtotal - (settleOrder.paid_amount ?? 0)
+                    )
+                  )}{' '}
+
                   <span style={{ fontSize: '16px' }}>تومان</span>
                 </div>
               </div>
+              {(settleOrder.paid_amount ?? 0) > 0 && (
+                <div
+                  style={{
+                    textAlign: 'center',
+                    fontSize: '12px',
+                    color: '#766f64',
+                    marginTop: '-12px',
+                    marginBottom: '16px',
+                  }}
+                >
+                  از مبلغ کل {formatPrice(settleOrder.subtotal)} تومان،{' '}
+                  {formatPrice(settleOrder.paid_amount ?? 0)} تومان قبلاً پرداخت شده است.
+                </div>
+              )}
 
               <div style={{ marginBottom: '16px' }}>
                 <label

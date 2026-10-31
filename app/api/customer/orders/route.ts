@@ -36,7 +36,34 @@ export async function GET() {
       return apiError(error, 'خطای پایگاه داده')
     }
 
-    return NextResponse.json({ orders: data || [] })
+    const orders = data || []
+
+    // جمع پرداخت‌های تأییدشده هر سفارش از دفتر پرداخت
+    const paidByOrder: Record<string, number> = {}
+    if (orders.length > 0) {
+      const { data: payments, error: payErr } = await db
+        .from('order_payments')
+        .select('order_id, amount')
+        .in('order_id', orders.map((o: any) => o.id))
+        .eq('status', 'confirmed')
+
+      if (payErr) {
+        console.error('Payments Error:', payErr)
+        return apiError(payErr, 'خطای پایگاه داده')
+      }
+
+      for (const p of payments ?? []) {
+        paidByOrder[p.order_id] = (paidByOrder[p.order_id] ?? 0) + Number(p.amount)
+      }
+    }
+
+    const withPaid = orders.map((o: any) => ({
+      ...o,
+      paid_amount: paidByOrder[o.id] ?? 0,
+    }))
+
+    return NextResponse.json({ orders: withPaid })
+
   } catch (err) {
     console.error('[Customer Orders] Error:', err)
     return NextResponse.json({ error: 'خطای سرور' }, { status: 500 })

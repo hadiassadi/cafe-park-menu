@@ -112,6 +112,7 @@ export default function OrderPage({
   const [paymentError, setPaymentError] = useState<string | null>(null)
   const [paymentSuccess, setPaymentSuccess] = useState<string | null>(null)
   const [showChangeMethod, setShowChangeMethod] = useState(false)
+  const [debtReceiptSent, setDebtReceiptSent] = useState(false)
 
   const [paymentSettings, setPaymentSettings] = useState<{
     payment_enabled: boolean
@@ -404,10 +405,18 @@ export default function OrderPage({
   // ✅ رسید (عکس یا متن) ارسال شده و منتظر تعیین‌تکلیف مدیر هستیم
   const receiptSubmitted =
     isTransfer && isPendingReview && !!(order.payment_receipt_url || order.payment_note)
+  // ✅ سفارش تحویل‌شده و تسویه‌نشده (بدهی)
+  const isDebt =
+    order.status === 'delivered' && !isPaid && !isCancelled
+  const canPayDebtOnline =
+    isDebt &&
+    paymentSettings?.payment_enabled === true &&
+    paymentSettings?.payment_online_enabled === true
 
   const showPaymentSection =
     !isCancelled &&
     !isPaid &&
+    order.status !== 'delivered' &&
     paymentSettings?.payment_enabled === true &&
     (needsOnlinePayment || needsTransferReceipt || isFailed)
 
@@ -541,6 +550,58 @@ export default function OrderPage({
           )}
         </div>
       )}
+      {isDebt && (
+        <div className="order-payment-section">
+          <div className="order-payment-section-title">💸 این سفارش هنوز تسویه نشده است</div>
+          <p className="order-payment-section-desc">
+            مبلغ {formatPrice(order.subtotal)} تومان باقی مانده است.
+                        {debtReceiptSent || isPendingReview
+              ? ' رسید شما در انتظار تأیید مدیر است.'
+              : canPayDebtOnline
+                ? ' می‌تونی همین حالا آنلاین پرداخت کنی.'
+                : ' لطفاً هنگام مراجعهٔ بعدی به کافه تسویه کن.'}
+
+          </p>
+
+          {paymentError && (
+            <div className="checkout-error" style={{ marginBottom: '12px' }}>❌ {paymentError}</div>
+          )}
+          {canPayDebtOnline && !(debtReceiptSent || isPendingReview) && (
+            <button
+              type="button"
+              className="order-payment-btn primary"
+              onClick={handlePayOnline}
+              disabled={paying}
+            >
+              {paying ? '...' : `💳 پرداخت آنلاین ${formatPrice(order.subtotal)} تومان`}
+            </button>
+          )}
+
+
+                    {paymentSettings?.payment_enabled === true &&
+            paymentSettings?.payment_transfer_enabled === true && (
+              <div style={{ marginTop: '12px' }}>
+                <p className="order-payment-section-desc">
+                  🏦 یا مبلغ را واریز کن و رسید را بفرست:
+                </p>
+                                {debtReceiptSent || isPendingReview ? (
+
+                  <div style={{ padding: '12px', background: '#fff7e6', color: '#8a5a00', borderRadius: '8px', fontSize: '13px', textAlign: 'center', fontWeight: 'bold' }}>
+                    ⏳ رسید شما ارسال شد و در انتظار تأیید مدیر است.
+                  </div>
+                ) : (
+                  <UploadReceipt
+                    orderId={order.id}
+                    initialUrl={null}
+                    onSuccess={() => setDebtReceiptSent(true)}
+                  />
+                )}
+              </div>
+            )}
+
+        </div>
+      )}
+
 
       {showPaymentSection && (
         <div className="order-payment-section">

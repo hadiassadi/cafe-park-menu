@@ -1,32 +1,28 @@
-import { apiError } from '@/lib/api-error'
+import 'server-only'
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { apiError } from '@/lib/api-error'
+import { supabaseAdmin } from '@/lib/supabase/server'
+import { getDeviceHash, UUID_RE } from '@/lib/orders/owner'
 import { requestZarinPalPayment } from '@/lib/payment/zarinpal'
+import { paymentErrorMessage } from '@/lib/payment/methods'
 
 export const dynamic = 'force-dynamic'
 
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-
-function createDb() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
-  if (!url || !key) throw new Error('Missing Supabase env')
-  return createClient(url, key, { auth: { persistSession: false } })
-}
-
 export async function POST(req: NextRequest) {
   try {
-    let body: any
-    try {
-      body = await req.json()
-    } catch {
-      return NextResponse.json({ error: 'درخواست نامعتبر است' }, { status: 400 })
-    }
-
+    const body = await req.json().catch(() => null)
     const orderId = body?.orderId
     if (typeof orderId !== 'string' || !UUID_RE.test(orderId)) {
       return NextResponse.json({ error: 'شناسه سفارش نامعتبر است' }, { status: 400 })
+    }
+
+    // مبلغ اختیاری است؛ اگر نیامد، کل باقی‌مانده پرداخت می‌شود
+    let requestedAmount: number | null = null
+    if (body?.amount !== undefined && body?.amount !== null) {
+      if (!Number.isInteger(body.amount) || body.amount <= 0) {
+        return NextResponse.json({ error: 'مبلغ نامعتبر است' }, { status: 400 })
+      }
+      requestedAmount = body.amount
     }
 
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL
@@ -35,30 +31,28 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'خطای پیکربندی سرور' }, { status: 500 })
     }
 
-    const db = createDb()
+    const deviceHash = await getDeviceHash()
+    if (!deviceHash) {
+      return NextResponse.json({ error: 'سفارش پیدا نشد' }, { status: 404 })
+    }
 
-    // جایگزینی ۱ از ۳: اگر ستون مبلغ نهایی دارید، subtotal را اینجا عوض کنید
+    const db = supabaseAdmin()
+
     const { data: order, error: orderErr } = await db
       .from('orders')
-      .select('id, order_number, subtotal, payment_status, customer_phone')
+      .select('id, order_number, subtotal, status, deleted_at, customer_phone')
       .eq('id', orderId)
-      .single()
+      .eq('device_id_hash', deviceHash)
+      .maybeSingle()
 
     if (orderErr || !order) {
       return NextResponse.json({ error: 'سفارش پیدا نشد' }, { status: 404 })
     }
-
-    // TODO: سفارش لغوشده یا soft-delete‌شده را هم رد کنید
-
-    if (order.payment_status === 'paid') {
-      return NextResponse.json({ error: 'این سفارش قبلاً پرداخت شده' }, { status: 400 })
+    if (order.deleted_at || order.status === 'cancelled') {
+      return NextResponse.json({ error: 'این سفارش لغو یا حذف شده است' }, { status: 400 })
     }
 
-    // جایگزینی ۲ از ۳
-    if (!Number.isInteger(order.subtotal) || order.subtotal <= 0) {
-      return NextResponse.json({ error: 'مبلغ سفارش نامعتبر است' }, { status: 400 })
-    }
-
+    // تنظیمات درگاه
     const { data: settings, error: settingsErr } = await db
       .from('settings')
       .select('payment_enabled, payment_online_enabled, payment_gateway, payment_merchant_id, payment_sandbox_mode')
@@ -68,28 +62,68 @@ export async function POST(req: NextRequest) {
     if (settingsErr || !settings) {
       return NextResponse.json({ error: 'خطا در خواندن تنظیمات پرداخت' }, { status: 500 })
     }
-
     if (!settings.payment_enabled || !settings.payment_online_enabled) {
       return NextResponse.json({ error: 'پرداخت آنلاین غیرفعال است' }, { status: 400 })
     }
-
     if (settings.payment_gateway !== 'zarinpal') {
       return NextResponse.json({ error: 'درگاه پرداخت پشتیبانی نمی‌شود' }, { status: 400 })
     }
-
     if (!settings.payment_merchant_id) {
       return NextResponse.json({ error: 'Merchant ID در تنظیمات پرداخت ثبت نشده است' }, { status: 400 })
     }
 
-    const callbackUrl = `${siteUrl.replace(/\/$/, '')}/api/payment/verify?orderId=${order.id}`
+    // باقی‌مانده = مبلغ سفارش − پرداخت‌های تأییدشده
+    const { data: confirmedRows, error: sumErr } = await db
+      .from('order_payments')
+      .select('amount')
+      .eq('order_id', order.id)
+      .eq('status', 'confirmed')
+    if (sumErr) {
+      console.error('[payment/request] sum:', sumErr)
+      return NextResponse.json({ error: 'خطا در خواندن پرداخت‌ها' }, { status: 500 })
+    }
+    const paid = (confirmedRows ?? []).reduce((s, r) => s + Number(r.amount), 0)
+    const remaining = Number(order.subtotal) - paid
 
-    // جایگزینی ۳ از ۳: مبلغ ارسالی به درگاه
+    if (remaining <= 0) {
+      return NextResponse.json({ error: 'این سفارش قبلاً تسویه شده' }, { status: 400 })
+    }
+
+    const amount = requestedAmount ?? remaining
+    if (amount > remaining) {
+      return NextResponse.json({ error: 'مبلغ بیشتر از باقی‌مانده سفارش است' }, { status: 400 })
+    }
+
+    // ۱) رزرو مبلغ در دفتر (اتمیک)
+    const { data: paymentId, error: addErr } = await db.rpc('add_order_payment', {
+      p_order_id: order.id,
+      p_method: 'online',
+      p_amount: amount,
+      p_created_by: 'customer',
+      p_status: 'pending',
+    })
+    if (addErr || !paymentId) {
+      console.error('[payment/request] add_order_payment:', addErr)
+      return NextResponse.json({ error: paymentErrorMessage(addErr?.message) }, { status: 400 })
+    }
+
+    const failPayment = async (reason: string) => {
+      const { error } = await db.rpc('set_order_payment_status', {
+        p_payment_id: paymentId,
+        p_new_status: 'failed',
+        p_reason: reason,
+      })
+      if (error) console.error('[payment/request] mark failed:', error)
+    }
+
+    // ۲) درخواست به درگاه
+    const callbackUrl = `${siteUrl.replace(/\/$/, '')}/api/payment/verify?paymentId=${paymentId}`
     const result = await requestZarinPalPayment(
       {
         merchantId: settings.payment_merchant_id,
         sandbox: !!settings.payment_sandbox_mode,
       },
-      order.subtotal,
+      amount,
       callbackUrl,
       `سفارش #${order.order_number} - کافه پارک`,
       order.customer_phone
@@ -97,22 +131,20 @@ export async function POST(req: NextRequest) {
 
     if (!result.success) {
       console.error('[payment/request] gateway error:', result.error)
+      await failPayment('gateway_error')
       return NextResponse.json({ error: 'ایجاد تراکنش ناموفق بود' }, { status: 502 })
     }
 
+    // ۳) ذخیرهٔ Authority روی ردیف پرداخت
     const { error: saveErr } = await db
-      .from('orders')
-      .update({
-        payment_method: 'online',
-        payment_status: 'unpaid',
-        payment_authority: result.authority,
-        payment_amount: order.subtotal,
-      })
-      .eq('id', order.id)
-      .neq('payment_status', 'paid')
+      .from('order_payments')
+      .update({ authority: result.authority, updated_at: new Date().toISOString() })
+      .eq('id', paymentId)
+      .eq('status', 'pending')
 
     if (saveErr) {
       console.error('[payment/request] save authority failed:', saveErr)
+      await failPayment('save_authority_failed')
       return NextResponse.json({ error: 'خطا در ثبت تراکنش' }, { status: 500 })
     }
 

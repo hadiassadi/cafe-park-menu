@@ -3,11 +3,17 @@ import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 
-export async function requireAdmin(): Promise<NextResponse | null> {
+export type AdminCheck =
+  | { denied: NextResponse; userId?: undefined }
+  | { denied: null; userId: string }
+
+export async function requireAdminUser(): Promise<AdminCheck> {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
   const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
   if (!url || !key) {
-    return NextResponse.json({ error: 'Server misconfigured' }, { status: 500 })
+    return {
+      denied: NextResponse.json({ error: 'Server misconfigured' }, { status: 500 }),
+    }
   }
 
   const allowed = (process.env.ADMIN_EMAILS || '')
@@ -17,7 +23,9 @@ export async function requireAdmin(): Promise<NextResponse | null> {
 
   if (allowed.length === 0) {
     console.error('[requireAdmin] ADMIN_EMAILS is not set')
-    return NextResponse.json({ error: 'Server misconfigured' }, { status: 500 })
+    return {
+      denied: NextResponse.json({ error: 'Server misconfigured' }, { status: 500 }),
+    }
   }
 
   const cookieStore = await cookies()
@@ -34,13 +42,18 @@ export async function requireAdmin(): Promise<NextResponse | null> {
   const user = data.user
 
   if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    return { denied: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) }
   }
 
   const email = (user.email || '').toLowerCase()
   if (!email || !allowed.includes(email)) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    return { denied: NextResponse.json({ error: 'Forbidden' }, { status: 403 }) }
   }
 
-  return null
+  return { denied: null, userId: user.id }
+}
+
+export async function requireAdmin(): Promise<NextResponse | null> {
+  const result = await requireAdminUser()
+  return result.denied
 }
