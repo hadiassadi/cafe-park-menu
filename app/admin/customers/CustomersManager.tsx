@@ -16,6 +16,11 @@ type CustomerData = {
   first_order_at: string | null
   notes: string | null
   tags: string[]
+    has_record: boolean
+  phone_verified_at: string | null
+  credit_override: 'default' | 'allow' | 'block'
+  settled_orders: number
+  open_debt: number
 }
 
 const PRESET_TAGS = [
@@ -78,6 +83,8 @@ export default function CustomersManager() {
   const [newTagInput, setNewTagInput] = useState('')
   const [saving, setSaving] = useState(false)
   const [saveMessage, setSaveMessage] = useState<string | null>(null)
+  const [editVerified, setEditVerified] = useState(false)
+  const [editCredit, setEditCredit] = useState<'default' | 'allow' | 'block'>('default')
 
   // ✅ لود داده‌ها از API امن سرور (نه مستقیم از دیتابیس)
   useEffect(() => {
@@ -157,6 +164,9 @@ export default function CustomersManager() {
     setSelectedCustomer(customer)
     setEditNotes(customer.notes || '')
     setEditTags(customer.tags || [])
+    setEditVerified(!!customer.phone_verified_at)
+    setEditCredit(customer.credit_override || 'default')
+
     setNewTagInput('')
     setSaveMessage(null)
   }
@@ -200,6 +210,9 @@ export default function CustomersManager() {
           phone: selectedCustomer.phone,
           notes: editNotes,
           tags: editTags,
+		  phone_verified: editVerified,
+          credit_override: editCredit,
+
         }),
       })
 
@@ -212,7 +225,17 @@ export default function CustomersManager() {
       setCustomers((prev) =>
         prev.map((c) =>
           c.phone === selectedCustomer.phone
-            ? { ...c, notes: editNotes, tags: editTags }
+                        ? {
+                ...c,
+                notes: editNotes,
+                tags: editTags,
+                has_record: true,
+                credit_override: editCredit,
+                phone_verified_at: editVerified
+                  ? c.phone_verified_at ?? new Date().toISOString()
+                  : null,
+              }
+
             : c
         )
       )
@@ -220,6 +243,12 @@ export default function CustomersManager() {
         ...selectedCustomer,
         notes: editNotes,
         tags: editTags,
+		has_record: true,
+        credit_override: editCredit,
+        phone_verified_at: editVerified
+          ? selectedCustomer.phone_verified_at ?? new Date().toISOString()
+          : null,
+
       })
 
       setSaveMessage('✅ ذخیره شد')
@@ -502,6 +531,40 @@ export default function CustomersManager() {
                   <span>آخرین سفارش:</span>
                   <strong>{timeAgo(selectedCustomer.last_order_at)}</strong>
                 </div>
+              </div>
+              <div className="info-card" style={{ marginTop: '16px' }}>
+                <h3>💳 اعتبار پرداخت حضوری</h3>
+                <div className="info-row">
+                  <span>سفارش تسویه‌شده:</span>
+                  <strong>{formatPrice(selectedCustomer.settled_orders)}</strong>
+                </div>
+                <div className="info-row">
+                  <span>بدهی باز:</span>
+                  <strong>{formatPrice(selectedCustomer.open_debt)} تومان</strong>
+                </div>
+
+                <label style={{ display: 'flex', gap: '8px', margin: '12px 0' }}>
+                  <input
+                    type="checkbox"
+                    checked={editVerified}
+                    onChange={(e) => setEditVerified(e.target.checked)}
+                    disabled={saving}
+                  />
+                  <span>شمارهٔ این مشتری را تأیید کرده‌ام</span>
+                </label>
+
+                <select
+                  value={editCredit}
+                  onChange={(e) =>
+                    setEditCredit(e.target.value as 'default' | 'allow' | 'block')
+                  }
+                  disabled={saving}
+                  style={{ width: '100%', padding: '8px' }}
+                >
+                  <option value="default">طبق قوانین پیش‌فرض</option>
+                  <option value="allow">همیشه مجاز</option>
+                  <option value="block">همیشه مسدود</option>
+                </select>
               </div>
 
               <div className="info-card" style={{ marginTop: '16px' }}>

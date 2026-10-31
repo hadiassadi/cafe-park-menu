@@ -1,6 +1,7 @@
 import { apiError } from '@/lib/api-error'
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { requireAdmin } from '@/lib/admin/require-admin'
 
 export const dynamic = 'force-dynamic'
 
@@ -11,41 +12,48 @@ function createAdminDb() {
   return createClient(url, key, { auth: { persistSession: false } })
 }
 
+const CREDIT_VALUES = ['default', 'allow', 'block']
+
 export async function POST(req: NextRequest) {
   try {
+    const denied = await requireAdmin()
+    if (denied) return denied
+
     const body = await req.json()
-    const { phone, notes, tags } = body
+    const { phone, notes, tags, credit_override, phone_verified } = body
 
     if (!phone) {
       return NextResponse.json({ error: 'شماره تلفن الزامی است' }, { status: 400 })
     }
 
     const cleanPhone = String(phone).replace(/[^\d]/g, '')
-    const db = createAdminDb()
-
-    // ۱. چک کن مشتری وجود داره یا نه
-    const { data: existing } = await db
-      .from('customers')
-      .select('phone')
-      .eq('phone', cleanPhone)
-      .maybeSingle()
-
-    let error;
-
-    if (existing) {
-      // آپدیت
-      const { error: updateErr } = await db
-        .from('customers')
-        .update({ notes: notes || null, tags: tags || [], updated_at: new Date().toISOString() })
-        .eq('phone', cleanPhone)
-      error = updateErr
-    } else {
-      // درج
-      const { error: insertErr } = await db
-        .from('customers')
-        .insert({ phone: cleanPhone, notes: notes || null, tags: tags || [], updated_at: new Date().toISOString() })
-      error = insertErr
+    if (!/^09\d{9}$/.test(cleanPhone)) {
+      return NextResponse.json({ error: 'شماره تلفن معتبر نیست' }, { status: 400 })
     }
+
+    const now = new Date().toISOString()
+    const patch: Record<string, unknown> = { phone: cleanPhone, updated_at: now }
+
+    if (notes !== undefined) {
+      patch.notes = typeof notes === 'string' && notes.trim() ? notes.trim().slice(0, 2000) : null
+    }
+    if (tags !== undefined) {
+      patch.tags = Array.isArray(tags)
+        ? tags.filter((t: unknown) => typeof t === 'string').slice(0, 30)
+        : []
+    }
+    if (credit_override !== undefined) {
+      if (!CREDIT_VALUES.includes(credit_override)) {
+        return NextResponse.json({ error: 'مقدار وضعیت اعتبار نامعتبر است' }, { status: 400 })
+      }
+      patch.credit_override = credit_override
+    }
+    if (phone_verified !== undefined) {
+      patch.phone_verified_at = phone_verified === true ? now : null
+    }
+
+    const db = createAdminDb()
+    const { error } = await db.from('customers').upsert(patch, { onConflict: 'phone' })
 
     if (error) {
       console.error('[customers/update]', error)

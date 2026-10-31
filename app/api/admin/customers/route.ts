@@ -12,6 +12,8 @@ function createAdminDb() {
   return createClient(url, key, { auth: { persistSession: false } })
 }
 
+const normalizePhone = (v: unknown) => String(v ?? '').replace(/[^\d]/g, '')
+
 export async function GET() {
   try {
     const denied = await requireAdmin()
@@ -19,31 +21,42 @@ export async function GET() {
 
     const db = createAdminDb()
     const now = new Date()
-
     const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
 
     // خواندن همه سفارش‌ها
     const { data: orders, error: ordersError } = await db
       .from('orders')
-      .select('customer_phone, customer_name, subtotal, status, created_at')
+      .select('id, customer_phone, customer_name, subtotal, status, payment_status, deleted_at, created_at')
       .order('created_at', { ascending: false })
 
     if (ordersError || !orders) {
-      return NextResponse.json({ error: ordersError?.message || 'خطا در خواندن سفارش‌ها' }, { status: 500 })
+      return NextResponse.json(
+        { error: ordersError?.message || 'خطا در خواندن سفارش‌ها' },
+        { status: 500 }
+      )
     }
 
-    // خواندن متادیتای مشتریان (یادداشت و تگ)
+    // خواندن اطلاعات مشتریان (یادداشت، تگ، تأیید شماره، وضعیت اعتبار)
     const { data: metaCustomers } = await db
       .from('customers')
-      .select('phone, notes, tags')
+      .select('phone, notes, tags, phone_verified_at, credit_override')
 
-    const metaMap = new Map<string, { notes: string | null; tags: string[] }>()
+    const metaMap = new Map<
+      string,
+      {
+        notes: string | null
+        tags: string[]
+        phone_verified_at: string | null
+        credit_override: string
+      }
+    >()
     for (const c of metaCustomers ?? []) {
       if (!c.phone) continue
-      const normalized = String(c.phone).replace(/[^\d]/g, '')
-      metaMap.set(normalized, {
+      metaMap.set(normalizePhone(c.phone), {
         notes: c.notes || null,
         tags: Array.isArray(c.tags) ? c.tags : [],
+        phone_verified_at: c.phone_verified_at ?? null,
+        credit_override: c.credit_override || 'default',
       })
     }
 
@@ -60,8 +73,12 @@ export async function GET() {
       }
     >()
 
+    // محاسبهٔ اعتبار: سفارش تسویه‌شده و سفارش‌های باز هر مشتری
+    const settledByPhone = new Map<string, number>()
+    const openOrdersByPhone = new Map<string, { id: string; subtotal: number }[]>()
+
     for (const order of orders) {
-      const phone = String(order.customer_phone || '').replace(/[^\d]/g, '')
+      const phone = normalizePhone(order.customer_phone)
       if (!phone) continue
 
       const existing = customerMap.get(phone) ?? {
@@ -91,11 +108,53 @@ export async function GET() {
       }
 
       customerMap.set(phone, existing)
+
+      // اعتبار: سفارش لغو یا حذف‌شده حساب نمی‌شود
+      if (order.status !== 'cancelled' && order.status !== 'canceled' && !order.deleted_at) {
+        if (order.status === 'delivered' && order.payment_status === 'paid') {
+          settledByPhone.set(phone, (settledByPhone.get(phone) ?? 0) + 1)
+        } else {
+          const list = openOrdersByPhone.get(phone) ?? []
+          list.push({ id: order.id, subtotal: Number(order.subtotal) || 0 })
+          openOrdersByPhone.set(phone, list)
+        }
+      }
+    }
+
+    // پرداخت‌های تأییدشدهٔ سفارش‌های باز
+    const openIds: string[] = []
+    for (const list of openOrdersByPhone.values()) {
+      for (const o of list) openIds.push(o.id)
+    }
+
+    const paidByOrder = new Map<string, number>()
+    if (openIds.length > 0) {
+      const { data: pays } = await db
+        .from('order_payments')
+        .select('order_id, amount')
+        .in('order_id', openIds)
+        .eq('status', 'confirmed')
+      for (const p of pays ?? []) {
+        paidByOrder.set(p.order_id, (paidByOrder.get(p.order_id) ?? 0) + Number(p.amount))
+      }
     }
 
     const customers = Array.from(customerMap.values()).map((c) => {
-      const meta = metaMap.get(c.phone) ?? { notes: null, tags: [] }
-      return { ...c, notes: meta.notes, tags: meta.tags }
+      const meta = metaMap.get(c.phone)
+      let openDebt = 0
+      for (const o of openOrdersByPhone.get(c.phone) ?? []) {
+        openDebt += Math.max(0, o.subtotal - (paidByOrder.get(o.id) ?? 0))
+      }
+      return {
+        ...c,
+        notes: meta?.notes ?? null,
+        tags: meta?.tags ?? [],
+        has_record: !!meta,
+        phone_verified_at: meta?.phone_verified_at ?? null,
+        credit_override: meta?.credit_override ?? 'default',
+        settled_orders: settledByPhone.get(c.phone) ?? 0,
+        open_debt: openDebt,
+      }
     })
 
     customers.sort((a, b) => {
@@ -115,9 +174,10 @@ export async function GET() {
       problematic: customers.filter((c) => c.cancelled_count >= 5).length,
     }
 
-    return NextResponse.json({ customers, summary }, {
-      headers: { 'Cache-Control': 'no-store' },
-    })
+    return NextResponse.json(
+      { customers, summary },
+      { headers: { 'Cache-Control': 'no-store' } }
+    )
   } catch (err: any) {
     return apiError(err)
   }
