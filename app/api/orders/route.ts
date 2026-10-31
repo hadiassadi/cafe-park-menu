@@ -5,6 +5,7 @@ import { createClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 import crypto from 'crypto'
 import { hashData } from '@/lib/utils/hash'
+import { getCustomerCreditState, creditDenyMessage } from '@/lib/club/credit'
 
 export const dynamic = 'force-dynamic'
 
@@ -222,6 +223,14 @@ export async function POST(request: NextRequest) {
         'شما یک سفارش در جریان دارید. برای ثبت سفارش جدید، لطفاً تا تحویل سفارش قبلی صبر کنید یا با پرسنل کافه هماهنگ کنید.'
       )
     }
+    // ---------- قانون اعتبار: پرداخت حضوری فقط برای مشتریان مجاز ----------
+    if (initialMethod === 'cash' || initialMethod === 'card') {
+      const credit = await getCustomerCreditState(phone)
+      if (!credit.allowed) {
+        return bad(creditDenyMessage(credit.reason))
+      }
+    }
+
 
     // ---------- تخفیف باشگاه ----------
     let membershipDiscount = 0
