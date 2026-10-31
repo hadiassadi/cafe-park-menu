@@ -61,6 +61,7 @@ type Order = {
   note: string | null
   items: OrderItem[]
   subtotal: number
+  paid_amount?: number
   original_subtotal: number | null
   coupon_code: string | null
   coupon_discount: number | null
@@ -254,7 +255,7 @@ export default function OrdersManager({
                 ? prev
                 : [inserted, ...prev]
             )
-          } else if (payload.eventType === 'UPDATE') {
+                    } else if (payload.eventType === 'UPDATE') {
             const updated = payload.new as Order
             const visible = isOrderVisibleToAdmin(updated)
             setOrders((prev) => {
@@ -263,12 +264,15 @@ export default function OrdersManager({
               if (!visible && exists)
                 return prev.filter((o) => o.id !== updated.id)
               if (exists)
-                return prev.map((o) => (o.id === updated.id ? updated : o))
+                return prev.map((o) =>
+                  o.id === updated.id ? { ...o, ...updated } : o
+                )
               return prev
             })
             setSelectedOrder((prev) =>
-              prev?.id === updated.id ? updated : prev
+              prev?.id === updated.id ? { ...prev, ...updated } : prev
             )
+
           } else if (payload.eventType === 'DELETE') {
             setOrders((prev) => prev.filter((o) => o.id !== payload.old.id))
           }
@@ -565,13 +569,15 @@ export default function OrdersManager({
         }
       }
 
-      const updated = {
+        const updated = {
         ...settleOrder,
         payment_status: 'paid',
         payment_method: settleMethod,
         payment_note: settleNote.trim() || settleOrder.payment_note,
+        paid_amount: settleOrder.subtotal,
         status: newStatus,
       }
+
 
       setOrders((prev) =>
         prev.map((o) => (o.id === settleOrder.id ? updated : o))
@@ -1399,7 +1405,7 @@ export default function OrdersManager({
                               width: '100%',
                               justifyContent: 'center',
                             }}
-                            onClick={() => setShowApprovePayment(true)}
+                            onClick={() => openSettleModal(selectedOrder, false)}
                           >
                             ✅ تأیید پرداخت (دستی)
                           </button>
@@ -1513,7 +1519,7 @@ export default function OrdersManager({
                         </span>
                       </div>
                     </>
-                  ) : (
+                                    ) : (
                     <div className="total-row">
                       <span>جمع کل</span>
                       <span>
@@ -1521,7 +1527,31 @@ export default function OrdersManager({
                       </span>
                     </div>
                   )}
+                  {(selectedOrder.paid_amount ?? 0) > 0 && (
+                    <>
+                      <div className="total-row">
+                        <span>پرداخت‌شده</span>
+                        <span>
+                          {formatPrice(selectedOrder.paid_amount ?? 0)} تومان
+                        </span>
+                      </div>
+                      <div className="total-row">
+                        <span>باقی‌مانده</span>
+                        <strong>
+                          {formatPrice(
+                            Math.max(
+                              0,
+                              selectedOrder.subtotal -
+                                (selectedOrder.paid_amount ?? 0)
+                            )
+                          )}{' '}
+                          تومان
+                        </strong>
+                      </div>
+                    </>
+                  )}
                 </div>
+
               </div>
 
               <div className="modal-footer">
@@ -1608,10 +1638,30 @@ export default function OrdersManager({
                     color: '#2d5d3e',
                   }}
                 >
-                  {formatPrice(settleOrder.subtotal)}{' '}
+                                    {formatPrice(
+                    Math.max(
+                      0,
+                      settleOrder.subtotal - (settleOrder.paid_amount ?? 0)
+                    )
+                  )}{' '}
+
                   <span style={{ fontSize: '16px' }}>تومان</span>
                 </div>
               </div>
+              {(settleOrder.paid_amount ?? 0) > 0 && (
+                <div
+                  style={{
+                    textAlign: 'center',
+                    fontSize: '12px',
+                    color: '#766f64',
+                    marginTop: '-12px',
+                    marginBottom: '16px',
+                  }}
+                >
+                  از مبلغ کل {formatPrice(settleOrder.subtotal)} تومان،{' '}
+                  {formatPrice(settleOrder.paid_amount ?? 0)} تومان قبلاً پرداخت شده است.
+                </div>
+              )}
 
               <div style={{ marginBottom: '16px' }}>
                 <label

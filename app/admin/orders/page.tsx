@@ -27,7 +27,7 @@ export default async function OrdersPage() {
   const db = createClient(url, key, { auth: { persistSession: false } })
 
   const [ordersResult, settingsResult] = await Promise.all([
-        db
+    db
       .from('orders')
       .select('*')
       .or(
@@ -52,15 +52,46 @@ export default async function OrdersPage() {
     )
   }
 
+  const rawOrders = ordersResult.data ?? []
+
+  // جمع پرداخت‌های تأییدشدهٔ هر سفارش از دفتر پرداخت
+  const paidByOrder: Record<string, number> = {}
+  if (rawOrders.length > 0) {
+    const { data: payments, error: payErr } = await db
+      .from('order_payments')
+      .select('order_id, amount')
+      .in(
+        'order_id',
+        rawOrders.map((o: any) => o.id)
+      )
+      .eq('status', 'confirmed')
+
+    if (payErr) {
+      return (
+        <main className="admin">
+          <h1>مدیریت سفارش‌ها</h1>
+          <p className="danger">{payErr.message}</p>
+        </main>
+      )
+    }
+
+    for (const p of payments ?? []) {
+      paidByOrder[p.order_id] =
+        (paidByOrder[p.order_id] ?? 0) + Number(p.amount)
+    }
+  }
+
+  const orders = rawOrders.map((o: any) => ({
+    ...o,
+    paid_amount: paidByOrder[o.id] ?? 0,
+  }))
+
   const allowDeleteOrders =
     settingsResult.data?.admin_allow_delete_orders ?? true
 
   return (
     <main className="admin">
-      <OrdersManager
-        orders={ordersResult.data ?? []}
-        allowDeleteOrders={allowDeleteOrders}
-      />
+      <OrdersManager orders={orders} allowDeleteOrders={allowDeleteOrders} />
     </main>
   )
 }

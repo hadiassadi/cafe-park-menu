@@ -315,13 +315,15 @@ export async function updatePaymentStatus(
 
     const payMethod = method ?? (order.payment_method as string | null) ?? 'cash'
 
-    const { error: addErr } = await db.rpc('add_order_payment', {
+        const { error: addErr } = await db.rpc('add_order_payment', {
       p_order_id: orderId,
       p_method: payMethod,
       p_amount: remaining,
       p_created_by: 'admin',
       p_status: 'confirmed',
+      p_note: note ? String(note).slice(0, 500) : null,
     })
+
     if (addErr) {
       console.error('[updatePaymentStatus] add_order_payment:', addErr)
       return { error: paymentErrorMessage(addErr.message) }
