@@ -132,6 +132,15 @@ const NEXT_LABEL: Record<string, string> = {
 }
 
 type Filter = 'all' | 'pending' | 'active' | 'done' | 'unpaid'
+const UNPAID_FILTER_STATUSES = ['unpaid', 'failed', 'partial', 'pending_review']
+
+function needsPaymentFollowUp(o: Order): boolean {
+  return (
+    UNPAID_FILTER_STATUSES.includes(o.payment_status || 'unpaid') &&
+    o.status !== 'cancelled'
+  )
+}
+
 type SearchType =
   | 'all'
   | 'order_number'
@@ -359,13 +368,9 @@ export default function OrdersManager({
         ['confirmed', 'preparing', 'ready'].includes(o.status)
       ).length,
       done: activeOrders.filter((o) =>
-        ['delivered', 'cancelled'].includes(o.status)
+      ['delivered', 'cancelled'].includes(o.status)
       ).length,
-      unpaid: activeOrders.filter(
-        (o) =>
-          (o.payment_status === 'unpaid' || o.payment_status === 'failed') &&
-          o.status !== 'cancelled'
-      ).length,
+      unpaid: activeOrders.filter(needsPaymentFollowUp).length,
       all: activeOrders.length,
       deleted: orders.filter((o) => !!o.deleted_at).length,
     }
@@ -389,12 +394,8 @@ export default function OrdersManager({
         result = result.filter((o) =>
           ['delivered', 'cancelled'].includes(o.status)
         )
-      } else if (filter === 'unpaid') {
-        result = result.filter(
-          (o) =>
-            (o.payment_status === 'unpaid' || o.payment_status === 'failed') &&
-            o.status !== 'cancelled'
-        )
+            } else if (filter === 'unpaid') {
+        result = result.filter(needsPaymentFollowUp)
       }
     }
 
