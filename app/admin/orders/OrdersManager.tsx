@@ -50,6 +50,9 @@ type OrderItem = {
   unit_price: number
   quantity: number
   discount_amount?: number
+  takeaway?: boolean
+  takeaway_fee?: number
+  takeaway_label?: string | null
 }
 
 type Order = {
@@ -67,6 +70,7 @@ type Order = {
   coupon_discount: number | null
   eligible_subtotal: number | null
   ineligible_subtotal: number | null
+  takeaway_fee_total?: number | null
   status: string
   created_at: string
   cancellation_reason_id: string | null
@@ -1478,7 +1482,7 @@ export default function OrdersManager({
                   {selectedOrder.items.map((item, idx) => (
                     <div key={idx} className="info-row">
                       <span>
-                        {formatPrice(item.quantity)} × {item.product_name}
+                        {formatPrice(item.quantity)} × {item.product_name}{item.takeaway && (<span style={{ color: '#b45309', fontWeight: 700, fontSize: 12, marginInlineStart: 6 }}>🥡 بیرونبر (+{formatPrice((item.takeaway_fee ?? 0) * item.quantity)})</span>)}
                         {item.option_name && (
                           <small> ({item.option_name})</small>
                         )}
@@ -1488,6 +1492,14 @@ export default function OrdersManager({
                       </strong>
                     </div>
                   ))}
+                  {(selectedOrder.takeaway_fee_total ?? 0) > 0 && (
+                    <div className="info-row" style={{ marginTop: '10px' }}>
+                      <span>🥡 هزینهٔ بیرونبر (شامل در جمع):</span>
+                      <strong>
+                        {formatPrice(selectedOrder.takeaway_fee_total ?? 0)} تومان
+                      </strong>
+                    </div>
+                  )}
                   {selectedOrder.coupon_code &&
                   selectedOrder.coupon_discount ? (
                     <>
@@ -2089,7 +2101,7 @@ export default function OrdersManager({
                       <tr key={idx}>
                         <td>{formatPrice(idx + 1)}</td>
                         <td>
-                          {item.product_name}
+                          {item.product_name}{item.takeaway && (<span style={{ color: '#b45309', fontWeight: 700, fontSize: 12, marginInlineStart: 6 }}>🥡 بیرونبر (+{formatPrice((item.takeaway_fee ?? 0) * item.quantity)})</span>)}
                           {item.option_name && (
                             <small
                               style={{
@@ -2132,6 +2144,12 @@ export default function OrdersManager({
                   })}
                 </tbody>
                 <tfoot>
+                  {(printOrder.takeaway_fee_total ?? 0) > 0 && (
+                    <tr className="invoice-summary-row">
+                      <td colSpan={5}>🥡 هزینهٔ بیرونبر (شامل در جمع):</td>
+                      <td>{formatPrice(printOrder.takeaway_fee_total ?? 0)} تومان</td>
+                    </tr>
+                  )}
                   {printOrder.coupon_code &&
                   printOrder.coupon_discount ? (
                     <>
