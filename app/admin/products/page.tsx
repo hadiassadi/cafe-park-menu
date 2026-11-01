@@ -25,6 +25,14 @@ export default async function ProductsPage() {
     .from('categories')
     .select('id, name')
     .order('sort_order', { ascending: true })
+const feesResult = await db
+  .from('takeaway_fees')
+  .select('id, name, fee')
+  .eq('is_active', true)
+  .order('sort_order', { ascending: true })
+const takeawayFees = feesResult.data ?? []
+
+
 
   if (productsResult.error) {
     return (
@@ -66,6 +74,7 @@ export default async function ProductsPage() {
       <ProductsManager
         products={products}
         categories={categories}
+takeawayFees={takeawayFees}
       />
     </main>
   )

@@ -1,0 +1,121 @@
+import { apiError } from '@/lib/api-error'
+import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
+
+export const dynamic = 'force-dynamic'
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const CANCEL_WINDOW_MS = 5 * 60 * 1000
+
+function createAdminDb() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!url || !key) throw new Error('Missing Supabase admin env')
+  return createClient(url, key, { auth: { persistSession: false } })
+}
+
+function normalizePhone(v: unknown): string {
+  return String(v ?? '')
+    .replace(/[۰-۹]/g, (d) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d)))
+    .replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
+    .replace(/\D/g, '')
+    .replace(/^98/, '0')
+}
+
+export async function POST(req: NextRequest) {
+  try {
+    let body: any
+    try {
+      body = await req.json()
+    } catch {
+      return NextResponse.json({ error: 'درخواست نامعتبر است' }, { status: 400 })
+    }
+
+    const { orderId, phone, reasonId, reasonLabel, note } = body ?? {}
+
+    if (typeof orderId !== 'string' || !UUID_RE.test(orderId) || !phone) {
+      return NextResponse.json({ error: 'اطلاعات ناقص است' }, { status: 400 })
+    }
+    if (reasonId != null && (typeof reasonId !== 'string' || !UUID_RE.test(reasonId))) {
+      return NextResponse.json({ error: 'دلیل نامعتبر است' }, { status: 400 })
+    }
+
+    const db = createAdminDb()
+
+    const { data: order, error: readError } = await db
+      .from('orders')
+      .select('id, status, customer_phone, created_at, customer_confirmed, payment_status')
+      .eq('id', orderId)
+      .maybeSingle()
+
+    if (readError || !order) {
+      return NextResponse.json({ error: 'سفارش پیدا نشد' }, { status: 404 })
+    }
+
+    if (normalizePhone(order.customer_phone) !== normalizePhone(phone)) {
+      return NextResponse.json({ error: 'سفارش پیدا نشد' }, { status: 404 })
+    }
+
+    if (order.status !== 'pending' || order.customer_confirmed) {
+      return NextResponse.json(
+        { error: 'این سفارش دیگر قابل لغو نیست' },
+        { status: 400 }
+      )
+    }
+
+    if (order.payment_status === 'paid' || order.payment_status === 'pending_review') {
+      return NextResponse.json(
+        { error: 'سفارش پرداخت‌شده را فقط کافه می‌تواند لغو کند' },
+        { status: 400 }
+      )
+    }
+
+    if (Date.now() - new Date(order.created_at).getTime() > CANCEL_WINDOW_MS) {
+      return NextResponse.json(
+        { error: 'زمان مجاز برای لغو به پایان رسیده است' },
+        { status: 400 }
+      )
+    }
+
+    // اول سفارش را شرطی لغو کن؛ فقط اگر موفق شد سهمیه را آزاد کن
+    const { data: updated, error: updateError } = await db
+      .from('orders')
+      .update({
+        status: 'cancelled',
+        cancelled_by: 'customer',
+        cancelled_at: new Date().toISOString(),
+        cancellation_reason_id: reasonId ?? null,
+        cancellation_reason_label:
+          typeof reasonLabel === 'string' ? reasonLabel.slice(0, 100) : null,
+        cancellation_note: typeof note === 'string' ? note.slice(0, 500) : null,
+      })
+      .eq('id', orderId)
+      .eq('status', 'pending')
+      .eq('customer_confirmed', false)
+      .select('id')
+
+    if (updateError) {
+      console.error('[orders/cancel]', updateError)
+      return NextResponse.json({ error: 'خطا در لغو سفارش' }, { status: 500 })
+    }
+
+    if (!updated || updated.length === 0) {
+      return NextResponse.json(
+        { error: 'وضعیت سفارش تغییر کرده است' },
+        { status: 409 }
+      )
+    }
+
+    const { error: logError } = await db
+      .from('redemption_logs')
+      .delete()
+      .eq('order_id', orderId)
+    if (logError) console.error('[orders/cancel] redemption_logs', logError)
+
+    return NextResponse.json({ success: true })
+  } catch (err: any) {
+    console.error('[orders/cancel]', err)
+    return apiError(err)
+  }
+}

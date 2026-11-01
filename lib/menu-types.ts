@@ -54,6 +54,10 @@ export type Product = {
   // true   = همیشه شامل تخفیف
   // false  = هرگز شامل تخفیف
   coupon_eligible?: boolean | null
+  // هزینهٔ بیرون‌بر هر عدد (حل‌شده در سرور). null = بیرون‌بر ندارد
+  takeaway_fee?: number | null
+  takeaway_label?: string | null
+
 }
 
 export type FontFile = {

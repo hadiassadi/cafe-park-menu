@@ -22,6 +22,12 @@ type VariantGroup = {
   sort_order: number
   options: VariantOption[]
 }
+type TakeawayFee = {
+  id: string
+  name: string
+  fee: number
+}
+
 
 type Category = {
   id: string
@@ -47,18 +53,21 @@ type Product = {
   allergens: string | null
   dietary_info: string | null
   coupon_eligible: boolean | null
+  takeaway_fee_id: string | null
   variant_groups?: VariantGroup[]
 }
 
 type ProductsManagerProps = {
   products: Product[]
   categories: Category[]
+takeawayFees: TakeawayFee[]
 }
-
 export default function ProductsManager({
   products,
   categories,
+  takeawayFees,
 }: ProductsManagerProps) {
+
   const [search, setSearch] = useState('')
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
@@ -82,6 +91,7 @@ export default function ProductsManager({
   const [formIngredients, setFormIngredients] = useState('')
   const [formAllergens, setFormAllergens] = useState('')
   const [formDietaryInfo, setFormDietaryInfo] = useState('')
+  const [formTakeawayFeeId, setFormTakeawayFeeId] = useState('')
   // ✅ state کوپن
   const [formCouponEligible, setFormCouponEligible] = useState<
     'inherit' | 'always' | 'never'
@@ -119,6 +129,7 @@ export default function ProductsManager({
     setFormIngredients('')
     setFormAllergens('')
     setFormDietaryInfo('')
+	setFormTakeawayFeeId('')
     setFormCouponEligible('inherit')
     setFormVariantGroups([])
     setMessage(null)
@@ -149,8 +160,8 @@ export default function ProductsManager({
   )
   setFormIngredients(product.ingredients ?? '')
   setFormAllergens(product.allergens ?? '')
-    setFormDietaryInfo(product.dietary_info ?? '')
-
+  setFormDietaryInfo(product.dietary_info ?? '')
+  setFormTakeawayFeeId(product.takeaway_fee_id ?? '')
   // ✅ مقدار کوپن
   if (product.coupon_eligible === true) {
     setFormCouponEligible('always')
@@ -301,6 +312,11 @@ export default function ProductsManager({
         formData.append('coupon_eligible', 'false')
       }
       // 'inherit' → هیچ مقداری فرستاده نمی‌شه (null)
+// ✅ هزینهٔ بیرون‌بر
+if (formTakeawayFeeId) {
+  formData.append('takeaway_fee_id', formTakeawayFeeId)
+}
+
 
       // ✅ واریانت‌ها رو به JSON تبدیل کن
       const validGroups = formVariantGroups.filter(
@@ -684,6 +700,33 @@ export default function ProductsManager({
               </div>
             </label>
           </div>
+		  {/* ============ هزینهٔ بیرون‌بر ============ */}
+<div className="form-section-title">
+  🥡 هزینهٔ بیرون‌بر
+</div>
+
+<div className="form-grid">
+  <div className="field field-wide">
+    <label>گروه هزینه</label>
+    <select
+      value={formTakeawayFeeId}
+      onChange={(e) => setFormTakeawayFeeId(e.target.value)}
+    >
+      <option value="">از دسته‌بندی ارث ببر</option>
+      {takeawayFees.map((fee) => (
+        <option key={fee.id} value={fee.id}>
+          {fee.name} — {new Intl.NumberFormat('fa-IR').format(fee.fee)} تومان
+        </option>
+      ))}
+    </select>
+    <small>
+      اگر گروهی انتخاب کنید، به‌جای هزینهٔ دسته برای این محصول اعمال می‌شود.
+      اگر دسته هم هزینه نداشته باشد، تیک بیرون‌بر برای این محصول نمایش داده نمی‌شود.
+    </small>
+  </div>
+</div>
+
+
           {/* ============ واریانت‌ها ============ */}
           <div className="form-section-title">
             🎛 گزینه‌های انتخابی (واریانت‌ها)

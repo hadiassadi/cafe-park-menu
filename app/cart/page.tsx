@@ -11,7 +11,7 @@ const formatPrice = (price: number) =>
 
 function CartContent() {
   const searchParams = useSearchParams()
-  const { items, totalItems, totalPrice, updateQuantity, removeItem, clearCart } = useCart()
+  const { items, totalItems, totalPrice, takeawayTotal, updateQuantity, setItemTakeaway, removeItem, clearCart } = useCart()
   const [showClearConfirm, setShowClearConfirm] = useState(false)
   const [tableNumber, setTableNumber] = useState<string>('')
 
@@ -96,6 +96,21 @@ function CartContent() {
                 {formatPrice(item.unitPrice)} <small>تومان</small>
               </div>
 
+                        {(item.takeawayFee ?? 0) > 0 && (
+            <label
+              className="check-label"
+              style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '6px 0', fontSize: 13 }}
+            >
+              <input
+                type="checkbox"
+                checked={Boolean(item.takeaway)}
+                onChange={(e) => setItemTakeaway(item.id, e.target.checked)}
+              />
+              <span>
+                🥡 بیرون‌بر (+{formatPrice(item.takeawayFee ?? 0)} تومان به‌ازای هر عدد)
+              </span>
+            </label>
+          )}
               <div className="cart-item-actions">
                 <div className="qty-selector">
                   <button
@@ -143,12 +158,30 @@ function CartContent() {
           <strong>{formatPrice(totalItems)} قلم</strong>
         </div>
 
+        {takeawayTotal > 0 && (
+          <>
+            <div className="cart-summary-row">
+              <span>جمع اقلام</span>
+              <strong>
+                {formatPrice(totalPrice)} <small>تومان</small>
+              </strong>
+            </div>
+            <div className="cart-summary-row">
+              <span>هزینهٔ بیرون‌بر</span>
+              <strong>
+                {formatPrice(takeawayTotal)} <small>تومان</small>
+              </strong>
+            </div>
+          </>
+        )}
+
         <div className="cart-summary-row cart-summary-total">
           <span>جمع کل</span>
           <strong>
-            {formatPrice(totalPrice)} <small>تومان</small>
+            {formatPrice(totalPrice + takeawayTotal)} <small>تومان</small>
           </strong>
         </div>
+
       </div>
 
       <div className="cart-actions">

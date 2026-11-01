@@ -19,14 +19,21 @@ export type CartItem = {
   unitPrice: number           // قیمت واحد
   quantity: number
   note?: string               // توضیحات مشتری
+  takeaway?: boolean          // بیرون‌بر؟ (undefined = سرو در کافه)
+  takeawayFee?: number        // هزینهٔ بیرون‌بر هر عدد (فقط نمایشی)
+  takeawayLabel?: string | null
 }
+
 
 type CartContextType = {
   items: CartItem[]
   totalItems: number
   totalPrice: number
-  addItem: (item: Omit<CartItem, 'id'>) => void
+  takeawayTotal: number
+  addItem:
+ (item: Omit<CartItem, 'id'>) => void
   updateQuantity: (id: string, quantity: number) => void
+  setItemTakeaway: (id: string, value: boolean) => void
   removeItem: (id: string) => void
   clearCart: () => void
 }
@@ -68,7 +75,9 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       const existingIndex = prev.findIndex(
         (item) =>
           item.productId === newItem.productId &&
-          item.selectedOptionId === newItem.selectedOptionId
+          item.selectedOptionId === newItem.selectedOptionId &&
+          Boolean(item.takeaway) === Boolean(newItem.takeaway)
+
       )
 
       if (existingIndex >= 0) {
@@ -81,7 +90,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       }
 
       // آیتم جدید
-      const id = `${newItem.productId}-${newItem.selectedOptionId ?? 'default'}-${Date.now()}`
+      const id = `${newItem.productId}-${newItem.selectedOptionId ?? 'default'}-${newItem.takeaway ? 'tk' : 'dn'}-${Date.now()}`
       return [...prev, { ...newItem, id }]
     })
   }, [])
@@ -93,6 +102,35 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       )
     )
   }, [])
+  const setItemTakeaway = useCallback((id: string, value: boolean) => {
+    setItems((prev) => {
+      const target = prev.find((i) => i.id === id)
+      if (!target) return prev
+      if (Boolean(target.takeaway) === value) return prev
+      // بیرون‌بر فقط برای آیتمی که هزینه دارد
+      if (value && !((target.takeawayFee ?? 0) > 0)) return prev
+
+      // اگر ردیف همسان با حالت جدید هست، ادغام کن
+      const twin = prev.find(
+        (i) =>
+          i.id !== id &&
+          i.productId === target.productId &&
+          i.selectedOptionId === target.selectedOptionId &&
+          Boolean(i.takeaway) === value
+      )
+      if (twin) {
+        return prev
+          .filter((i) => i.id !== id)
+          .map((i) =>
+            i.id === twin.id
+              ? { ...i, quantity: i.quantity + target.quantity }
+              : i
+          )
+      }
+      return prev.map((i) => (i.id === id ? { ...i, takeaway: value } : i))
+    })
+  }, [])
+
 
   const removeItem = useCallback((id: string) => {
     setItems((prev) => prev.filter((item) => item.id !== id))
@@ -107,15 +145,21 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     (sum, item) => sum + item.unitPrice * item.quantity,
     0
   )
-
+  const takeawayTotal = items.reduce(
+    (sum, item) =>
+      item.takeaway ? sum + (item.takeawayFee ?? 0) * item.quantity : sum,
+    0
+  )
   return (
     <CartContext.Provider
       value={{
         items,
         totalItems,
         totalPrice,
+        takeawayTotal,
         addItem,
         updateQuantity,
+        setItemTakeaway,
         removeItem,
         clearCart,
       }}

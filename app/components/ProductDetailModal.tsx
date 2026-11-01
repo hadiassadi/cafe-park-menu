@@ -22,10 +22,19 @@ export default function ProductDetailModal({
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null)
   const [selectedOptionId, setSelectedOptionId] = useState<string | null>(null)
   const [quantity, setQuantity] = useState(1)
+  const [takeaway, setTakeaway] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
   const { addItem } = useCart()
 
-  const groups = product?.variant_groups ?? []
+  // گروه قدیمی «بیرون بر» پنهان می‌شود (هزینهٔ بیرون‌بر اکنون جداگانه است)
+  const groups = (product?.variant_groups ?? []).filter(
+    (g) => g.name.trim() !== 'بیرون بر'
+  )
+  const takeawayFee = product?.takeaway_fee ?? null
+  const canTakeaway = takeawayFee !== null && takeawayFee > 0
+  const isTakeaway = canTakeaway && takeaway
+  const takeawayExtra = isTakeaway ? (takeawayFee ?? 0) * 1 : 0
+
   const hasMultipleGroups = groups.length > 1
   const selectedGroup = groups.find((g) => g.id === selectedGroupId)
   const selectedOption = selectedGroup?.variant_options.find(
@@ -39,15 +48,19 @@ export default function ProductDetailModal({
   if (selectedOption) {
     unitPrice = selectedOption.price_modifier
   }
-  const totalPrice = unitPrice * quantity
+  const totalPrice = (unitPrice + takeawayExtra) * quantity
 
   // ریست وقتی محصول عوض می‌شه
   useEffect(() => {
     if (!product) return
     setQuantity(1)
+    setTakeaway(false)
     setToast(null)
 
-    const gs = product.variant_groups ?? []
+    const gs = (product.variant_groups ?? []).filter(
+      (g) => g.name.trim() !== 'بیرون بر'
+    )
+
     if (gs.length === 1) {
       // فقط یه گروه → خودکار انتخابش کن
       setSelectedGroupId(gs[0].id)
@@ -121,7 +134,11 @@ export default function ProductDetailModal({
       selectedOptionId: selectedOption?.id ?? null,
       unitPrice,
       quantity,
+            takeaway: isTakeaway,
+      takeawayFee: canTakeaway ? (takeawayFee ?? 0) : undefined,
+      takeawayLabel: canTakeaway ? (currentProduct.takeaway_label ?? null) : null,
     })
+
 
     setToast(`✅ ${currentProduct.name} به سبد اضافه شد`)
     setTimeout(() => {
@@ -275,7 +292,31 @@ export default function ProductDetailModal({
               </div>
             )}
 
+          {/* ۲.۵ سرو در کافه / بیرون‌بر */}
+          {canTakeaway && (
+            <div className="product-modal-step">
+              <div className="step-title">نوع سرو</div>
+              <div className="service-type-grid">
+                <button
+                  type="button"
+                  className={`service-type-btn ${!takeaway ? 'selected' : ''}`}
+                  onClick={() => setTakeaway(false)}
+                >
+                  سرو در کافه
+                </button>
+                <button
+                  type="button"
+                  className={`service-type-btn ${takeaway ? 'selected' : ''}`}
+                  onClick={() => setTakeaway(true)}
+                >
+                  🥡 بیرون‌بر (+{formatPrice(takeawayFee ?? 0)} تومان)
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* ۳. تعداد */}
+
           <div className="product-modal-step">
             <div className="step-title">تعداد</div>
             <div className="quantity-selector">

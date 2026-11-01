@@ -85,10 +85,10 @@ export const getSettings = cache(async (): Promise<Settings | null> => {
 export async function getMenuData(): Promise<MenuData> {
   const db = createDb()
 
-  const [cats, products, theme, settings, quotes] = await Promise.all([
+  const [cats, products, theme, settings, quotes, fees] = await Promise.all([
     db
       .from('categories')
-      .select('id,name,icon,sort_order')
+      .select('id,name,icon,sort_order,takeaway_fee_id')
       .eq('is_active', true)
       .order('sort_order', { ascending: true })
       .order('id', { ascending: true }),
@@ -99,7 +99,8 @@ export async function getMenuData(): Promise<MenuData> {
     `id,category_id,name,description,price,size,image_url,
      is_featured,sort_order,is_available,is_new,
      calories,prep_time_minutes,ingredients,allergens,dietary_info,
-     coupon_eligible,
+     coupon_eligible, takeaway_fee_id,
+
      variant_groups(
        id, product_id, name, is_required, sort_order,
        variant_options(id, group_id, name, price_modifier, is_default, is_available, sort_order)
@@ -114,6 +115,7 @@ export async function getMenuData(): Promise<MenuData> {
     getSettings(),
 
     db.from('quotes').select('id,text,author').eq('is_active', true),
+	db.from('takeaway_fees').select('id,name,fee').eq('is_active', true),
   ])
 
   // منو بدون دسته‌بندی و محصول بی‌معناست؛ در این حالت خطا بده
@@ -126,10 +128,34 @@ export async function getMenuData(): Promise<MenuData> {
   // بقیه اختیاری‌اند؛ خطایشان را لاگ می‌کنیم ولی صفحه را نمی‌خوابانیم
   if (theme.error) console.error('[menu] theme error:', theme.error)
   if (quotes.error) console.error('[menu] quotes error:', quotes.error)
+  if (fees.error) console.error('[menu] takeaway_fees error:', fees.error)
+
+  const feeById = new Map(
+    (fees.data ?? []).map((f) => [f.id, { name: f.name, fee: Number(f.fee) }])
+  )
+  const catFeeId = new Map(
+    (cats.data ?? []).map((c: any) => [c.id, c.takeaway_fee_id ?? null])
+  )
+
+  const productsWithFee = (products.data ?? []).map((p: any) => {
+    const { takeaway_fee_id, ...rest } = p
+    const id = takeaway_fee_id ?? catFeeId.get(p.category_id) ?? null
+    const f = id ? feeById.get(id) : undefined
+    return {
+      ...rest,
+      takeaway_fee: f ? f.fee : null,
+      takeaway_label: f ? f.name : null,
+    }
+  })
+
+  const categoriesClean = (cats.data ?? []).map((c: any) => {
+    const { takeaway_fee_id, ...rest } = c
+    return rest
+  })
 
   return {
-    categories: cats.data ?? [],
-    products: products.data ?? [],
+    categories: categoriesClean,
+    products: productsWithFee,
     theme: theme.data ?? null,
     settings,
     quotes: quotes.data ?? [],

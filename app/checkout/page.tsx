@@ -14,11 +14,9 @@ type PaymentSettings = { payment_enabled: boolean; payment_online_enabled: boole
 function CheckoutForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const { items, totalItems, totalPrice, clearCart } = useCart()
-
+  const { items, totalItems, totalPrice, takeawayTotal, clearCart } = useCart()
   const [customerInfo, setCustomerInfo] = useState<{ name: string; phone: string } | null>(null)
   const [loadingUser, setLoadingUser] = useState(true)
-
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
   const [tableNumber, setTableNumber] = useState('')
@@ -47,7 +45,8 @@ function CheckoutForm() {
   const couponDiscount = !isOrgMember ? (appliedCoupon?.discount || 0) : 0
   
   const totalDiscount = membershipDiscount + couponDiscount
-  const finalTotal = Math.max(0, totalPrice - totalDiscount)
+  const finalTotal = Math.max(0, totalPrice - totalDiscount) + takeawayTotal
+  const allTakeaway = items.length > 0 && items.every((i) => i.takeaway)
 
   useEffect(() => {
     fetch('/api/customer/me', { cache: 'no-store' })
@@ -167,7 +166,7 @@ function CheckoutForm() {
       if (!name.trim()) throw new Error('نام رو وارد کن')
       const cleanPhone = toLatinDigits(phone).replace(/\D/g, '')
       if (cleanPhone.length < 10) throw new Error('شماره تماس معتبر نیست')
-      if (!tableNumber) throw new Error('شماره میز رو وارد کن')
+      if (!tableNumber && !allTakeaway) throw new Error('شماره میز رو وارد کن')
 
       const res = await fetch('/api/orders', {
         method: 'POST',
@@ -178,9 +177,9 @@ function CheckoutForm() {
           table_number: tableNumber ? Number(tableNumber) : null,
           payment_method: paymentMethod,
           note: note.trim() || null,
-          items: items.map((item) => ({ product_id: item.productId, product_name: item.productName, option_id: item.selectedOptionId, option_name: item.selectedOptionName, group_name: item.selectedGroupName, unit_price: item.unitPrice, quantity: item.quantity })),
+          items: items.map((item) => ({ product_id: item.productId, product_name: item.productName, option_id: item.selectedOptionId, option_name: item.selectedOptionName, group_name: item.selectedGroupName, unit_price: item.unitPrice, quantity: item.quantity, takeaway: item.takeaway === true })),
           subtotal: finalTotal,
-          original_subtotal: totalPrice,
+          original_subtotal: totalPrice + takeawayTotal,
           coupon_code: !isOrgMember && appliedCoupon ? appliedCoupon.code : null,
           coupon_discount: !isOrgMember && couponDiscount > 0 ? couponDiscount : null,
         }),
@@ -263,8 +262,10 @@ function CheckoutForm() {
         <div className="checkout-card">
           <div className="checkout-card-title">🪑 محل سرویس</div>
           <div className="checkout-field">
-            <label htmlFor="table">شماره میز *{tableAutoDetected && <span style={{ fontSize: '11px', color: '#477052', fontWeight: 500, marginInlineStart: '8px' }}>✅ از QR تشخیص داده شد</span>}</label>
-            <input id="table" type="number" value={tableNumber} onChange={(e) => { setTableNumber(e.target.value); setTableAutoDetected(false); try { if (e.target.value) sessionStorage.setItem('cafe-park-table', e.target.value) } catch {} }} placeholder="مثلاً ۵" min="1" required disabled={saving} />
+            <label htmlFor="table">شماره میز {allTakeaway ? '(اختیاری)' : '*'}{tableAutoDetected
+ && <span style={{ fontSize: '11px', color: '#477052', fontWeight: 500, marginInlineStart: '8px' }}>✅ از QR تشخیص داده شد</span>}</label>
+            <input id="table" type="number" value={tableNumber} onChange={(e) => { setTableNumber(e.target.value); setTableAutoDetected(false); try { if (e.target.value) sessionStorage.setItem('cafe-park-table', e.target.value) } catch {} }} placeholder="مثلاً ۵" min="1" required={!allTakeaway} disabled={saving}
+ />
           </div>
           <div className="checkout-field"><label htmlFor="note">توضیحات (اختیاری)</label><textarea id="note" value={note} onChange={(e) => setNote(e.target.value)} placeholder="مثلاً: قند جدا، بدون شکر..." rows={2} disabled={saving} /></div>
         </div>
@@ -284,6 +285,8 @@ function CheckoutForm() {
                     <span style={{ display: 'block', marginBottom: '4px', fontWeight: 600 }}>
                       {formatPrice(item.quantity)} × {item.productName}
                       {item.selectedOptionName && <small style={{ fontWeight: 'normal', color: '#766f64' }}> ({item.selectedOptionName})</small>}
+                      {item.takeaway && <small style={{ fontWeight: 'normal', color: '#766f64' }}> 🥡 بیرون‌بر</small>}
+
                     </span>
                     {isEligible && (
                       <span className="item-badge badge-eligible" style={{ display: 'inline-block', padding: '2px 8px', fontSize: '11px', background: '#e5f0e6', color: '#2d5d3e', borderRadius: '4px' }}>
@@ -410,24 +413,33 @@ function CheckoutForm() {
             <strong>{formatPrice(totalPrice)} تومان</strong>
           </div>
           
+          {takeawayTotal > 0 && (
+            <div className="checkout-total-row" style={{ borderBottom: 'none', padding: '8px 0' }}>
+              <span>هزینهٔ بیرون‌بر:</span>
+              <strong>{formatPrice(takeawayTotal)} تومان</strong>
+            </div>
+          )}
+
           {/* ✅ ردیف تخفیف با عنوان داینامیک */}
-          {totalDiscount > 0 && (
+
+                    {totalDiscount > 0 && (
             <div className="checkout-total-row discount" style={{ borderBottom: 'none', padding: '8px 0' }}>
               <span style={{ fontWeight: 'bold' }}>
-                {isOrgMember 
-                  ? 'تخفیف باشگاه:' 
+                {isOrgMember
+                  ? 'تخفیف باشگاه:'
                   : `تخفیف کد تخفیف (${appliedCoupon?.code || ''}):`}
               </span>
               <strong>− {formatPrice(totalDiscount)} تومان</strong>
             </div>
           )}
 
+
           <div className="checkout-total-row final" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '10px', paddingTop: '16px' }}>
             <span style={{ fontSize: '16px', fontWeight: 800 }}>قابل پرداخت:</span>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              {totalDiscount > 0 && (
+                            {totalDiscount > 0 && (
                 <span style={{ textDecoration: 'line-through', color: '#aaa', fontSize: '13px', fontWeight: 'normal' }}>
-                  {formatPrice(totalPrice)}
+                  {formatPrice(totalPrice + takeawayTotal)}
                 </span>
               )}
               <strong style={{ fontSize: '22px', color: '#6b4f3a' }}>
