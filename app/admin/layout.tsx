@@ -124,6 +124,7 @@ export default function AdminLayout({
     { href: '/admin', label: 'داشبورد', icon: '🏠' },
 	{ href: '/admin/memberships', label: 'باشگاه مشتریان', icon: '🎓' },
     { href: '/admin/orders', label: 'سفارش‌ها', icon: '🛒' },
+    { href: '/admin/orders/new', label: 'ثبت سفارش حضوری', icon: '➕' },
     { href: '/admin/customers', label: 'مشتریان', icon: '👥' },
     { href: '/admin/products', label: 'محصولات', icon: '☕' },
     { href: '/admin/categories', label: 'دسته‌ها', icon: '📂' },
@@ -141,6 +142,12 @@ export default function AdminLayout({
 
   const isActive = (href: string) => {
     if (href === '/admin') return pathname === '/admin'
+    if (href === '/admin/orders') {
+      return (
+        pathname.startsWith('/admin/orders') &&
+        !pathname.startsWith('/admin/orders/new')
+      )
+    }
     return pathname.startsWith(href)
   }
 
