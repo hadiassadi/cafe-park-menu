@@ -2,6 +2,7 @@ import 'server-only'
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { requireAdminUser } from '@/lib/admin/require-admin'
+import { loadActiveFees, feeForProduct, findActiveTable } from '@/lib/orders/takeaway'
 
 export const dynamic = 'force-dynamic'
 
@@ -91,6 +92,11 @@ export async function POST(request: NextRequest) {
     }
 
     const db = createAdminDb()
+let tableRow: { id: string; number: number } | null = null
+if (tableNo !== null) {
+  tableRow = await findActiveTable(db, tableNo)
+  if (!tableRow) return bad('این میز وجود ندارد یا غیرفعال است')
+}
 
     const productIds = [...new Set(items.map((i: any) => i.product_id as string))]
     const optionIds = [
@@ -99,13 +105,14 @@ export async function POST(request: NextRequest) {
 
     const { data: products, error: prodErr } = await db
       .from('products')
-      .select('id, name, price, is_active, is_available, coupon_eligible, categories(coupon_eligible)')
+      .select('id, name, price, is_active, is_available, coupon_eligible, takeaway_fee_id, categories(coupon_eligible, takeaway_fee_id)')
       .in('id', productIds)
     if (prodErr || !products) {
       console.error('[admin orders create] products:', prodErr)
       return bad('خطا در ثبت سفارش', 500)
     }
     const productMap = new Map<string, any>(products.map((p: any) => [p.id, p]))
+const feeMap = await loadActiveFees(db, products)
 
     const { data: requiredGroups, error: reqErr } = await db
       .from('variant_groups')
@@ -133,6 +140,7 @@ export async function POST(request: NextRequest) {
     // ---------- قیمت‌گذاری سمت سرور (بدون تخفیف) ----------
     const serverItems: any[] = []
     let baseTotal = 0
+	let takeawayTotal = 0
     let eligibleSubtotal = 0
 
     for (const it of items) {
@@ -176,7 +184,16 @@ export async function POST(request: NextRequest) {
               ? false
               : true
       if (eligible) eligibleSubtotal += lineTotal
-
+const wantsTakeaway = it.takeaway === true
+let takeawayFee = 0
+let takeawayLabel: string | null = null
+if (wantsTakeaway) {
+  const f = feeForProduct(p, feeMap)
+  if (!f) return bad(`بیرون‌بر برای «${p.name}» در دسترس نیست`)
+  takeawayFee = f.fee
+  takeawayLabel = f.name
+  takeawayTotal += f.fee * it.quantity
+}
       serverItems.push({
         product_id: it.product_id,
         product_name: p.name,
@@ -185,6 +202,9 @@ export async function POST(request: NextRequest) {
         group_name: groupName,
         unit_price: unitPrice,
         quantity: it.quantity,
+		takeaway: wantsTakeaway,
+		takeaway_fee: takeawayFee,
+		takeaway_label: takeawayLabel,
       })
     }
 
@@ -204,23 +224,26 @@ export async function POST(request: NextRequest) {
 
       const res = await db
         .from('orders')
-        .insert({
-          order_number: nextOrderNumber,
-          customer_name: name,
-          customer_phone: phone,
-          table_number: tableNo,
-          note: cleanNote,
-          items: serverItems,
-          subtotal: baseTotal,
-          original_subtotal: baseTotal,
-          eligible_subtotal: eligibleSubtotal,
-          ineligible_subtotal: baseTotal - eligibleSubtotal,
-          status: 'confirmed',
-          confirmed_at: now,
-          payment_status: 'unpaid',
-          payment_method: 'cash',
-          source: 'admin',
-        })
+            .insert({
+      order_number: nextOrderNumber,
+      customer_name: name,
+      customer_phone: phone,
+      table_number: tableNo,
+      table_id: tableRow?.id ?? null,
+      note: cleanNote,
+      items: serverItems,
+      subtotal: baseTotal + takeawayTotal,
+      original_subtotal: baseTotal + takeawayTotal,
+      eligible_subtotal: eligibleSubtotal,
+      ineligible_subtotal: baseTotal - eligibleSubtotal + takeawayTotal,
+      takeaway_fee_total: takeawayTotal,
+      status: 'confirmed',
+      confirmed_at: now,
+      payment_status: 'unpaid',
+      payment_method: 'cash',
+      source: 'admin',
+    })
+
         .select('id, order_number, status, subtotal, customer_name, customer_phone, created_at')
         .single()
 

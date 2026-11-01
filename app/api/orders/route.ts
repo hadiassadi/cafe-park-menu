@@ -6,6 +6,7 @@ import { cookies } from 'next/headers'
 import crypto from 'crypto'
 import { hashData } from '@/lib/utils/hash'
 import { getCustomerCreditState, creditDenyMessage } from '@/lib/club/credit'
+import { loadActiveFees, feeForProduct, findActiveTable } from '@/lib/orders/takeaway'
 
 export const dynamic = 'force-dynamic'
 
@@ -90,6 +91,14 @@ export async function POST(request: NextRequest) {
         : null
 
     const db = createAdminDb()
+const allTakeaway = items.every((i: any) => i.takeaway === true)
+let tableRow: { id: string; number: number } | null = null
+if (tableNo !== null) {
+  tableRow = await findActiveTable(db, tableNo)
+  if (!tableRow) return bad('این میز وجود ندارد یا غیرفعال است')
+} else if (!allTakeaway) {
+  return bad('شماره‌ی میز الزامی است')
+}
 
     // ---------- قیمت‌گذاری سمت سرور ----------
     const productIds = [...new Set(items.map((i: any) => i.product_id as string))]
@@ -99,13 +108,14 @@ export async function POST(request: NextRequest) {
 
     const { data: products, error: prodErr } = await db
       .from('products')
-      .select('id, name, price, is_active, is_available, coupon_eligible, categories(coupon_eligible)')
+      .select('id, name, price, is_active, is_available, coupon_eligible, takeaway_fee_id, categories(coupon_eligible, takeaway_fee_id)')
       .in('id', productIds)
     if (prodErr || !products) {
       console.error('[orders POST] products:', prodErr)
       return bad('خطا در ثبت سفارش', 500)
     }
     const productMap = new Map<string, any>(products.map((p: any) => [p.id, p]))
+    const feeMap = await loadActiveFees(db, products)
 
     const { data: requiredGroups, error: reqErr } = await db
       .from('variant_groups')
@@ -132,6 +142,7 @@ export async function POST(request: NextRequest) {
 
     const serverItems: any[] = []
     let baseTotal = 0
+	let takeawayTotal = 0
     let eligibleSubtotal = 0
 
     for (const it of items) {
@@ -174,6 +185,16 @@ export async function POST(request: NextRequest) {
               : true
 
       if (eligible) eligibleSubtotal += lineTotal
+const wantsTakeaway = it.takeaway === true
+let takeawayFee = 0
+let takeawayLabel: string | null = null
+if (wantsTakeaway) {
+  const f = feeForProduct(p, feeMap)
+  if (!f) return bad(`بیرون‌بر برای «${p.name}» در دسترس نیست`)
+  takeawayFee = f.fee
+  takeawayLabel = f.name
+  takeawayTotal += f.fee * it.quantity
+}
 
       serverItems.push({
         product_id: it.product_id,
@@ -183,6 +204,10 @@ export async function POST(request: NextRequest) {
         group_name: groupName,
         unit_price: unitPrice,
         quantity: it.quantity,
+		takeaway: wantsTakeaway,
+		takeaway_fee: takeawayFee,
+		takeaway_label: takeawayLabel,
+
       })
     }
 
@@ -336,7 +361,8 @@ export async function POST(request: NextRequest) {
     }
 
     const totalDiscount = membershipDiscount + couponDiscount
-    const finalSubtotal = Math.max(0, baseTotal - totalDiscount)
+    const finalSubtotal = Math.max(0, baseTotal - totalDiscount) + takeawayTotal
+
 
     // فقط برای عیب‌یابی
     if (Number.isFinite(Number(subtotal)) && Number(subtotal) !== finalSubtotal) {
@@ -370,17 +396,19 @@ export async function POST(request: NextRequest) {
 
       const res = await db
         .from('orders')
-        .insert({
+                .insert({
           order_number: nextOrderNumber,
           customer_name: name,
           customer_phone: phone,
           table_number: tableNo,
+          table_id: tableRow?.id ?? null,
           note: cleanNote,
           items: serverItems,
           subtotal: finalSubtotal,
-          original_subtotal: baseTotal,
+          original_subtotal: baseTotal + takeawayTotal,
           eligible_subtotal: eligibleSubtotal,
-          ineligible_subtotal: baseTotal - eligibleSubtotal,
+          ineligible_subtotal: baseTotal - eligibleSubtotal + takeawayTotal,
+          takeaway_fee_total: takeawayTotal,
           coupon_code: membershipDiscount > 0 ? 'MEMBERSHIP' : appliedCouponCode,
           coupon_discount: totalDiscount > 0 ? totalDiscount : null,
           status: 'pending',
@@ -388,6 +416,7 @@ export async function POST(request: NextRequest) {
           payment_method: initialMethod,
           device_id_hash: deviceIdHash,
         })
+
         .select('id, order_number, status, subtotal, created_at')
         .single()
 
