@@ -11,6 +11,8 @@ const ERROR_MESSAGES: Record<string, string> = {
   no_authority: 'کد تراکنش دریافت نشد.',
   bad_order: 'شناسه سفارش نامعتبر است.',
   order_not_found: 'سفارش پیدا نشد.',
+    order_cancelled:
+    'این سفارش لغو شده است و پرداخت شما تأیید نشد. اگر مبلغی از حساب شما کسر شده، معمولاً توسط بانک برگردانده می‌شود. در صورت تأخیر با کافه تماس بگیرید.',
   authority_mismatch: 'اطلاعات تراکنش با سفارش مطابقت ندارد.',
   bad_amount: 'مبلغ سفارش نامعتبر است.',
   settings: 'خطا در تنظیمات پرداخت.',
@@ -73,7 +75,8 @@ function CallbackContent() {
     color = '#9b3c32'
     // پس از save_failed نباید پرداخت مجدد پیشنهاد شود
     showOrder = !!orderId
-    showRetry = !!orderId && code !== 'save_failed'
+    showRetry =
+      !!orderId && code !== 'save_failed' && code !== 'order_cancelled'
   }
 
   const showRef =

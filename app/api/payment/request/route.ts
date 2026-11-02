@@ -48,7 +48,7 @@ export async function POST(req: NextRequest) {
     if (orderErr || !order) {
       return NextResponse.json({ error: 'سفارش پیدا نشد' }, { status: 404 })
     }
-    if (order.deleted_at || order.status === 'cancelled') {
+    if (order.deleted_at || ['cancelled', 'canceled'].includes(order.status)) {
       return NextResponse.json({ error: 'این سفارش لغو یا حذف شده است' }, { status: 400 })
     }
 
