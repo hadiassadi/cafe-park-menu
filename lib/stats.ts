@@ -75,6 +75,7 @@ export const getOrderStats = cache(async (): Promise<OrderStats> => {
     .gte('created_at', oneYearAgo.toISOString())
     .neq('status', 'cancelled')
 	.is('deleted_at', null)
+	.eq('is_test', false)
     .order('created_at', { ascending: false })
 
   const emptyStats: OrderStats = {
@@ -334,6 +335,7 @@ export const getCouponStats = cache(
       .not('coupon_code', 'is', null)
       .neq('status', 'cancelled')
 	  .is('deleted_at', null)
+	  .eq('is_test', false)
 
     if (since) {
       ordersQuery = ordersQuery.gte('created_at', since.toISOString())
@@ -459,6 +461,7 @@ export const getCustomersData = cache(async (): Promise<CustomersReport> => {
     .from('orders')
     .select('customer_phone, customer_name, subtotal, status, created_at')
 	.is('deleted_at', null)
+	.eq('is_test', false)
     .order('created_at', { ascending: false })
 
   if (ordersError || !orders) {
@@ -681,6 +684,7 @@ export const getCancellationStats = cache(
       .from('orders')
       .select('*', { count: 'exact', head: true })
       .is('deleted_at', null)
+	  .eq('is_test', false)
     if (since) {
       totalOrdersQuery = totalOrdersQuery.gte('created_at', since.toISOString())
     }
@@ -694,7 +698,7 @@ export const getCancellationStats = cache(
       )
       .eq('status', 'cancelled')
       .is('deleted_at', null)
-
+	  .eq('is_test', false)
     if (since) {
       cancelQuery = cancelQuery.gte('created_at', since.toISOString())
     }
@@ -1076,7 +1080,7 @@ export const getSalesReport = cache(
       .from('orders')
       .select('subtotal, original_subtotal, coupon_discount, status, created_at, items')
       .is('deleted_at', null)
-
+	  .eq('is_test', false)
     if (since) {
       summaryQuery = summaryQuery.gte('created_at', since.toISOString())
     }
