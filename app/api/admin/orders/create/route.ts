@@ -45,6 +45,7 @@ export async function POST(request: NextRequest) {
     }
 
     const { customer_name, customer_phone, table_number, note, items } = body ?? {}
+    const isTest = body?.is_test === true
 
     // ---------- مشتری: با نام یا بی‌نام ----------
     const rawPhone = String(customer_phone ?? '').trim()
@@ -242,6 +243,7 @@ if (wantsTakeaway) {
       payment_status: 'unpaid',
       payment_method: 'cash',
       source: 'admin',
+	  is_test: isTest,
     })
 
         .select('id, order_number, status, subtotal, customer_name, customer_phone, created_at')

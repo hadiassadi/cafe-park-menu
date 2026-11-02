@@ -66,6 +66,7 @@ export default function NewOrderClient() {
   const [phone, setPhone] = useState('')
   const [table, setTable] = useState('')
   const [note, setNote] = useState('')
+  const [isTest, setIsTest] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [done, setDone] = useState<number | null>(null)
@@ -151,6 +152,7 @@ export default function NewOrderClient() {
           customer_phone: phone,
           table_number: table.trim() === '' ? null : Number(table),
           note,
+          is_test: isTest,
           items: lines.map((l) => ({
             product_id: l.product_id,
             option_id: l.option_id,
@@ -330,7 +332,29 @@ export default function NewOrderClient() {
             <input style={input} placeholder="نام مشتری (اختیاری)" value={name} onChange={(e) => setName(e.target.value)} />
             <input style={input} placeholder="شمارهٔ تماس (اختیاری)" inputMode="tel" value={phone} onChange={(e) => setPhone(e.target.value)} />
             <textarea style={{ ...input, minHeight: 60 }} placeholder="توضیحات (اختیاری)" value={note} onChange={(e) => setNote(e.target.value)} />
-          </div>
+                      <label
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '10px 12px',
+                borderRadius: 10,
+                cursor: 'pointer',
+                border: isTest ? '1px solid #b45309' : '1px solid #d9cfc0',
+                background: isTest ? '#fdf0dc' : '#fff',
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={isTest}
+                onChange={(e) => setIsTest(e.target.checked)}
+              />
+              <span>
+                🧪 سفارش آزمایشی (در گزارش‌ها حساب نشود)
+              </span>
+            </label>
+
+		  </div>
 
           {error && <p className="danger" style={{ marginTop: 10 }}>{error}</p>}
 
