@@ -53,7 +53,28 @@ export async function POST(
       )
     }
 
-    // ۳. soft delete
+    // ۳. سفارش دارای پرداخت واقعی را نباید بی‌صدا حذف کرد
+    const { data: ord } = await db
+      .from('orders')
+      .select('is_test')
+      .eq('id', id)
+      .maybeSingle()
+    if (ord && !ord.is_test) {
+      const { data: paidRows } = await db
+        .from('order_payments')
+        .select('id')
+        .eq('order_id', id)
+        .eq('status', 'confirmed')
+        .limit(1)
+      if (paidRows && paidRows.length > 0) {
+        return NextResponse.json(
+          { error: 'این سفارش پرداخت تأییدشده دارد؛ به‌جای حذف، آن را لغو و بازپرداخت کنید' },
+          { status: 409 }
+        )
+      }
+    }
+
+    // ۴. soft delete
     const { data, error } = await db
       .from('orders')
       .update({ deleted_at: new Date().toISOString() })
@@ -70,6 +91,9 @@ export async function POST(
         { status: 404 }
       )
     }
+
+    // تخفیف باشگاه سازمانی هم آزاد شود (کوپن را تریگر برمی‌گرداند)
+    await db.from('redemption_logs').delete().eq('order_id', id)
 
     return NextResponse.json({ success: true })
   } catch (err: any) {

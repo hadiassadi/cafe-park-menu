@@ -1,5 +1,5 @@
 'use server'
-
+import { cancelErrorInfo } from '@/lib/orders/cancel-errors'
 import { createClient } from '@supabase/supabase-js'
 import { revalidatePath } from 'next/cache'
 import { sendPushToOrder } from '@/lib/push/send-push'
@@ -33,7 +33,13 @@ function isValidDays(days: unknown): days is number {
   )
 }
 
-type ActionResult = { success?: boolean; error?: string }
+type ActionResult = {
+  success?: boolean
+  error?: string
+  refundRequired?: boolean
+  paidAmount?: number
+}
+
 type CleanupResult = ActionResult & { deletedCount?: number; message?: string }
 type CountResult = { count?: number; error?: string }
 
@@ -57,38 +63,68 @@ export async function updateOrderStatus(
     return { error: 'وضعیت نامعتبر است' }
   }
 
-  const updateData: Record<string, unknown> = { status }
+  // سفارش لغوشده دیگر زنده نمی‌شود (چون ممکن است پولش برگشته باشد)
+  const { data: current } = await db
+    .from('orders')
+    .select('status')
+    .eq('id', id)
+    .maybeSingle()
+  if (!current) return { error: 'سفارش پیدا نشد' }
+  if (current.status === 'cancelled' && status !== 'cancelled') {
+    return { error: 'سفارش لغوشده قابل بازگشت نیست؛ سفارش جدید ثبت کنید' }
+  }
 
+  if (status === 'cancelled') {
+    const reasonId = String(formData.get('cancellation_reason_id') || '')
+    const reasonLabel = String(formData.get('cancellation_reason_label') || '')
+    const note = String(formData.get('cancellation_note') || '')
+    const refundMethod = String(formData.get('refund_method') || '')
+
+    const { error } = await db.rpc('cancel_order_atomic', {
+      p_order_id: id,
+      p_cancelled_by: 'admin',
+      p_reason_id: reasonId || null,
+      p_reason_label: reasonLabel || null,
+      p_note: note || null,
+      p_refund_method: refundMethod || null,
+    })
+
+    if (error) {
+      const info = cancelErrorInfo(error.message)
+      if (info?.code === 'refund_method_required') {
+        const { data: pays } = await db
+          .from('order_payments')
+          .select('amount')
+          .eq('order_id', id)
+          .eq('status', 'confirmed')
+        const paidAmount = (pays ?? []).reduce((s, r) => s + Number(r.amount), 0)
+        return { error: info.text, refundRequired: true, paidAmount }
+      }
+      if (info) return { error: info.text }
+      console.error('[updateOrderStatus] cancel:', error)
+      return { error: 'خطا در لغو سفارش' }
+    }
+
+    sendPushToOrder(id, 'cancelled').catch((err) =>
+      console.error('[updateOrderStatus] push failed:', err)
+    )
+    revalidatePath('/admin/orders')
+    revalidatePath('/admin')
+    revalidatePath(`/order/${id}`)
+    return { success: true }
+  }
+
+  const updateData: Record<string, unknown> = { status }
   const now = new Date().toISOString()
   if (status === 'confirmed') updateData.confirmed_at = now
   if (status === 'preparing') updateData.preparing_at = now
   if (status === 'ready') updateData.ready_at = now
   if (status === 'delivered') updateData.delivered_at = now
 
-  if (status === 'cancelled') {
-    updateData.cancelled_at = now
-    // فقط ادمین به این Action دسترسی دارد، پس مقدار ثابت است
-    updateData.cancelled_by = 'admin'
-
-    const reasonId = formData.get('cancellation_reason_id')
-    const reasonLabel = formData.get('cancellation_reason_label')
-    const note = formData.get('cancellation_note')
-
-    if (reasonId) updateData.cancellation_reason_id = String(reasonId)
-    if (reasonLabel) updateData.cancellation_reason_label = String(reasonLabel)
-    if (note) updateData.cancellation_note = String(note)
-  }
-
   const { error } = await db.from('orders').update(updateData).eq('id', id)
-
   if (error) return { error: error.message }
 
-  // 🔔 Push notification
-  if (
-    ['confirmed', 'preparing', 'ready', 'delivered', 'cancelled'].includes(
-      status
-    )
-  ) {
+  if (['confirmed', 'preparing', 'ready', 'delivered'].includes(status)) {
     sendPushToOrder(id, status).catch((err) =>
       console.error('[updateOrderStatus] push failed:', err)
     )
@@ -99,6 +135,7 @@ export async function updateOrderStatus(
   revalidatePath(`/order/${id}`)
   return { success: true }
 }
+
 
 // ─────────────────────────────────────────────
 // پاکسازی سفارش‌های قدیمی (بیشتر از N روز)

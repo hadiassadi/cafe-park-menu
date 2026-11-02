@@ -3,10 +3,9 @@ import 'server-only'
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase/server'
 import { getDeviceHash, UUID_RE } from '@/lib/orders/owner'
+import { cancelErrorInfo } from '@/lib/orders/cancel-errors'
 
 export const dynamic = 'force-dynamic'
-
-const CANCEL_WINDOW_MS = 5 * 60 * 1000
 
 export async function POST(req: NextRequest) {
   try {
@@ -25,76 +24,21 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'سفارش پیدا نشد' }, { status: 404 })
     }
 
-    const db = supabaseAdmin()
+    const { error } = await supabaseAdmin().rpc('cancel_order_atomic', {
+      p_order_id: orderId,
+      p_cancelled_by: 'customer',
+      p_device_hash: deviceHash,
+      p_reason_id: reasonId ?? null,
+      p_reason_label: typeof reasonLabel === 'string' ? reasonLabel.slice(0, 100) : null,
+      p_note: typeof note === 'string' ? note.slice(0, 500) : null,
+    })
 
-    const { data: order, error: readError } = await db
-      .from('orders')
-      .select(
-        'id, status, created_at, customer_confirmed, payment_status, payment_receipt_url, payment_note'
-      )
-      .eq('id', orderId)
-      .eq('device_id_hash', deviceHash)
-      .is('deleted_at', null)
-      .maybeSingle()
-
-    if (readError || !order) {
-      return NextResponse.json({ error: 'سفارش پیدا نشد' }, { status: 404 })
-    }
-
-    if (order.status !== 'pending' || order.customer_confirmed) {
-      return NextResponse.json({ error: 'این سفارش دیگر قابل لغو نیست' }, { status: 400 })
-    }
-
-    const receiptSent = !!(order.payment_receipt_url || order.payment_note)
-    if (order.payment_status === 'paid' || receiptSent) {
-      return NextResponse.json(
-        { error: 'سفارش پرداخت‌شده یا دارای رسید را فقط کافه می‌تواند لغو کند' },
-        { status: 400 }
-      )
-    }
-
-    if (Date.now() - new Date(order.created_at).getTime() > CANCEL_WINDOW_MS) {
-      return NextResponse.json(
-        { error: 'زمان مجاز برای لغو به پایان رسیده است' },
-        { status: 400 }
-      )
-    }
-
-    // لغو شرطی؛ کوپن را تریگر دیتابیس خودکار برمی‌گرداند
-    const { data: updated, error: updateError } = await db
-      .from('orders')
-      .update({
-        status: 'cancelled',
-        cancelled_by: 'customer',
-        cancelled_at: new Date().toISOString(),
-        cancellation_reason_id: reasonId ?? null,
-        cancellation_reason_label:
-          typeof reasonLabel === 'string' ? reasonLabel.slice(0, 100) : null,
-        cancellation_note: typeof note === 'string' ? note.slice(0, 500) : null,
-      })
-      .eq('id', orderId)
-      .eq('device_id_hash', deviceHash)
-      .eq('status', 'pending')
-      .eq('customer_confirmed', false)
-      .neq('payment_status', 'paid')
-      .is('payment_receipt_url', null)
-      .is('payment_note', null)
-      .is('deleted_at', null)
-      .select('id')
-
-    if (updateError) {
-      console.error('[orders/cancel]', updateError)
+    if (error) {
+      const info = cancelErrorInfo(error.message)
+      if (info) return NextResponse.json({ error: info.text }, { status: info.status })
+      console.error('[orders/cancel]', error)
       return NextResponse.json({ error: 'خطا در لغو سفارش' }, { status: 500 })
     }
-    if (!updated || updated.length === 0) {
-      return NextResponse.json({ error: 'وضعیت سفارش تغییر کرده است' }, { status: 409 })
-    }
-
-    const { error: logError } = await db
-      .from('redemption_logs')
-      .delete()
-      .eq('order_id', orderId)
-    if (logError) console.error('[orders/cancel] redemption_logs', logError)
 
     return NextResponse.json({ success: true })
   } catch (err) {
