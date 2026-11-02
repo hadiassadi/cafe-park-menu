@@ -552,13 +552,25 @@ export default function OrdersManager({
     }
   }
 
-  async function handleRestore(order: Order) {
-    setDeletingId(order.id)
-    try {
-      const res = await fetch(`/api/admin/orders/${order.id}/restore`, {
+    async function handleRestore(order: Order) {
+    const call = () =>
+      fetch(`/api/admin/orders/${order.id}/restore`, {
         method: 'POST',
       })
-      const data = await res.json()
+
+    setDeletingId(order.id)
+    try {
+      let res = await call()
+
+      if (res.status === 401 || res.status === 403) {
+        setDeletingId(null)
+        const ok = await stepUp.requireStepUp()
+        if (!ok) return
+        setDeletingId(order.id)
+        res = await call()
+      }
+
+      const data = await res.json().catch(() => ({}))
       if (!res.ok) {
         alert('❌ ' + (data.error || 'بازیابی انجام نشد'))
         return
@@ -575,6 +587,7 @@ export default function OrdersManager({
       setDeletingId(null)
     }
   }
+
 
   function openSettleModal(order: Order, deliverToo: boolean = false) {
     setSettleOrder(order)
