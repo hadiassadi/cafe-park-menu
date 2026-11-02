@@ -74,6 +74,21 @@ export async function GET(req: NextRequest) {
       await markFinal('failed', 'user_cancelled')
       return back('cancelled', orderId)
     }
+    // سفارش لغو یا حذف شده: پرداخت را تأیید نکنید
+    const { data: orderRow } = await db
+      .from('orders')
+      .select('status, deleted_at')
+      .eq('id', orderId)
+      .maybeSingle()
+
+    if (
+      !orderRow ||
+      orderRow.deleted_at ||
+      ['cancelled', 'canceled'].includes(orderRow.status)
+    ) {
+      await markFinal('failed', 'order_cancelled')
+      return back('error', orderId, { code: 'order_cancelled' })
+    }
 
     const amount = Number(payment.amount)
     if (!Number.isInteger(amount) || amount <= 0) {
