@@ -205,6 +205,10 @@ export default function OrdersManager({
   const [cancelReasons, setCancelReasons] = useState<CancelReason[]>([])
   const [selectedReasonId, setSelectedReasonId] = useState<string | null>(null)
   const [cancelNote, setCancelNote] = useState('')
+  const [refundStep, setRefundStep] = useState<{ paidAmount: number } | null>(null)
+  const [refundMethod, setRefundMethod] = useState<
+    'cash' | 'gateway_manual' | 'wallet' | null
+  >(null)
   const [loadingReasons, setLoadingReasons] = useState(false)
   const [cancelling, setCancelling] = useState(false)
   const [approvingPayment, setApprovingPayment] = useState(false)
@@ -788,10 +792,12 @@ export default function OrdersManager({
     }
   }
 
-  function openCancelModal(order: Order) {
+    function openCancelModal(order: Order) {
     setCancelOrder(order)
     setSelectedReasonId(null)
     setCancelNote('')
+    setRefundStep(null)
+    setRefundMethod(null)
   }
 
   function closeCancelModal() {
@@ -799,10 +805,19 @@ export default function OrdersManager({
     setCancelOrder(null)
     setSelectedReasonId(null)
     setCancelNote('')
+    setRefundStep(null)
+    setRefundMethod(null)
   }
 
-  async function confirmCancel() {
+
+    async function confirmCancel() {
     if (!cancelOrder) return
+
+    if (refundStep && !refundMethod) {
+      alert('❌ روش بازپرداخت را انتخاب کنید')
+      return
+    }
+
     setCancelling(true)
     try {
       const selectedReason = cancelReasons.find(
@@ -818,8 +833,16 @@ export default function OrdersManager({
         formData.append('cancellation_reason_label', selectedReason.label)
       if (cancelNote.trim())
         formData.append('cancellation_note', cancelNote.trim())
+      if (refundStep && refundMethod)
+        formData.append('refund_method', refundMethod)
 
       const result = await updateOrderStatus(formData)
+
+      if (result?.refundRequired) {
+        setRefundStep({ paidAmount: result.paidAmount ?? 0 })
+        return
+      }
+
       if (result?.error) {
         alert('❌ ' + result.error)
         return
@@ -1844,7 +1867,7 @@ export default function OrdersManager({
         </div>
       )}
 
-      {cancelOrder && (
+            {cancelOrder && (
         <div className="modal-overlay" onClick={closeCancelModal}>
           <div
             className="modal-container modal-md"
@@ -1855,7 +1878,11 @@ export default function OrdersManager({
                 <h2>
                   لغو سفارش #{formatPrice(cancelOrder.order_number)}
                 </h2>
-                <p>دلیل لغو رو انتخاب کن</p>
+                <p>
+                  {refundStep
+                    ? 'روش بازپرداخت به مشتری را انتخاب کن'
+                    : 'دلیل لغو رو انتخاب کن'}
+                </p>
               </div>
               <button
                 type="button"
@@ -1868,65 +1895,174 @@ export default function OrdersManager({
             </div>
 
             <div className="modal-body">
-              {loadingReasons ? (
-                <p className="empty-admin" style={{ padding: '20px' }}>
-                  ⏳ در حال بارگذاری دلایل...
-                </p>
-              ) : cancelReasons.length === 0 ? (
-                <p className="empty-admin" style={{ padding: '20px' }}>
-                  دلیلی برای نمایش وجود ندارد. می‌تونی بدون دلیل لغو
-                  کنی.
-                </p>
-              ) : (
-                <div className="cancel-reasons-list">
-                  {cancelReasons.map((reason) => (
+              {refundStep ? (
+                <>
+                  <div style={{ textAlign: 'center', margin: '12px 0 20px' }}>
+                    <div
+                      style={{
+                        fontSize: '14px',
+                        color: '#766f64',
+                        marginBottom: '8px',
+                      }}
+                    >
+                      مبلغ پرداخت‌شده توسط مشتری:
+                    </div>
+                    <div
+                      style={{
+                        fontSize: '28px',
+                        fontWeight: 900,
+                        color: '#9b3c32',
+                      }}
+                    >
+                      {formatPrice(refundStep.paidAmount)}{' '}
+                      <span style={{ fontSize: '16px' }}>تومان</span>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gap: '10px' }}>
                     <button
-                      key={reason.id}
                       type="button"
-                      className={`cancel-reason-item ${selectedReasonId === reason.id ? 'selected' : ''}`}
-                      onClick={() => setSelectedReasonId(reason.id)}
+                      className={`btn ${refundMethod === 'cash' ? 'primary-btn' : ''}`}
+                      style={{
+                        minHeight: '56px',
+                        justifyContent: 'flex-start',
+                        textAlign: 'right',
+                      }}
+                      onClick={() => setRefundMethod('cash')}
                       disabled={cancelling}
                     >
-                      <span className="cancel-reason-icon">
-                        {reason.icon || '📝'}
-                      </span>
-                      <span className="cancel-reason-label">
-                        {reason.label}
-                      </span>
-                      {selectedReasonId === reason.id && (
-                        <span className="cancel-reason-check">✓</span>
-                      )}
+                      💵 نقدی از صندوق
+                      <small style={{ display: 'block', fontWeight: 400 }}>
+                        مبلغ همین الان به مشتری پس داده می‌شود
+                      </small>
                     </button>
-                  ))}
-                </div>
+
+                    <button
+                      type="button"
+                      className={`btn ${refundMethod === 'gateway_manual' ? 'primary-btn' : ''}`}
+                      style={{
+                        minHeight: '56px',
+                        justifyContent: 'flex-start',
+                        textAlign: 'right',
+                      }}
+                      onClick={() => setRefundMethod('gateway_manual')}
+                      disabled={cancelling}
+                    >
+                      🏦 بازگشت دستی از درگاه
+                      <small style={{ display: 'block', fontWeight: 400 }}>
+                        باید خودت از پنل درگاه پول را برگردانی
+                      </small>
+                    </button>
+
+                    <button
+                      type="button"
+                      className="btn"
+                      style={{
+                        minHeight: '56px',
+                        justifyContent: 'flex-start',
+                        textAlign: 'right',
+                        opacity: 0.5,
+                        cursor: 'not-allowed',
+                      }}
+                      disabled
+                    >
+                      👛 کیف پول مشتری (به‌زودی)
+                      <small style={{ display: 'block', fontWeight: 400 }}>
+                        بعد از تکمیل کیف پول فعال می‌شود
+                      </small>
+                    </button>
+                  </div>
+
+                  {refundMethod === 'gateway_manual' && (
+                    <div className="cancel-warning" style={{ marginTop: '16px' }}>
+                      ⚠️ سیستم فقط ثبت می‌کند که این مبلغ باید برگردد. پول
+                      را خودت باید از پنل درگاه به مشتری برگردانی.
+                    </div>
+                  )}
+
+                  <div className="cancel-warning" style={{ marginTop: '16px' }}>
+                    ⚠️ این سفارش پرداخت دارد. بازپرداخت در دفتر مالی ثبت
+                    می‌شود و بعد از ثبت قابل برگشت نیست.
+                  </div>
+                </>
+              ) : (
+                <>
+                  {loadingReasons ? (
+                    <p className="empty-admin" style={{ padding: '20px' }}>
+                      ⏳ در حال بارگذاری دلایل...
+                    </p>
+                  ) : cancelReasons.length === 0 ? (
+                    <p className="empty-admin" style={{ padding: '20px' }}>
+                      دلیلی برای نمایش وجود ندارد. می‌تونی بدون دلیل لغو
+                      کنی.
+                    </p>
+                  ) : (
+                    <div className="cancel-reasons-list">
+                      {cancelReasons.map((reason) => (
+                        <button
+                          key={reason.id}
+                          type="button"
+                          className={`cancel-reason-item ${selectedReasonId === reason.id ? 'selected' : ''}`}
+                          onClick={() => setSelectedReasonId(reason.id)}
+                          disabled={cancelling}
+                        >
+                          <span className="cancel-reason-icon">
+                            {reason.icon || '📝'}
+                          </span>
+                          <span className="cancel-reason-label">
+                            {reason.label}
+                          </span>
+                          {selectedReasonId === reason.id && (
+                            <span className="cancel-reason-check">✓</span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="cancel-note-field">
+                    <label>توضیحات بیشتر (اختیاری)</label>
+                    <textarea
+                      value={cancelNote}
+                      onChange={(e) => setCancelNote(e.target.value)}
+                      placeholder="اگه دوست داری بیشتر توضیح بده..."
+                      rows={3}
+                      disabled={cancelling}
+                    />
+                  </div>
+
+                  <div className="cancel-warning">
+                    ⚠️ این سفارش با وضعیت «لغوشده» در سیستم می‌مونه و حذف
+                    نمی‌شه. اگه دلیل انتخاب کنی، برای مشتری نمایش داده
+                    می‌شه.
+                  </div>
+                </>
               )}
-
-              <div className="cancel-note-field">
-                <label>توضیحات بیشتر (اختیاری)</label>
-                <textarea
-                  value={cancelNote}
-                  onChange={(e) => setCancelNote(e.target.value)}
-                  placeholder="اگه دوست داری بیشتر توضیح بده..."
-                  rows={3}
-                  disabled={cancelling}
-                />
-              </div>
-
-              <div className="cancel-warning">
-                ⚠️ بعد از لغو، این سفارش از سیستم حذف میشه. اگه دلیل
-                انتخاب کنی، برای مشتری نمایش داده میشه.
-              </div>
             </div>
 
             <div className="modal-footer">
-              <button
-                type="button"
-                className="btn"
-                onClick={closeCancelModal}
-                disabled={cancelling}
-              >
-                انصراف
-              </button>
+              {refundStep ? (
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => {
+                    setRefundStep(null)
+                    setRefundMethod(null)
+                  }}
+                  disabled={cancelling}
+                >
+                  → بازگشت
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={closeCancelModal}
+                  disabled={cancelling}
+                >
+                  انصراف
+                </button>
+              )}
               <button
                 type="button"
                 className="btn"
@@ -1934,16 +2070,22 @@ export default function OrdersManager({
                   background: '#9b3c32',
                   color: '#fff',
                   border: 0,
+                  opacity: refundStep && !refundMethod ? 0.5 : 1,
                 }}
                 onClick={confirmCancel}
-                disabled={cancelling}
+                disabled={cancelling || (!!refundStep && !refundMethod)}
               >
-                {cancelling ? '...' : '❌ لغو سفارش'}
+                {cancelling
+                  ? '...'
+                  : refundStep
+                    ? '✅ لغو و ثبت بازپرداخت'
+                    : '❌ لغو سفارش'}
               </button>
             </div>
           </div>
         </div>
       )}
+
 
       {exportOpen && (
         <div
