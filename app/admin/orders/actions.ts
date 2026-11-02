@@ -574,3 +574,43 @@ export async function reviewLedgerReceipt(
     return { error: err?.message || 'خطای غیرمنتظره' }
   }
 }
+// ─────────────────────────────────────────────
+// ثبت «بازگشت وجه انجام شد» برای بازپرداخت دستی
+// ─────────────────────────────────────────────
+export async function completeManualRefund(
+  refundId: string
+): Promise<{ success?: boolean; error?: string }> {
+  try {
+    const adminId = await assertAdminId()
+
+    if (!refundId || !LEDGER_UUID_RE.test(refundId)) {
+      return { error: 'شناسه بازپرداخت نامعتبر است' }
+    }
+
+    const db = createAdminDb()
+    const { data, error } = await db
+      .from('order_refunds')
+      .update({
+        status: 'completed',
+        completed_at: new Date().toISOString(),
+        completed_by: adminId,
+      })
+      .eq('id', refundId)
+      .eq('status', 'pending_manual')
+      .select('id')
+
+    if (error) {
+      console.error('[completeManualRefund]', error)
+      return { error: 'خطا در ثبت بازپرداخت' }
+    }
+    if (!data || data.length === 0) {
+      return { error: 'این بازپرداخت قبلاً بسته شده است' }
+    }
+
+    revalidatePath('/admin/orders')
+    revalidatePath('/admin')
+    return { success: true }
+  } catch (err: any) {
+    return { error: err?.message || 'خطای غیرمنتظره' }
+  }
+}

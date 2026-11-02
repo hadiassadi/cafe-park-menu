@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { createClient } from '@supabase/supabase-js'
 import OrdersManager from './OrdersManager'
+import PendingRefundsBanner from './PendingRefundsBanner'
 
 export const metadata: Metadata = {
   title: 'سفارش ها',
@@ -88,10 +89,23 @@ export default async function OrdersPage() {
 
   const allowDeleteOrders =
     settingsResult.data?.admin_allow_delete_orders ?? true
+  const { data: refundRows, error: refundErr } = await db
+    .from('order_refunds')
+    .select('id, order_number, amount, method, created_at')
+    .eq('status', 'pending_manual')
+    .order('created_at', { ascending: true })
+  if (refundErr) console.error('[orders page] pending refunds:', refundErr)
+
+  const pendingRefunds = (refundRows ?? []).map((r) => ({
+    ...r,
+    amount: Number(r.amount),
+  }))
 
   return (
     <main className="admin">
+      <PendingRefundsBanner refunds={pendingRefunds} />
       <OrdersManager orders={orders} allowDeleteOrders={allowDeleteOrders} />
+
     </main>
   )
 }
