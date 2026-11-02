@@ -11,7 +11,6 @@ import {
   reviewLedgerReceipt,
   type LedgerReceipt,
 } from './actions'
-'./actions'
 import { formatPersianDate } from '@/lib/format-date'
 import { useStepUp } from '@/lib/admin/use-step-up'
 import StepUpModal from '../components/StepUpModal'
@@ -1118,6 +1117,33 @@ export default function OrdersManager({
                             💰 تسویه (پرداخت شد)
                           </button>
                         )}
+                      {['confirmed', 'preparing'].includes(order.status) && (
+                        <button
+                          type="button"
+                          className="btn"
+                          style={{
+                            flex: '1 1 100%',
+                            marginBottom: '8px',
+                            background: '#e8f1e9',
+                            color: '#2d5d3e',
+                            borderColor: '#b9d4bd',
+                            fontWeight: 800,
+                          }}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            if (order.payment_status === 'paid') {
+                              handleStatusChange(order, 'delivered')
+                            } else {
+                              openSettleModal(order, true)
+                            }
+                          }}
+                          disabled={loading}
+                        >
+                          {order.payment_status === 'paid'
+                            ? '⚡ تحویل فوری'
+                            : '⚡ تسویه و تحویل فوری'}
+                        </button>
+                      )}
 
                       {NEXT_STATUS[order.status] && (
                         <button
