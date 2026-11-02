@@ -66,10 +66,11 @@ export async function GET() {
     settingsRes,
     quotesRes,
     variantsRes,
+    feesRes,
   ] = await Promise.all([
     db
       .from('categories')
-      .select('id,name,icon,sort_order')
+      .select('id,name,icon,sort_order,takeaway_fee_id')
       .eq('is_active', true)
       .order('sort_order', { ascending: true }),
 
@@ -78,7 +79,8 @@ export async function GET() {
       .select(
         `id,category_id,name,description,price,size,image_url,
          is_featured,sort_order,is_available,is_new,
-         calories,prep_time_minutes,ingredients,allergens,dietary_info`
+         calories,prep_time_minutes,ingredients,allergens,dietary_info,
+         takeaway_fee_id`
       )
       .eq('is_active', true)
       .order('sort_order', { ascending: true }),
@@ -102,6 +104,11 @@ export async function GET() {
         `
       )
       .order('sort_order', { ascending: true }),
+
+    adminDb
+      .from('takeaway_fees')
+      .select('id,name,fee')
+      .eq('is_active', true),
   ])
 
   if (catsRes.error || productsRes.error) {
@@ -127,15 +134,40 @@ export async function GET() {
     variantsByProduct.set(group.product_id, list)
   }
 
-  // ✅ اضافه کردن واریانت‌ها به هر محصول
-  const products = (productsRes.data ?? []).map((p) => ({
-    ...p,
-    variant_groups: variantsByProduct.get(p.id) ?? [],
-  }))
+  if (feesRes.error) {
+    console.error('[api/menu] takeaway_fees error:', feesRes.error)
+  }
+  const feeById = new Map(
+    (feesRes.data ?? []).map((f) => [
+      f.id,
+      { name: f.name, fee: Number(f.fee) },
+    ])
+  )
+  const catFeeId = new Map(
+    (catsRes.data ?? []).map((c) => [c.id, c.takeaway_fee_id ?? null])
+  )
+
+  // ✅ اضافه کردن واریانت‌ها و هزینهٔ بیرون‌بر به هر محصول
+  const products = (productsRes.data ?? []).map((p) => {
+    const { takeaway_fee_id, ...rest } = p
+    const feeId = takeaway_fee_id ?? catFeeId.get(p.category_id) ?? null
+    const f = feeId ? feeById.get(feeId) : undefined
+    return {
+      ...rest,
+      variant_groups: variantsByProduct.get(p.id) ?? [],
+      takeaway_fee: f ? f.fee : null,
+      takeaway_label: f ? f.name : null,
+    }
+  })
+
+  const categories = (catsRes.data ?? []).map((c) => {
+    const { takeaway_fee_id, ...rest } = c
+    return rest
+  })
 
   return NextResponse.json(
     {
-      categories: catsRes.data ?? [],
+      categories,
       products,
       theme: themeRes.data ?? null,
       settings:

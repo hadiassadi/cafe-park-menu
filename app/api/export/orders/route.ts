@@ -68,11 +68,14 @@ export async function GET(request: Request) {
     const db = await supabaseServer()
 
     let query = db
-      .from('orders')
-      .select(
-        'id, order_number, customer_name, customer_phone, table_number, note, items, subtotal, original_subtotal, coupon_code, coupon_discount, status, created_at'
-      )
-      .order('created_at', { ascending: false })
+  .from('orders')
+  .select(
+    'id, order_number, customer_name, customer_phone, table_number, note, items, subtotal, original_subtotal, coupon_code, coupon_discount, status, created_at'
+  )
+  .is('deleted_at', null)
+  .eq('is_test', false)
+  .order('created_at', { ascending: false })
+
 
     if (filter === 'today') {
       const start = new Date()

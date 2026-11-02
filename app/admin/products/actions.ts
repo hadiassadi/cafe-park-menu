@@ -128,10 +128,8 @@ export async function addProduct(formData: FormData) {
   const isFeatured = formData.get('is_featured') === 'on'
   const isNew = formData.get('is_new') === 'on'
   const isAvailable = formData.get('is_available') !== 'off'
-
-  // ✅ جدید
   const couponEligible = parseCouponEligible(formData.get('coupon_eligible'))
-
+  const takeawayFeeId = String(formData.get('takeaway_fee_id') || '').trim() || null
   const calories = formData.get('calories')
     ? Number(formData.get('calories'))
     : null
@@ -182,6 +180,7 @@ export async function addProduct(formData: FormData) {
       dietary_info: dietaryInfo,
       sort_order: sortOrder,
       coupon_eligible: couponEligible, // ✅ جدید
+      takeaway_fee_id: takeawayFeeId,
     })
     .select()
     .single()
@@ -214,10 +213,8 @@ export async function updateProduct(formData: FormData) {
   const isFeatured = formData.get('is_featured') === 'on'
   const isNew = formData.get('is_new') === 'on'
   const isAvailable = formData.get('is_available') !== 'off'
-
-  // ✅ جدید
   const couponEligible = parseCouponEligible(formData.get('coupon_eligible'))
-
+  const takeawayFeeId = String(formData.get('takeaway_fee_id') || '').trim() || null
   const calories = formData.get('calories')
     ? Number(formData.get('calories'))
     : null
@@ -269,6 +266,7 @@ export async function updateProduct(formData: FormData) {
       allergens,
       dietary_info: dietaryInfo,
       coupon_eligible: couponEligible, // ✅ جدید
+      takeaway_fee_id: takeawayFeeId,
       updated_at: new Date().toISOString(),
     })
     .eq('id', id)

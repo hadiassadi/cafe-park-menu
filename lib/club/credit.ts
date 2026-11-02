@@ -38,6 +38,7 @@ export async function getCustomerCreditState(phone: string): Promise<CreditDecis
     .select('id, status, payment_status, subtotal')
     .eq('customer_phone', phone)
     .is('deleted_at', null)
+    .eq('is_test', false)
   if (error) {
     console.error('[credit] orders read failed:', error)
     return { allowed: false, reason: 'unknown_customer', ...base }
@@ -91,6 +92,7 @@ export async function getCustomerCreditState(phone: string): Promise<CreditDecis
   }
   return { allowed: true, reason: 'allowed', ...state }
 }
+
 export function creditDenyMessage(reason: CreditDecision['reason']): string {
   switch (reason) {
     case 'has_debt':
