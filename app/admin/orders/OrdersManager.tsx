@@ -76,6 +76,7 @@ type Order = {
   cancellation_reason_label: string | null
   cancellation_note: string | null
   cancelled_by: string | null
+  cancelled_at?: string | null
   payment_method: string | null
   payment_status: string | null
   payment_ref_id: string | null
@@ -187,20 +188,17 @@ export default function OrdersManager({
   const [searchQuery, setSearchQuery] = useState('')
   const [searchType, setSearchType] = useState<SearchType>('all')
   const [trashMode, setTrashMode] = useState(false)
-
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
   const [loading, setLoading] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [printOrder, setPrintOrder] = useState<Order | null>(null)
   const [mounted, setMounted] = useState(false)
-
   const stepUp = useStepUp()
-
+  const [reopeningId, setReopeningId] = useState<string | null>(null)
   const [exportOpen, setExportOpen] = useState(false)
   const [exportFilter, setExportFilter] = useState<ExportFilter>('month')
   const [exportStatus, setExportStatus] = useState<ExportStatus>('all')
   const [exporting, setExporting] = useState(false)
-
   const [cancelOrder, setCancelOrder] = useState<Order | null>(null)
   const [cancelReasons, setCancelReasons] = useState<CancelReason[]>([])
   const [selectedReasonId, setSelectedReasonId] = useState<string | null>(null)
@@ -501,6 +499,56 @@ export default function OrdersManager({
       alert('❌ خطا در حذف سفارش')
     } finally {
       setDeletingId(null)
+    }
+  }
+  async function handleReopen(order: Order) {
+    const reason = window.prompt('دلیل تأیید مجدد سفارش (اختیاری):')
+    if (reason === null) return
+
+    const call = () =>
+      fetch(`/api/admin/orders/${order.id}/reopen`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason }),
+      })
+
+    setReopeningId(order.id)
+    try {
+      let res = await call()
+
+      if (res.status === 401 || res.status === 403) {
+        setReopeningId(null)
+        const ok = await stepUp.requireStepUp()
+        if (!ok) return
+        setReopeningId(order.id)
+        res = await call()
+      }
+
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        alert('❌ ' + (data.error || 'تأیید مجدد انجام نشد'))
+        return
+      }
+
+      const patch = {
+        status: 'confirmed',
+        cancelled_at: null,
+        cancelled_by: null,
+        cancellation_reason_id: null,
+        cancellation_reason_label: null,
+        cancellation_note: null,
+      }
+      setOrders((prev) =>
+        prev.map((o) => (o.id === order.id ? { ...o, ...patch } : o))
+      )
+      if (selectedOrder?.id === order.id) {
+        setSelectedOrder({ ...selectedOrder, ...patch })
+      }
+      alert('✅ سفارش دوباره تأیید شد')
+    } catch {
+      alert('❌ خطا در تأیید مجدد سفارش')
+    } finally {
+      setReopeningId(null)
     }
   }
 
@@ -1286,6 +1334,25 @@ export default function OrdersManager({
                   )}
 
                 <div className="info-card">
+				                {selectedOrder.status === 'cancelled' &&
+                  selectedOrder.cancelled_by === 'admin' &&
+                  !selectedOrder.deleted_at &&
+                  selectedOrder.cancelled_at &&
+                  Date.now() - new Date(selectedOrder.cancelled_at).getTime() <
+                    30 * 60 * 1000 && (
+                    <button
+                      type="button"
+                      className="admin-btn"
+                      style={{ marginBottom: 16 }}
+                      disabled={reopeningId === selectedOrder.id}
+                      onClick={() => handleReopen(selectedOrder)}
+                    >
+                      {reopeningId === selectedOrder.id
+                        ? 'در حال بررسی...'
+                        : '↩️ تأیید مجدد سفارش'}
+                    </button>
+                  )}
+
                   <h3>👤 اطلاعات مشتری</h3>
                   <div className="info-row">
                     <span>نام:</span>
