@@ -174,7 +174,7 @@ function CheckoutForm() {
         body: JSON.stringify({
           customer_name: name.trim(),
           customer_phone: cleanPhone,
-          table_number: tableNumber ? Number(tableNumber) : null,
+          table_number: allTakeaway ? null : (tableNumber ? Number(tableNumber) : null),
           payment_method: paymentMethod,
           note: note.trim() || null,
           items: items.map((item) => ({ product_id: item.productId, product_name: item.productName, option_id: item.selectedOptionId, option_name: item.selectedOptionName, group_name: item.selectedGroupName, unit_price: item.unitPrice, quantity: item.quantity, takeaway: item.takeaway === true })),
@@ -259,16 +259,39 @@ function CheckoutForm() {
           </div>
         )}
 
-        <div className="checkout-card">
-          <div className="checkout-card-title">🪑 محل سرویس</div>
-          <div className="checkout-field">
-            <label htmlFor="table">شماره میز {allTakeaway ? '(اختیاری)' : '*'}{tableAutoDetected
- && <span style={{ fontSize: '11px', color: '#477052', fontWeight: 500, marginInlineStart: '8px' }}>✅ از QR تشخیص داده شد</span>}</label>
-            <input id="table" type="number" value={tableNumber} onChange={(e) => { setTableNumber(e.target.value); setTableAutoDetected(false); try { if (e.target.value) sessionStorage.setItem('cafe-park-table', e.target.value) } catch {} }} placeholder="مثلاً ۵" min="1" required={!allTakeaway} disabled={saving}
- />
+                <div className="checkout-card">
+          <div className="checkout-card-title">
+            {allTakeaway ? '🥡 سرویس بیرون‌بر است' : '🪑 محل سرویس'}
           </div>
+          {!allTakeaway && (
+            <div className="checkout-field">
+              <label htmlFor="table">
+                شماره میز *
+                {tableAutoDetected && (
+                  <span style={{ fontSize: '11px', color: '#477052', fontWeight: 500, marginInlineStart: '8px' }}>
+                    ✅ از QR تشخیص داده شد
+                  </span>
+                )}
+              </label>
+              <input
+                id="table"
+                type="number"
+                value={tableNumber}
+                onChange={(e) => {
+                  setTableNumber(e.target.value)
+                  setTableAutoDetected(false)
+                  try { if (e.target.value) sessionStorage.setItem('cafe-park-table', e.target.value) } catch {}
+                }}
+                placeholder="مثلاً ۵"
+                min="1"
+                required
+                disabled={saving}
+              />
+            </div>
+          )}
           <div className="checkout-field"><label htmlFor="note">توضیحات (اختیاری)</label><textarea id="note" value={note} onChange={(e) => setNote(e.target.value)} placeholder="مثلاً: قند جدا، بدون شکر..." rows={2} disabled={saving} /></div>
         </div>
+
 
         <div className="checkout-card">
           <div className="checkout-card-title">🧾 خلاصه سفارش ({formatPrice(totalItems)} قلم)</div>
