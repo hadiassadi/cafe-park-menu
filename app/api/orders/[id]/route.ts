@@ -21,6 +21,7 @@ const CUSTOMER_COLUMNS = [
   'coupon_discount',
   'eligible_subtotal',
   'ineligible_subtotal',
+  'takeaway_fee_total',
   'status',
   'created_at',
   'customer_confirmed',

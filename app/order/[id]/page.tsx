@@ -25,6 +25,9 @@ type OrderItem = {
   product_id?: string
   variant_option_id?: string
   image_url?: string
+    takeaway?: boolean
+  takeaway_fee?: number
+  takeaway_label?: string | null
 }
 
 type Order = {
@@ -41,6 +44,7 @@ type Order = {
   coupon_discount: number | null
   eligible_subtotal: number | null
   ineligible_subtotal: number | null
+  takeaway_fee_total?: number | null
   status: string
   created_at: string
   customer_confirmed?: boolean
@@ -434,6 +438,7 @@ export default function OrderPage({
 
   const finalSubtotal = order.subtotal
   const discountAmount = originalSum > finalSubtotal ? (originalSum - finalSubtotal) : 0
+  const takeawayFee = Number(order.takeaway_fee_total ?? 0)
   const hasDiscount = discountAmount > 0
 
   let badgeType = 'unpaid'
@@ -466,7 +471,7 @@ export default function OrderPage({
   const bannerTableText = order.table_number
     ? ` برای میز شماره ${formatPrice(order.table_number)}`
     : ''
-
+  const isTakeawayOnly = order.items.length > 0 && order.items.every((i) => i.takeaway === true)
   let bannerIcon = '✅'
   let bannerTitle = 'سفارش شما با موفقیت ثبت شد!'
   let bannerText = `سفارش #${bannerOrderNo}${bannerTableText} ثبت شد.`
@@ -517,13 +522,21 @@ export default function OrderPage({
           <div className="order-success-body">
             <p className="order-success-title">{bannerTitle}</p>
             <p className="order-success-text">{bannerText}</p>
-            {bannerShowHint && (
-              <p className="order-success-hint">
-                🙏 لطفاً برای جلوگیری از تداخل در سرویس‌دهی،{' '}
-                <strong>میز خود را ترک نکنید</strong> و منتظر بمانید.
-                می‌تونید وضعیت سفارش رو از همین صفحه پیگیری کنید.
-              </p>
+                        {bannerShowHint && (
+              isTakeawayOnly ? (
+                <p className="order-success-hint">
+                  🥡 سفارش شما <strong>بیرون‌بر</strong> است. وضعیت آماده‌شدنش را
+                  از همین صفحه پیگیری کنید و پس از آماده شدن تحویل بگیرید.
+                </p>
+              ) : (
+                <p className="order-success-hint">
+                  🙏 لطفاً برای جلوگیری از تداخل در سرویس‌دهی،{' '}
+                  <strong>میز خود را ترک نکنید</strong> و منتظر بمانید.
+                  می‌تونید وضعیت سفارش رو از همین صفحه پیگیری کنید.
+                </p>
+              )
             )}
+
           </div>
           <button
             type="button"
@@ -753,11 +766,15 @@ export default function OrderPage({
 
       <div className="info-card">
         <h3>🧾 اقلام سفارش</h3>
-        {order.table_number && (
+                {order.table_number ? (
           <div style={{ fontSize: '13px', color: '#6b4f3a', marginBottom: '10px' }}>
             📍 میز شماره {formatPrice(order.table_number)}
           </div>
-        )}
+        ) : isTakeawayOnly ? (
+          <div style={{ fontSize: '13px', color: '#6b4f3a', marginBottom: '10px' }}>
+            🥡 سفارش بیرون‌بر
+          </div>
+        ) : null}
         {order.items.map((item, idx) => (
           <div key={idx} className="info-row">
             <span>
@@ -765,7 +782,11 @@ export default function OrderPage({
               {item.option_name && (
                 <small style={{ color: '#766f64' }}> ({item.option_name})</small>
               )}
+              {item.takeaway === true && (
+                <small style={{ color: '#766f64' }}> 🥡 بیرون‌بر</small>
+              )}
             </span>
+
             <strong>{formatPrice(item.unit_price * item.quantity)} تومان</strong>
           </div>
         ))}
@@ -776,12 +797,18 @@ export default function OrderPage({
         </div>
 
         {/* ✅ بخش خلاصه پرداخت با محاسبه تخفیف */}
-        {hasDiscount ? (
+                {hasDiscount ? (
           <div className="order-payment-summary">
             <div className="info-row">
               <span>جمع اقلام:</span>
-              <strong>{formatPrice(originalSum)} تومان</strong>
+              <strong>{formatPrice(originalSum - takeawayFee)} تومان</strong>
             </div>
+            {takeawayFee > 0 && (
+              <div className="info-row">
+                <span>🥡 هزینه بیرون‌بر:</span>
+                <strong>{formatPrice(takeawayFee)} تومان</strong>
+              </div>
+            )}
             <div className="info-row discount">
               <span>
                 {order.coupon_code && order.coupon_code !== 'MEMBERSHIP'
@@ -796,11 +823,20 @@ export default function OrderPage({
             </div>
           </div>
         ) : (
-          <div className="total-row">
-            <span>جمع کل</span>
-            <span>{formatPrice(finalSubtotal)} تومان</span>
-          </div>
+          <>
+            {takeawayFee > 0 && (
+              <div className="info-row">
+                <span>🥡 هزینه بیرون‌بر:</span>
+                <strong>{formatPrice(takeawayFee)} تومان</strong>
+              </div>
+            )}
+            <div className="total-row">
+              <span>جمع کل</span>
+              <span>{formatPrice(finalSubtotal)} تومان</span>
+            </div>
+          </>
         )}
+
       </div>
 
       <div className="info-card">
