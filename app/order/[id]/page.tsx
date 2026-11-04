@@ -1068,18 +1068,28 @@ export default function OrderPage({
 }
 
 function buildWhatsAppMessage(order: Order): string {
+  const isTakeawayOnly =
+    order.items.length > 0 && order.items.every((i) => i.takeaway === true)
+  const takeawayFee = Number(order.takeaway_fee_total ?? 0)
+
   let msg = `سلام، سفارش جدید ثبت کردم.\n\n`
   msg += `📋 سفارش #${order.order_number}\n`
   msg += `👤 ${order.customer_name}\n`
   msg += `📞 ${order.customer_phone}\n`
   if (order.table_number) msg += `📍 میز ${order.table_number}\n`
+  else if (isTakeawayOnly) msg += `🥡 سفارش بیرون‌بر\n`
   msg += `\n🧾 اقلام:\n`
   for (const item of order.items) {
     msg += `  • ${item.quantity} × ${item.product_name}`
     if (item.option_name) msg += ` (${item.option_name})`
+    if (item.takeaway === true) msg += ` 🥡 بیرون‌بر`
     msg += ` - ${item.unit_price * item.quantity} تومان\n`
+  }
+  if (takeawayFee > 0) {
+    msg += `  🥡 هزینهٔ بیرون‌بر (شامل در جمع): ${takeawayFee} تومان\n`
   }
   msg += `\n💰 جمع کل: ${order.subtotal} تومان`
   if (order.note) msg += `\n\n📝 توضیحات: ${order.note}`
   return msg
 }
+
