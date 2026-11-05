@@ -11,8 +11,8 @@ const ERROR_MESSAGES: Record<string, string> = {
   no_authority: 'کد تراکنش دریافت نشد.',
   bad_order: 'شناسه سفارش نامعتبر است.',
   order_not_found: 'سفارش پیدا نشد.',
-    order_cancelled:
-    'این سفارش لغو شده است و پرداخت شما تأیید نشد. اگر مبلغی از حساب شما کسر شده، معمولاً توسط بانک برگردانده می‌شود. در صورت تأخیر با کافه تماس بگیرید.',
+   order_cancelled:
+    'این سفارش لغو شده بود. اگر مبلغی از حساب شما کسر شده، پرداخت شما ثبت شده و کافه بازگشت وجه را پیگیری می‌کند. لطفاً دوباره پرداخت نکنید و در صورت نیاز با کافه تماس بگیرید.',
   authority_mismatch: 'اطلاعات تراکنش با سفارش مطابقت ندارد.',
   bad_amount: 'مبلغ سفارش نامعتبر است.',
   settings: 'خطا در تنظیمات پرداخت.',
@@ -68,8 +68,8 @@ function CallbackContent() {
     color = '#a8741a'
     showOrder = true
   } else if (status === 'error') {
-    icon = '⚠️'
-    title = 'خطا در پرداخت'
+        icon = code === 'order_cancelled' ? '🚫' : '⚠️'
+    title = code === 'order_cancelled' ? 'سفارش لغو شده است' : 'خطا در پرداخت'
     description =
       ERROR_MESSAGES[code] ?? 'متأسفانه در فرآیند پرداخت خطایی رخ داد.'
     color = '#9b3c32'
