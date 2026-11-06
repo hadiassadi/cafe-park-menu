@@ -65,10 +65,29 @@ export async function GET(
       return NextResponse.json({ error: 'سفارش پیدا نشد' }, { status: 404 })
     }
 
+        // فقط یک مقدار ساده؛ مبلغ و جزئیات مالی به مشتری نمی‌رسد
+    let refundPending = false
+    if ((data as any).status === 'cancelled') {
+      const { data: refundRows, error: refundError } = await db
+        .from('order_refunds')
+        .select('id')
+        .eq('order_id', id)
+        .eq('status', 'pending_manual')
+        .limit(1)
+
+      if (refundError) {
+        console.error('[api/orders/[id]] refund lookup error:', refundError)
+      } else {
+        refundPending = (refundRows?.length ?? 0) > 0
+      }
+    }
+
     return NextResponse.json(
-      { order: data },
+      { order: { ...(data as any), refund_pending: refundPending } },
       { headers: { 'Cache-Control': 'no-store' } }
     )
+
+
   } catch (err: any) {
     console.error('[api/orders/[id]] error:', err)
     return apiError(err)
