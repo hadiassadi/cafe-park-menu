@@ -20,6 +20,11 @@ const MAP: Record<string, { status: number; text: string }> = {
     status: 400,
     text: 'مشتری تلفن تأییدشده ندارد؛ فقط بازگشت نقدی ممکن است',
   },
+    wallet_disabled: {
+    status: 400,
+    text: 'بازپرداخت به کیف پول هنوز فعال نیست؛ روش نقدی یا دستی درگاه را انتخاب کنید',
+  },
+
 }
 
 export function cancelErrorInfo(message: string | undefined) {
