@@ -53,6 +53,7 @@ type Order = {
   cancelled_by: string | null
   payment_method: string | null
   payment_status: string | null
+  refund_pending?: boolean
   payment_ref_id: string | null
   payment_receipt_url: string | null
   payment_note: string | null
@@ -734,9 +735,18 @@ export default function OrderPage({
           {order.cancelled_by === 'customer' && (
             <p style={{ color: '#766f64', marginTop: '12px' }}>این سفارش توسط خودت لغو شده است.</p>
           )}
-          {!order.cancelled_by && (
-            <p style={{ color: '#766f64', marginTop: '12px' }}>این سفارش لغو شده است.</p>
+                    {order.refund_pending && (
+            <div
+              className="cancellation-info-box"
+              style={{ marginTop: '16px', borderColor: '#a8741a' }}
+            >
+              <div className="cancellation-info-label">💸 بازگشت وجه در حال پیگیری است</div>
+              <div className="cancellation-info-note">
+                پرداخت شما ثبت شده است و کافه بازگشت وجه را پیگیری می‌کند. لطفاً دوباره پرداخت نکنید.
+              </div>
+            </div>
           )}
+
         </div>
       ) : (
         <div className="status-stepper">
