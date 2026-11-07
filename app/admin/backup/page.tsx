@@ -7,6 +7,7 @@ type BackupMeta = {
   backupVersion?: number
   createdAt?: string
   counts?: Record<string, number>
+  skipped?: Record<string, string>
   tables?: Record<string, unknown[]>
 }
 
@@ -209,6 +210,12 @@ export default function AdminBackupPage() {
           <div style={{ marginTop: 12, color: '#16a34a', fontWeight: 600 }}>
             ✅ بکاپ گرفته شد — {fa(totalRows(backupMeta))} ردیف از{' '}
             {fa(backupMeta.tables ? Object.keys(backupMeta.tables).length : 0)} جدول
+          </div>
+        )}
+        {backupMeta?.skipped && Object.keys(backupMeta.skipped).length > 0 && (
+          <div style={{ marginTop: 8, color: '#b45309', fontSize: 13 }}>
+            ⚠️ جدول‌های ردشده چون در دیتابیس موجود نیستند:{' '}
+            {Object.keys(backupMeta.skipped).join('، ')}
           </div>
         )}
       </div>
