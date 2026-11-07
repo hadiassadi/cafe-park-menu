@@ -2,6 +2,8 @@
 
 import { useRef, useState } from 'react'
 
+type StorageFile = { name: string; data: string }
+
 type BackupMeta = {
   app?: string
   backupVersion?: number
@@ -9,7 +11,12 @@ type BackupMeta = {
   counts?: Record<string, number>
   skipped?: Record<string, string>
   tables?: Record<string, unknown[]>
+  storage?: Record<string, StorageFile[]>
+  storageSkipped?: Record<string, string>
 }
+
+// نسخه‌های پشتیبانی‌شده: ۱ = فقط جداول، ۲ = جداول + فایل‌های Storage
+const BACKUP_VERSION_OK = (v?: number) => v === 1 || v === 2
 
 type RestoreProgress = {
   table: string
@@ -49,6 +56,9 @@ export default function AdminBackupPage() {
   const totalRows = (meta: BackupMeta | null) =>
     meta?.counts ? Object.values(meta.counts).reduce((a, b) => a + b, 0) : 0
 
+  const totalStorageFiles = (meta: BackupMeta | null) =>
+    meta?.storage ? Object.values(meta.storage).reduce((a, b) => a + b.length, 0) : 0
+
   // ───────────────── گرفتن بکاپ ─────────────────
   const handleBackup = async () => {
     setBackingUp(true)
@@ -62,7 +72,7 @@ export default function AdminBackupPage() {
       }
       const text = await res.text()
       const meta = JSON.parse(text) as BackupMeta
-      if (meta?.backupVersion !== 1 || !meta.tables) {
+      if (!BACKUP_VERSION_OK(meta?.backupVersion) || !meta.tables) {
         throw new Error('ساختار فایل بکاپ معتبر نیست')
       }
 
@@ -100,7 +110,7 @@ export default function AdminBackupPage() {
     try {
       const text = await file.text()
       const meta = JSON.parse(text) as BackupMeta
-      if (meta?.backupVersion !== 1 || !meta.tables) {
+      if (!BACKUP_VERSION_OK(meta?.backupVersion) || !meta.tables) {
         throw new Error('این فایل بکاپ کافه پارک نیست یا نسخه‌ی آن پشتیبانی نمی‌شود')
       }
       setParsed(meta)
@@ -140,6 +150,49 @@ export default function AdminBackupPage() {
           }
           reportAcc.push({ table, upserted: j.upserted ?? 0 })
         }
+      }
+
+      // ─── بازگردانی فایل‌های Storage (چانک بر اساس حجم، زیر سقف بدنه‌ی درخواست) ───
+      for (const [bucket, files] of Object.entries(parsed.storage ?? {})) {
+        if (!Array.isArray(files) || files.length === 0) continue
+
+        let chunk: StorageFile[] = []
+        let chunkBytes = 0
+        let done = 0
+
+        const flush = async () => {
+          if (chunk.length === 0) return
+          setProgress({ table: `📁 ${bucket}`, done, total: files.length })
+
+          const res = await fetch('/api/admin/backup', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ confirm: RESTORE_WORD, bucket, files: chunk }),
+          })
+          const j = await res.json().catch(() => null)
+          if (!res.ok || !j?.ok) {
+            throw new Error(`bucket «${bucket}»: ${j?.error || `خطای سرور (${res.status})`}`)
+          }
+          const results = (j.results ?? []) as { name: string; ok: boolean; error?: string }[]
+          for (const r of results) {
+            reportAcc.push({
+              table: `📁 ${bucket}/${r.name}`,
+              upserted: r.ok ? 1 : 0,
+              error: r.ok ? undefined : r.error ?? 'خطا',
+            })
+          }
+          done += chunk.length
+          chunk = []
+          chunkBytes = 0
+        }
+
+        for (const file of files) {
+          const bytes = file.data.length * 0.75
+          if (chunkBytes + bytes > 2_500_000 && chunk.length > 0) await flush()
+          chunk.push(file)
+          chunkBytes += bytes
+        }
+        await flush()
       }
 
       // جمع گزارش به‌ازای هر جدول
@@ -188,8 +241,8 @@ export default function AdminBackupPage() {
     <div style={{ padding: 24, maxWidth: 760, margin: '0 auto' }}>
       <h1 style={{ fontSize: 22, marginBottom: 4 }}>💾 پشتیبان‌گیری</h1>
       <p style={{ color: '#6b7280', marginBottom: 20 }}>
-        بکاپ شامل داده‌های دیتابیس (سفارش‌ها، محصولات، مشتریان و…) است. فایل‌های تصویری
-        و رسیدها در Storage سوپابیس ذخیره می‌شوند و جزو این بکاپ نیستند.
+        بکاپ شامل داده‌های دیتابیس (سفارش‌ها، محصولات، مشتریان و…) به‌علاوه‌ی فایل‌های
+        Storage (تصاویر محصولات، رسیدها، فونت‌ها) است. این فایل را در جای امن نگه دارید.
       </p>
 
       {/* گرفتن بکاپ */}
@@ -210,12 +263,21 @@ export default function AdminBackupPage() {
           <div style={{ marginTop: 12, color: '#16a34a', fontWeight: 600 }}>
             ✅ بکاپ گرفته شد — {fa(totalRows(backupMeta))} ردیف از{' '}
             {fa(backupMeta.tables ? Object.keys(backupMeta.tables).length : 0)} جدول
+            {totalStorageFiles(backupMeta) > 0 &&
+              ` + ${fa(totalStorageFiles(backupMeta))} فایل از ${
+                backupMeta.storage ? Object.keys(backupMeta.storage).length : 0
+              } پوشه`}
           </div>
         )}
         {backupMeta?.skipped && Object.keys(backupMeta.skipped).length > 0 && (
           <div style={{ marginTop: 8, color: '#b45309', fontSize: 13 }}>
             ⚠️ جدول‌های ردشده چون در دیتابیس موجود نیستند:{' '}
             {Object.keys(backupMeta.skipped).join('، ')}
+          </div>
+        )}
+        {backupMeta?.storageSkipped && Object.keys(backupMeta.storageSkipped).length > 0 && (
+          <div style={{ marginTop: 8, color: '#b45309', fontSize: 13 }}>
+            ⚠️ موارد ردشده از Storage: {Object.keys(backupMeta.storageSkipped).join('، ')}
           </div>
         )}
       </div>
@@ -255,6 +317,8 @@ export default function AdminBackupPage() {
             </div>
             <div>
               مجموع {fa(totalRows(parsed))} ردیف از {fa(parsed.tables ? Object.keys(parsed.tables).length : 0)} جدول
+              {totalStorageFiles(parsed) > 0 &&
+                ` + ${fa(totalStorageFiles(parsed))} فایل Storage`}
             </div>
           </div>
         )}
