@@ -1,6 +1,7 @@
 import './globals.css'
 import type { Metadata, Viewport } from 'next'
 import localFont from 'next/font/local'
+import { Analytics } from '@vercel/analytics/next'
 import { getSettings } from '@/lib/menu'
 import { SITE_URL } from '@/lib/site'
 import { CartProvider } from '@/lib/cart-context'
@@ -136,6 +137,8 @@ export default function RootLayout({
           {children}
           {/* ✅ تغییر: از رپر استفاده می‌کنیم تا در صفحات غیرضروری مخفی شود */}
           <CartFloatingBarWrapper />
+          {/* آمار بازدید Vercel Web Analytics */}
+          <Analytics />
         </CartProvider>
       </body>
     </html>
