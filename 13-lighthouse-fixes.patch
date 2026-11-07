@@ -1,0 +1,25 @@
+diff --git a/app/CategoriesGrid.tsx b/app/CategoriesGrid.tsx
+old mode 100644
+new mode 100755
+index b2d6356..c91e55e
+--- a/app/CategoriesGrid.tsx
++++ b/app/CategoriesGrid.tsx
+@@ -319,7 +319,7 @@ export default function CategoriesGrid({ initial }: { initial: MenuData }) {
+     <>
+       {fontFaces && <style dangerouslySetInnerHTML={{ __html: fontFaces }} />}
+ 
+-      <div className="theme-root" style={themeStyle}>
++      <main className="theme-root" style={themeStyle}>
+         <header className={`hero ${heroImage ? 'hero-has-image' : ''}`}>
+           {heroImage && (
+             <Image
+@@ -582,7 +582,7 @@ export default function CategoriesGrid({ initial }: { initial: MenuData }) {
+             {toast}
+           </div>
+         )}
+-      </div>
++      </main>
+     </>
+   )
+ }
+\ No newline at end of file
