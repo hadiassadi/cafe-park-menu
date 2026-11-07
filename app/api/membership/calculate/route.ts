@@ -18,15 +18,15 @@ export async function POST(req: Request) {
     if (!member || !member.organizations) return NextResponse.json({ discount: 0, discountPercent: 0, eligibleProductIds: [] })
 
     const org = member.organizations as any
-    if (new Date(org.expires_at) < new Date()) return NextResponse.json({ discount: 0, discountPercent: 0, message: 'قرارداد منقضی شده', eligibleProductIds: [] })
+    if (new Date(org.expires_at) < new Date()) return NextResponse.json({ discount: 0, discountPercent: 0, message: 'قرارداد منقضی شده', orgName: org.name, eligibleProductIds: [] })
 
     const today = new Date().toISOString().split('T')[0]
     const { count: dailyCount } = await db.from('redemption_logs').select('*', { count: 'exact', head: true }).eq('member_id', member.id).gte('created_at', `${today}T00:00:00Z`)
     const { count: totalCount } = await db.from('redemption_logs').select('*', { count: 'exact', head: true }).eq('member_id', member.id)
 
     // ✅ استفاده از ?? 0 برای جلوگیری از خطای null
-    if ((dailyCount ?? 0) >= org.max_daily_orders) return NextResponse.json({ discount: 0, discountPercent: 0, message: 'سقف روزانه پر شده', eligibleProductIds: [] })
-    if ((totalCount ?? 0) >= org.max_total_orders) return NextResponse.json({ discount: 0, discountPercent: 0, message: 'سقف کل پر شده', eligibleProductIds: [] })
+    if ((dailyCount ?? 0) >= org.max_daily_orders) return NextResponse.json({ discount: 0, discountPercent: 0, message: 'سقف تخفیف روزانهٔ شما به پایان رسیده است', orgName: org.name, eligibleProductIds: [] })
+    if ((totalCount ?? 0) >= org.max_total_orders) return NextResponse.json({ discount: 0, discountPercent: 0, message: 'سقف کل تخفیف شما به پایان رسیده است', orgName: org.name, eligibleProductIds: [] })
 
     const productIds = items.map((i: any) => i.product_id)
     const { data: products } = await db.from('products').select('id, coupon_eligible, categories(coupon_eligible)').in('id', productIds)
