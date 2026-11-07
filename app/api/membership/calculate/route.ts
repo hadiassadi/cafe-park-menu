@@ -20,8 +20,11 @@ export async function POST(req: Request) {
     const org = member.organizations as any
     if (new Date(org.expires_at) < new Date()) return NextResponse.json({ discount: 0, discountPercent: 0, message: 'قرارداد منقضی شده', orgName: org.name, eligibleProductIds: [] })
 
-    const today = new Date().toISOString().split('T')[0]
-    const { count: dailyCount } = await db.from('redemption_logs').select('*', { count: 'exact', head: true }).eq('member_id', member.id).gte('created_at', `${today}T00:00:00Z`)
+    // شروع روز به وقت تهران — هم‌سو با reserve_membership_redemption (به‌جای UTC)
+    const dayStartTehran = new Date(
+      `${new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Tehran' })}T00:00:00+03:30`
+    ).toISOString()
+    const { count: dailyCount } = await db.from('redemption_logs').select('*', { count: 'exact', head: true }).eq('member_id', member.id).gte('created_at', dayStartTehran)
     const { count: totalCount } = await db.from('redemption_logs').select('*', { count: 'exact', head: true }).eq('member_id', member.id)
 
     // ✅ استفاده از ?? 0 برای جلوگیری از خطای null

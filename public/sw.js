@@ -1,18 +1,20 @@
 // public/sw.js — Service Worker برای کافه پارک
 
-const CACHE_NAME = 'cafe-park-v3'
+const CACHE_NAME = 'cafe-park-v4'
 const STATIC_ASSETS = [
   '/manifest.webmanifest',
   '/icons/icon-192.png',
-  '/icons/icon-512.png',
+  '/icons/icon-maskable-512.png',
 ]
 
 // ─── Install ───
+// از cache.add تکی استفاده می‌کنیم نه cache.addAll: addAll اتمی است و
+// شکست یک فایل (مثل آیکون ناموجود) باعث می‌شد هیچ assetای کش نشود.
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(STATIC_ASSETS).catch(() => {})
-    })
+    caches.open(CACHE_NAME).then((cache) =>
+      Promise.allSettled(STATIC_ASSETS.map((asset) => cache.add(asset)))
+    )
   )
   self.skipWaiting()
 })
