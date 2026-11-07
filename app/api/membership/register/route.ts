@@ -7,13 +7,34 @@ import { cookies } from 'next/headers'
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
+// هم‌سو با app/api/orders/route.ts: نرمال‌سازی ارقام فارسی/عربی و فرمت 09xxxxxxxxx
+function normalizePhone(v: unknown): string {
+  let p = String(v ?? '')
+    .replace(/[۰-۹]/g, (d) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d)))
+    .replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
+    .replace(/\D/g, '')
+    .replace(/^98/, '0')
+  if (/^9\d{9}$/.test(p)) p = '0' + p
+  return p
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json()
-    const { fullName, memberId, phone, orgId } = body
+    const { fullName, memberId, orgId } = body
 
-    if (!fullName || !phone || !orgId) {
+    if (!fullName || !body.phone || !orgId) {
       return NextResponse.json({ error: 'لطفاً همه فیلدهای ضروری را پر کنید' }, { status: 400 })
+    }
+
+    const cleanName = String(fullName).trim().slice(0, 60)
+    if (!cleanName) {
+      return NextResponse.json({ error: 'نام معتبر نیست' }, { status: 400 })
+    }
+
+    const phoneClean = normalizePhone(body.phone)
+    if (!/^09\d{9}$/.test(phoneClean)) {
+      return NextResponse.json({ error: 'شماره تلفن معتبر نیست' }, { status: 400 })
     }
 
     const cookieStore = await cookies()
@@ -30,8 +51,6 @@ export async function POST(req: Request) {
     // حالت اول: مشتری عادی (باشگاه مشتریان)
     // ═══════════════════════════════════════════════
     if (orgId === 'general') {
-      const phoneClean = phone.trim()
-      
       // ✅ چک می‌کنیم آیا این شماره تلفن قبلاً ثبت‌نام کرده است یا نه
       const { data: existingCustomer } = await db
         .from('customers')
@@ -54,7 +73,7 @@ export async function POST(req: Request) {
       // اگر قبلاً ثبت‌نام نکرده بود، ثبت‌نام را انجام می‌دهیم
       const { error: custError } = await db.from('customers').upsert({
         phone: phoneClean,
-        name: fullName,
+        name: cleanName,
         device_id_hash: deviceIdHash,
         notes: `ثبت‌نام در باشگاه مشتریان`,
         tags: newTags,
@@ -73,9 +92,9 @@ export async function POST(req: Request) {
     // ═══════════════════════════════════════════════
     if (!memberId) return NextResponse.json({ error: 'شماره دانشجویی/پرسنلی الزامی است' }, { status: 400 })
 
-    const nameHash = hashData(fullName)
+    const nameHash = hashData(cleanName)
     const memberIdHash = hashData(memberId)
-    const phoneHash = hashData(phone)
+    const phoneHash = hashData(phoneClean)
 
     // ✅ ۱. چک می‌کنیم آیا این شماره دانشجویی قبلاً توسط کسی ثبت‌نام شده است یا نه
     const { data: existingMember } = await db
@@ -109,17 +128,17 @@ export async function POST(req: Request) {
     const orgName = org?.name || 'سازمان ناشناس'
 
     if (!member) {
-      await db.from('membership_requests').insert({ 
-        full_name: fullName, phone, member_id: memberId, 
-        organization_name: orgName, status: 'pending' 
+      await db.from('membership_requests').insert({
+        full_name: cleanName, phone: phoneClean, member_id: memberId,
+        organization_name: orgName, status: 'pending'
       })
       return NextResponse.json({ success: false, message: 'اطلاعات شما در لیست سازمان یافت نشد. درخواست شما جهت بررسی دستی ثبت شد.' })
     }
 
-    const newMetadata = { 
-      ...(member.metadata || {}), 
-      _display_name: fullName, 
-      _phone: phone 
+    const newMetadata = {
+      ...(member.metadata || {}),
+      _display_name: cleanName,
+      _phone: phoneClean
     }
 
     const { error: updateError } = await db.from('organization_members').update({
@@ -130,19 +149,18 @@ export async function POST(req: Request) {
 
     // ✅ ۳. ثبت خودکار در CRM (جدول مشتریان)
     try {
-      const phoneClean = phone.trim()
       const { data: existingCust } = await db.from('customers').select('tags').eq('phone', phoneClean).maybeSingle()
 
       const currentTags = existingCust?.tags || []
       const orgTag = `عضو ${orgName}`
-      
+
       let newTags = [...currentTags]
       if (!newTags.includes('عضو باشگاه سازمانی')) newTags.push('عضو باشگاه سازمانی')
       if (!newTags.includes(orgTag)) newTags.push(orgTag)
 
       await db.from('customers').upsert({
         phone: phoneClean,
-        name: fullName,
+        name: cleanName,
         device_id_hash: deviceIdHash,
         notes: `ثبت‌نام در باشگاه سازمانی (${orgName})`,
         tags: newTags,

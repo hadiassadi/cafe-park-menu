@@ -67,6 +67,19 @@ export async function proxy(request: NextRequest) {
       return NextResponse.redirect(loginUrl)
     }
 
+    // ─── گارد ادمین: فقط ایمیل‌های موجود در ADMIN_EMAILS مجازند ───
+    // (قبلاً هر کاربر لاگین‌شده‌ی سوپابیس از اینجا رد می‌شد)
+    const allowedAdmins = (process.env.ADMIN_EMAILS || '')
+      .split(',')
+      .map((e) => e.trim().toLowerCase())
+      .filter(Boolean)
+
+    const adminEmail = (data.user.email || '').toLowerCase()
+    if (allowedAdmins.length === 0 || !allowedAdmins.includes(adminEmail)) {
+      // fail-closed: اگر ADMIN_EMAILS تنظیم نشده باشد هم هیچ‌کس وارد نمی‌شود
+      return NextResponse.redirect(new URL('/admin/login?denied=1', request.url))
+    }
+
     return response
   }
 

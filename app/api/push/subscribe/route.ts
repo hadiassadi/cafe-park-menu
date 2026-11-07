@@ -1,5 +1,8 @@
 import 'server-only'
 import { supabaseAdmin } from '@/lib/supabase/server'
+import { hashData } from '@/lib/utils/hash'
+import { cookies } from 'next/headers'
+import crypto from 'crypto'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -23,6 +26,18 @@ export async function POST(req: Request) {
 
     const db = supabaseAdmin()
 
+    // ✅ فقط دستگاهِ صاحبِ سفارش حق دارد برای همان سفارش subscribe شود
+    const cookieStore = await cookies()
+    const deviceToken = cookieStore.get('cafe_device_token')?.value
+    if (!deviceToken) {
+      return Response.json({ error: 'Order or device not found' }, { status: 404 })
+    }
+    // هش قدیمی (سفارش‌های قبل از salt) + هش جدید
+    const deviceHashes = [
+      hashData(deviceToken),
+      crypto.createHash('sha256').update(deviceToken).digest('hex'),
+    ]
+
     // پیدا کردن device_id_hash از روی سفارش
     const { data: order, error: orderError } = await db
       .from('orders')
@@ -30,7 +45,7 @@ export async function POST(req: Request) {
       .eq('id', orderId)
       .single()
 
-    if (orderError || !order?.device_id_hash) {
+    if (orderError || !order?.device_id_hash || !deviceHashes.includes(order.device_id_hash)) {
       return Response.json(
         { error: 'Order or device not found' },
         { status: 404 }

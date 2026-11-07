@@ -259,7 +259,6 @@ if (wantsTakeaway) {
 
     // ---------- تخفیف باشگاه ----------
     let membershipDiscount = 0
-    let membershipMemberId: string | null = null
 
     const { data: member } = await db
       .from('organization_members')
@@ -270,7 +269,7 @@ if (wantsTakeaway) {
       .eq('is_registered', true)
       .maybeSingle()
 
-        let membershipRedemptionId: string | null = null
+    let membershipRedemptionId: string | null = null
 
     if (member && member.organizations) {
       const org = member.organizations as any
@@ -296,12 +295,10 @@ if (wantsTakeaway) {
         }
         if (redemptionId) {
           membershipDiscount = discount
-          membershipMemberId = member.id
           membershipRedemptionId = redemptionId as string
         }
       }
     }
-
 
     // ---------- کوپن (فقط اگر عضو باشگاه نیست) ----------
     let couponDiscount = 0
@@ -440,7 +437,7 @@ if (wantsTakeaway) {
         const { error: relErr } = await db.rpc('release_coupon', { p_code: appliedCouponCode })
         if (relErr) console.error('[orders POST] release_coupon:', relErr)
       }
-        if (membershipRedemptionId) {
+      if (membershipRedemptionId) {
         const { error: undoErr } = await db
           .from('redemption_logs')
           .delete()
@@ -451,7 +448,7 @@ if (wantsTakeaway) {
       return bad('خطا در ثبت سفارش', 500)
     }
 
-        if (membershipRedemptionId) {
+    if (membershipRedemptionId) {
       const { error: logErr } = await db
         .from('redemption_logs')
         .update({ order_id: order.id })
