@@ -50,22 +50,30 @@ export async function GET() {
 
     const db = supabaseAdmin()
     const tables: Record<string, unknown[]> = {}
+    // جدول‌هایی که در دیتابیس موجود نیستند یا خوانده نشدند؛
+    // بکاپ به‌جای شکستن، آن‌ها را خالی ثبت می‌کند و ادامه می‌دهد
+    const skipped: Record<string, string> = {}
 
     for (const table of BACKUP_TABLES) {
-      const rows: unknown[] = []
-      let from = 0
-      for (;;) {
-        const { data, error } = await db
-          .from(table)
-          .select('*')
-          .range(from, from + PAGE_SIZE - 1)
-        if (error) throw new Error(`${table}: ${error.message}`)
-        if (!data || data.length === 0) break
-        rows.push(...data)
-        if (data.length < PAGE_SIZE) break
-        from += PAGE_SIZE
+      try {
+        const rows: unknown[] = []
+        let from = 0
+        for (;;) {
+          const { data, error } = await db
+            .from(table)
+            .select('*')
+            .range(from, from + PAGE_SIZE - 1)
+          if (error) throw new Error(error.message)
+          if (!data || data.length === 0) break
+          rows.push(...data)
+          if (data.length < PAGE_SIZE) break
+          from += PAGE_SIZE
+        }
+        tables[table] = rows
+      } catch (e) {
+        tables[table] = []
+        skipped[table] = e instanceof Error ? e.message : 'خطای نامشخص'
       }
-      tables[table] = rows
     }
 
     const payload = {
@@ -73,6 +81,7 @@ export async function GET() {
       backupVersion: 1,
       createdAt: new Date().toISOString(),
       counts: Object.fromEntries(Object.entries(tables).map(([k, v]) => [k, v.length])),
+      skipped,
       tables,
     }
 
