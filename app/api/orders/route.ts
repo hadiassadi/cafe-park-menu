@@ -270,30 +270,38 @@ if (wantsTakeaway) {
       .eq('is_registered', true)
       .maybeSingle()
 
+        let membershipRedemptionId: string | null = null
+
     if (member && member.organizations) {
       const org = member.organizations as any
-      const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Tehran' })
-      const dayStart = `${today}T00:00:00+03:30`
-
-      const { count: dailyCount } = await db
-        .from('redemption_logs')
-        .select('*', { count: 'exact', head: true })
-        .eq('member_id', member.id)
-        .gte('created_at', dayStart)
-      const { count: totalCount } = await db
-        .from('redemption_logs')
-        .select('*', { count: 'exact', head: true })
-        .eq('member_id', member.id)
+      const discount = Math.round((eligibleSubtotal * org.discount_percent) / 100)
 
       if (
         new Date(org.expires_at) > new Date() &&
-        (dailyCount ?? 0) < org.max_daily_orders &&
-        (totalCount ?? 0) < org.max_total_orders
+        discount > 0 &&
+        typeof org.max_daily_orders === 'number' &&
+        typeof org.max_total_orders === 'number'
       ) {
-        membershipDiscount = Math.round((eligibleSubtotal * org.discount_percent) / 100)
-        if (membershipDiscount > 0) membershipMemberId = member.id
+        const { data: redemptionId, error: reserveErr } = await db.rpc(
+          'reserve_membership_redemption',
+          {
+            p_member_id: member.id,
+            p_max_daily: org.max_daily_orders,
+            p_max_total: org.max_total_orders,
+          }
+        )
+        if (reserveErr) {
+          console.error('[orders POST] reserve_membership_redemption:', reserveErr)
+          return bad('خطا در ثبت سفارش', 500)
+        }
+        if (redemptionId) {
+          membershipDiscount = discount
+          membershipMemberId = member.id
+          membershipRedemptionId = redemptionId as string
+        }
       }
     }
+
 
     // ---------- کوپن (فقط اگر عضو باشگاه نیست) ----------
     let couponDiscount = 0
@@ -432,13 +440,22 @@ if (wantsTakeaway) {
         const { error: relErr } = await db.rpc('release_coupon', { p_code: appliedCouponCode })
         if (relErr) console.error('[orders POST] release_coupon:', relErr)
       }
+        if (membershipRedemptionId) {
+        const { error: undoErr } = await db
+          .from('redemption_logs')
+          .delete()
+          .eq('id', membershipRedemptionId)
+        if (undoErr) console.error('[orders POST] undo redemption:', undoErr)
+      }
+
       return bad('خطا در ثبت سفارش', 500)
     }
 
-    if (membershipMemberId && membershipDiscount > 0) {
+        if (membershipRedemptionId) {
       const { error: logErr } = await db
         .from('redemption_logs')
-        .insert({ member_id: membershipMemberId, order_id: order.id })
+        .update({ order_id: order.id })
+        .eq('id', membershipRedemptionId)
       if (logErr) console.error('[orders POST] redemption_logs:', logErr)
     }
 
