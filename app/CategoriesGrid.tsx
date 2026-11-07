@@ -319,7 +319,7 @@ export default function CategoriesGrid({ initial }: { initial: MenuData }) {
     <>
       {fontFaces && <style dangerouslySetInnerHTML={{ __html: fontFaces }} />}
 
-      <div className="theme-root" style={themeStyle}>
+      <main className="theme-root" style={themeStyle}>
         <header className={`hero ${heroImage ? 'hero-has-image' : ''}`}>
           {heroImage && (
             <Image
@@ -582,7 +582,7 @@ export default function CategoriesGrid({ initial }: { initial: MenuData }) {
             {toast}
           </div>
         )}
-      </div>
+      </main>
     </>
   )
 }
