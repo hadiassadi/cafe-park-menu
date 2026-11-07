@@ -1,8 +1,7 @@
 'use client'
-import { createBrowserClient } from '@supabase/ssr'
+import { useRouter } from 'next/navigation'
 import { useState, useEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
-import { isOrderVisibleToAdmin } from '@/lib/orders/visibility'
 import {
   updateOrderStatus,
   updatePaymentStatus,
@@ -193,6 +192,7 @@ export default function OrdersManager({
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [printOrder, setPrintOrder] = useState<Order | null>(null)
   const [mounted, setMounted] = useState(false)
+  const router = useRouter()
   const stepUp = useStepUp()
   const [reopeningId, setReopeningId] = useState<string | null>(null)
   const [exportOpen, setExportOpen] = useState(false)
@@ -250,54 +250,27 @@ export default function OrdersManager({
   }, [selectedOrder?.id, selectedOrder?.payment_status])
 
     useEffect(() => {
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
-    if (!url || !key) return
+    // بعد از بسته‌شدن RLS، realtime جدولی برای anon صدا نمی‌زند؛
+    // لیست که server-render است با router.refresh از سرور تازه می‌شود (پچ ۱۵)
+    setOrders(initialOrders)
+  }, [initialOrders])
 
-    const supabase = createBrowserClient(url, key)
-    const channel = supabase
-      .channel('orders-changes')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'orders' },
-        (payload) => {
-          if (payload.eventType === 'INSERT') {
-            const inserted = payload.new as Order
-            if (!isOrderVisibleToAdmin(inserted)) return
-            setOrders((prev) =>
-              prev.some((o) => o.id === inserted.id)
-                ? prev
-                : [inserted, ...prev]
-            )
-                    } else if (payload.eventType === 'UPDATE') {
-            const updated = payload.new as Order
-            const visible = isOrderVisibleToAdmin(updated)
-            setOrders((prev) => {
-              const exists = prev.some((o) => o.id === updated.id)
-              if (visible && !exists) return [updated, ...prev]
-              if (!visible && exists)
-                return prev.filter((o) => o.id !== updated.id)
-              if (exists)
-                return prev.map((o) =>
-                  o.id === updated.id ? { ...o, ...updated } : o
-                )
-              return prev
-            })
-            setSelectedOrder((prev) =>
-              prev?.id === updated.id ? { ...prev, ...updated } : prev
-            )
-
-          } else if (payload.eventType === 'DELETE') {
-            setOrders((prev) => prev.filter((o) => o.id !== payload.old.id))
-          }
-        }
-      )
-      .subscribe()
-
-    return () => {
-      supabase.removeChannel(channel)
+  useEffect(() => {
+    const REFRESH_MS = 15_000
+    const tick = () => {
+      if (document.visibilityState !== 'visible') return
+      router.refresh()
     }
-  }, [])
+    const id = setInterval(tick, REFRESH_MS)
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') router.refresh()
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      clearInterval(id)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
+  }, [router])
 
   useEffect(() => {
     if (!printOrder) return
