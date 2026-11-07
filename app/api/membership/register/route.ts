@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase/server'
 import { hashData } from '@/lib/utils/hash'
 import { cookies } from 'next/headers'
+import { rateLimit, tooMany } from '@/lib/rate-limit'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -19,6 +20,10 @@ function normalizePhone(v: unknown): string {
 }
 
 export async function POST(req: Request) {
+  // بازدارنده‌ی اسپم ثبت‌نام: حداکثر ۱۰ درخواست در دقیقه از هر IP
+  const rl = rateLimit(req, 'membership-register', 10, 60_000)
+  if (!rl.ok) return tooMany(rl)
+
   try {
     const body = await req.json()
     const { fullName, memberId, orgId } = body

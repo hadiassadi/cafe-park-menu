@@ -2,6 +2,7 @@ import { cookies } from 'next/headers'
 import { hashData } from '@/lib/utils/hash'
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { rateLimit, tooMany } from '@/lib/rate-limit'
 
 function createAdminDb() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -25,6 +26,10 @@ function isEligible(product: ProductInfo, category: CategoryInfo | undefined): b
 }
 
 export async function POST(request: Request) {
+  // بازدارنده‌ی جست‌وجوی کد تخفیف: حداکثر ۶۰ درخواست در دقیقه از هر IP
+  const rl = rateLimit(request, 'coupons-validate', 60, 60_000)
+  if (!rl.ok) return tooMany(rl)
+
   try {
     const body = await request.json()
     const { code, items, subtotal } = body
