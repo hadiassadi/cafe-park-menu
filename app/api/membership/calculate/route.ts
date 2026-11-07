@@ -3,8 +3,13 @@ import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { supabaseAdmin } from '@/lib/supabase/server'
 import { hashData } from '@/lib/utils/hash'
+import { rateLimit, tooMany } from '@/lib/rate-limit'
 
 export async function POST(req: Request) {
+  // بازدارنده‌ی اسپم: حداکثر ۱۲۰ درخواست در دقیقه از هر IP
+  const rl = rateLimit(req, 'membership-calculate', 120, 60_000)
+  if (!rl.ok) return tooMany(rl)
+
   try {
     const { items } = await req.json()
     const cookieStore = await cookies()

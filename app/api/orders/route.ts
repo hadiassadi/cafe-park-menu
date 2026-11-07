@@ -7,6 +7,7 @@ import crypto from 'crypto'
 import { hashData } from '@/lib/utils/hash'
 import { getCustomerCreditState, creditDenyMessage } from '@/lib/club/credit'
 import { loadActiveFees, feeForProduct, findActiveTable } from '@/lib/orders/takeaway'
+import { rateLimit, tooMany } from '@/lib/rate-limit'
 
 export const dynamic = 'force-dynamic'
 
@@ -38,6 +39,10 @@ function bad(msg: string, status = 400) {
 }
 
 export async function POST(request: NextRequest) {
+  // بازدارنده‌ی اسپم: حداکثر ۳۰ سفارش در دقیقه از هر IP
+  const rl = rateLimit(request, 'orders-post', 30, 60_000)
+  if (!rl.ok) return tooMany(rl)
+
   try {
     let body: any
     try {

@@ -1,0 +1,649 @@
+diff --git a/app/admin/backup/page.tsx b/app/admin/backup/page.tsx
+new file mode 100644
+index 0000000..859d72e
+--- /dev/null
++++ b/app/admin/backup/page.tsx
+@@ -0,0 +1,311 @@
++'use client'
++
++import { useRef, useState } from 'react'
++
++type BackupMeta = {
++  app?: string
++  backupVersion?: number
++  createdAt?: string
++  counts?: Record<string, number>
++  tables?: Record<string, unknown[]>
++}
++
++type RestoreProgress = {
++  table: string
++  done: number
++  total: number
++}
++
++type RestoreReport = {
++  table: string
++  upserted: number
++  error?: string
++}
++
++const RESTORE_WORD = 'بازگردانی'
++const CLIENT_CHUNK = 500 // هر بار حداکثر این تعداد ردیف به سرور فرستاده می‌شود (زیر سقف 4.5MB بدنه‌ی درخواست Vercel)
++
++function fa(n: number): string {
++  return n.toLocaleString('fa-IR')
++}
++
++export default function AdminBackupPage() {
++  // ─── بکاپ ───
++  const [backingUp, setBackingUp] = useState(false)
++  const [backupMeta, setBackupMeta] = useState<BackupMeta | null>(null)
++  const [backupError, setBackupError] = useState<string | null>(null)
++
++  // ─── بازگردانی ───
++  const fileRef = useRef<HTMLInputElement>(null)
++  const [parsed, setParsed] = useState<BackupMeta | null>(null)
++  const [fileName, setFileName] = useState<string | null>(null)
++  const [confirmText, setConfirmText] = useState('')
++  const [restoring, setRestoring] = useState(false)
++  const [progress, setProgress] = useState<RestoreProgress | null>(null)
++  const [report, setReport] = useState<RestoreReport[] | null>(null)
++  const [restoreError, setRestoreError] = useState<string | null>(null)
++
++  const totalRows = (meta: BackupMeta | null) =>
++    meta?.counts ? Object.values(meta.counts).reduce((a, b) => a + b, 0) : 0
++
++  // ───────────────── گرفتن بکاپ ─────────────────
++  const handleBackup = async () => {
++    setBackingUp(true)
++    setBackupError(null)
++    setBackupMeta(null)
++    try {
++      const res = await fetch('/api/admin/backup', { cache: 'no-store' })
++      if (!res.ok) {
++        const j = await res.json().catch(() => null)
++        throw new Error(j?.error || `خطای سرور (${res.status})`)
++      }
++      const text = await res.text()
++      const meta = JSON.parse(text) as BackupMeta
++      if (meta?.backupVersion !== 1 || !meta.tables) {
++        throw new Error('ساختار فایل بکاپ معتبر نیست')
++      }
++
++      // ذخیره‌ی فایل
++      const disposition = res.headers.get('Content-Disposition') || ''
++      const match = disposition.match(/filename="([^"]+)"/)
++      const name = match?.[1] || `cafepark-backup-${Date.now()}.json`
++      const blob = new Blob([text], { type: 'application/json' })
++      const url = URL.createObjectURL(blob)
++      const a = document.createElement('a')
++      a.href = url
++      a.download = name
++      document.body.appendChild(a)
++      a.click()
++      a.remove()
++      URL.revokeObjectURL(url)
++
++      setBackupMeta(meta)
++    } catch (e) {
++      setBackupError(e instanceof Error ? e.message : 'خطای نامشخص')
++    } finally {
++      setBackingUp(false)
++    }
++  }
++
++  // ───────────────── انتخاب فایل بکاپ ─────────────────
++  const handleFile = async (file: File | null) => {
++    setParsed(null)
++    setReport(null)
++    setRestoreError(null)
++    setConfirmText('')
++    setProgress(null)
++    if (!file) return
++    setFileName(file.name)
++    try {
++      const text = await file.text()
++      const meta = JSON.parse(text) as BackupMeta
++      if (meta?.backupVersion !== 1 || !meta.tables) {
++        throw new Error('این فایل بکاپ کافه پارک نیست یا نسخه‌ی آن پشتیبانی نمی‌شود')
++      }
++      setParsed(meta)
++    } catch (e) {
++      setRestoreError(e instanceof Error ? e.message : 'فایل قابل خواندن نیست')
++    }
++  }
++
++  // ───────────────── بازگردانی ─────────────────
++  const handleRestore = async () => {
++    if (!parsed?.tables) return
++    setRestoring(true)
++    setRestoreError(null)
++    setReport([])
++
++    const reportAcc: RestoreReport[] = []
++
++    try {
++      // ترتیب جداول داخل فایل بکاپ همان ترتیب امن از نظر FK است
++      for (const [table, rows] of Object.entries(parsed.tables)) {
++        if (!Array.isArray(rows) || rows.length === 0) continue
++
++        for (let i = 0; i < rows.length; i += CLIENT_CHUNK) {
++          const chunk = rows.slice(i, i + CLIENT_CHUNK)
++          setProgress({ table, done: Math.min(i + CLIENT_CHUNK, rows.length), total: rows.length })
++
++          const res = await fetch('/api/admin/backup', {
++            method: 'POST',
++            headers: { 'Content-Type': 'application/json' },
++            body: JSON.stringify({ confirm: RESTORE_WORD, table, rows: chunk }),
++          })
++          const j = await res.json().catch(() => null)
++          if (!res.ok || !j?.ok) {
++            throw new Error(
++              `جدول «${table}»: ${j?.error || `خطای سرور (${res.status})`}`
++            )
++          }
++          reportAcc.push({ table, upserted: j.upserted ?? 0 })
++        }
++      }
++
++      // جمع گزارش به‌ازای هر جدول
++      const merged: Record<string, RestoreReport> = {}
++      for (const r of reportAcc) {
++        if (!merged[r.table]) merged[r.table] = { table: r.table, upserted: 0 }
++        merged[r.table].upserted += r.upserted
++      }
++      setReport(Object.values(merged))
++      setProgress(null)
++    } catch (e) {
++      setRestoreError(e instanceof Error ? e.message : 'خطای نامشخص در بازگردانی')
++      setProgress(null)
++      setReport(reportAcc)
++    } finally {
++      setRestoring(false)
++    }
++  }
++
++  const card: React.CSSProperties = {
++    background: '#fff',
++    border: '1px solid #e5e7eb',
++    borderRadius: 12,
++    padding: 20,
++    marginBottom: 16,
++  }
++  const btn: React.CSSProperties = {
++    padding: '10px 18px',
++    borderRadius: 8,
++    border: 'none',
++    cursor: 'pointer',
++    fontWeight: 700,
++    color: '#fff',
++    background: '#7c3aed',
++  }
++  const btnDanger: React.CSSProperties = { ...btn, background: '#dc2626' }
++  const inputStyle: React.CSSProperties = {
++    width: '100%',
++    padding: '8px 12px',
++    borderRadius: 8,
++    border: '1px solid #d1d5db',
++    boxSizing: 'border-box',
++  }
++
++  return (
++    <div style={{ padding: 24, maxWidth: 760, margin: '0 auto' }}>
++      <h1 style={{ fontSize: 22, marginBottom: 4 }}>💾 پشتیبان‌گیری</h1>
++      <p style={{ color: '#6b7280', marginBottom: 20 }}>
++        بکاپ شامل داده‌های دیتابیس (سفارش‌ها، محصولات، مشتریان و…) است. فایل‌های تصویری
++        و رسیدها در Storage سوپابیس ذخیره می‌شوند و جزو این بکاپ نیستند.
++      </p>
++
++      {/* گرفتن بکاپ */}
++      <div style={card}>
++        <h2 style={{ fontSize: 17, marginBottom: 8 }}>گرفتن بکاپ</h2>
++        <p style={{ color: '#6b7280', marginBottom: 12 }}>
++          یک فایل JSON از همه‌ی جداول ساخته می‌شود و دانلود می‌شود. این فایل را در جای
++          امن نگه دارید (ایمیل، هارد اکسترنال، درایو ابری).
++        </p>
++        <button style={btn} onClick={handleBackup} disabled={backingUp}>
++          {backingUp ? 'در حال گرفتن بکاپ…' : '⬇️ دانلود بکاپ کامل'}
++        </button>
++
++        {backupError && (
++          <div style={{ color: '#dc2626', marginTop: 12 }}>خطا: {backupError}</div>
++        )}
++        {backupMeta && (
++          <div style={{ marginTop: 12, color: '#16a34a', fontWeight: 600 }}>
++            ✅ بکاپ گرفته شد — {fa(totalRows(backupMeta))} ردیف از{' '}
++            {fa(backupMeta.tables ? Object.keys(backupMeta.tables).length : 0)} جدول
++          </div>
++        )}
++      </div>
++
++      {/* بازگردانی */}
++      <div style={card}>
++        <h2 style={{ fontSize: 17, marginBottom: 8 }}>بازگردانی از فایل بکاپ</h2>
++        <p style={{ color: '#6b7280', marginBottom: 12 }}>
++          ردیف‌های فایل بکاپ روی دیتابیس فعلی <b>upsert</b> می‌شوند: ردیف‌های موجود با
++          نسخه‌ی بکاپ جایگزین و بقیه اضافه می‌شوند. هیچ داده‌ای حذف نمی‌شود.
++        </p>
++
++        <input
++          ref={fileRef}
++          type="file"
++          accept="application/json,.json"
++          onChange={(e) => handleFile(e.target.files?.[0] ?? null)}
++          style={{ marginBottom: 12 }}
++        />
++
++        {fileName && (
++          <div style={{ marginBottom: 8, color: '#6b7280' }}>فایل انتخاب‌شده: {fileName}</div>
++        )}
++
++        {parsed && (
++          <div
++            style={{
++              background: '#f9fafb',
++              border: '1px solid #e5e7eb',
++              borderRadius: 8,
++              padding: 12,
++              marginBottom: 12,
++            }}
++          >
++            <div style={{ fontWeight: 700, marginBottom: 4 }}>
++              تاریخ بکاپ: {parsed.createdAt ? new Date(parsed.createdAt).toLocaleString('fa-IR') : '—'}
++            </div>
++            <div>
++              مجموع {fa(totalRows(parsed))} ردیف از {fa(parsed.tables ? Object.keys(parsed.tables).length : 0)} جدول
++            </div>
++          </div>
++        )}
++
++        {parsed && (
++          <>
++            <label style={{ display: 'block', marginBottom: 6, fontWeight: 600 }}>
++              برای تأیید، عبارت «{RESTORE_WORD}» را تایپ کنید:
++            </label>
++            <input
++              style={{ ...inputStyle, marginBottom: 12 }}
++              value={confirmText}
++              onChange={(e) => setConfirmText(e.target.value)}
++              placeholder={RESTORE_WORD}
++              disabled={restoring}
++            />
++            <button
++              style={btnDanger}
++              onClick={handleRestore}
++              disabled={restoring || confirmText !== RESTORE_WORD}
++            >
++              {restoring ? 'در حال بازگردانی…' : '♻️ شروع بازگردانی'}
++            </button>
++          </>
++        )}
++
++        {progress && (
++          <div style={{ marginTop: 12, color: '#6b7280' }}>
++            در حال بازگردانی «{progress.table}»: {fa(progress.done)} از {fa(progress.total)} ردیف…
++          </div>
++        )}
++
++        {restoreError && (
++          <div style={{ color: '#dc2626', marginTop: 12 }}>خطا: {restoreError}</div>
++        )}
++
++        {report && report.length > 0 && (
++          <div style={{ marginTop: 12 }}>
++            <div style={{ fontWeight: 700, marginBottom: 6 }}>نتیجه‌ی بازگردانی:</div>
++            <div
++              style={{
++                maxHeight: 220,
++                overflowY: 'auto',
++                border: '1px solid #e5e7eb',
++                borderRadius: 8,
++                padding: 8,
++              }}
++            >
++              {report.map((r) => (
++                <div key={r.table} style={{ padding: '2px 0' }}>
++                  {r.error ? '❌' : '✅'} <b>{r.table}</b>: {fa(r.upserted)} ردیف
++                  {r.error ? ` — ${r.error}` : ''}
++                </div>
++              ))}
++            </div>
++          </div>
++        )}
++      </div>
++    </div>
++  )
++}
+diff --git a/app/admin/layout.tsx b/app/admin/layout.tsx
+index eb471dc..d361061 100644
+--- a/app/admin/layout.tsx
++++ b/app/admin/layout.tsx
+@@ -135,6 +135,7 @@ export default function AdminLayout({
+     { href: '/admin/cancellation-reasons', label: 'دلایل لغو', icon: '🚫' },
+     { href: '/admin/cancellations', label: 'آمار لغوها', icon: '📊' },
+     { href: '/admin/reports/sales', label: 'گزارش فروش', icon: '💰' },
++    { href: '/admin/backup', label: 'پشتیبان‌گیری', icon: '💾' },
+ 	{ href: '/admin/settings/payment', label: 'تنظیمات پرداخت', icon: '💳' },
+ 	{ href: '/admin/settings/club', label: 'قوانین اعتبار', icon: '🛡️' },
+     { href: '/admin/settings', label: 'تنظیمات', icon: '⚙️' },
+diff --git a/app/api/admin/backup/route.ts b/app/api/admin/backup/route.ts
+new file mode 100644
+index 0000000..f370929
+--- /dev/null
++++ b/app/api/admin/backup/route.ts
+@@ -0,0 +1,143 @@
++import 'server-only'
++import { NextResponse } from 'next/server'
++import { apiError } from '@/lib/api-error'
++import { requireAdmin } from '@/lib/admin/require-admin'
++import { supabaseAdmin } from '@/lib/supabase/server'
++
++export const dynamic = 'force-dynamic'
++
++// ترتیب جداول = ترتیب امن از نظر کلیدهای خارجی (اول والد، بعد فرزند).
++// در بازگردانی هم همین ترتیب برای upsert استفاده می‌شود.
++const BACKUP_TABLES = [
++  'settings',
++  'club_settings',
++  'tables',
++  'cancellation_reasons',
++  'themes',
++  'theme-fonts',
++  'categories',
++  'organizations',
++  'coupons',
++  'products',
++  'product-images',
++  'variant_groups',
++  'variant_options',
++  'takeaway_fees',
++  'organization_members',
++  'customers',
++  'membership_requests',
++  'quotes',
++  'orders',
++  'order_payments',
++  'order_refunds',
++  'redemption_logs',
++  'receipts',
++  'push_subscriptions',
++  'club_settings_log',
++] as const
++
++const PAGE_SIZE = 1000 // بکاپ: تعداد ردیف در هر کوئری
++const RESTORE_CHUNK = 500 // بازگردانی: تعداد ردیف در هر upsert
++const MAX_RESTORE_ROWS = 5000 // سقف ردیف در هر درخواست بازگردانی
++
++// ─────────────────────────────────────────────────────────────
++// GET — گرفتن بکاپ کامل (دانلود یک فایل JSON شامل همه‌ی جداول)
++// ─────────────────────────────────────────────────────────────
++export async function GET() {
++  try {
++    const denied = await requireAdmin()
++    if (denied) return denied
++
++    const db = supabaseAdmin()
++    const tables: Record<string, unknown[]> = {}
++
++    for (const table of BACKUP_TABLES) {
++      const rows: unknown[] = []
++      let from = 0
++      for (;;) {
++        const { data, error } = await db
++          .from(table)
++          .select('*')
++          .range(from, from + PAGE_SIZE - 1)
++        if (error) throw new Error(`${table}: ${error.message}`)
++        if (!data || data.length === 0) break
++        rows.push(...data)
++        if (data.length < PAGE_SIZE) break
++        from += PAGE_SIZE
++      }
++      tables[table] = rows
++    }
++
++    const payload = {
++      app: 'cafe-park-menu',
++      backupVersion: 1,
++      createdAt: new Date().toISOString(),
++      counts: Object.fromEntries(Object.entries(tables).map(([k, v]) => [k, v.length])),
++      tables,
++    }
++
++    const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')
++    const fileName = `cafepark-backup-${stamp}.json`
++
++    return new NextResponse(JSON.stringify(payload), {
++      status: 200,
++      headers: {
++        'Content-Type': 'application/json; charset=utf-8',
++        'Content-Disposition': `attachment; filename="${fileName}"`,
++        'Cache-Control': 'no-store',
++      },
++    })
++  } catch (err) {
++    return apiError(err, 'خطا در گرفتن بکاپ')
++  }
++}
++
++// ─────────────────────────────────────────────────────────────
++// POST — بازگردانی (upsert) یک جدول از روی فایل بکاپ
++// بدنه: { confirm: 'بازگردانی', table: 'orders', rows: [...] }
++// ردیف‌های موجود با نسخه‌ی بکاپ جایگزین می‌شوند و بقیه اضافه می‌شوند؛
++// هیچ‌چیز حذف نمی‌شود (برای حذف، خود ردیف‌ها را دستی مدیریت کنید).
++// ─────────────────────────────────────────────────────────────
++export async function POST(req: Request) {
++  try {
++    const denied = await requireAdmin()
++    if (denied) return denied
++
++    const body = await req.json().catch(() => null)
++    const confirm = body?.confirm
++    const table = body?.table
++    const rows = body?.rows
++
++    if (confirm !== 'بازگردانی') {
++      return NextResponse.json(
++        { error: 'عبارت تأیید درست نیست؛ باید دقیقاً «بازگردانی» تایپ شود' },
++        { status: 400 }
++      )
++    }
++    if (typeof table !== 'string' || !(BACKUP_TABLES as readonly string[]).includes(table)) {
++      return NextResponse.json({ error: 'جدول نامعتبر است' }, { status: 400 })
++    }
++    if (!Array.isArray(rows) || rows.length === 0) {
++      return NextResponse.json({ error: 'ردیفی برای بازگردانی نیست' }, { status: 400 })
++    }
++    if (rows.length > MAX_RESTORE_ROWS) {
++      return NextResponse.json(
++        { error: `تعداد ردیف‌ها در هر درخواست حداکثر ${MAX_RESTORE_ROWS} است` },
++        { status: 413 }
++      )
++    }
++
++    const db = supabaseAdmin()
++    let upserted = 0
++    for (let i = 0; i < rows.length; i += RESTORE_CHUNK) {
++      const chunk = rows.slice(i, i + RESTORE_CHUNK)
++      const { error } = await db.from(table).upsert(chunk, { ignoreDuplicates: false })
++      if (error) throw new Error(`${table}: ${error.message}`)
++      upserted += chunk.length
++    }
++
++    return NextResponse.json({ ok: true, table, upserted })
++  } catch (err) {
++    return apiError(err, 'خطا در بازگردانی بکاپ')
++  }
++}
+diff --git a/app/api/coupons/validate/route.ts b/app/api/coupons/validate/route.ts
+index 7fb5bfc..bf4415b 100644
+--- a/app/api/coupons/validate/route.ts
++++ b/app/api/coupons/validate/route.ts
+@@ -2,6 +2,7 @@ import { cookies } from 'next/headers'
+ import { hashData } from '@/lib/utils/hash'
+ import { NextResponse } from 'next/server'
+ import { createClient } from '@supabase/supabase-js'
++import { rateLimit, tooMany } from '@/lib/rate-limit'
+ 
+ function createAdminDb() {
+   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+@@ -25,6 +26,10 @@ function isEligible(product: ProductInfo, category: CategoryInfo | undefined): b
+ }
+ 
+ export async function POST(request: Request) {
++  // بازدارنده‌ی جست‌وجوی کد تخفیف: حداکثر ۶۰ درخواست در دقیقه از هر IP
++  const rl = rateLimit(request, 'coupons-validate', 60, 60_000)
++  if (!rl.ok) return tooMany(rl)
++
+   try {
+     const body = await request.json()
+     const { code, items, subtotal } = body
+diff --git a/app/api/membership/calculate/route.ts b/app/api/membership/calculate/route.ts
+index 4eb78ee..692682b 100644
+--- a/app/api/membership/calculate/route.ts
++++ b/app/api/membership/calculate/route.ts
+@@ -3,8 +3,13 @@ import { NextResponse } from 'next/server'
+ import { cookies } from 'next/headers'
+ import { supabaseAdmin } from '@/lib/supabase/server'
+ import { hashData } from '@/lib/utils/hash'
++import { rateLimit, tooMany } from '@/lib/rate-limit'
+ 
+ export async function POST(req: Request) {
++  // بازدارنده‌ی اسپم: حداکثر ۱۲۰ درخواست در دقیقه از هر IP
++  const rl = rateLimit(req, 'membership-calculate', 120, 60_000)
++  if (!rl.ok) return tooMany(rl)
++
+   try {
+     const { items } = await req.json()
+     const cookieStore = await cookies()
+diff --git a/app/api/membership/register/route.ts b/app/api/membership/register/route.ts
+index d7b3111..770586d 100644
+--- a/app/api/membership/register/route.ts
++++ b/app/api/membership/register/route.ts
+@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
+ import { supabaseAdmin } from '@/lib/supabase/server'
+ import { hashData } from '@/lib/utils/hash'
+ import { cookies } from 'next/headers'
++import { rateLimit, tooMany } from '@/lib/rate-limit'
+ 
+ export const runtime = 'nodejs'
+ export const dynamic = 'force-dynamic'
+@@ -19,6 +20,10 @@ function normalizePhone(v: unknown): string {
+ }
+ 
+ export async function POST(req: Request) {
++  // بازدارنده‌ی اسپم ثبت‌نام: حداکثر ۱۰ درخواست در دقیقه از هر IP
++  const rl = rateLimit(req, 'membership-register', 10, 60_000)
++  if (!rl.ok) return tooMany(rl)
++
+   try {
+     const body = await req.json()
+     const { fullName, memberId, orgId } = body
+diff --git a/app/api/orders/route.ts b/app/api/orders/route.ts
+index d1ae326..fbaaf5f 100644
+--- a/app/api/orders/route.ts
++++ b/app/api/orders/route.ts
+@@ -7,6 +7,7 @@ import crypto from 'crypto'
+ import { hashData } from '@/lib/utils/hash'
+ import { getCustomerCreditState, creditDenyMessage } from '@/lib/club/credit'
+ import { loadActiveFees, feeForProduct, findActiveTable } from '@/lib/orders/takeaway'
++import { rateLimit, tooMany } from '@/lib/rate-limit'
+ 
+ export const dynamic = 'force-dynamic'
+ 
+@@ -38,6 +39,10 @@ function bad(msg: string, status = 400) {
+ }
+ 
+ export async function POST(request: NextRequest) {
++  // بازدارنده‌ی اسپم: حداکثر ۳۰ سفارش در دقیقه از هر IP
++  const rl = rateLimit(request, 'orders-post', 30, 60_000)
++  if (!rl.ok) return tooMany(rl)
++
+   try {
+     let body: any
+     try {
+diff --git a/lib/rate-limit.ts b/lib/rate-limit.ts
+new file mode 100644
+index 0000000..37a4ff3
+--- /dev/null
++++ b/lib/rate-limit.ts
+@@ -0,0 +1,78 @@
++// ریتم‌سنج درون‌حافظه‌ای (پنجره‌ی لغزان) — بدون نیاز به سرویس خارجی
++// توجه: در محیط سرورلس (Vercel) هر instance حافظه‌ی جداگانه دارد؛
++// این لایه «بازدارنده» است و جلوی اسپم و سوءاستفاده‌ی برنامه‌ای را می‌گیرد،
++// نه یک قفل مطلق سراسری. برای قفل سخت‌گیرانه‌تر باید از سرویس اشتراکی استفاده کرد.
++
++type Bucket = { hits: number[] }
++
++const buckets = new Map<string, Bucket>()
++
++// سقف حافظه؛ اگر کلیدهای زیادی انباشته شد، قدیمی‌های خالی پاک می‌شوند
++const MAX_BUCKETS = 10_000
++
++export function getClientIp(req: Request): string {
++  // روی Vercel مقدار x-forwarded-for همیشه ست می‌شود؛ اولین IP، کلاینت واقعی است
++  const fwd = req.headers.get('x-forwarded-for')
++  if (fwd) return fwd.split(',')[0].trim()
++  return req.headers.get('x-real-ip') || 'unknown'
++}
++
++export type RateLimitResult = {
++  ok: boolean
++  remaining: number
++  retryAfterSec: number
++}
++
++/**
++ * مثال: rateLimit(req, 'orders-post', 30, 60_000)
++ * یعنی حداکثر ۳۰ درخواست در هر دقیقه برای هر کلید (IP + اختیاری شناسه‌ی دستگاه)
++ */
++export function rateLimit(
++  req: Request,
++  name: string,
++  limit: number,
++  windowMs: number,
++  extraKey?: string
++): RateLimitResult {
++  const ip = getClientIp(req)
++  const key = `${name}:${extraKey ?? ''}:${ip}`
++  const now = Date.now()
++
++  if (buckets.size > MAX_BUCKETS) {
++    for (const [k, b] of buckets) {
++      const alive = b.hits.some((t) => now - t < windowMs)
++      if (!alive) buckets.delete(k)
++      if (buckets.size <= MAX_BUCKETS) break
++    }
++  }
++
++  const bucket = buckets.get(key) ?? { hits: [] }
++  bucket.hits = bucket.hits.filter((t) => now - t < windowMs)
++
++  if (bucket.hits.length >= limit) {
++    buckets.set(key, bucket)
++    const oldest = bucket.hits[0] ?? now
++    return {
++      ok: false,
++      remaining: 0,
++      retryAfterSec: Math.max(1, Math.ceil((oldest + windowMs - now) / 1000)),
++    }
++  }
++
++  bucket.hits.push(now)
++  buckets.set(key, bucket)
++  return { ok: true, remaining: limit - bucket.hits.length, retryAfterSec: 0 }
++}
++
++export function tooMany(res: RateLimitResult): Response {
++  return Response.json(
++    { error: 'تعداد درخواست‌های شما زیاد است؛ لطفاً کمی بعد دوباره تلاش کنید' },
++    {
++      status: 429,
++      headers: {
++        'Retry-After': String(res.retryAfterSec),
++        'Cache-Control': 'no-store',
++      },
++    }
++  )
++}
