@@ -4,39 +4,44 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase/server'
 import { getDeviceHash, UUID_RE } from '@/lib/orders/owner'
 import { resolveWalletCustomer } from '@/lib/wallet/wallet'
+import { getVerifiedCustomerGrade } from '@/lib/customers/grades'
 import { paymentErrorMessage } from '@/lib/payment/methods'
 
 export const dynamic = 'force-dynamic'
 
-/** موجودی کیف پول نشست فعلی — برای نمایش گزینه «پرداخت با کیف پول» در چک‌اوت */
+/** موجودی کیف پول + گرید نشست فعلی — برای نمایش گزینه «پرداخت با کیف پول» و پیش‌نمایش تخفیف گرید در چک‌اوت */
 export async function GET() {
   try {
     const customer = await resolveWalletCustomer()
     if (!customer) {
       return NextResponse.json(
-        { balance: null, blocked: false },
+        { balance: null, blocked: false, grade: null },
         { headers: { 'Cache-Control': 'no-store' } }
       )
     }
 
-    const { data, error } = await supabaseAdmin().rpc('wallet_balance', {
-      p_customer_id: customer.id,
-    })
+    const [{ data, error }, grade] = await Promise.all([
+      supabaseAdmin().rpc('wallet_balance', { p_customer_id: customer.id }),
+      getVerifiedCustomerGrade(customer.phone).catch((err) => {
+        console.error('[payment/wallet][GET] grade:', err)
+        return null
+      }),
+    ])
     if (error) {
       console.error('[payment/wallet][GET] balance:', error.message)
       return NextResponse.json(
-        { balance: null, blocked: !!customer.wallet_blocked },
+        { balance: null, blocked: !!customer.wallet_blocked, grade },
         { headers: { 'Cache-Control': 'no-store' } }
       )
     }
 
     return NextResponse.json(
-      { balance: Number(data ?? 0), blocked: !!customer.wallet_blocked },
+      { balance: Number(data ?? 0), blocked: !!customer.wallet_blocked, grade },
       { headers: { 'Cache-Control': 'no-store' } }
     )
   } catch (err) {
     console.error('[payment/wallet][GET]', err)
-    return NextResponse.json({ balance: null, blocked: false })
+    return NextResponse.json({ balance: null, blocked: false, grade: null })
   }
 }
 

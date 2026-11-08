@@ -69,6 +69,7 @@ export default function MyOrdersClient() {
     chargeMax?: number
     cardInfo?: { bankName: string | null; cardNumber: string; accountHolder: string | null } | null
     customer: { id: string; name: string | null; phone: string | null; verification_status: string; wallet_blocked: boolean; card_charge_blocked?: boolean; balance: number } | null
+    grade?: { id: string; name: string; discountPercent: number; color: string | null } | null
   } | null>(null)
 
   // 🤝 درخواست فعال‌سازی حضوری از مدیر
@@ -424,6 +425,19 @@ export default function MyOrdersClient() {
           {wstatus?.walletEnabled && wstatus.customer?.verification_status === 'verified' && !wstatus.customer.wallet_blocked && (
             <div className="panel-balance-strip">
               👛 موجودی کیف پول: {formatPrice(wstatus.customer.balance)} تومان
+            </div>
+          )}
+
+          {/* 🏆 گرید وفاداری — فقط برای مشتریِ احرازشده با گرید فعال */}
+          {wstatus?.customer?.verification_status === 'verified' && wstatus.grade && (
+            <div style={{ background: '#fff', border: `1.5px solid ${wstatus.grade.color ?? '#6b4f3a'}`, borderRadius: '14px', padding: '10px 14px', marginTop: '10px', display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+              <span style={{ width: 12, height: 12, borderRadius: '50%', background: wstatus.grade.color ?? '#6b4f3a', flex: '0 0 auto' }} />
+              <strong style={{ fontSize: '13px', color: '#29251f' }}>🏆 گرید {wstatus.grade.name}</strong>
+              {wstatus.grade.discountPercent > 0 && (
+                <small style={{ fontSize: '11.5px', color: '#766f64' }}>
+                  {formatPrice(wstatus.grade.discountPercent)}٪ تخفیف روی اقلام مشمول — خودکار اعمال می‌شود
+                </small>
+              )}
             </div>
           )}
         </div>

@@ -11,6 +11,15 @@ import { formatPersianDate } from '@/lib/format-date'
 const formatPrice = (price: number) =>
   new Intl.NumberFormat('fa-IR').format(Math.round(price))
 
+/** برچسب ردیف تخفیف — کدهای شبه‌کوپن سرور: MEMBERSHIP / GRADE / MEMBERSHIP+GRADE */
+function discountLabel(couponCode: string | null | undefined): string {
+  if (couponCode === 'MEMBERSHIP') return '🎉 تخفیف باشگاه:'
+  if (couponCode === 'GRADE') return '🏆 تخفیف گرید:'
+  if (couponCode === 'MEMBERSHIP+GRADE') return '🎉 تخفیف باشگاه + گرید:'
+  if (couponCode) return `🎟️ تخفیف (${couponCode}):`
+  return '🎉 تخفیف:'
+}
+
 function formatCountdown(seconds: number): string {
   const m = Math.floor(seconds / 60)
   const s = seconds % 60
@@ -904,11 +913,7 @@ export default function OrderPage({
               </div>
             )}
             <div className="info-row discount">
-              <span>
-                {order.coupon_code && order.coupon_code !== 'MEMBERSHIP'
-                  ? `🎟️ تخفیف (${order.coupon_code}):`
-                  : '🎉 تخفیف باشگاه:'}
-              </span>
+              <span>{discountLabel(order.coupon_code)}</span>
               <strong>− {formatPrice(discountAmount)} تومان</strong>
             </div>
             <div className="total-row">
@@ -1125,11 +1130,7 @@ export default function OrderPage({
                       <td>{formatPrice(originalSum)} تومان</td>
                     </tr>
                     <tr className="invoice-summary-row invoice-discount-row">
-                      <td colSpan={3}>
-                        {printOrder.coupon_code && printOrder.coupon_code !== 'MEMBERSHIP'
-                          ? `🎟️ تخفیف (${printOrder.coupon_code}):`
-                          : '🎉 تخفیف باشگاه:'}
-                      </td>
+                      <td colSpan={3}>{discountLabel(printOrder.coupon_code)}</td>
                       <td>− {formatPrice(discountAmount)} تومان</td>
                     </tr>
                     <tr className="invoice-summary-row invoice-total-row">

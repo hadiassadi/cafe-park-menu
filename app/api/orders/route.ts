@@ -6,6 +6,8 @@ import { cookies } from 'next/headers'
 import crypto from 'crypto'
 import { hashData } from '@/lib/utils/hash'
 import { getCustomerCreditState, creditDenyMessage } from '@/lib/club/credit'
+import { combineDiscounts } from '@/lib/club/discount-policy'
+import { getGradeConfig, getVerifiedCustomerGrade } from '@/lib/customers/grades'
 import { loadActiveFees, feeForProduct, findActiveTable } from '@/lib/orders/takeaway'
 import { rateLimit, tooMany } from '@/lib/rate-limit'
 
@@ -262,9 +264,7 @@ if (wantsTakeaway) {
     }
 
 
-    // ---------- تخفیف باشگاه ----------
-    let membershipDiscount = 0
-
+    // ---------- تخفیف باشگاه × گرید (سیاست مدیر) ----------
     const { data: member } = await db
       .from('organization_members')
       .select(
@@ -276,40 +276,83 @@ if (wantsTakeaway) {
 
     let membershipRedemptionId: string | null = null
 
+    // نامزدِ تخفیف باشگاه (سازمان/اعضا با سهمیه)
+    let membershipPercent = 0
     if (member && member.organizations) {
       const org = member.organizations as any
-      const discount = Math.round((eligibleSubtotal * org.discount_percent) / 100)
-
       if (
         new Date(org.expires_at) > new Date() &&
-        discount > 0 &&
+        Number(org.discount_percent) > 0 &&
         typeof org.max_daily_orders === 'number' &&
         typeof org.max_total_orders === 'number'
       ) {
-        const { data: redemptionId, error: reserveErr } = await db.rpc(
-          'reserve_membership_redemption',
-          {
-            p_member_id: member.id,
-            p_max_daily: org.max_daily_orders,
-            p_max_total: org.max_total_orders,
-          }
-        )
-        if (reserveErr) {
-          console.error('[orders POST] reserve_membership_redemption:', reserveErr)
-          return bad('خطا در ثبت سفارش', 500)
-        }
-        if (redemptionId) {
-          membershipDiscount = discount
-          membershipRedemptionId = redemptionId as string
-        }
+        membershipPercent = Number(org.discount_percent)
       }
     }
 
-    // ---------- کوپن (فقط اگر عضو باشگاه نیست) ----------
+    // نامزدِ تخفیف گرید (مشتریِ احرازشده با گرید فعال)
+    let gradeWinnerLabel: 'MEMBERSHIP' | 'GRADE' | 'MEMBERSHIP+GRADE' | null = null
+    let gradePercent = 0
+    try {
+      const customerGrade = await getVerifiedCustomerGrade(phone)
+      gradePercent = customerGrade?.discountPercent ?? 0
+    } catch (gradeErr) {
+      console.error('[orders POST] grade lookup:', gradeErr)
+    }
+
+    const gradeConfig = await getGradeConfig()
+    const combine = (mPct: number) =>
+      combineDiscounts({
+        policy: gradeConfig.policy,
+        stackCapPercent: gradeConfig.stackCapPercent,
+        eligibleSubtotal,
+        membershipPercent: mPct,
+        gradePercent,
+      })
+
+    let combined = combine(membershipPercent)
+    let membershipDiscount = combined.membershipDiscount
+    let gradeDiscount = combined.gradeDiscount
+    let combinedDiscount = combined.discount
+
+    // رزرو سهمیه‌ی عضویت فقط وقتی تخفیف باشگاه برنده شده باشد
+    if (combined.winner === 'membership' || combined.winner === 'stacked') {
+      if (!member || membershipDiscount <= 0) {
+        return bad('خطا در ثبت سفارش', 500)
+      }
+      const org = member.organizations as any
+      const { data: redemptionId, error: reserveErr } = await db.rpc(
+        'reserve_membership_redemption',
+        {
+          p_member_id: member.id,
+          p_max_daily: org.max_daily_orders,
+          p_max_total: org.max_total_orders,
+        }
+      )
+      if (reserveErr) {
+        console.error('[orders POST] reserve_membership_redemption:', reserveErr)
+        return bad('خطا در ثبت سفارش', 500)
+      }
+      if (redemptionId) {
+        membershipRedemptionId = redemptionId as string
+      } else {
+        // ظرفیت باشگاه پر بود → بدون تخفیف عضویت دوباره بسنجیم (گرید می‌تواند برنده شود)
+        combined = combine(0)
+        membershipDiscount = combined.membershipDiscount
+        gradeDiscount = combined.gradeDiscount
+        combinedDiscount = combined.discount
+      }
+    }
+
+    if (combined.winner === 'membership') gradeWinnerLabel = 'MEMBERSHIP'
+    else if (combined.winner === 'grade') gradeWinnerLabel = 'GRADE'
+    else if (combined.winner === 'stacked') gradeWinnerLabel = 'MEMBERSHIP+GRADE'
+
+    // ---------- کوپن (فقط اگر هیچ تخفیف باشگاه/گریدی اعمال نشده) ----------
     let couponDiscount = 0
     let appliedCouponCode: string | null = null
 
-    if (cleanCoupon && membershipDiscount === 0) {
+    if (cleanCoupon && membershipDiscount === 0 && gradeDiscount === 0) {
       const { data: c, error: cErr } = await db
         .from('coupons')
         .select(
@@ -370,7 +413,7 @@ if (wantsTakeaway) {
       if (couponDiscount > 0) appliedCouponCode = c!.code
     }
 
-    const totalDiscount = membershipDiscount + couponDiscount
+    const totalDiscount = combinedDiscount + couponDiscount
     const finalSubtotal = Math.max(0, baseTotal - totalDiscount) + takeawayTotal
 
 
@@ -419,8 +462,9 @@ if (wantsTakeaway) {
           eligible_subtotal: eligibleSubtotal,
           ineligible_subtotal: baseTotal - eligibleSubtotal + takeawayTotal,
           takeaway_fee_total: takeawayTotal,
-          coupon_code: membershipDiscount > 0 ? 'MEMBERSHIP' : appliedCouponCode,
+          coupon_code: gradeWinnerLabel ?? appliedCouponCode,
           coupon_discount: totalDiscount > 0 ? totalDiscount : null,
+          grade_discount: gradeDiscount > 0 ? gradeDiscount : 0,
           status: 'pending',
           payment_status: 'unpaid',
           payment_method: initialMethod,

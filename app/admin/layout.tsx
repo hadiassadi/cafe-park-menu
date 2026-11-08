@@ -140,6 +140,7 @@ export default function AdminLayout({
 	{ href: '/admin/settings/sms', label: 'تنظیمات پیامک', icon: '📱' },
 	{ href: '/admin/wallet', label: 'کیف پول مشتریان', icon: '👛' },
 	{ href: '/admin/settings/club', label: 'قوانین اعتبار', icon: '🛡️' },
+	{ href: '/admin/settings/grades', label: 'گرید مشتریان', icon: '🏆' },
     { href: '/admin/settings', label: 'تنظیمات', icon: '⚙️' },
   ]
 
