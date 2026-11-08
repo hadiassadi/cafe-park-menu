@@ -359,8 +359,8 @@ export default function MyOrdersClient() {
           <div style={{ fontSize: '28px' }}>✅</div>
           <div>
             <strong style={{ fontSize: '14px', color: '#2d5d3e', display: 'block' }}>
-              {membership.orgId === 'general' 
-                ? 'شما عضو باشگاه مشتریان کافه پارک هستید' 
+              {membership.orgId === 'general'
+                ? 'شما عضو باشگاه مشتریان کافه پارک هستید'
                 : `شما عضو باشگاه ${membership.orgName} هستید`
               }
             </strong>
@@ -372,7 +372,9 @@ export default function MyOrdersClient() {
             </small>
           </div>
         </div>
-      ) : (
+      ) : !wstatus?.customer?.verification_status || wstatus.customer.verification_status !== 'verified' ? (
+        // بنر دعوت به عضویت فقط برای مشتریِ هنوز ثبت‌نام‌نشده معنا دارد؛
+        // مشتری احرازشده (لینک مدیر/OTP) نباید دوباره لینک ثبت‌نام ببیند.
         <div onClick={() => setShowMemberModal(true)} style={{ background: 'linear-gradient(135deg, #fdf6e3 0%, #fef8e8 100%)', border: '1.5px solid #d99f59', borderRadius: '14px', padding: '16px', display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer', marginBottom: '16px', boxShadow: '0 4px 12px rgba(217, 159, 89, 0.1)' }}>
           <div style={{ fontSize: '28px' }}>🎓</div>
           <div>
@@ -380,7 +382,7 @@ export default function MyOrdersClient() {
             <small style={{ fontSize: '11px', color: '#766f64' }}>با ثبت‌نام، از تخفیف‌های ویژه و خودکار بهره‌مند شوید.</small>
           </div>
         </div>
-      )}
+      ) : null}
 
       {activeTab === 'wallet' ? (
         <div>
@@ -529,7 +531,7 @@ export default function MyOrdersClient() {
                   {formatPrice(walletView.balance)} <small style={{ fontSize: '13px' }}>تومان</small>
                 </strong>
                 <small style={{ display: 'block', fontSize: '11px', color: '#766f64', marginTop: '8px' }}>
-                  در صفحه پرداخت، وقتی مبلغ سفارش کمتر یا مساوی موجودی باشد گزینه‌ی «کیف پول» نمایش داده می‌شود.
+                  گزینه‌ی «کیف پول» در صفحه پرداخت کنار سایر روش‌ها هست؛ اگر موجودی برای کل سفارش کافی نباشد، همان‌جا با نمایش موجودی غیرفعال می‌شود.
                 </small>
               </div>
 

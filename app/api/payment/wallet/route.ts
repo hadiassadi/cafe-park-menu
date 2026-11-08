@@ -3,22 +3,40 @@ import 'server-only'
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase/server'
 import { getDeviceHash, UUID_RE } from '@/lib/orders/owner'
-import { getSessionWalletBalance, resolveWalletCustomer } from '@/lib/wallet/wallet'
+import { resolveWalletCustomer } from '@/lib/wallet/wallet'
 import { paymentErrorMessage } from '@/lib/payment/methods'
 
 export const dynamic = 'force-dynamic'
 
-/** موجودی کیف پول نشست فعلی — برای نمایش دکمه «پرداخت با کیف پول» */
+/** موجودی کیف پول نشست فعلی — برای نمایش گزینه «پرداخت با کیف پول» در چک‌اوت */
 export async function GET() {
   try {
-    const balance = await getSessionWalletBalance()
+    const customer = await resolveWalletCustomer()
+    if (!customer) {
+      return NextResponse.json(
+        { balance: null, blocked: false },
+        { headers: { 'Cache-Control': 'no-store' } }
+      )
+    }
+
+    const { data, error } = await supabaseAdmin().rpc('wallet_balance', {
+      p_customer_id: customer.id,
+    })
+    if (error) {
+      console.error('[payment/wallet][GET] balance:', error.message)
+      return NextResponse.json(
+        { balance: null, blocked: !!customer.wallet_blocked },
+        { headers: { 'Cache-Control': 'no-store' } }
+      )
+    }
+
     return NextResponse.json(
-      { balance },
+      { balance: Number(data ?? 0), blocked: !!customer.wallet_blocked },
       { headers: { 'Cache-Control': 'no-store' } }
     )
   } catch (err) {
     console.error('[payment/wallet][GET]', err)
-    return NextResponse.json({ balance: null })
+    return NextResponse.json({ balance: null, blocked: false })
   }
 }
 

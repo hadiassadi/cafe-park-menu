@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 import { hashData } from '@/lib/utils/hash'
+import { getVerifiedPhoneHash } from '@/lib/sms/otp'
 import crypto from 'crypto'
 import 'server-only'
 
@@ -22,17 +23,35 @@ export async function GET() {
     
     const db = createClient(url, key, { auth: { persistSession: false } })
 
-    // ۱. اطلاعات مشتری از آخرین سفارش
-    const { data: orderData } = await db
-      .from('orders')
-      .select('customer_name, customer_phone')
-      .in('device_id_hash', [deviceIdHashOld, deviceIdHashNew])
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
+    let customer: { name: string; phone: string } | null = null
 
-    let customer = null
-    if (orderData) customer = { name: orderData.customer_name, phone: orderData.customer_phone }
+    // ۰. نشست «شماره تأییدشده» (ثبت‌نام با لینک دعوت مدیر یا کد پیامکی) — اولویت دارد؛
+    // مشتریِ تازه‌ثبت‌نام‌شده هنوز سفارشی ندارد و با دستگاه پیدا نمی‌شود.
+    const verifiedHash = await getVerifiedPhoneHash()
+    if (verifiedHash) {
+      const { data: verifiedCustomer } = await db
+        .from('customers')
+        .select('phone, name')
+        .eq('phone_hash', verifiedHash)
+        .eq('verification_status', 'verified')
+        .maybeSingle()
+      if (verifiedCustomer) {
+        customer = { name: verifiedCustomer.name || 'کاربر', phone: verifiedCustomer.phone }
+      }
+    }
+
+    // ۱. اطلاعات مشتری از آخرین سفارش
+    if (!customer) {
+      const { data: orderData } = await db
+        .from('orders')
+        .select('customer_name, customer_phone')
+        .in('device_id_hash', [deviceIdHashOld, deviceIdHashNew])
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (orderData) customer = { name: orderData.customer_name, phone: orderData.customer_phone }
+    }
 
     // ۲. چک کردن عضویت (اول با شماره تلفن، بعد با دستگاه)
     let membership = null
