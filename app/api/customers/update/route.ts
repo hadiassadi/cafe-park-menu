@@ -13,6 +13,7 @@ function createAdminDb() {
 }
 
 const CREDIT_VALUES = ['default', 'allow', 'block']
+const VERIFICATION_VALUES = ['unverified', 'pending', 'verified']
 
 export async function POST(req: NextRequest) {
   try {
@@ -20,7 +21,7 @@ export async function POST(req: NextRequest) {
     if (denied) return denied
 
     const body = await req.json()
-    const { phone, notes, tags, credit_override, phone_verified } = body
+    const { phone, notes, tags, credit_override, phone_verified, name, verification_status, wallet_blocked } = body
 
     if (!phone) {
       return NextResponse.json({ error: 'شماره تلفن الزامی است' }, { status: 400 })
@@ -50,6 +51,26 @@ export async function POST(req: NextRequest) {
     }
     if (phone_verified !== undefined) {
       patch.phone_verified_at = phone_verified === true ? now : null
+    }
+    // نام پروفایل مشتری — در فرم ثبت‌نام/چک‌اوت همان نمایش داده می‌شود
+    if (name !== undefined) {
+      const cleanName = typeof name === 'string' ? name.trim().slice(0, 120) : ''
+      if (cleanName && cleanName.length < 3) {
+        return NextResponse.json({ error: 'نام خیلی کوتاه است' }, { status: 400 })
+      }
+      patch.name = cleanName || null
+    }
+    // وضعیت احراز حساب (ثبت‌نام دعوتی/OTP) — فقط مقادیر مجازِ constraint
+    if (verification_status !== undefined) {
+      if (!VERIFICATION_VALUES.includes(verification_status)) {
+        return NextResponse.json({ error: 'وضعیت احراز نامعتبر است' }, { status: 400 })
+      }
+      patch.verification_status = verification_status
+      patch.verified_at = verification_status === 'verified' ? now : null
+    }
+    // مسدودسازی کیف پول مشتری توسط مدیر
+    if (wallet_blocked !== undefined) {
+      patch.wallet_blocked = wallet_blocked === true
     }
 
     const db = createAdminDb()

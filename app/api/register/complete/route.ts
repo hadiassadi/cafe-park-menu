@@ -1,5 +1,7 @@
 import 'server-only'
+import crypto from 'crypto'
 import { NextRequest, NextResponse } from 'next/server'
+import { cookies } from 'next/headers'
 import { rateLimit, tooMany } from '@/lib/rate-limit'
 import { supabaseAdmin } from '@/lib/supabase/server'
 import {
@@ -9,6 +11,7 @@ import {
   setPhoneSession,
 } from '@/lib/sms/otp'
 import { hashData } from '@/lib/utils/hash'
+import { parseDeviceLabel } from '@/lib/device-info'
 import { ensureActivationTx } from '@/lib/wallet/wallet'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -67,14 +70,52 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'مهلت این لینک تمام شده است؛ از مدیر لینک جدید بگیر' }, { status: 410 })
     }
 
-    // ۲) مشتری: موجود → تکمیل اطلاعات و تأیید؛ جدید → ساختن
-    const pHash = phoneHash(phone)
+    // ۲) شناسنامه‌ی دستگاه — کوکی موجود یا ساختِ جدید؛ مبنای تشخیص ثبت‌نام تکراری
+    const ua = req.headers.get('user-agent') || ''
+    const deviceLabel = parseDeviceLabel(ua)
+    const cookieStore = await cookies()
+    let deviceToken = cookieStore.get('cafe_device_token')?.value || ''
+    if (!deviceToken || deviceToken.length > 100) {
+      deviceToken = crypto.randomUUID()
+      cookieStore.set('cafe_device_token', deviceToken, {
+        httpOnly: true,
+        sameSite: 'lax',
+        secure: process.env.NODE_ENV === 'production',
+        maxAge: 365 * 24 * 60 * 60,
+        path: '/',
+      })
+    }
+    const deviceHash = hashData(deviceToken)
+
+    // ۳) جلوگیری از ثبت‌نام تکراری — شماره موبایل و دستگاه
     const { data: existing } = await db
       .from('customers')
-      .select('id')
+      .select('id, verification_status')
       .eq('phone', phone)
       .maybeSingle()
 
+    if (existing?.verification_status === 'verified') {
+      return NextResponse.json(
+        { error: 'این شماره موبایل قبلاً ثبت‌نام کرده است؛ برای تغییر اطلاعات با مدیر کافه صحبت کنید' },
+        { status: 409 }
+      )
+    }
+
+    const { data: deviceOwner } = await db
+      .from('customers')
+      .select('id, phone')
+      .eq('device_id_hash', deviceHash)
+      .eq('verification_status', 'verified')
+      .maybeSingle()
+    if (deviceOwner && deviceOwner.phone !== phone) {
+      return NextResponse.json(
+        { error: 'این دستگاه قبلاً یکبار ثبت‌نام کرده است؛ برای اطلاعات بیشتر با مدیر کافه صحبت کنید' },
+        { status: 409 }
+      )
+    }
+
+    // ۴) مشتری: موجود → تکمیل اطلاعات و تأیید؛ جدید → ساختن (با شناسنامه‌ی دستگاه)
+    const pHash = phoneHash(phone)
     let customerId: string
     if (existing?.id) {
       customerId = existing.id
@@ -85,6 +126,8 @@ export async function POST(req: NextRequest) {
           phone_hash: pHash,
           verification_status: 'verified',
           verified_at: new Date().toISOString(),
+          device_id_hash: deviceHash,
+          device_info: deviceLabel,
         })
         .eq('id', customerId)
       if (upErr) {
@@ -100,6 +143,8 @@ export async function POST(req: NextRequest) {
           name: fullName,
           verification_status: 'verified',
           verified_at: new Date().toISOString(),
+          device_id_hash: deviceHash,
+          device_info: deviceLabel,
         })
         .select('id')
         .single()
@@ -110,7 +155,7 @@ export async function POST(req: NextRequest) {
       customerId = inserted.id
     }
 
-    // ۳) عضویت باشگاه — نوعش در فرم دعوت انتخاب شده است
+    // ۵) عضویت باشگاه — نوعش در فرم دعوت انتخاب شده است
     let orgMembership: 'activated' | 'pending_review' | null = null
     let orgName: string | null = null
     if (orgId !== 'general') {
@@ -182,10 +227,15 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // ۴) مصرف دعوت‌نامه — شرط used_at is null داخل UPDATE؛ رقابتِ دوباره‌فرستادن شکست می‌خورد
+    // ۶) مصرف دعوت‌نامه — شرط used_at is null داخل UPDATE؛ رقابتِ دوباره‌فرستادن شکست می‌خورد
     const { data: used, error: useErr } = await db
       .from('registration_invites')
-      .update({ used_at: new Date().toISOString(), used_phone: phone })
+      .update({
+        used_at: new Date().toISOString(),
+        used_phone: phone,
+        used_device_hash: deviceHash,
+        used_device_info: deviceLabel,
+      })
       .eq('id', invite.id)
       .is('used_at', null)
       .select('id')
@@ -197,7 +247,7 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // ۵) تگ‌های CRM — تگ‌های قبلی حفظ می‌شوند
+    // ۷) تگ‌های CRM — تگ‌های قبلی حفظ می‌شوند
     try {
       const { data: custRow } = await db
         .from('customers')
@@ -217,7 +267,7 @@ export async function POST(req: NextRequest) {
       console.error('[register/complete] crm tags:', crmErr)
     }
 
-    // ۶) نشست تأییدشده روی همین دستگاه + رویداد فعال‌سازی
+    // ۸) نشست تأییدشده روی همین دستگاه + رویداد فعال‌سازی
     await setPhoneSession(phone)
     await ensureActivationTx(customerId)
 

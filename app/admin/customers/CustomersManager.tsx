@@ -21,6 +21,10 @@ type CustomerData = {
   credit_override: 'default' | 'allow' | 'block'
   settled_orders: number
   open_debt: number
+  profile_name: string | null
+  verification_status: string | null
+  wallet_blocked: boolean
+  device_info: string | null
 }
 
 const PRESET_TAGS = [
@@ -85,6 +89,12 @@ export default function CustomersManager() {
   const [saveMessage, setSaveMessage] = useState<string | null>(null)
   const [editVerified, setEditVerified] = useState(false)
   const [editCredit, setEditCredit] = useState<'default' | 'allow' | 'block'>('default')
+  // 👤 پروفایل ثبت‌نامی (جدول مشتریان): نام، وضعیت احراز، مسدودی کیف پول، دستگاه
+  const [editName, setEditName] = useState('')
+  const [editVerification, setEditVerification] = useState<'verified' | 'unverified'>('unverified')
+  const [editWalletBlocked, setEditWalletBlocked] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   // ✅ لود داده‌ها از API امن سرور (نه مستقیم از دیتابیس)
   useEffect(() => {
@@ -97,6 +107,15 @@ export default function CustomersManager() {
           if (data.customers) {
             setCustomers(data.customers)
             setSummary(data.summary)
+            // لینک عمیق از بخش کیف پول: /admin/customers?phone=09xxxxxxxxx
+            try {
+              const p = (new URLSearchParams(window.location.search).get('phone') || '').replace(/[^\d]/g, '')
+              const target = data.customers.find((c: CustomerData) => c.phone === p)
+              if (target) {
+                setSearch(p)
+                openCustomer(target)
+              }
+            } catch {}
           }
           setLoading(false)
         }
@@ -149,7 +168,10 @@ export default function CustomersManager() {
     if (search.trim()) {
       const q = search.trim().toLowerCase()
       list = list.filter(
-        (c) => c.name.toLowerCase().includes(q) || c.phone.includes(q)
+        (c) =>
+          c.name.toLowerCase().includes(q) ||
+          (c.profile_name || '').toLowerCase().includes(q) ||
+          c.phone.includes(q)
       )
     }
 
@@ -166,9 +188,39 @@ export default function CustomersManager() {
     setEditTags(customer.tags || [])
     setEditVerified(!!customer.phone_verified_at)
     setEditCredit(customer.credit_override || 'default')
+    setEditName(customer.profile_name || (customer.name !== 'بدون نام' ? customer.name : ''))
+    setEditVerification(customer.verification_status === 'verified' ? 'verified' : 'unverified')
+    setEditWalletBlocked(!!customer.wallet_blocked)
+    setConfirmDelete(false)
+    setDeleting(false)
 
     setNewTagInput('')
     setSaveMessage(null)
+  }
+
+  async function deleteCustomer() {
+    if (!selectedCustomer || !confirmDelete) {
+      setConfirmDelete(true)
+      return
+    }
+    setDeleting(true)
+    setSaveMessage(null)
+    try {
+      const res = await fetch('/api/customers/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: selectedCustomer.phone }),
+      })
+      const data = await res.json().catch(() => null)
+      if (!res.ok) throw new Error(data?.error || 'حذف ناموفق بود')
+      setCustomers((prev) => prev.filter((c) => c.phone !== selectedCustomer.phone))
+      setSelectedCustomer(null)
+    } catch (err) {
+      setSaveMessage(`❌ ${err instanceof Error ? err.message : 'خطا در حذف'}`)
+    } finally {
+      setDeleting(false)
+      setConfirmDelete(false)
+    }
   }
 
   function togglePresetTag(tagKey: string) {
@@ -212,6 +264,9 @@ export default function CustomersManager() {
           tags: editTags,
 		  phone_verified: editVerified,
           credit_override: editCredit,
+          name: editName,
+          verification_status: editVerification,
+          wallet_blocked: editWalletBlocked,
 
         }),
       })
@@ -231,6 +286,9 @@ export default function CustomersManager() {
                 tags: editTags,
                 has_record: true,
                 credit_override: editCredit,
+                profile_name: editName.trim() || null,
+                verification_status: editVerification,
+                wallet_blocked: editWalletBlocked,
                 phone_verified_at: editVerified
                   ? c.phone_verified_at ?? new Date().toISOString()
                   : null,
@@ -245,6 +303,9 @@ export default function CustomersManager() {
         tags: editTags,
 		has_record: true,
         credit_override: editCredit,
+        profile_name: editName.trim() || null,
+        verification_status: editVerification,
+        wallet_blocked: editWalletBlocked,
         phone_verified_at: editVerified
           ? selectedCustomer.phone_verified_at ?? new Date().toISOString()
           : null,
@@ -418,6 +479,12 @@ export default function CustomersManager() {
                   {customer.order_count >= 5 && (
                     <span className="customer-badge loyal">⭐ وفادار</span>
                   )}
+                  {customer.verification_status === 'verified' && (
+                    <span className="customer-badge" style={{ background: '#e6f6ea', color: '#176a32' }}>✅ احراز</span>
+                  )}
+                  {customer.wallet_blocked && (
+                    <span className="customer-badge" style={{ background: '#fdeaea', color: '#8f2020' }}>🚫 کیف پول</span>
+                  )}
                   {customer.cancelled_count >= 2 && (
                     <span className="customer-badge problem">⚠️</span>
                   )}
@@ -512,6 +579,52 @@ export default function CustomersManager() {
 
             <div className="modal-body">
               <div className="info-card">
+                <h3>👤 پروفایل ثبت‌نامی</h3>
+                <div className="info-row" style={{ display: 'block' }}>
+                  <span>نام مشتری (نمایش در فرم‌ها و چک‌اوت):</span>
+                  <input
+                    type="text"
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    placeholder="نام و نام خانوادگی"
+                    disabled={saving}
+                    style={{ width: '100%', padding: '8px', marginTop: '6px', boxSizing: 'border-box' }}
+                  />
+                </div>
+                <div className="info-row" style={{ marginTop: '10px' }}>
+                  <span>وضعیت حساب (ثبت‌نام دعوتی/OTP):</span>
+                  <select
+                    value={editVerification}
+                    onChange={(e) => setEditVerification(e.target.value as 'verified' | 'unverified')}
+                    disabled={saving}
+                    style={{ padding: '6px 8px' }}
+                  >
+                    <option value="verified">✅ تأیید شده</option>
+                    <option value="unverified">⛔ تأیید نشده</option>
+                  </select>
+                </div>
+                <label style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '10px', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={editWalletBlocked}
+                    onChange={(e) => setEditWalletBlocked(e.target.checked)}
+                    disabled={saving}
+                  />
+                  <span>🚫 مسدودسازی کیف پول این مشتری</span>
+                </label>
+                <div className="info-row" style={{ marginTop: '10px' }}>
+                  <span>📱 دستگاه ثبت‌نام:</span>
+                  <strong style={{ fontSize: '12px' }}>{selectedCustomer.device_info || 'نامشخص'}</strong>
+                </div>
+                <a
+                  href={`/admin/orders?phone=${encodeURIComponent(selectedCustomer.phone)}`}
+                  className="customer-action-btn"
+                  style={{ display: 'inline-block', marginTop: '10px', textDecoration: 'none' }}
+                >
+                  🧾 مشاهده سفارش‌ها
+                </a>
+              </div>
+              <div className="info-card" style={{ marginTop: '16px' }}>
                 <h3>📊 آمار</h3>
                 <div className="info-row">
                   <span>تعداد سفارش:</span>
@@ -638,6 +751,15 @@ export default function CustomersManager() {
             </div>
 
             <div className="modal-footer">
+              <button
+                type="button"
+                className="btn"
+                onClick={deleteCustomer}
+                disabled={deleting || saving}
+                style={{ background: confirmDelete ? '#8f2020' : '#fff', color: confirmDelete ? '#fff' : '#8f2020', border: '1px solid #e5b5b5' }}
+              >
+                {deleting ? '...' : confirmDelete ? '⚠️ تأیید حذف ثبت‌نام' : '🗑 حذف ثبت‌نام'}
+              </button>
               <button type="button" className="btn" onClick={() => setSelectedCustomer(null)} disabled={saving}>
                 بستن
               </button>

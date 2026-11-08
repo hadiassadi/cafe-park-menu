@@ -222,6 +222,17 @@ export default function OrdersManager({
   const [loadingLedger, setLoadingLedger] = useState(false)
   const [reviewingId, setReviewingId] = useState<string | null>(null)
 
+  // لینک عمیق از بخش کیف پول/مشتریان: /admin/orders?phone=09xxxxxxxxx
+  useEffect(() => {
+    try {
+      const p = (new URLSearchParams(window.location.search).get('phone') || '').replace(/[^\d]/g, '')
+      if (/^09\d{9}$/.test(p)) {
+        setSearchQuery(p)
+        setSearchType('customer_phone')
+      }
+    } catch {}
+  }, [])
+
   useEffect(() => {
     setMounted(true)
   }, [])
