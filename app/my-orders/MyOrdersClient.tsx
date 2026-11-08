@@ -255,24 +255,24 @@ export default function MyOrdersClient() {
 
   return (
     <div className="my-orders-page">
-      {/* ✅ هدر بازطراحی شده */}
+      {/* ✅ هدر: عنوان + تب‌های بالا (فقط دسکتاپ) */}
       <div className="my-orders-header" style={{ flexDirection: 'column', alignItems: 'stretch', padding: '0', borderBottom: 'none' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 0', borderBottom: '1px solid #e3ddd2' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 0', borderBottom: '1px solid #e3ddd2' }}>
           <Link href="/" className="my-orders-back" style={{ padding: '6px 12px', fontSize: '13px' }}>← منو</Link>
           <h1 style={{ margin: 0, fontSize: '18px', color: '#29251f' }}>پنل مشتری</h1>
           <span style={{ width: '60px' }} />
         </div>
 
-        {/* ✅ تب‌های جدید */}
-        <div style={{ display: 'flex', width: '100%', borderBottom: '1px solid #e3ddd2' }}>
+        {/* تب‌های بالایی — در موبایل نوار پایین جایگزینشان می‌کند */}
+        <div className="panel-top-tabs">
           <button
             onClick={() => setActiveTab('open')}
             style={{
-              flex: 1, padding: '14px 10px', fontSize: '14px', fontWeight: 'bold',
-              background: 'transparent', border: 'none', 
+              flex: 1, padding: '13px 10px', fontSize: '13.5px', fontWeight: 'bold',
+              background: 'transparent', border: 'none',
               borderBottom: activeTab === 'open' ? '3px solid #6b4f3a' : '3px solid transparent',
-              color: activeTab === 'open' ? '#6b4f3a' : '#766f64', 
-              cursor: 'pointer', transition: 'all 0.2s ease'
+              color: activeTab === 'open' ? '#6b4f3a' : '#766f64',
+              cursor: 'pointer', transition: 'all 0.2s ease', fontFamily: 'inherit'
             }}
           >
             🛍️ سفارش‌های باز
@@ -280,23 +280,23 @@ export default function MyOrdersClient() {
           <button
             onClick={() => setActiveTab('history')}
             style={{
-              flex: 1, padding: '14px 10px', fontSize: '14px', fontWeight: 'bold',
-              background: 'transparent', border: 'none', 
+              flex: 1, padding: '13px 10px', fontSize: '13.5px', fontWeight: 'bold',
+              background: 'transparent', border: 'none',
               borderBottom: activeTab === 'history' ? '3px solid #6b4f3a' : '3px solid transparent',
-              color: activeTab === 'history' ? '#6b4f3a' : '#766f64', 
-              cursor: 'pointer', transition: 'all 0.2s ease'
+              color: activeTab === 'history' ? '#6b4f3a' : '#766f64',
+              cursor: 'pointer', transition: 'all 0.2s ease', fontFamily: 'inherit'
             }}
           >
-            📜 تاریخچه سفارشات
+            📜 تاریخچه
           </button>
-		            <button
+          <button
             onClick={() => setActiveTab('debt')}
             style={{
-              flex: 1, padding: '14px 10px', fontSize: '14px', fontWeight: 'bold',
+              flex: 1, padding: '13px 10px', fontSize: '13.5px', fontWeight: 'bold',
               background: 'transparent', border: 'none',
               borderBottom: activeTab === 'debt' ? '3px solid #9b3c32' : '3px solid transparent',
               color: activeTab === 'debt' ? '#9b3c32' : '#766f64',
-              cursor: 'pointer', transition: 'all 0.2s ease'
+              cursor: 'pointer', transition: 'all 0.2s ease', fontFamily: 'inherit'
             }}
           >
             💸 بدهی‌ها{debtOrders.length > 0 ? ` (${debtOrders.length.toLocaleString('fa-IR')})` : ''}
@@ -304,85 +304,75 @@ export default function MyOrdersClient() {
           <button
             onClick={openWalletTab}
             style={{
-              flex: 1, padding: '14px 10px', fontSize: '14px', fontWeight: 'bold',
+              flex: 1, padding: '13px 10px', fontSize: '13.5px', fontWeight: 'bold',
               background: 'transparent', border: 'none',
               borderBottom: activeTab === 'wallet' ? '3px solid #2d5d3e' : '3px solid transparent',
               color: activeTab === 'wallet' ? '#2d5d3e' : '#766f64',
-              cursor: 'pointer', transition: 'all 0.2s ease'
+              cursor: 'pointer', transition: 'all 0.2s ease', fontFamily: 'inherit'
             }}
           >
             👛 کیف پول
           </button>
-
         </div>
       </div>
 
-      {/* ✅ کارت خوش‌آمدگویی و آمار */}
+      {/* ✅ کارت پروفایل فشرده: نام + شماره + نشان عضویت + آمار + موجودی */}
       {customer && (
-        <div className="my-orders-user" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '16px', background: 'linear-gradient(135deg, #fffdf9 0%, #fbf9f5 100%)', border: '1px solid #e3ddd2', marginTop: '16px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div className="my-orders-user-icon">👤</div>
-            <div>
-              <strong style={{ fontSize: '18px' }}>
-                خوش اومدی، {customer.name && customer.name !== 'کاربر' ? `${customer.name} عزیز` : 'دوست عزیز'}! 🌟
-              </strong>
+        <div className="panel-profile-card" style={{ marginTop: '12px' }}>
+          <div className="panel-profile-row">
+            <div className="panel-avatar">
+              {customer.name && customer.name !== 'کاربر' ? customer.name.trim().charAt(0) : '☕'}
+            </div>
+            <div className="panel-profile-meta">
+              <strong>{customer.name && customer.name !== 'کاربر' ? customer.name : 'مشتری کافه پارک'}</strong>
               <small dir="ltr">{customer.phone}</small>
-              {wstatus?.walletEnabled && wstatus.customer?.verification_status === 'verified' && !wstatus.customer.wallet_blocked && (
-                <div style={{ marginTop: '6px', display: 'inline-block', background: '#2d5d3e', color: '#fff', borderRadius: '999px', padding: '4px 12px', fontSize: '12px' }}>
-                  👛 موجودی کیف پول: {formatPrice(wstatus.customer.balance)} تومان
-                </div>
-              )}
+            </div>
+            {membership && (
+              <span
+                className="panel-membership-chip"
+                title={membership.orgId === 'general' ? 'عضو باشگاه مشتریان' : `عضو باشگاه ${membership.orgName}`}
+              >
+                🎓 {membership.orgId === 'general' ? 'عضو باشگاه' : membership.orgName}
+              </span>
+            )}
+          </div>
+
+          <div className="panel-stats">
+            <div className="panel-stat">
+              <strong>{orders.length.toLocaleString('fa-IR')}</strong>
+              <small>سفارش</small>
+            </div>
+            <div className="panel-stat">
+              <strong>{formatPrice(totalSpent)} <span className="panel-unit">تومان</span></strong>
+              <small>مجموع خرید</small>
+            </div>
+            <div className="panel-stat">
+              <strong style={{ color: '#9b3c32' }}>{formatPrice(totalDiscount)} <span className="panel-unit">تومان</span></strong>
+              <small>تخفیف</small>
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', width: '100%', marginTop: '8px' }}>
-            <div style={{ background: '#fff', padding: '12px', borderRadius: '10px', textAlign: 'center', border: '1px solid #ebe6de' }}>
-              <div style={{ fontSize: '11px', color: '#766f64', marginBottom: '4px' }}>کل سفارشات</div>
-              <strong style={{ fontSize: '16px', color: '#6b4f3a' }}>{orders.length.toLocaleString('fa-IR')}</strong>
+          {wstatus?.walletEnabled && wstatus.customer?.verification_status === 'verified' && !wstatus.customer.wallet_blocked && (
+            <div className="panel-balance-strip">
+              👛 موجودی کیف پول: {formatPrice(wstatus.customer.balance)} تومان
             </div>
-            <div style={{ background: '#fff', padding: '12px', borderRadius: '10px', textAlign: 'center', border: '1px solid #ebe6de' }}>
-              <div style={{ fontSize: '11px', color: '#766f64', marginBottom: '4px' }}>مجموع خرید</div>
-              <strong style={{ fontSize: '14px', color: '#2d5d3e' }}>{formatPrice(totalSpent)} <small>ت</small></strong>
-            </div>
-            <div style={{ background: '#fff', padding: '12px', borderRadius: '10px', textAlign: 'center', border: '1px solid #ebe6de' }}>
-              <div style={{ fontSize: '11px', color: '#766f64', marginBottom: '4px' }}>تخفیفات</div>
-              <strong style={{ fontSize: '14px', color: '#9b3c32' }}>
-                {totalDiscount > 0 ? formatPrice(totalDiscount) : '-'} <small>ت</small>
-              </strong>
-            </div>
-          </div>
+          )}
         </div>
       )}
 
-      {membership ? (
-        <div style={{ background: '#e5f0e6', border: '1.5px solid #477052', borderRadius: '14px', padding: '16px', display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
-          <div style={{ fontSize: '28px' }}>✅</div>
+      {/* دعوت به عضویت — فقط برای مشتریِ هنوز ثبت‌نام‌نشده؛ عضوِ فعال چیپ عضویت را در کارت بالا می‌بیند */}
+      {!membership && (!wstatus?.customer?.verification_status || wstatus.customer.verification_status !== 'verified') && (
+        <div
+          onClick={() => setShowMemberModal(true)}
+          style={{ background: 'linear-gradient(135deg, #fdf6e3 0%, #fef8e8 100%)', border: '1.5px solid #d99f59', borderRadius: '14px', padding: '12px 14px', display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }}
+        >
+          <div style={{ fontSize: '24px' }}>🎓</div>
           <div>
-            <strong style={{ fontSize: '14px', color: '#2d5d3e', display: 'block' }}>
-              {membership.orgId === 'general'
-                ? 'شما عضو باشگاه مشتریان کافه پارک هستید'
-                : `شما عضو باشگاه ${membership.orgName} هستید`
-              }
-            </strong>
-            <small style={{ fontSize: '11px', color: '#3d6b48' }}>
-              {membership.orgId === 'general'
-                ? 'اطلاعات شما در سیستم ثبت شده است و از اخبار و امکانات ویژه باخبر خواهید شد.'
-                : 'تخفیف‌های سازمانی شما به این دستگاه متصل است و در زمان سفارش اعمال می‌شود.'
-              }
-            </small>
+            <strong style={{ fontSize: '13.5px', color: '#6b4f3a', display: 'block' }}>عضویت در باشگاه مشتریان و سازمان‌ها</strong>
+            <small style={{ fontSize: '11px', color: '#766f64' }}>برای تخفیف‌های ویژه و خودکار، عضو شو.</small>
           </div>
         </div>
-      ) : !wstatus?.customer?.verification_status || wstatus.customer.verification_status !== 'verified' ? (
-        // بنر دعوت به عضویت فقط برای مشتریِ هنوز ثبت‌نام‌نشده معنا دارد؛
-        // مشتری احرازشده (لینک مدیر/OTP) نباید دوباره لینک ثبت‌نام ببیند.
-        <div onClick={() => setShowMemberModal(true)} style={{ background: 'linear-gradient(135deg, #fdf6e3 0%, #fef8e8 100%)', border: '1.5px solid #d99f59', borderRadius: '14px', padding: '16px', display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer', marginBottom: '16px', boxShadow: '0 4px 12px rgba(217, 159, 89, 0.1)' }}>
-          <div style={{ fontSize: '28px' }}>🎓</div>
-          <div>
-            <strong style={{ fontSize: '14px', color: '#6b4f3a', display: 'block' }}>عضویت در باشگاه مشتریان و سازمان‌ها</strong>
-            <small style={{ fontSize: '11px', color: '#766f64' }}>با ثبت‌نام، از تخفیف‌های ویژه و خودکار بهره‌مند شوید.</small>
-          </div>
-        </div>
-      ) : null}
+      )}
 
       {activeTab === 'wallet' ? (
         <div>
@@ -392,31 +382,28 @@ export default function MyOrdersClient() {
 
           {walletState === 'login' && (
             <>
-              {/* بنر وضعیت: هنوز احراز هویت نشده‌اید */}
-              <div style={{ background: '#fdf6e3', border: '1.5px solid #d99f59', borderRadius: '14px', padding: '16px', marginTop: '16px' }}>
+              {/* کارت تأیید شماره — کوتاه، بدون توضیح اضافه */}
+              <div style={{ background: '#fdf6e3', border: '1.5px solid #d99f59', borderRadius: '14px', padding: '14px', marginTop: '12px' }}>
                 <strong style={{ display: 'block', fontSize: '14px', color: '#8a5a24', textAlign: 'center' }}>
-                  🔒 شما هنوز احراز هویت نکرده‌اید
+                  🔒 برای دیدن کیف پول، شماره‌ات را تأیید کن
                 </strong>
-                <small style={{ display: 'block', fontSize: '11px', color: '#766f64', textAlign: 'center', marginTop: '4px', lineHeight: 1.9 }}>
-                  برای دیدن موجودی و استفاده از کیف پول، یکی از دو راه زیر را انتخاب کن.
-                </small>
 
                 <div style={{ display: 'grid', gap: '8px', marginTop: '12px' }}>
-                  <button
-                    onClick={() => { setShowOtpForm(true); if (wstatus?.customer?.phone) setOtpPhone(wstatus.customer.phone) }}
-                    disabled={!wstatus?.smsConfigured}
-                    style={{
-                      padding: '11px 14px', borderRadius: '10px', border: 'none',
-                      background: wstatus?.smsConfigured ? '#6b4f3a' : '#c9c2b8',
-                      color: '#fff', fontSize: '13px', fontWeight: 'bold',
-                      cursor: wstatus?.smsConfigured ? 'pointer' : 'default', textAlign: 'center',
-                    }}
-                  >
-                    🔐 احراز هویت با کد پیامکی
-                  </button>
-                  {!wstatus?.smsConfigured && (
-                    <small style={{ display: 'block', fontSize: '10px', color: '#9b3c32', textAlign: 'center' }}>
-                      پیامک تنظیم نشده است — با مدیر کافه هماهنگ کن.
+                  {wstatus?.smsConfigured ? (
+                    <button
+                      onClick={() => { setShowOtpForm(true); if (wstatus?.customer?.phone) setOtpPhone(wstatus.customer.phone) }}
+                      style={{
+                        padding: '11px 14px', borderRadius: '10px', border: 'none',
+                        background: '#6b4f3a',
+                        color: '#fff', fontSize: '13px', fontWeight: 'bold',
+                        cursor: 'pointer', textAlign: 'center', fontFamily: 'inherit',
+                      }}
+                    >
+                      🔐 تأیید با کد پیامکی
+                    </button>
+                  ) : (
+                    <small style={{ display: 'block', fontSize: '11.5px', color: '#766f64', textAlign: 'center' }}>
+                      🔐 فعلاً ورود با کد پیامکی غیرفعال است.
                     </small>
                   )}
 
@@ -431,10 +418,10 @@ export default function MyOrdersClient() {
                       style={{
                         padding: '11px 14px', borderRadius: '10px', border: '1.5px solid #6b4f3a',
                         background: '#fff', color: '#6b4f3a', fontSize: '13px', fontWeight: 'bold',
-                        cursor: reqState === 'busy' ? 'default' : 'pointer', textAlign: 'center', opacity: reqState === 'busy' ? 0.6 : 1,
+                        cursor: reqState === 'busy' ? 'default' : 'pointer', textAlign: 'center', opacity: reqState === 'busy' ? 0.6 : 1, fontFamily: 'inherit',
                       }}
                     >
-                      {reqState === 'busy' ? '⏳ در حال ثبت...' : '🤝 درخواست فعال‌سازی کیف پول از مدیر'}
+                      {reqState === 'busy' ? '⏳ در حال ثبت...' : '🤝 درخواست احراز حضوری از مدیر'}
                     </button>
                   )}
                   {reqError && <div style={{ color: '#9b3c32', fontSize: '11px', textAlign: 'center' }}>{reqError}</div>}
@@ -524,14 +511,14 @@ export default function MyOrdersClient() {
 
           {walletState === 'ready' && walletView && (
             <>
-              <div style={{ background: 'linear-gradient(135deg, #e5f0e6 0%, #f2f8f2 100%)', border: '1.5px solid #477052', borderRadius: '14px', padding: '18px', textAlign: 'center', marginTop: '16px' }}>
-                <div style={{ fontSize: '30px' }}>👛</div>
-                <div style={{ fontSize: '12px', color: '#3d6b48', marginTop: '4px' }}>موجودی کیف پول</div>
-                <strong style={{ fontSize: '24px', color: '#2d5d3e' }}>
+              <div style={{ background: 'linear-gradient(135deg, #e5f0e6 0%, #f2f8f2 100%)', border: '1.5px solid #477052', borderRadius: '14px', padding: '14px', textAlign: 'center', marginTop: '12px' }}>
+                <div style={{ fontSize: '26px' }}>👛</div>
+                <div style={{ fontSize: '12px', color: '#3d6b48', marginTop: '2px' }}>موجودی کیف پول</div>
+                <strong style={{ fontSize: '23px', color: '#2d5d3e' }}>
                   {formatPrice(walletView.balance)} <small style={{ fontSize: '13px' }}>تومان</small>
                 </strong>
-                <small style={{ display: 'block', fontSize: '11px', color: '#766f64', marginTop: '8px' }}>
-                  گزینه‌ی «کیف پول» در صفحه پرداخت کنار سایر روش‌ها هست؛ اگر موجودی برای کل سفارش کافی نباشد، همان‌جا با نمایش موجودی غیرفعال می‌شود.
+                <small style={{ display: 'block', fontSize: '11px', color: '#766f64', marginTop: '6px' }}>
+                  در صفحه‌ی پرداخت می‌توانی موجودی کیف پول را خرج کنی.
                 </small>
               </div>
 
@@ -676,6 +663,45 @@ export default function MyOrdersClient() {
           })}
         </div>
       )}
+
+      {/* ✅ نوار پایین بخش‌ها — فقط موبایل */}
+      <nav className="panel-bottom-nav" aria-label="بخش‌های پنل مشتری">
+        <button
+          type="button"
+          onClick={() => setActiveTab('open')}
+          style={activeTab === 'open' ? { color: '#6b4f3a', boxShadow: 'inset 0 3px 0 #6b4f3a' } : undefined}
+        >
+          <span className="panel-nav-icon">🛍️</span>
+          سفارش‌ها
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('history')}
+          style={activeTab === 'history' ? { color: '#6b4f3a', boxShadow: 'inset 0 3px 0 #6b4f3a' } : undefined}
+        >
+          <span className="panel-nav-icon">📜</span>
+          تاریخچه
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('debt')}
+          style={activeTab === 'debt' ? { color: '#9b3c32', boxShadow: 'inset 0 3px 0 #9b3c32' } : undefined}
+        >
+          <span className="panel-nav-icon">💸</span>
+          بدهی
+          {debtOrders.length > 0 && (
+            <span className="panel-nav-badge">{debtOrders.length.toLocaleString('fa-IR')}</span>
+          )}
+        </button>
+        <button
+          type="button"
+          onClick={openWalletTab}
+          style={activeTab === 'wallet' ? { color: '#2d5d3e', boxShadow: 'inset 0 3px 0 #2d5d3e' } : undefined}
+        >
+          <span className="panel-nav-icon">👛</span>
+          کیف پول
+        </button>
+      </nav>
 
       {toast && <div className="toast">{toast}</div>}
 

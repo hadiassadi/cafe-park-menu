@@ -69,6 +69,7 @@ type BoolKey =
   | 'rubika_enabled'
   // ✅ جدید
   | 'admin_allow_delete_orders'
+  | 'admin_allow_delete_customers'
 
 type Settings = Record<TextKey, string> &
   Record<BoolKey, boolean> & {
@@ -115,6 +116,7 @@ const BOOL_DEFAULTS: Record<BoolKey, boolean> = {
   whatsapp_enabled: true, eitaa_enabled: false, bale_enabled: false, rubika_enabled: false,
   // ✅ جدید: پیش‌فرض روشن
   admin_allow_delete_orders: true,
+  admin_allow_delete_customers: true,
 }
 
 const BOOL_KEYS = Object.keys(BOOL_DEFAULTS) as BoolKey[]
@@ -506,7 +508,11 @@ function previewOf(key: SectionKey, f: Settings): string {
     }
     case 'share': return f.og_enabled ? f.og_title || 'پیش‌فرض' : 'غیرفعال'
     // ✅ جدید
-    case 'security': return f.admin_allow_delete_orders ? 'حذف سفارش: فعال' : 'حذف سفارش: غیرفعال'
+    case 'security':
+      return [
+        f.admin_allow_delete_orders ? 'حذف سفارش: فعال' : 'حذف سفارش: غیرفعال',
+        f.admin_allow_delete_customers ? 'حذف مشتری: فعال' : 'حذف مشتری: غیرفعال',
+      ].join(' · ')
   }
 }
 
@@ -888,6 +894,19 @@ export default function SettingsPage() {
                 ⚠️ با غیرفعال کردن این گزینه، دکمه حذف از پنل سفارش‌ها مخفی می‌شه و API هم درخواست‌ها رو رد می‌کنه. سفارش‌های قبلاً حذف‌شده دست‌نخورده باقی می‌مونن.
               </p>
             )}
+            <div className="toggle-row" style={{ marginTop: 16 }}>
+              <div>
+                <strong>حذف کامل مشتری</strong>
+                <small>
+                  حذف کامل ثبت‌نام فقط از بخش «آرشیو» مشتریان ممکنه، بعد از آرشیو کردن و صفر شدن موجودی کیف پول. اگه خاموش باشه، آرشیو و بازگردانی همچنان کار می‌کنه ولی حذف کامل هیچ‌وقت رخ نمی‌ده.
+                </small>
+              </div>
+              <Switch
+                checked={draft.admin_allow_delete_customers}
+                onChange={(v) => setBool('admin_allow_delete_customers', v)}
+                label={draft.admin_allow_delete_customers ? 'فعال' : 'غیرفعال'}
+              />
+            </div>
           </>
         )
       default: return null

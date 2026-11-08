@@ -128,6 +128,7 @@ export async function POST(req: NextRequest) {
           verified_at: new Date().toISOString(),
           device_id_hash: deviceHash,
           device_info: deviceLabel,
+          archived_at: null, // حساب آرشیوشده با ثبت‌نام دعوتی دوباره زنده می‌شود
         })
         .eq('id', customerId)
       if (upErr) {
