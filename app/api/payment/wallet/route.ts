@@ -3,8 +3,7 @@ import 'server-only'
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase/server'
 import { getDeviceHash, UUID_RE } from '@/lib/orders/owner'
-import { getVerifiedPhoneHash } from '@/lib/sms/otp'
-import { getSessionWalletBalance } from '@/lib/wallet/wallet'
+import { getSessionWalletBalance, resolveWalletCustomer } from '@/lib/wallet/wallet'
 import { paymentErrorMessage } from '@/lib/payment/methods'
 
 export const dynamic = 'force-dynamic'
@@ -33,11 +32,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'اطلاعات نامعتبر است' }, { status: 400 })
     }
 
-    const phoneHash = await getVerifiedPhoneHash()
-    if (!phoneHash) {
+    // مشتری: نشست تأییدشده (OTP/دعوت) یا دستگاهِ مشتریِ احرازشده توسط ادمین
+    const customer = await resolveWalletCustomer()
+    if (!customer) {
       return NextResponse.json(
-        { error: 'برای پرداخت با کیف پول باید با تأیید شماره (OTP) وارد شده باشی' },
+        { error: 'برای پرداخت با کیف پول اول باید شماره‌ات تأیید شود' },
         { status: 401 }
+      )
+    }
+    if (customer.wallet_blocked) {
+      return NextResponse.json(
+        { error: 'کیف پول شما توسط مدیر مسدود شده است' },
+        { status: 403 }
       )
     }
 
@@ -47,19 +53,6 @@ export async function POST(req: NextRequest) {
     }
 
     const db = supabaseAdmin()
-
-    const { data: customer } = await db
-      .from('customers')
-      .select('id, phone')
-      .eq('phone_hash', phoneHash)
-      .maybeSingle()
-
-    if (!customer?.id) {
-      return NextResponse.json(
-        { error: 'کیف پولی برای این نشست پیدا نشد' },
-        { status: 404 }
-      )
-    }
 
     // مالکیت سفارش با دستگاه + تطابق شماره سفارش با شماره کیف پول
     const { data: order, error: orderErr } = await db

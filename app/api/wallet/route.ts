@@ -5,7 +5,7 @@ import { getWalletView, resolveWalletCustomer } from '@/lib/wallet/wallet'
 
 export const dynamic = 'force-dynamic'
 
-/** کیف پول مشتری — فقط با نشست «تلفن تأییدشده» (OTP) */
+/** کیف پول مشتری — نشست تأییدشده (OTP/دعوت) یا دستگاهِ مشتریِ احرازشده */
 export async function GET(req: NextRequest) {
   const rl = rateLimit(req, 'wallet-get', 30, 60_000)
   if (!rl.ok) return tooMany(rl)
@@ -14,6 +14,9 @@ export async function GET(req: NextRequest) {
     const customer = await resolveWalletCustomer()
     if (!customer) {
       return NextResponse.json({ error: 'برای دیدن کیف پول باید با شماره موبایل وارد شوید' }, { status: 401 })
+    }
+    if (customer.wallet_blocked) {
+      return NextResponse.json({ error: 'کیف پول شما توسط مدیر مسدود شده است' }, { status: 403 })
     }
 
     const view = await getWalletView(customer.id)
