@@ -54,8 +54,51 @@ export default function MyOrdersClient() {
 
   // 👛 کیف پول مشتری — با اولین باز کردن تب لود می‌شود
   const [walletView, setWalletView] = useState<{ balance: number; transactions: WalletTx[] } | null>(null)
-  const [walletState, setWalletState] = useState<'idle' | 'loading' | 'ready' | 'login' | 'error'>('idle')
+  const [walletState, setWalletState] = useState<'idle' | 'loading' | 'ready' | 'login' | 'error' | 'blocked'>('idle')
   const [walletLoadedOnce, setWalletLoadedOnce] = useState(false)
+
+  // 🔐 وضعیت احراز/فعال‌سازی — در ورود به پنل چک می‌شود
+  const [wstatus, setWstatus] = useState<{
+    walletEnabled: boolean
+    cardChargeEnabled: boolean
+    smsConfigured: boolean
+    customer: { id: string; name: string | null; phone: string | null; verification_status: string; wallet_blocked: boolean; balance: number } | null
+  } | null>(null)
+
+  // 🤝 درخواست فعال‌سازی حضوری از مدیر
+  const [reqState, setReqState] = useState<'idle' | 'busy' | 'sent' | 'error'>('idle')
+  const [reqError, setReqError] = useState<string | null>(null)
+  const [showOtpForm, setShowOtpForm] = useState(false)
+
+  useEffect(() => {
+    fetch('/api/wallet/status', { cache: 'no-store' })
+      .then((r) => r.json())
+      .then((d) => { if (d && typeof d.walletEnabled === 'boolean') setWstatus(d) })
+      .catch(() => {})
+  }, [])
+
+  // بعد از تأیید شماره، هم کیف پول و هم وضعیت تازه می‌شود
+  async function refreshWalletAfterVerify() {
+    await loadWallet()
+    fetch('/api/wallet/status', { cache: 'no-store' })
+      .then((r) => r.json())
+      .then((d) => { if (d && typeof d.walletEnabled === 'boolean') setWstatus(d) })
+      .catch(() => {})
+  }
+
+  async function requestActivation() {
+    setReqState('busy')
+    setReqError(null)
+    try {
+      const res = await fetch('/api/wallet/activation-request', { method: 'POST' })
+      const data = await res.json().catch(() => null)
+      if (!res.ok) throw new Error(data?.error || 'ثبت درخواست ناموفق بود')
+      setReqState('sent')
+    } catch (err: any) {
+      setReqState('error')
+      setReqError(err.message)
+    }
+  }
 
   // 🔐 ورود با کد پیامکی (OTP) — کلید کیف پول و پرداخت با کیف پول همین‌جاست
   const [otpStep, setOtpStep] = useState<'phone' | 'code'>('phone')
@@ -108,6 +151,7 @@ export default function MyOrdersClient() {
     try {
       const res = await fetch('/api/wallet', { cache: 'no-store' })
       if (res.status === 401) { setWalletState('login'); return }
+      if (res.status === 403) { setWalletState('blocked'); return }
       const data = await res.json().catch(() => null)
       if (!res.ok || !data) throw new Error('خطا در خواندن کیف پول')
       setWalletView({
@@ -159,7 +203,7 @@ export default function MyOrdersClient() {
       })
       const data = await res.json().catch(() => null)
       if (!res.ok) throw new Error(data?.error || 'تأیید کد ناموفق بود')
-      await loadWallet()
+      await refreshWalletAfterVerify()
     } catch (err: any) {
       setOtpError(err.message)
     } finally {
@@ -283,6 +327,11 @@ export default function MyOrdersClient() {
                 خوش اومدی، {customer.name && customer.name !== 'کاربر' ? `${customer.name} عزیز` : 'دوست عزیز'}! 🌟
               </strong>
               <small dir="ltr">{customer.phone}</small>
+              {wstatus?.walletEnabled && wstatus.customer?.verification_status === 'verified' && !wstatus.customer.wallet_blocked && (
+                <div style={{ marginTop: '6px', display: 'inline-block', background: '#2d5d3e', color: '#fff', borderRadius: '999px', padding: '4px 12px', fontSize: '12px' }}>
+                  👛 موجودی کیف پول: {formatPrice(wstatus.customer.balance)} تومان
+                </div>
+              )}
             </div>
           </div>
 
@@ -340,65 +389,125 @@ export default function MyOrdersClient() {
           )}
 
           {walletState === 'login' && (
-            <div style={{ background: '#fff', border: '1px solid #e3ddd2', borderRadius: '14px', padding: '18px', marginTop: '16px' }}>
-              <div style={{ fontSize: '28px', textAlign: 'center' }}>🔐</div>
-              <strong style={{ display: 'block', textAlign: 'center', fontSize: '14px', color: '#29251f', marginTop: '6px' }}>
-                برای دیدن کیف پول، شماره موبایل را تأیید کن
-              </strong>
-              <small style={{ display: 'block', textAlign: 'center', fontSize: '11px', color: '#766f64', marginTop: '4px' }}>
-                کیف پول به شماره‌ای وصل است که برایش شارژ ثبت شده؛ با تأیید همان شماره،
-                موجودی و تراکنش‌ها اینجا نمایش داده می‌شود و در صفحه پرداخت هم گزینه‌ی «کیف پول» فعال می‌شود.
-              </small>
+            <>
+              {/* بنر وضعیت: هنوز احراز هویت نشده‌اید */}
+              <div style={{ background: '#fdf6e3', border: '1.5px solid #d99f59', borderRadius: '14px', padding: '16px', marginTop: '16px' }}>
+                <strong style={{ display: 'block', fontSize: '14px', color: '#8a5a24', textAlign: 'center' }}>
+                  🔒 شما هنوز احراز هویت نکرده‌اید
+                </strong>
+                <small style={{ display: 'block', fontSize: '11px', color: '#766f64', textAlign: 'center', marginTop: '4px', lineHeight: 1.9 }}>
+                  برای دیدن موجودی و استفاده از کیف پول، یکی از دو راه زیر را انتخاب کن.
+                </small>
 
-              {otpStep === 'phone' ? (
-                <div style={{ display: 'flex', gap: '8px', marginTop: '14px' }}>
-                  <input
-                    dir="ltr"
-                    value={otpPhone}
-                    onChange={(e) => setOtpPhone(e.target.value)}
-                    placeholder="09xxxxxxxxx"
-                    inputMode="numeric"
-                    style={{ flex: 1, padding: '10px 12px', borderRadius: '10px', border: '1px solid #e3ddd2', fontSize: '14px', minWidth: 0 }}
-                  />
+                <div style={{ display: 'grid', gap: '8px', marginTop: '12px' }}>
                   <button
-                    onClick={sendOtp}
-                    disabled={otpBusy || otpPhone.trim().length < 10}
-                    style={{ padding: '10px 16px', borderRadius: '10px', border: 'none', background: '#6b4f3a', color: '#fff', fontSize: '13px', fontWeight: 'bold', cursor: otpBusy || otpPhone.trim().length < 10 ? 'default' : 'pointer', whiteSpace: 'nowrap', opacity: otpBusy || otpPhone.trim().length < 10 ? 0.6 : 1 }}
+                    onClick={() => { setShowOtpForm(true); if (wstatus?.customer?.phone) setOtpPhone(wstatus.customer.phone) }}
+                    disabled={!wstatus?.smsConfigured}
+                    style={{
+                      padding: '11px 14px', borderRadius: '10px', border: 'none',
+                      background: wstatus?.smsConfigured ? '#6b4f3a' : '#c9c2b8',
+                      color: '#fff', fontSize: '13px', fontWeight: 'bold',
+                      cursor: wstatus?.smsConfigured ? 'pointer' : 'default', textAlign: 'center',
+                    }}
                   >
-                    {otpBusy ? '⏳' : 'ارسال کد'}
+                    🔐 احراز هویت با کد پیامکی
                   </button>
+                  {!wstatus?.smsConfigured && (
+                    <small style={{ display: 'block', fontSize: '10px', color: '#9b3c32', textAlign: 'center' }}>
+                      پیامک تنظیم نشده است — با مدیر کافه هماهنگ کن.
+                    </small>
+                  )}
+
+                  {reqState === 'sent' ? (
+                    <div style={{ background: '#e9f3ec', border: '1px solid #b9dcc4', borderRadius: '10px', padding: '10px 12px', fontSize: '12px', color: '#2d5d3e', textAlign: 'center', lineHeight: 1.9 }}>
+                      ✅ درخواستت ثبت شد؛ مدیر کافه حضوری احرازت می‌کند. همین صفحه را بعداً دوباره چک کن.
+                    </div>
+                  ) : (
+                    <button
+                      onClick={requestActivation}
+                      disabled={reqState === 'busy'}
+                      style={{
+                        padding: '11px 14px', borderRadius: '10px', border: '1.5px solid #6b4f3a',
+                        background: '#fff', color: '#6b4f3a', fontSize: '13px', fontWeight: 'bold',
+                        cursor: reqState === 'busy' ? 'default' : 'pointer', textAlign: 'center', opacity: reqState === 'busy' ? 0.6 : 1,
+                      }}
+                    >
+                      {reqState === 'busy' ? '⏳ در حال ثبت...' : '🤝 درخواست فعال‌سازی کیف پول از مدیر'}
+                    </button>
+                  )}
+                  {reqError && <div style={{ color: '#9b3c32', fontSize: '11px', textAlign: 'center' }}>{reqError}</div>}
                 </div>
-              ) : (
-                <div style={{ marginTop: '14px' }}>
-                  <div style={{ display: 'flex', gap: '8px' }}>
+              </div>
+
+              {showOtpForm && (
+              <div style={{ background: '#fff', border: '1px solid #e3ddd2', borderRadius: '14px', padding: '18px', marginTop: '12px' }}>
+                <strong style={{ display: 'block', textAlign: 'center', fontSize: '14px', color: '#29251f' }}>
+                  تأیید شماره موبایل با کد پیامکی
+                </strong>
+
+                {otpStep === 'phone' ? (
+                  <div style={{ display: 'flex', gap: '8px', marginTop: '14px' }}>
                     <input
                       dir="ltr"
-                      value={otpCode}
-                      onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
-                      placeholder="- - - - - -"
+                      value={otpPhone}
+                      onChange={(e) => setOtpPhone(e.target.value)}
+                      placeholder="09xxxxxxxxx"
                       inputMode="numeric"
-                      maxLength={6}
-                      style={{ flex: 1, padding: '10px 12px', borderRadius: '10px', border: '1px solid #e3ddd2', fontSize: '16px', textAlign: 'center', letterSpacing: '4px', minWidth: 0 }}
+                      style={{ flex: 1, padding: '10px 12px', borderRadius: '10px', border: '1px solid #e3ddd2', fontSize: '14px', minWidth: 0 }}
                     />
                     <button
-                      onClick={verifyOtp}
-                      disabled={otpBusy || otpCode.length !== 6}
-                      style={{ padding: '10px 16px', borderRadius: '10px', border: 'none', background: '#2d5d3e', color: '#fff', fontSize: '13px', fontWeight: 'bold', cursor: otpBusy || otpCode.length !== 6 ? 'default' : 'pointer', whiteSpace: 'nowrap', opacity: otpBusy || otpCode.length !== 6 ? 0.6 : 1 }}
+                      onClick={sendOtp}
+                      disabled={otpBusy || otpPhone.trim().length < 10}
+                      style={{ padding: '10px 16px', borderRadius: '10px', border: 'none', background: '#6b4f3a', color: '#fff', fontSize: '13px', fontWeight: 'bold', cursor: otpBusy || otpPhone.trim().length < 10 ? 'default' : 'pointer', whiteSpace: 'nowrap', opacity: otpBusy || otpPhone.trim().length < 10 ? 0.6 : 1 }}
                     >
-                      {otpBusy ? '⏳' : 'تأیید'}
+                      {otpBusy ? '⏳' : 'ارسال کد'}
                     </button>
                   </div>
-                  <button
-                    onClick={() => { setOtpStep('phone'); setOtpCode(''); setOtpInfo(null); setOtpError(null) }}
-                    style={{ background: 'none', border: 'none', color: '#9a6b3f', fontSize: '11px', marginTop: '10px', cursor: 'pointer', padding: 0 }}
-                  >
-                    ← تغییر شماره / ارسال مجدد کد
-                  </button>
-                </div>
-              )}
+                ) : (
+                  <div style={{ marginTop: '14px' }}>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <input
+                        dir="ltr"
+                        value={otpCode}
+                        onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
+                        placeholder="- - - - - -"
+                        inputMode="numeric"
+                        maxLength={6}
+                        style={{ flex: 1, padding: '10px 12px', borderRadius: '10px', border: '1px solid #e3ddd2', fontSize: '16px', textAlign: 'center', letterSpacing: '4px', minWidth: 0 }}
+                      />
+                      <button
+                        onClick={verifyOtp}
+                        disabled={otpBusy || otpCode.length !== 6}
+                        style={{ padding: '10px 16px', borderRadius: '10px', border: 'none', background: '#2d5d3e', color: '#fff', fontSize: '13px', fontWeight: 'bold', cursor: otpBusy || otpCode.length !== 6 ? 'default' : 'pointer', whiteSpace: 'nowrap', opacity: otpBusy || otpCode.length !== 6 ? 0.6 : 1 }}
+                      >
+                        {otpBusy ? '⏳' : 'تأیید'}
+                      </button>
+                    </div>
+                    <button
+                      onClick={() => { setOtpStep('phone'); setOtpCode(''); setOtpInfo(null); setOtpError(null) }}
+                      style={{ background: 'none', border: 'none', color: '#9a6b3f', fontSize: '11px', marginTop: '10px', cursor: 'pointer', padding: 0 }}
+                    >
+                      ← تغییر شماره / ارسال مجدد کد
+                    </button>
+                  </div>
+                )}
 
-              {otpInfo && <div style={{ color: '#2d5d3e', fontSize: '12px', marginTop: '10px', textAlign: 'center' }}>{otpInfo}</div>}
-              {otpError && <div style={{ color: '#9b3c32', fontSize: '12px', marginTop: '10px', textAlign: 'center' }}>{otpError}</div>}
+                {otpInfo && <div style={{ color: '#2d5d3e', fontSize: '12px', marginTop: '10px', textAlign: 'center' }}>{otpInfo}</div>}
+                {otpError && <div style={{ color: '#9b3c32', fontSize: '12px', marginTop: '10px', textAlign: 'center' }}>{otpError}</div>}
+              </div>
+              )}
+            </>
+          )}
+
+          {walletState === 'blocked' && (
+            <div style={{ background: '#fdecea', border: '1px solid #f5c6c0', borderRadius: '14px', padding: '18px', marginTop: '16px', textAlign: 'center' }}>
+              <div style={{ fontSize: '28px' }}>⛔</div>
+              <strong style={{ display: 'block', fontSize: '14px', color: '#9b3c32', marginTop: '6px' }}>
+                کیف پول شما توسط مدیر مسدود شده است
+              </strong>
+              <small style={{ display: 'block', fontSize: '11px', color: '#766f64', marginTop: '4px' }}>
+                برای پیگیری با مدیر کافه تماس بگیر.
+              </small>
             </div>
           )}
 

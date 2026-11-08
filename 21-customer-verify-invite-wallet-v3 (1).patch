@@ -1,0 +1,1818 @@
+diff --git a/TASKS.md b/TASKS.md
+index 17e25f4..25afa69 100644
+--- a/TASKS.md
++++ b/TASKS.md
+@@ -55,3 +55,27 @@
+ - [x] قواعد اعتبار + `/admin/settings/club` + لاگ تغییرات
+ - [x] محافظت `customers/update`
+ - [x] API ثبت سفارش حضوری (`bec9bd3`، شاخهٔ `feature-walkin-orders`)
++
++## 🎯 طرح توافق‌شده — کیف پول نسخه ۲ و مشتریان (نوامبر ۲۰۲۶)
++### فاز ۱ — پچ ۲۱ (احراز و فعال‌سازی)
++- [x] مایگریشن: `customer_grades` (با پیش‌فرض برنز/نقره/طلایی/الماس)، `subscription_plans`، `customer_subscriptions`، `registration_invites`، `wallet_activation_requests`، `wallet_charge_requests` + ستون‌های customers (verification_status، customer_type، total_purchase، wallet_blocked، card_charge_blocked) + تنظیمات (wallet_card_charge_enabled، wallet_charge_min=۵۰هزار، membership_enabled، discount_policy) + انواع تراکنش جدید
++- [x] هویت دومرحله‌ای: نشست OTP/دعوت یا دستگاهِ مشتریِ verified (resolveWalletCustomer)
++- [x] دعوت مشتری: ادمین لینک تک‌مصرف ۷روزه + QR + کپی → `/register/[token]` → احراز فوری + نشست روی همان دستگاه + تراکنش «فعال‌سازی»
++- [x] پنل مشتری: بنر «احراز هویت نشده» + دکمه OTP (فقط با تنظیمات پیامک) + دکمه «درخواست فعال‌سازی از مدیر» + حالت blocked + نشان موجودی در هدر
++- [x] ادمین: صف درخواست‌های فعال‌سازی با تأیید/رد
++### فاز ۲ — پچ ۲۲ (چک‌اوت و شارژ کارت‌به‌کارت)
++- [ ] کیف پول اولِ روش‌های پرداخت + حالت‌های غیرفعال با دلیل (موجودی صفر/ناکافی)
++- [ ] شارژ کارت‌به‌کارت: مبلغ (کف ۵۰ هزار، بدون سقف) → شماره کارت → آپلود رسید + شماره پیگیری → صف تأیید ادمین → receipt_charge
++- [ ] تاریخچه کامل با صفحه‌بندی «نمایش بیشتر»
++- [ ] سوییچ‌های سراسری + استثنای هر مشتری در پنل ادمین
++### فاز ۳ — پچ ۲۳ (گرید و موتور تخفیف)
++- [ ] ارتقای خودکار گرید از total_purchase بعد از هر سفارش تکمیل‌شده (فقط ارتقا)
++- [ ] سیاست تخفیف مدیر: max / membership_first / grade_first / stacked(با سقف)
++- [ ] تخفیف کالا/دسته‌بندی فعلی دست‌نخورده؛ بیرون‌بر و خدمات همیشه بدون تخفیف
++- [ ] مدیریت گریدها در پنل ادمین (نام، بازه مبلغ، درصد، رنگ)
++### فاز ۴ — پچ ۲۴ (اشتراک ماهیانه)
++- [ ] پلن‌ها (قیمت، مدت، درصد تخفیف، مزایا، دامنه آیتم‌ها) + خرید با کیف پول/کارت‌به‌کارت
++- [ ] گزینه آنلاین (زرین‌پال/نکست‌پی/بانک‌ها) نمایان ولی غیرفعال تا فعال شدن تنظیمات
++### فاز ۵ — پچ ۲۵ (درگاه آنلاین + تکمیلی)
++- [ ] شارژ آنلاین درگاه‌محور + ضدتکرار شناسه شارژ
++- [ ] یادآوری انقضای اشتراک (اگر پیامک تنظیم بود) + جمع بدهی کیف پول‌ها در داشبورد ادمین
+diff --git a/app/admin/wallet/page.tsx b/app/admin/wallet/page.tsx
+index 4316f5a..e619f09 100644
+--- a/app/admin/wallet/page.tsx
++++ b/app/admin/wallet/page.tsx
+@@ -1,6 +1,7 @@
+ 'use client'
+ 
+-import { useState } from 'react'
++import { useCallback, useEffect, useState } from 'react'
++import { QRCodeSVG } from 'qrcode.react'
+ import { formatPersianDate } from '@/lib/format-date'
+ 
+ type WalletTx = {
+@@ -20,8 +21,11 @@ type WalletView = {
+ const KIND_LABELS: Record<string, string> = {
+   admin_charge: 'شارژ توسط ادمین',
+   online_charge: 'شارژ آنلاین',
++  receipt_charge: 'شارژ با تأیید رسید',
++  subscription_purchase: 'خرید اشتراک',
+   refund: 'بازگشت وجه',
+   spend: 'خرج سفارش',
++  wallet_activation: 'فعال‌سازی کیف پول',
+ }
+ 
+ const fmt = (n: number) => n.toLocaleString('fa-IR')
+@@ -41,6 +45,111 @@ export default function WalletPage() {
+   const [note, setNote] = useState('')
+   const [charging, setCharging] = useState(false)
+ 
++  // 🎟 دعوت مشتری (QR / لینک)
++  const [invite, setInvite] = useState<{ token: string; expires_at: string } | null>(null)
++  const [inviteList, setInviteList] = useState<
++    { id: string; token: string; expires_at: string; used_at: string | null; used_phone: string | null; is_active: boolean; created_at: string }[]
++  >([])
++  const [inviteBusy, setInviteBusy] = useState(false)
++  const [copied, setCopied] = useState(false)
++
++  // 📥 درخواست‌های فعال‌سازی حضوری
++  const [requests, setRequests] = useState<
++    { id: string; name: string | null; phone: string | null; status: string; created_at: string }[]
++  >([])
++  const [reviewBusy, setReviewBusy] = useState<string | null>(null)
++
++  const loadRequests = useCallback(async () => {
++    try {
++      const res = await fetch('/api/admin/wallet/requests', { cache: 'no-store', credentials: 'same-origin' })
++      const json = await res.json()
++      if (res.ok) setRequests(json.activationRequests ?? [])
++    } catch {}
++  }, [])
++
++  const loadInvites = useCallback(async () => {
++    try {
++      const res = await fetch('/api/admin/wallet/invites', { cache: 'no-store', credentials: 'same-origin' })
++      const json = await res.json()
++      if (res.ok) setInviteList(json.invites ?? [])
++    } catch {}
++  }, [])
++
++  useEffect(() => {
++    loadRequests()
++    loadInvites()
++  }, [loadRequests, loadInvites])
++
++  async function createInvite() {
++    setInviteBusy(true)
++    setCopied(false)
++    try {
++      const res = await fetch('/api/admin/wallet/invites', {
++        method: 'POST',
++        credentials: 'same-origin',
++      })
++      const json = await res.json()
++      if (res.ok && json.invite) {
++        setInvite(json.invite)
++        await loadInvites()
++      } else {
++        setMsg({ kind: 'err', text: json.error || 'ساخت لینک ناموفق بود' })
++      }
++    } catch {
++      setMsg({ kind: 'err', text: 'ارتباط با سرور برقرار نشد' })
++    } finally {
++      setInviteBusy(false)
++    }
++  }
++
++  async function revokeInvite(id: string) {
++    try {
++      await fetch(`/api/admin/wallet/invites?id=${encodeURIComponent(id)}`, {
++        method: 'DELETE',
++        credentials: 'same-origin',
++      })
++      await loadInvites()
++      if (invite) setInvite(null)
++    } catch {}
++  }
++
++  function copyInviteLink(token: string) {
++    const url = `${window.location.origin}/register/${token}`
++    navigator.clipboard?.writeText(url).then(
++      () => {
++        setCopied(true)
++        setTimeout(() => setCopied(false), 2000)
++      },
++      () => {}
++    )
++  }
++
++  async function reviewRequest(id: string, action: 'approve' | 'reject') {
++    setReviewBusy(id)
++    try {
++      const res = await fetch('/api/admin/wallet/requests', {
++        method: 'POST',
++        headers: { 'Content-Type': 'application/json' },
++        credentials: 'same-origin',
++        body: JSON.stringify({ id, type: 'activation', action }),
++      })
++      const json = await res.json()
++      if (!res.ok) {
++        setMsg({ kind: 'err', text: json.error || 'بررسی ناموفق بود' })
++      } else {
++        setMsg({
++          kind: 'ok',
++          text: action === 'approve' ? 'مشتری تأیید شد ✓ — کیف پولش فعال است' : 'درخواست رد شد',
++        })
++      }
++      await loadRequests()
++    } catch {
++      setMsg({ kind: 'err', text: 'ارتباط با سرور برقرار نشد' })
++    } finally {
++      setReviewBusy(null)
++    }
++  }
++
+   async function load(e?: React.FormEvent) {
+     e?.preventDefault()
+     setMsg(null)
+@@ -140,6 +249,145 @@ export default function WalletPage() {
+         </button>
+       </form>
+ 
++      {/* 🎟 دعوت مشتری — QR / لینک تک‌مصرف */}
++      <div style={{ marginTop: 24, padding: '14px 18px', borderRadius: 10, border: '1px solid #e5e0da' }}>
++        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
++          <strong style={{ fontSize: 14 }}>🎟 دعوت مشتری (QR / لینک)</strong>
++          <button
++            type="button"
++            onClick={createInvite}
++            disabled={inviteBusy}
++            style={{
++              padding: '8px 14px',
++              borderRadius: 8,
++              border: 'none',
++              background: inviteBusy ? '#999' : '#6f4e37',
++              color: '#fff',
++              fontWeight: 700,
++              fontSize: 13,
++              cursor: inviteBusy ? 'default' : 'pointer',
++            }}
++          >
++            {inviteBusy ? '…' : '+ ساخت لینک جدید'}
++          </button>
++        </div>
++        <p style={{ opacity: 0.65, fontSize: 12, lineHeight: 1.9, margin: '6px 0 0' }}>
++          مشتری QR را اسکن می‌کند یا لینک را در پیام‌رسان می‌گیرد؛ با تکمیل فرم، حسابش فوراً تأیید و کیف پول همان دستگاه فعال می‌شود.
++        </p>
++
++        {invite && (
++          <div style={{ display: 'flex', gap: 16, alignItems: 'center', marginTop: 12, flexWrap: 'wrap' }}>
++            <div style={{ background: '#fff', padding: 10, borderRadius: 10, border: '1px solid #e5e0da' }}>
++              <QRCodeSVG value={`${typeof window !== 'undefined' ? window.location.origin : ''}/register/${invite.token}`} size={120} />
++            </div>
++            <div style={{ flex: 1, minWidth: 220 }}>
++              <code dir="ltr" style={{ display: 'block', fontSize: 11, background: '#f7f2ec', padding: '8px 10px', borderRadius: 8, wordBreak: 'break-all' }}>
++                {typeof window !== 'undefined' ? `${window.location.origin}/register/${invite.token}` : `/register/${invite.token}`}
++              </code>
++              <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center' }}>
++                <button
++                  type="button"
++                  onClick={() => copyInviteLink(invite.token)}
++                  style={{ padding: '7px 12px', borderRadius: 8, border: '1px solid #ccc', background: '#fff', fontSize: 12, cursor: 'pointer' }}
++                >
++                  {copied ? 'کپی شد ✓' : 'کپی لینک برای ارسال'}
++                </button>
++                <button
++                  type="button"
++                  onClick={() => revokeInvite(inviteList.find((i) => i.token === invite.token)?.id ?? '')}
++                  style={{ padding: '7px 12px', borderRadius: 8, border: '1px solid #e5b5b5', background: '#fff', color: '#8f2020', fontSize: 12, cursor: 'pointer' }}
++                >
++                  باطل کردن
++                </button>
++                <span style={{ opacity: 0.6, fontSize: 11 }}>
++                  مهلت: {formatPersianDate(invite.expires_at)}
++                </span>
++              </div>
++            </div>
++          </div>
++        )}
++
++        {inviteList.length > 0 && (
++          <div style={{ marginTop: 12, display: 'grid', gap: 6 }}>
++            {inviteList.slice(0, 6).map((inv) => (
++              <div key={inv.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, padding: '6px 10px', background: '#faf7f3', borderRadius: 8 }}>
++                <code dir="ltr">{inv.token.slice(0, 8)}…</code>
++                <span style={{ opacity: 0.7 }}>
++                  {inv.used_at
++                    ? `استفاده‌شده → ${inv.used_phone ?? ''}`
++                    : !inv.is_active
++                      ? 'باطل‌شده'
++                      : new Date(inv.expires_at).getTime() < Date.now()
++                        ? 'منقضی'
++                        : 'فعال'}
++                </span>
++              </div>
++            ))}
++          </div>
++        )}
++      </div>
++
++      {/* 📥 درخواست‌های فعال‌سازی حضوری */}
++      <div style={{ marginTop: 16, padding: '14px 18px', borderRadius: 10, border: '1px solid #e5e0da' }}>
++        <strong style={{ fontSize: 14 }}>
++          📥 درخواست‌های فعال‌سازی
++          {requests.filter((r) => r.status === 'pending').length > 0 && (
++            <span
++              style={{
++                marginRight: 8,
++                background: '#8f2020',
++                color: '#fff',
++                borderRadius: 999,
++                padding: '2px 8px',
++                fontSize: 11,
++              }}
++            >
++              {requests.filter((r) => r.status === 'pending').length}
++            </span>
++          )}
++        </strong>
++
++        {requests.length === 0 ? (
++          <p style={{ opacity: 0.6, fontSize: 13 }}>درخواستی ثبت نشده است.</p>
++        ) : (
++          <div style={{ marginTop: 10, display: 'grid', gap: 8 }}>
++            {requests.map((r) => (
++              <div key={r.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '10px 12px', borderRadius: 8, border: '1px solid #e5e0da', fontSize: 13 }}>
++                <div>
++                  <div style={{ fontWeight: 700 }}>
++                    {r.name || 'بدون نام'} — <span dir="ltr">{r.phone ?? '?'}</span>
++                  </div>
++                  <div style={{ opacity: 0.65, fontSize: 11 }}>
++                    {formatPersianDate(r.created_at)}
++                    {r.status !== 'pending' ? (r.status === 'approved' ? ' — تأییدشده ✓' : ' — رد‌شده ✗') : ''}
++                  </div>
++                </div>
++                {r.status === 'pending' && (
++                  <div style={{ display: 'flex', gap: 8 }}>
++                    <button
++                      type="button"
++                      onClick={() => reviewRequest(r.id, 'approve')}
++                      disabled={reviewBusy === r.id}
++                      style={{ padding: '7px 14px', borderRadius: 8, border: 'none', background: '#2e7d32', color: '#fff', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}
++                    >
++                      {reviewBusy === r.id ? '…' : 'تأیید حضوری'}
++                    </button>
++                    <button
++                      type="button"
++                      onClick={() => reviewRequest(r.id, 'reject')}
++                      disabled={reviewBusy === r.id}
++                      style={{ padding: '7px 14px', borderRadius: 8, border: '1px solid #e5b5b5', background: '#fff', color: '#8f2020', fontSize: 12, cursor: 'pointer' }}
++                    >
++                      رد
++                    </button>
++                  </div>
++                )}
++              </div>
++            ))}
++          </div>
++        )}
++      </div>
++
+       {view && (
+         <>
+           <div
+diff --git a/app/api/admin/wallet/invites/route.ts b/app/api/admin/wallet/invites/route.ts
+new file mode 100644
+index 0000000..e389260
+--- /dev/null
++++ b/app/api/admin/wallet/invites/route.ts
+@@ -0,0 +1,78 @@
++import 'server-only'
++import crypto from 'crypto'
++import { NextRequest, NextResponse } from 'next/server'
++import { rateLimit, tooMany } from '@/lib/rate-limit'
++import { guardAdmin } from '@/lib/admin/assert-admin'
++import { supabaseAdmin } from '@/lib/supabase/server'
++
++export const dynamic = 'force-dynamic'
++
++const INVITE_TTL_DAYS = 7
++
++/** فهرست دعوت‌نامه‌ها — GET /api/admin/wallet/invites */
++export async function GET(req: NextRequest) {
++  const denied = await guardAdmin()
++  if (denied) return NextResponse.json(denied, { status: 403 })
++
++  const rl = rateLimit(req, 'admin-invites-get', 60, 60_000)
++  if (!rl.ok) return tooMany(rl)
++
++  const db = supabaseAdmin()
++  const { data, error } = await db
++    .from('registration_invites')
++    .select('id, token, expires_at, used_at, used_phone, is_active, created_at')
++    .order('created_at', { ascending: false })
++    .limit(30)
++
++  if (error) {
++    console.error('[admin/wallet/invites] GET', error.message)
++    return NextResponse.json({ error: 'خطای سرور' }, { status: 500 })
++  }
++  return NextResponse.json({ invites: data ?? [] })
++}
++
++/** ساخت دعوت‌نامه جدید (QR / لینک) — POST { } */
++export async function POST(req: NextRequest) {
++  const denied = await guardAdmin()
++  if (denied) return NextResponse.json(denied, { status: 403 })
++
++  const rl = rateLimit(req, 'admin-invites-post', 20, 60_000)
++  if (!rl.ok) return tooMany(rl)
++
++  const token = crypto.randomBytes(9).toString('base64url') // ۱۲ کاراکتر امن در URL
++  const expiresAt = new Date(Date.now() + INVITE_TTL_DAYS * 24 * 60 * 60 * 1000).toISOString()
++
++  const { data, error } = await supabaseAdmin()
++    .from('registration_invites')
++    .insert({ token, expires_at: expiresAt })
++    .select('token, expires_at')
++    .single()
++
++  if (error || !data) {
++    console.error('[admin/wallet/invites] POST', error?.message)
++    return NextResponse.json({ error: 'ساخت دعوت‌نامه ناموفق بود' }, { status: 500 })
++  }
++  return NextResponse.json({ invite: data })
++}
++
++/** باطل کردن دعوت‌نامه — DELETE ?id= */
++export async function DELETE(req: NextRequest) {
++  const denied = await guardAdmin()
++  if (denied) return NextResponse.json(denied, { status: 403 })
++
++  const id = req.nextUrl.searchParams.get('id')
++  if (!id || !/^[0-9a-f-]{36}$/i.test(id)) {
++    return NextResponse.json({ error: 'شناسه نامعتبر است' }, { status: 400 })
++  }
++
++  const { error } = await supabaseAdmin()
++    .from('registration_invites')
++    .update({ is_active: false })
++    .eq('id', id)
++
++  if (error) {
++    console.error('[admin/wallet/invites] DELETE', error.message)
++    return NextResponse.json({ error: 'باطل‌سازی ناموفق بود' }, { status: 500 })
++  }
++  return NextResponse.json({ ok: true })
++}
+diff --git a/app/api/admin/wallet/requests/route.ts b/app/api/admin/wallet/requests/route.ts
+new file mode 100644
+index 0000000..de08761
+--- /dev/null
++++ b/app/api/admin/wallet/requests/route.ts
+@@ -0,0 +1,104 @@
++import 'server-only'
++import { NextRequest, NextResponse } from 'next/server'
++import { rateLimit, tooMany } from '@/lib/rate-limit'
++import { guardAdmin } from '@/lib/admin/assert-admin'
++import { supabaseAdmin } from '@/lib/supabase/server'
++import { ensureActivationTx } from '@/lib/wallet/wallet'
++
++export const dynamic = 'force-dynamic'
++
++/** صف درخواست‌ها: فعال‌سازی حضوری + رسیدهای شارژ — GET */
++export async function GET(req: NextRequest) {
++  const denied = await guardAdmin()
++  if (denied) return NextResponse.json(denied, { status: 403 })
++
++  const rl = rateLimit(req, 'admin-reqs-get', 60, 60_000)
++  if (!rl.ok) return tooMany(rl)
++
++  const db = supabaseAdmin()
++
++  const [activation, charges] = await Promise.all([
++    db
++      .from('wallet_activation_requests')
++      .select('id, customer_id, name, phone, status, created_at')
++      .order('created_at', { ascending: false })
++      .limit(50),
++    db
++      .from('wallet_charge_requests')
++      .select('id, customer_id, amount, status, receipt_url, tracking_no, reject_reason, created_at')
++      .order('created_at', { ascending: false })
++      .limit(50),
++  ])
++
++  if (activation.error) {
++    console.error('[admin/wallet/requests] activation:', activation.error.message)
++    return NextResponse.json({ error: 'خطای سرور' }, { status: 500 })
++  }
++
++  return NextResponse.json({
++    activationRequests: activation.data ?? [],
++    chargeRequests: charges.error ? [] : charges.data ?? [],
++  })
++}
++
++/** تأیید/رد درخواست — POST { id, type: 'activation', action: 'approve' | 'reject' } */
++export async function POST(req: NextRequest) {
++  const denied = await guardAdmin()
++  if (denied) return NextResponse.json(denied, { status: 403 })
++
++  const rl = rateLimit(req, 'admin-reqs-post', 30, 60_000)
++  if (!rl.ok) return tooMany(rl)
++
++  try {
++    const body = await req.json().catch(() => null)
++    const id = typeof body?.id === 'string' ? body.id : ''
++    const type = body?.type
++    const action = body?.action
++
++    if (!/^[0-9a-f-]{36}$/i.test(id) || type !== 'activation' || !['approve', 'reject'].includes(action)) {
++      return NextResponse.json({ error: 'اطلاعات نامعتبر است' }, { status: 400 })
++    }
++
++    const db = supabaseAdmin()
++
++    // درخواست باید در وضعیت pending باشد (جلوی تأیید دوباره گرفته می‌شود)
++    const { data: request } = await db
++      .from('wallet_activation_requests')
++      .select('id, customer_id, status')
++      .eq('id', id)
++      .maybeSingle()
++
++    if (!request || request.status !== 'pending') {
++      return NextResponse.json({ error: 'این درخواست قبلاً بررسی شده است' }, { status: 409 })
++    }
++
++    const newStatus = action === 'approve' ? 'approved' : 'rejected'
++
++    if (action === 'approve') {
++      // احراز فوری: پرچم مشتری + رویداد فعال‌سازی در دفتر
++      const { error: custErr } = await db
++        .from('customers')
++        .update({ verification_status: 'verified', verified_at: new Date().toISOString() })
++        .eq('id', request.customer_id)
++      if (custErr) {
++        console.error('[admin/wallet/requests] customer update:', custErr.message)
++        return NextResponse.json({ error: 'تأیید ناموفق بود' }, { status: 500 })
++      }
++      await ensureActivationTx(request.customer_id)
++    }
++
++    const { error: reqErr } = await db
++      .from('wallet_activation_requests')
++      .update({ status: newStatus, reviewed_at: new Date().toISOString() })
++      .eq('id', id)
++    if (reqErr) {
++      console.error('[admin/wallet/requests] request update:', reqErr.message)
++      return NextResponse.json({ error: 'ثبت نتیجه ناموفق بود' }, { status: 500 })
++    }
++
++    return NextResponse.json({ ok: true, status: newStatus })
++  } catch (err) {
++    console.error('[admin/wallet/requests] POST', err)
++    return NextResponse.json({ error: 'خطای سرور' }, { status: 500 })
++  }
++}
+diff --git a/app/api/payment/wallet/route.ts b/app/api/payment/wallet/route.ts
+index a1f0dea..5071e04 100644
+--- a/app/api/payment/wallet/route.ts
++++ b/app/api/payment/wallet/route.ts
+@@ -3,8 +3,7 @@ import 'server-only'
+ import { NextRequest, NextResponse } from 'next/server'
+ import { supabaseAdmin } from '@/lib/supabase/server'
+ import { getDeviceHash, UUID_RE } from '@/lib/orders/owner'
+-import { getVerifiedPhoneHash } from '@/lib/sms/otp'
+-import { getSessionWalletBalance } from '@/lib/wallet/wallet'
++import { getSessionWalletBalance, resolveWalletCustomer } from '@/lib/wallet/wallet'
+ import { paymentErrorMessage } from '@/lib/payment/methods'
+ 
+ export const dynamic = 'force-dynamic'
+@@ -33,13 +32,20 @@ export async function POST(req: NextRequest) {
+       return NextResponse.json({ error: 'اطلاعات نامعتبر است' }, { status: 400 })
+     }
+ 
+-    const phoneHash = await getVerifiedPhoneHash()
+-    if (!phoneHash) {
++    // مشتری: نشست تأییدشده (OTP/دعوت) یا دستگاهِ مشتریِ احرازشده توسط ادمین
++    const customer = await resolveWalletCustomer()
++    if (!customer) {
+       return NextResponse.json(
+-        { error: 'برای پرداخت با کیف پول باید با تأیید شماره (OTP) وارد شده باشی' },
++        { error: 'برای پرداخت با کیف پول اول باید شماره‌ات تأیید شود' },
+         { status: 401 }
+       )
+     }
++    if (customer.wallet_blocked) {
++      return NextResponse.json(
++        { error: 'کیف پول شما توسط مدیر مسدود شده است' },
++        { status: 403 }
++      )
++    }
+ 
+     const deviceHash = await getDeviceHash()
+     if (!deviceHash) {
+@@ -48,19 +54,6 @@ export async function POST(req: NextRequest) {
+ 
+     const db = supabaseAdmin()
+ 
+-    const { data: customer } = await db
+-      .from('customers')
+-      .select('id, phone')
+-      .eq('phone_hash', phoneHash)
+-      .maybeSingle()
+-
+-    if (!customer?.id) {
+-      return NextResponse.json(
+-        { error: 'کیف پولی برای این نشست پیدا نشد' },
+-        { status: 404 }
+-      )
+-    }
+-
+     // مالکیت سفارش با دستگاه + تطابق شماره سفارش با شماره کیف پول
+     const { data: order, error: orderErr } = await db
+       .from('orders')
+diff --git a/app/api/register/complete/route.ts b/app/api/register/complete/route.ts
+new file mode 100644
+index 0000000..ca2daf1
+--- /dev/null
++++ b/app/api/register/complete/route.ts
+@@ -0,0 +1,121 @@
++import 'server-only'
++import { NextRequest, NextResponse } from 'next/server'
++import { rateLimit, tooMany } from '@/lib/rate-limit'
++import { supabaseAdmin } from '@/lib/supabase/server'
++import {
++  isValidIranMobile,
++  normalizePhone,
++  phoneHash,
++  setPhoneSession,
++} from '@/lib/sms/otp'
++import { ensureActivationTx } from '@/lib/wallet/wallet'
++
++export const dynamic = 'force-dynamic'
++
++/**
++ * تکمیل ثبت‌نام با دعوت‌نامه — POST { token, fullName, phone }
++ * لینک دعوت (از QR یا پیام‌رسان) خودش مجوز است: تک‌مصرف + تاریخ انقضا.
++ * احراز فوری است: مشتری با همان دستگاهی که لینک را باز کرده تأیید می‌شود
++ * (کوکی نشست روی همان دستگاه ست می‌شود).
++ */
++export async function POST(req: NextRequest) {
++  const rl = rateLimit(req, 'register-complete', 5, 10 * 60_000)
++  if (!rl.ok) return tooMany(rl)
++
++  try {
++    const body = await req.json().catch(() => null)
++    const token = typeof body?.token === 'string' ? body.token.trim() : ''
++    const fullName = typeof body?.fullName === 'string' ? body.fullName.trim().slice(0, 120) : ''
++    const phone = normalizePhone(body?.phone)
++
++    if (!token || token.length > 64 || fullName.length < 3 || !isValidIranMobile(phone)) {
++      return NextResponse.json(
++        { error: 'نام و شماره موبایل معتبر لازم است' },
++        { status: 400 }
++      )
++    }
++
++    const db = supabaseAdmin()
++
++    // ۱) دعوت‌نامه باید فعال، مصرف‌نشده و داخل مهلت باشد
++    const { data: invite, error: invErr } = await db
++      .from('registration_invites')
++      .select('id, expires_at, used_at, is_active')
++      .eq('token', token)
++      .maybeSingle()
++
++    if (invErr || !invite || !invite.is_active || invite.used_at) {
++      return NextResponse.json({ error: 'این لینک قبلاً استفاده شده یا باطل شده است' }, { status: 409 })
++    }
++    if (new Date(invite.expires_at).getTime() < Date.now()) {
++      return NextResponse.json({ error: 'مهلت این لینک تمام شده است؛ از مدیر لینک جدید بگیر' }, { status: 410 })
++    }
++
++    // ۲) مشتری: موجود → تکمیل اطلاعات و تأیید؛ جدید → ساختن
++    const pHash = phoneHash(phone)
++    const { data: existing } = await db
++      .from('customers')
++      .select('id')
++      .eq('phone', phone)
++      .maybeSingle()
++
++    let customerId: string
++    if (existing?.id) {
++      customerId = existing.id
++      const { error: upErr } = await db
++        .from('customers')
++        .update({
++          name: fullName,
++          phone_hash: pHash,
++          verification_status: 'verified',
++          verified_at: new Date().toISOString(),
++        })
++        .eq('id', customerId)
++      if (upErr) {
++        console.error('[register/complete] update:', upErr.message)
++        return NextResponse.json({ error: 'تکمیل ثبت‌نام ناموفق بود' }, { status: 500 })
++      }
++    } else {
++      const { data: inserted, error: insErr } = await db
++        .from('customers')
++        .insert({
++          phone,
++          phone_hash: pHash,
++          name: fullName,
++          verification_status: 'verified',
++          verified_at: new Date().toISOString(),
++        })
++        .select('id')
++        .single()
++      if (insErr || !inserted) {
++        console.error('[register/complete] insert:', insErr?.message)
++        return NextResponse.json({ error: 'تکمیل ثبت‌نام ناموفق بود' }, { status: 500 })
++      }
++      customerId = inserted.id
++    }
++
++    // ۳) مصرف دعوت‌نامه — شرط used_at is null داخل UPDATE؛ رقابتِ دوباره‌فرستادن شکست می‌خورد
++    const { data: used, error: useErr } = await db
++      .from('registration_invites')
++      .update({ used_at: new Date().toISOString(), used_phone: phone })
++      .eq('id', invite.id)
++      .is('used_at', null)
++      .select('id')
++
++    if (useErr || !used || used.length === 0) {
++      return NextResponse.json(
++        { error: 'این لینک همزمان جای دیگری استفاده شد' },
++        { status: 409 }
++      )
++    }
++
++    // ۴) نشست تأییدشده روی همین دستگاه + رویداد فعال‌سازی
++    await setPhoneSession(phone)
++    await ensureActivationTx(customerId)
++
++    return NextResponse.json({ ok: true })
++  } catch (err) {
++    console.error('[register/complete]', err)
++    return NextResponse.json({ error: 'خطای سرور' }, { status: 500 })
++  }
++}
+diff --git a/app/api/register/invite/route.ts b/app/api/register/invite/route.ts
+new file mode 100644
+index 0000000..6e7ec33
+--- /dev/null
++++ b/app/api/register/invite/route.ts
+@@ -0,0 +1,37 @@
++import 'server-only'
++import { NextRequest, NextResponse } from 'next/server'
++import { rateLimit, tooMany } from '@/lib/rate-limit'
++import { supabaseAdmin } from '@/lib/supabase/server'
++
++export const dynamic = 'force-dynamic'
++
++/**
++ * بررسی دعوت‌نامه بدون مصرف آن — GET /api/register/invite?token=...
++ * صفحه‌ی «تکمیل اطلاعات» با همین فهمید می‌شود که لینک سالم است یا نه.
++ */
++export async function GET(req: NextRequest) {
++  const rl = rateLimit(req, 'register-invite-get', 30, 60_000)
++  if (!rl.ok) return tooMany(rl)
++
++  const token = (req.nextUrl.searchParams.get('token') ?? '').trim()
++  if (!token || token.length > 64) {
++    return NextResponse.json({ valid: false, reason: 'invalid' })
++  }
++
++  const { data, error } = await supabaseAdmin()
++    .from('registration_invites')
++    .select('expires_at, used_at, is_active')
++    .eq('token', token)
++    .maybeSingle()
++
++  if (error || !data) {
++    return NextResponse.json({ valid: false, reason: 'not_found' })
++  }
++  if (!data.is_active) return NextResponse.json({ valid: false, reason: 'revoked' })
++  if (data.used_at) return NextResponse.json({ valid: false, reason: 'used' })
++  if (new Date(data.expires_at).getTime() < Date.now()) {
++    return NextResponse.json({ valid: false, reason: 'expired' })
++  }
++
++  return NextResponse.json({ valid: true })
++}
+diff --git a/app/api/wallet/activation-request/route.ts b/app/api/wallet/activation-request/route.ts
+new file mode 100644
+index 0000000..734c7c2
+--- /dev/null
++++ b/app/api/wallet/activation-request/route.ts
+@@ -0,0 +1,71 @@
++import 'server-only'
++import { NextRequest, NextResponse } from 'next/server'
++import { rateLimit, tooMany } from '@/lib/rate-limit'
++import { supabaseAdmin } from '@/lib/supabase/server'
++import { getVerifiedPhoneHash } from '@/lib/sms/otp'
++import { resolveCustomerByDevice } from '@/lib/wallet/wallet'
++
++export const dynamic = 'force-dynamic'
++
++/**
++ * درخواست فعال‌سازی حضوری کیف پول از مدیر — POST { }
++ * هویت: نشست OTP یا آخرین سفارش همین دستگاه (احراز لازم ندارد؛ درخواست فقط به ادمین می‌رود)
++ */
++export async function POST(req: NextRequest) {
++  const rl = rateLimit(req, 'wallet-act-req', 3, 60 * 60_000)
++  if (!rl.ok) return tooMany(rl)
++
++  try {
++    const db = supabaseAdmin()
++
++    let customer: { id: string; phone: string | null; name: string | null; verification_status: string } | null = null
++
++    const phoneHash = await getVerifiedPhoneHash()
++    if (phoneHash) {
++      const { data } = await db
++        .from('customers')
++        .select('id, phone, name, verification_status')
++        .eq('phone_hash', phoneHash)
++        .maybeSingle()
++      customer = data ?? null
++    }
++    if (!customer) {
++      customer = await resolveCustomerByDevice()
++    }
++
++    if (!customer?.id) {
++      return NextResponse.json(
++        { error: 'برای ثبت درخواست، اول یک سفارش ثبت کن یا با شماره وارد شو' },
++        { status: 400 }
++      )
++    }
++    if (customer.verification_status === 'verified') {
++      return NextResponse.json({ error: 'حساب شما قبلاً تأیید شده است' }, { status: 400 })
++    }
++
++    const { data: dup } = await db
++      .from('wallet_activation_requests')
++      .select('id')
++      .eq('customer_id', customer.id)
++      .eq('status', 'pending')
++      .maybeSingle()
++    if (dup) {
++      return NextResponse.json({ ok: true, duplicate: true })
++    }
++
++    const { error } = await db.from('wallet_activation_requests').insert({
++      customer_id: customer.id,
++      name: customer.name ?? null,
++      phone: customer.phone ?? null,
++    })
++    if (error) {
++      console.error('[wallet/activation-request]', error.message)
++      return NextResponse.json({ error: 'ثبت درخواست ناموفق بود' }, { status: 500 })
++    }
++
++    return NextResponse.json({ ok: true })
++  } catch (err) {
++    console.error('[wallet/activation-request]', err)
++    return NextResponse.json({ error: 'خطای سرور' }, { status: 500 })
++  }
++}
+diff --git a/app/api/wallet/route.ts b/app/api/wallet/route.ts
+index 57900c7..6c06a66 100644
+--- a/app/api/wallet/route.ts
++++ b/app/api/wallet/route.ts
+@@ -5,7 +5,7 @@ import { getWalletView, resolveWalletCustomer } from '@/lib/wallet/wallet'
+ 
+ export const dynamic = 'force-dynamic'
+ 
+-/** کیف پول مشتری — فقط با نشست «تلفن تأییدشده» (OTP) */
++/** کیف پول مشتری — نشست تأییدشده (OTP/دعوت) یا دستگاهِ مشتریِ احرازشده */
+ export async function GET(req: NextRequest) {
+   const rl = rateLimit(req, 'wallet-get', 30, 60_000)
+   if (!rl.ok) return tooMany(rl)
+@@ -15,6 +15,9 @@ export async function GET(req: NextRequest) {
+     if (!customer) {
+       return NextResponse.json({ error: 'برای دیدن کیف پول باید با شماره موبایل وارد شوید' }, { status: 401 })
+     }
++    if (customer.wallet_blocked) {
++      return NextResponse.json({ error: 'کیف پول شما توسط مدیر مسدود شده است' }, { status: 403 })
++    }
+ 
+     const view = await getWalletView(customer.id)
+     return NextResponse.json(view)
+diff --git a/app/api/wallet/status/route.ts b/app/api/wallet/status/route.ts
+new file mode 100644
+index 0000000..10bb1f5
+--- /dev/null
++++ b/app/api/wallet/status/route.ts
+@@ -0,0 +1,16 @@
++import 'server-only'
++import { NextResponse } from 'next/server'
++import { getWalletStatus } from '@/lib/wallet/wallet'
++
++export const dynamic = 'force-dynamic'
++
++/** وضعیت کیف پول برای پنل مشتری: پرچم‌ها + مشتریِ شناسایی‌شده + موجودی */
++export async function GET() {
++  try {
++    const status = await getWalletStatus()
++    return NextResponse.json(status, { headers: { 'Cache-Control': 'no-store' } })
++  } catch (err) {
++    console.error('[wallet/status]', err)
++    return NextResponse.json({ error: 'خطای سرور' }, { status: 500 })
++  }
++}
+diff --git a/app/my-orders/MyOrdersClient.tsx b/app/my-orders/MyOrdersClient.tsx
+index 48fd4a6..ec91413 100644
+--- a/app/my-orders/MyOrdersClient.tsx
++++ b/app/my-orders/MyOrdersClient.tsx
+@@ -54,9 +54,60 @@ export default function MyOrdersClient() {
+ 
+   // 👛 کیف پول مشتری — با اولین باز کردن تب لود می‌شود
+   const [walletView, setWalletView] = useState<{ balance: number; transactions: WalletTx[] } | null>(null)
+-  const [walletState, setWalletState] = useState<'idle' | 'loading' | 'ready' | 'login' | 'error'>('idle')
++  const [walletState, setWalletState] = useState<'idle' | 'loading' | 'ready' | 'login' | 'error' | 'blocked'>('idle')
+   const [walletLoadedOnce, setWalletLoadedOnce] = useState(false)
+ 
++  // 🔐 وضعیت احراز/فعال‌سازی — در ورود به پنل چک می‌شود
++  const [wstatus, setWstatus] = useState<{
++    walletEnabled: boolean
++    cardChargeEnabled: boolean
++    smsConfigured: boolean
++    customer: { id: string; name: string | null; phone: string | null; verification_status: string; wallet_blocked: boolean; balance: number } | null
++  } | null>(null)
++
++  // 🤝 درخواست فعال‌سازی حضوری از مدیر
++  const [reqState, setReqState] = useState<'idle' | 'busy' | 'sent' | 'error'>('idle')
++  const [reqError, setReqError] = useState<string | null>(null)
++  const [showOtpForm, setShowOtpForm] = useState(false)
++
++  useEffect(() => {
++    fetch('/api/wallet/status', { cache: 'no-store' })
++      .then((r) => r.json())
++      .then((d) => { if (d && typeof d.walletEnabled === 'boolean') setWstatus(d) })
++      .catch(() => {})
++  }, [])
++
++  // بعد از تأیید شماره، هم کیف پول و هم وضعیت تازه می‌شود
++  async function refreshWalletAfterVerify() {
++    await loadWallet()
++    fetch('/api/wallet/status', { cache: 'no-store' })
++      .then((r) => r.json())
++      .then((d) => { if (d && typeof d.walletEnabled === 'boolean') setWstatus(d) })
++      .catch(() => {})
++  }
++
++  async function requestActivation() {
++    setReqState('busy')
++    setReqError(null)
++    try {
++      const res = await fetch('/api/wallet/activation-request', { method: 'POST' })
++      const data = await res.json().catch(() => null)
++      if (!res.ok) throw new Error(data?.error || 'ثبت درخواست ناموفق بود')
++      setReqState('sent')
++    } catch (err: any) {
++      setReqState('error')
++      setReqError(err.message)
++    }
++  }
++
++  // 🔐 ورود با کد پیامکی (OTP) — کلید کیف پول و پرداخت با کیف پول همین‌جاست
++  const [otpStep, setOtpStep] = useState<'phone' | 'code'>('phone')
++  const [otpPhone, setOtpPhone] = useState('')
++  const [otpCode, setOtpCode] = useState('')
++  const [otpBusy, setOtpBusy] = useState(false)
++  const [otpError, setOtpError] = useState<string | null>(null)
++  const [otpInfo, setOtpInfo] = useState<string | null>(null)
++
+   useEffect(() => {
+     async function loadData() {
+       try {
+@@ -100,6 +151,7 @@ export default function MyOrdersClient() {
+     try {
+       const res = await fetch('/api/wallet', { cache: 'no-store' })
+       if (res.status === 401) { setWalletState('login'); return }
++      if (res.status === 403) { setWalletState('blocked'); return }
+       const data = await res.json().catch(() => null)
+       if (!res.ok || !data) throw new Error('خطا در خواندن کیف پول')
+       setWalletView({
+@@ -117,6 +169,45 @@ export default function MyOrdersClient() {
+     if (!walletLoadedOnce) {
+       setWalletLoadedOnce(true)
+       loadWallet()
++      // پیش‌پر کردن شماره از آخرین سفارش همین دستگاه — فقط برای راحتی، تأیید همچنان با OTP است
++      if (customer?.phone) setOtpPhone(customer.phone)
++    }
++  }
++
++  async function sendOtp() {
++    setOtpBusy(true); setOtpError(null); setOtpInfo(null)
++    try {
++      const res = await fetch('/api/auth/otp/send', {
++        method: 'POST',
++        headers: { 'Content-Type': 'application/json' },
++        body: JSON.stringify({ phone: otpPhone }),
++      })
++      const data = await res.json().catch(() => null)
++      if (!res.ok) throw new Error(data?.error || 'ارسال کد ناموفق بود')
++      setOtpStep('code')
++      setOtpInfo(`کد ۶ رقمی به ${otpPhone.trim()} پیامک شد.`)
++    } catch (err: any) {
++      setOtpError(err.message)
++    } finally {
++      setOtpBusy(false)
++    }
++  }
++
++  async function verifyOtp() {
++    setOtpBusy(true); setOtpError(null); setOtpInfo(null)
++    try {
++      const res = await fetch('/api/auth/otp/verify', {
++        method: 'POST',
++        headers: { 'Content-Type': 'application/json' },
++        body: JSON.stringify({ phone: otpPhone, code: otpCode }),
++      })
++      const data = await res.json().catch(() => null)
++      if (!res.ok) throw new Error(data?.error || 'تأیید کد ناموفق بود')
++      await refreshWalletAfterVerify()
++    } catch (err: any) {
++      setOtpError(err.message)
++    } finally {
++      setOtpBusy(false)
+     }
+   }
+ 
+@@ -236,6 +327,11 @@ export default function MyOrdersClient() {
+                 خوش اومدی، {customer.name && customer.name !== 'کاربر' ? `${customer.name} عزیز` : 'دوست عزیز'}! 🌟
+               </strong>
+               <small dir="ltr">{customer.phone}</small>
++              {wstatus?.walletEnabled && wstatus.customer?.verification_status === 'verified' && !wstatus.customer.wallet_blocked && (
++                <div style={{ marginTop: '6px', display: 'inline-block', background: '#2d5d3e', color: '#fff', borderRadius: '999px', padding: '4px 12px', fontSize: '12px' }}>
++                  👛 موجودی کیف پول: {formatPrice(wstatus.customer.balance)} تومان
++                </div>
++              )}
+             </div>
+           </div>
+ 
+@@ -293,11 +389,124 @@ export default function MyOrdersClient() {
+           )}
+ 
+           {walletState === 'login' && (
+-            <div className="my-orders-empty" style={{ lineHeight: 2 }}>
+-              👛 برای دیدن کیف پول باید با شماره موبایل وارد شوی.<br />
+-              <small style={{ color: '#766f64', fontSize: '12px' }}>
+-                کافی است یک سفارش ثبت کنی و شماره‌ات را با کد پیامکی تأیید کنی؛
+-                کیف پولِ همان شماره به این دستگاه وصل می‌شود.
++            <>
++              {/* بنر وضعیت: هنوز احراز هویت نشده‌اید */}
++              <div style={{ background: '#fdf6e3', border: '1.5px solid #d99f59', borderRadius: '14px', padding: '16px', marginTop: '16px' }}>
++                <strong style={{ display: 'block', fontSize: '14px', color: '#8a5a24', textAlign: 'center' }}>
++                  🔒 شما هنوز احراز هویت نکرده‌اید
++                </strong>
++                <small style={{ display: 'block', fontSize: '11px', color: '#766f64', textAlign: 'center', marginTop: '4px', lineHeight: 1.9 }}>
++                  برای دیدن موجودی و استفاده از کیف پول، یکی از دو راه زیر را انتخاب کن.
++                </small>
++
++                <div style={{ display: 'grid', gap: '8px', marginTop: '12px' }}>
++                  <button
++                    onClick={() => { setShowOtpForm(true); if (wstatus?.customer?.phone) setOtpPhone(wstatus.customer.phone) }}
++                    disabled={!wstatus?.smsConfigured}
++                    style={{
++                      padding: '11px 14px', borderRadius: '10px', border: 'none',
++                      background: wstatus?.smsConfigured ? '#6b4f3a' : '#c9c2b8',
++                      color: '#fff', fontSize: '13px', fontWeight: 'bold',
++                      cursor: wstatus?.smsConfigured ? 'pointer' : 'default', textAlign: 'center',
++                    }}
++                  >
++                    🔐 احراز هویت با کد پیامکی
++                  </button>
++                  {!wstatus?.smsConfigured && (
++                    <small style={{ display: 'block', fontSize: '10px', color: '#9b3c32', textAlign: 'center' }}>
++                      پیامک تنظیم نشده است — با مدیر کافه هماهنگ کن.
++                    </small>
++                  )}
++
++                  {reqState === 'sent' ? (
++                    <div style={{ background: '#e9f3ec', border: '1px solid #b9dcc4', borderRadius: '10px', padding: '10px 12px', fontSize: '12px', color: '#2d5d3e', textAlign: 'center', lineHeight: 1.9 }}>
++                      ✅ درخواستت ثبت شد؛ مدیر کافه حضوری احرازت می‌کند. همین صفحه را بعداً دوباره چک کن.
++                    </div>
++                  ) : (
++                    <button
++                      onClick={requestActivation}
++                      disabled={reqState === 'busy'}
++                      style={{
++                        padding: '11px 14px', borderRadius: '10px', border: '1.5px solid #6b4f3a',
++                        background: '#fff', color: '#6b4f3a', fontSize: '13px', fontWeight: 'bold',
++                        cursor: reqState === 'busy' ? 'default' : 'pointer', textAlign: 'center', opacity: reqState === 'busy' ? 0.6 : 1,
++                      }}
++                    >
++                      {reqState === 'busy' ? '⏳ در حال ثبت...' : '🤝 درخواست فعال‌سازی کیف پول از مدیر'}
++                    </button>
++                  )}
++                  {reqError && <div style={{ color: '#9b3c32', fontSize: '11px', textAlign: 'center' }}>{reqError}</div>}
++                </div>
++              </div>
++
++              {showOtpForm && (
++              <div style={{ background: '#fff', border: '1px solid #e3ddd2', borderRadius: '14px', padding: '18px', marginTop: '12px' }}>
++                <strong style={{ display: 'block', textAlign: 'center', fontSize: '14px', color: '#29251f' }}>
++                  تأیید شماره موبایل با کد پیامکی
++                </strong>
++
++                {otpStep === 'phone' ? (
++                  <div style={{ display: 'flex', gap: '8px', marginTop: '14px' }}>
++                    <input
++                      dir="ltr"
++                      value={otpPhone}
++                      onChange={(e) => setOtpPhone(e.target.value)}
++                      placeholder="09xxxxxxxxx"
++                      inputMode="numeric"
++                      style={{ flex: 1, padding: '10px 12px', borderRadius: '10px', border: '1px solid #e3ddd2', fontSize: '14px', minWidth: 0 }}
++                    />
++                    <button
++                      onClick={sendOtp}
++                      disabled={otpBusy || otpPhone.trim().length < 10}
++                      style={{ padding: '10px 16px', borderRadius: '10px', border: 'none', background: '#6b4f3a', color: '#fff', fontSize: '13px', fontWeight: 'bold', cursor: otpBusy || otpPhone.trim().length < 10 ? 'default' : 'pointer', whiteSpace: 'nowrap', opacity: otpBusy || otpPhone.trim().length < 10 ? 0.6 : 1 }}
++                    >
++                      {otpBusy ? '⏳' : 'ارسال کد'}
++                    </button>
++                  </div>
++                ) : (
++                  <div style={{ marginTop: '14px' }}>
++                    <div style={{ display: 'flex', gap: '8px' }}>
++                      <input
++                        dir="ltr"
++                        value={otpCode}
++                        onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
++                        placeholder="- - - - - -"
++                        inputMode="numeric"
++                        maxLength={6}
++                        style={{ flex: 1, padding: '10px 12px', borderRadius: '10px', border: '1px solid #e3ddd2', fontSize: '16px', textAlign: 'center', letterSpacing: '4px', minWidth: 0 }}
++                      />
++                      <button
++                        onClick={verifyOtp}
++                        disabled={otpBusy || otpCode.length !== 6}
++                        style={{ padding: '10px 16px', borderRadius: '10px', border: 'none', background: '#2d5d3e', color: '#fff', fontSize: '13px', fontWeight: 'bold', cursor: otpBusy || otpCode.length !== 6 ? 'default' : 'pointer', whiteSpace: 'nowrap', opacity: otpBusy || otpCode.length !== 6 ? 0.6 : 1 }}
++                      >
++                        {otpBusy ? '⏳' : 'تأیید'}
++                      </button>
++                    </div>
++                    <button
++                      onClick={() => { setOtpStep('phone'); setOtpCode(''); setOtpInfo(null); setOtpError(null) }}
++                      style={{ background: 'none', border: 'none', color: '#9a6b3f', fontSize: '11px', marginTop: '10px', cursor: 'pointer', padding: 0 }}
++                    >
++                      ← تغییر شماره / ارسال مجدد کد
++                    </button>
++                  </div>
++                )}
++
++                {otpInfo && <div style={{ color: '#2d5d3e', fontSize: '12px', marginTop: '10px', textAlign: 'center' }}>{otpInfo}</div>}
++                {otpError && <div style={{ color: '#9b3c32', fontSize: '12px', marginTop: '10px', textAlign: 'center' }}>{otpError}</div>}
++              </div>
++              )}
++            </>
++          )}
++
++          {walletState === 'blocked' && (
++            <div style={{ background: '#fdecea', border: '1px solid #f5c6c0', borderRadius: '14px', padding: '18px', marginTop: '16px', textAlign: 'center' }}>
++              <div style={{ fontSize: '28px' }}>⛔</div>
++              <strong style={{ display: 'block', fontSize: '14px', color: '#9b3c32', marginTop: '6px' }}>
++                کیف پول شما توسط مدیر مسدود شده است
++              </strong>
++              <small style={{ display: 'block', fontSize: '11px', color: '#766f64', marginTop: '4px' }}>
++                برای پیگیری با مدیر کافه تماس بگیر.
+               </small>
+             </div>
+           )}
+diff --git a/app/register/[token]/page.tsx b/app/register/[token]/page.tsx
+new file mode 100644
+index 0000000..1ecb180
+--- /dev/null
++++ b/app/register/[token]/page.tsx
+@@ -0,0 +1,161 @@
++'use client'
++
++import { useEffect, useState } from 'react'
++import Link from 'next/link'
++
++const REASONS: Record<string, string> = {
++  not_found: 'این لینک پیدا نشد؛ از مدیر کافه لینک جدید بگیر.',
++  used: 'این لینک قبلاً استفاده شده است.',
++  expired: 'مهلت این لینک تمام شده است؛ از مدیر لینک جدید بگیر.',
++  revoked: 'این لینک توسط مدیر باطل شده است.',
++  invalid: 'لینک نامعتبر است.',
++}
++
++const toEnDigits = (s: string) =>
++  s
++    .replace(/[۰-۹]/g, (d) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d)))
++    .replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
++
++export default function RegisterPage({ params }: { params: Promise<{ token: string }> }) {
++  const [token, setToken] = useState<string | null>(null)
++  const [inviteState, setInviteState] = useState<'checking' | 'valid' | 'invalid'>('checking')
++  const [invalidReason, setInvalidReason] = useState<string | null>(null)
++
++  const [fullName, setFullName] = useState('')
++  const [phone, setPhone] = useState('')
++  const [busy, setBusy] = useState(false)
++  const [error, setError] = useState<string | null>(null)
++  const [done, setDone] = useState(false)
++
++  useEffect(() => {
++    params.then((p) => {
++      const t = p.token ?? ''
++      setToken(t)
++      fetch(`/api/register/invite?token=${encodeURIComponent(t)}`, { cache: 'no-store' })
++        .then((r) => r.json())
++        .then((d) => {
++          if (d?.valid) setInviteState('valid')
++          else {
++            setInviteState('invalid')
++            setInvalidReason(REASONS[d?.reason] ?? REASONS.invalid)
++          }
++        })
++        .catch(() => {
++          setInviteState('invalid')
++          setInvalidReason('خطا در بررسی لینک؛ دوباره تلاش کن.')
++        })
++    })
++  }, [params])
++
++  async function submit(e: React.FormEvent) {
++    e.preventDefault()
++    setError(null)
++    setBusy(true)
++    try {
++      const res = await fetch('/api/register/complete', {
++        method: 'POST',
++        headers: { 'Content-Type': 'application/json' },
++        body: JSON.stringify({ token, fullName, phone: toEnDigits(phone) }),
++      })
++      const data = await res.json().catch(() => null)
++      if (!res.ok) throw new Error(data?.error || 'ثبت‌نام ناموفق بود')
++      setDone(true)
++    } catch (err: any) {
++      setError(err.message)
++    } finally {
++      setBusy(false)
++    }
++  }
++
++  return (
++    <div style={{ maxWidth: 480, margin: '40px auto', padding: '0 16px', direction: 'rtl', fontFamily: 'inherit' }}>
++      <h1 style={{ textAlign: 'center', fontSize: 20, color: '#29251f' }}>☕ تکمیل ثبت‌نام کافه پارک</h1>
++
++      {inviteState === 'checking' && (
++        <div style={{ textAlign: 'center', marginTop: 32, color: '#766f64' }}>⏳ در حال بررسی لینک...</div>
++      )}
++
++      {inviteState === 'invalid' && (
++        <div style={{ background: '#fdecea', border: '1px solid #f5c6c0', borderRadius: 14, padding: 18, marginTop: 24, textAlign: 'center' }}>
++          <div style={{ fontSize: 30 }}>🔒</div>
++          <strong style={{ display: 'block', marginTop: 8, color: '#9b3c32' }}>{invalidReason}</strong>
++          <Link href="/" style={{ display: 'inline-block', marginTop: 14, color: '#6b4f3a', fontSize: 13 }}>
++            ← بازگشت به منو
++          </Link>
++        </div>
++      )}
++
++      {inviteState === 'valid' && done && (
++        <div style={{ background: '#e9f3ec', border: '1px solid #b9dcc4', borderRadius: 14, padding: 24, marginTop: 24, textAlign: 'center' }}>
++          <div style={{ fontSize: 34 }}>✅</div>
++          <strong style={{ display: 'block', marginTop: 8, fontSize: 15, color: '#2d5d3e' }}>
++            ثبت‌نامت کامل شد و حساب‌ت تأیید شد!
++          </strong>
++          <small style={{ display: 'block', marginTop: 6, color: '#4a6b55', fontSize: 12, lineHeight: 1.9 }}>
++            کیف پول این دستگاه فعال شد. برای شارژ و فعال‌سازی کامل با مدیر کافه هماهنگ کن.
++          </small>
++          <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 16 }}>
++            <Link href="/my-orders" style={{ background: '#2d5d3e', color: '#fff', borderRadius: 10, padding: '9px 16px', fontSize: 13, textDecoration: 'none' }}>
++              پنل مشتری
++            </Link>
++            <Link href="/" style={{ background: '#fff', color: '#6b4f3a', border: '1px solid #e3ddd2', borderRadius: 10, padding: '9px 16px', fontSize: 13, textDecoration: 'none' }}>
++              منو
++            </Link>
++          </div>
++        </div>
++      )}
++
++      {inviteState === 'valid' && !done && (
++        <form
++          onSubmit={submit}
++          style={{ background: '#fff', border: '1px solid #e3ddd2', borderRadius: 14, padding: 20, marginTop: 24 }}
++        >
++          <p style={{ fontSize: 13, color: '#766f64', lineHeight: 2, margin: '0 0 14px' }}>
++            این لینک اختصاصیِ مدیر کافه است؛ با تکمیل این فرم، حساب‌ت تأیید می‌شود
++            و کیف پولِ همین دستگاه وصل می‌شود.
++          </p>
++
++          <label style={{ display: 'block', fontSize: 12, color: '#766f64', marginBottom: 6 }}>نام و نام خانوادگی</label>
++          <input
++            value={fullName}
++            onChange={(e) => setFullName(e.target.value)}
++            placeholder="مثلاً سارا محمدی"
++            style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: 10, border: '1px solid #e3ddd2', fontSize: 14, marginBottom: 12 }}
++          />
++
++          <label style={{ display: 'block', fontSize: 12, color: '#766f64', marginBottom: 6 }}>شماره موبایل</label>
++          <input
++            dir="ltr"
++            value={phone}
++            onChange={(e) => setPhone(e.target.value)}
++            placeholder="09xxxxxxxxx"
++            inputMode="numeric"
++            style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: 10, border: '1px solid #e3ddd2', fontSize: 14, textAlign: 'left' }}
++          />
++
++          {error && <div style={{ color: '#9b3c32', fontSize: 12, marginTop: 10 }}>{error}</div>}
++
++          <button
++            type="submit"
++            disabled={busy || fullName.trim().length < 3 || phone.trim().length < 10}
++            style={{
++              width: '100%',
++              marginTop: 14,
++              padding: '11px 0',
++              borderRadius: 10,
++              border: 'none',
++              background: '#2d5d3e',
++              color: '#fff',
++              fontSize: 14,
++              fontWeight: 'bold',
++              cursor: busy ? 'default' : 'pointer',
++              opacity: busy || fullName.trim().length < 3 || phone.trim().length < 10 ? 0.6 : 1,
++            }}
++          >
++            {busy ? '⏳ در حال ثبت...' : 'تکمیل ثبت‌نام و تأیید'}
++          </button>
++        </form>
++      )}
++    </div>
++  )
++}
+diff --git a/lib/orders/owner.ts b/lib/orders/owner.ts
+index eb7f956..fca2289 100644
+--- a/lib/orders/owner.ts
++++ b/lib/orders/owner.ts
+@@ -1,6 +1,6 @@
+ import 'server-only'
+ import { cookies } from 'next/headers'
+-import { hashData } from '@/lib/utils/hash'
++import { hashData } from '../utils/hash'
+ 
+ export const UUID_RE =
+   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+diff --git a/lib/wallet/__tests__/rules.test.ts b/lib/wallet/__tests__/rules.test.ts
+new file mode 100644
+index 0000000..91ec0f5
+--- /dev/null
++++ b/lib/wallet/__tests__/rules.test.ts
+@@ -0,0 +1,55 @@
++import { describe, expect, it } from 'vitest'
++import { canSpendFromWallet, otpButtonEnabled, walletAccessState } from '../rules'
++
++describe('walletAccessState', () => {
++  it('کیف پول خاموش در تنظیمات → disabled (اولویت اول)', () => {
++    expect(
++      walletAccessState({ walletEnabled: false, verification: 'verified', walletBlocked: false })
++    ).toBe('disabled')
++  })
++
++  it('مشتری مسدودشده توسط ادمین → blocked', () => {
++    expect(
++      walletAccessState({ walletEnabled: true, verification: 'verified', walletBlocked: true })
++    ).toBe('blocked')
++  })
++
++  it('مشتری احرازنشده → unverified', () => {
++    expect(
++      walletAccessState({ walletEnabled: true, verification: 'unverified', walletBlocked: false })
++    ).toBe('unverified')
++  })
++
++  it('مشتری در انتظار (pending) هم مثل احرازنشده است', () => {
++    expect(
++      walletAccessState({ walletEnabled: true, verification: 'pending', walletBlocked: false })
++    ).toBe('unverified')
++  })
++
++  it('مشتری احرازشده و فعال → active', () => {
++    expect(
++      walletAccessState({ walletEnabled: true, verification: 'verified', walletBlocked: false })
++    ).toBe('active')
++  })
++
++  it('blocked مقدم بر unverified است', () => {
++    expect(
++      walletAccessState({ walletEnabled: true, verification: 'unverified', walletBlocked: true })
++    ).toBe('blocked')
++  })
++})
++
++describe('canSpendFromWallet', () => {
++  it('فقط در حالت active خرج مجاز است', () => {
++    expect(canSpendFromWallet({ walletEnabled: true, verification: 'verified', walletBlocked: false })).toBe(true)
++    expect(canSpendFromWallet({ walletEnabled: true, verification: 'unverified', walletBlocked: false })).toBe(false)
++    expect(canSpendFromWallet({ walletEnabled: false, verification: 'verified', walletBlocked: false })).toBe(false)
++  })
++})
++
++describe('otpButtonEnabled', () => {
++  it('دکمه OTP فقط با تنظیمات پیامک فعال می‌شود', () => {
++    expect(otpButtonEnabled(false)).toBe(false)
++    expect(otpButtonEnabled(true)).toBe(true)
++  })
++})
+diff --git a/lib/wallet/rules.ts b/lib/wallet/rules.ts
+new file mode 100644
+index 0000000..672310c
+--- /dev/null
++++ b/lib/wallet/rules.ts
+@@ -0,0 +1,36 @@
++// قواعد خالص دسترسی به کیف پول — بدون وابستگی به DB، قابل تست با vitest.
++// سرور و کلاینت هر دو همین قواعد را می‌خوانند تا وضعیت پنل با واقعیت API یکی باشد.
++
++export type VerificationStatus = 'unverified' | 'pending' | 'verified'
++
++export type WalletAccessInput = {
++  /** سوییچ سراسری «کیف پول» در تنظیمات پرداخت */
++  walletEnabled: boolean
++  /** وضعیت احراز هویت مشتری (لینک دعوت / تأیید حضوری ادمین / OTP) */
++  verification: VerificationStatus
++  /** مسدودسازی این مشتری توسط ادمین */
++  walletBlocked: boolean
++}
++
++export type WalletAccess =
++  | 'active' // همه‌چیز آماده — موجودی و خرج آزاد است
++  | 'unverified' // هنوز احراز هویت نشده
++  | 'blocked' // توسط ادمین مسدود شده
++  | 'disabled' // کیف پول در تنظیمات خاموش است
++
++export function walletAccessState(i: WalletAccessInput): WalletAccess {
++  if (!i.walletEnabled) return 'disabled'
++  if (i.walletBlocked) return 'blocked'
++  if (i.verification === 'verified') return 'active'
++  return 'unverified'
++}
++
++/** آیا این مشتری حق «خرج کردن» از کیف پول دارد؟ (مسیر POST پرداخت) */
++export function canSpendFromWallet(i: WalletAccessInput): boolean {
++  return walletAccessState(i) === 'active'
++}
++
++/** آیا دکمه «احراز هویت با کد پیامکی» باید فعال باشد؟ — فقط با تنظیمات پیامک */
++export function otpButtonEnabled(smsConfigured: boolean): boolean {
++  return smsConfigured
++}
+diff --git a/lib/wallet/wallet.ts b/lib/wallet/wallet.ts
+index 4f5119d..8482179 100644
+--- a/lib/wallet/wallet.ts
++++ b/lib/wallet/wallet.ts
+@@ -2,6 +2,7 @@ import 'server-only'
+ import { cookies } from 'next/headers'
+ import { supabaseAdmin } from '../supabase/server' // ایمپورت نسبی: توسط vitest هم لود می‌شود
+ import { getVerifiedPhoneHash } from '../sms/otp' // ایمپورت نسبی: توسط vitest هم لود می‌شود
++import { getDeviceHash } from '../orders/owner'
+ 
+ export type WalletTx = {
+   id: string
+@@ -25,8 +26,11 @@ export const WALLET_MAX_AMOUNT = 10_000_000
+ export const WALLET_KIND_LABELS: Record<string, string> = {
+   admin_charge: 'شارژ توسط ادمین',
+   online_charge: 'شارژ آنلاین',
++  receipt_charge: 'شارژ با تأیید رسید',
++  subscription_purchase: 'خرید اشتراک',
+   refund: 'بازگشت وجه',
+   spend: 'خرج سفارش',
++  wallet_activation: 'فعال‌سازی کیف پول',
+ }
+ 
+ export function isValidWalletAmount(v: unknown): v is number {
+@@ -43,24 +47,159 @@ export function walletKindLabel(kind: string): string {
+ }
+ 
+ /**
+- * مشتریِ کیف‌پول‌دار = کسی که نشست «تلفن تأییدشده» دارد.
+- * کوکی فقط هش تلفن است؛ با ستون customers.phone_hash به رکورد مشتری می‌رسیم.
++ * مشتریِ کیف‌پول‌دار — دو مسیر:
++ * ۱) نشست «تلفن تأییدشده» (کوکی OTP یا لینک دعوت) → customers.phone_hash
++ * ۲) دستگاه بدون نشست → آخرین سفارشِ همین دستگاه → مشتریِ «verified»
++ *    (تأیید حضوری ادمین بدون OTP هم با این مسیر جواب می‌دهد)
+  */
+-export async function resolveWalletCustomer(): Promise<{ id: string; phone_hash: string } | null> {
+-  const phoneHash = await getVerifiedPhoneHash()
+-  if (!phoneHash) return null
++export type ResolvedWalletCustomer = {
++  id: string
++  phone_hash: string | null
++  phone: string | null
++  name: string | null
++  verification_status: string
++  wallet_blocked: boolean
++  card_charge_blocked: boolean
++}
++
++const CUSTOMER_COLS =
++  'id, phone_hash, phone, name, verification_status, wallet_blocked, card_charge_blocked'
+ 
++async function customerByPhoneHash(phoneHash: string): Promise<ResolvedWalletCustomer | null> {
+   const { data, error } = await supabaseAdmin()
+     .from('customers')
+-    .select('id, phone_hash')
++    .select(CUSTOMER_COLS)
+     .eq('phone_hash', phoneHash)
+     .maybeSingle()
+-
+   if (error) {
+-    console.error('[wallet] resolve failed:', error.message)
++    console.error('[wallet] resolve (hash) failed:', error.message)
+     return null
+   }
+-  return data ?? null
++  return (data as ResolvedWalletCustomer) ?? null
++}
++
++async function customerByDevice(): Promise<ResolvedWalletCustomer | null> {
++  const deviceHash = await getDeviceHash()
++  if (!deviceHash) return null
++
++  const { data: order, error: orderErr } = await supabaseAdmin()
++    .from('orders')
++    .select('customer_phone')
++    .eq('device_id_hash', deviceHash)
++    .order('created_at', { ascending: false })
++    .limit(1)
++    .maybeSingle()
++  if (orderErr || !order?.customer_phone) return null
++
++  const { data: customer, error: custErr } = await supabaseAdmin()
++    .from('customers')
++    .select(CUSTOMER_COLS)
++    .eq('phone', order.customer_phone)
++    .eq('verification_status', 'verified') // فقط مشتری تأییدشده به مسیر دستگاه اعتماد می‌شود
++    .maybeSingle()
++  if (custErr) {
++    console.error('[wallet] resolve (device) failed:', custErr.message)
++    return null
++  }
++  return (customer as ResolvedWalletCustomer) ?? null
++}
++
++export async function resolveWalletCustomer(): Promise<ResolvedWalletCustomer | null> {
++  const phoneHash = await getVerifiedPhoneHash()
++  if (phoneHash) {
++    const byHash = await customerByPhoneHash(phoneHash)
++    if (byHash) return byHash
++  }
++  return customerByDevice()
++}
++
++/** مشتری بر اساس دستگاه — بدون شرط احراز (برای «درخواست فعال‌سازی» مشتری احرازنشده) */
++export async function resolveCustomerByDevice(): Promise<ResolvedWalletCustomer | null> {
++  const deviceHash = await getDeviceHash()
++  if (!deviceHash) return null
++
++  const { data: order, error: orderErr } = await supabaseAdmin()
++    .from('orders')
++    .select('customer_phone')
++    .eq('device_id_hash', deviceHash)
++    .order('created_at', { ascending: false })
++    .limit(1)
++    .maybeSingle()
++  if (orderErr || !order?.customer_phone) return null
++
++  const { data: customer, error: custErr } = await supabaseAdmin()
++    .from('customers')
++    .select(CUSTOMER_COLS)
++    .eq('phone', order.customer_phone)
++    .maybeSingle()
++  if (custErr) return null
++  return (customer as ResolvedWalletCustomer) ?? null
++}
++
++/** سوییچ‌های سراسری کیف پول + آیا پیامک تنظیم شده؟ */
++export type WalletFlags = {
++  walletEnabled: boolean
++  cardChargeEnabled: boolean
++  chargeMin: number
++  smsConfigured: boolean
++}
++
++export async function getWalletFlags(): Promise<WalletFlags> {
++  const { data } = await supabaseAdmin()
++    .from('settings')
++    .select('payment_wallet_enabled, wallet_card_charge_enabled, wallet_charge_min, sms_api_key')
++    .eq('id', 1)
++    .single()
++
++  return {
++    walletEnabled: Boolean(data?.payment_wallet_enabled),
++    cardChargeEnabled: Boolean(data?.wallet_card_charge_enabled),
++    chargeMin: Number(data?.wallet_charge_min ?? 50000),
++    smsConfigured: Boolean(data?.sms_api_key || process.env.KAVENEGAR_API_KEY),
++  }
++}
++
++/** وضعیت کامل برای پنل مشتری: پرچم‌ها + مشتریِ شناسایی‌شده + موجودی */
++export type WalletStatus = WalletFlags & {
++  customer: (ResolvedWalletCustomer & { balance: number }) | null
++}
++
++export async function getWalletStatus(): Promise<WalletStatus> {
++  const flags = await getWalletFlags()
++  const customer = await resolveWalletCustomer()
++
++  if (!customer) return { ...flags, customer: null }
++
++  const { data, error } = await supabaseAdmin().rpc('wallet_balance', {
++    p_customer_id: customer.id,
++  })
++  if (error) {
++    console.error('[wallet] status balance failed:', error.message)
++    return { ...flags, customer: { ...customer, balance: 0 } }
++  }
++  return { ...flags, customer: { ...customer, balance: Number(data ?? 0) } }
++}
++
++/** ثبت یک‌باره‌ی رویداد «فعال‌سازی کیف پول» در دفتر (idempotent) */
++export async function ensureActivationTx(customerId: string): Promise<void> {
++  const db = supabaseAdmin()
++  const { count, error: countErr } = await db
++    .from('wallet_transactions')
++    .select('id', { count: 'exact', head: true })
++    .eq('customer_id', customerId)
++    .eq('kind', 'wallet_activation')
++
++  if (countErr || (count ?? 0) > 0) return
++
++  const { error } = await db.from('wallet_transactions').insert({
++    customer_id: customerId,
++    amount: 0,
++    kind: 'wallet_activation',
++    status: 'settled',
++    note: 'کیف پول فعال شد',
++    created_by: 'system',
++  })
++  if (error) console.error('[wallet] activation tx failed:', error.message)
+ }
+ 
+ export async function getWalletView(customerId: string): Promise<WalletView> {
+diff --git a/supabase/migrations/20261108_customer_v3_verify_grades.sql b/supabase/migrations/20261108_customer_v3_verify_grades.sql
+new file mode 100644
+index 0000000..b51c0be
+--- /dev/null
++++ b/supabase/migrations/20261108_customer_v3_verify_grades.sql
+@@ -0,0 +1,216 @@
++-- ============================================================
++-- پچ ۲۱ — احراز هویت مشتری (QR/لینک دعوت) + گرید + اشتراک + رسید شارژ
++-- اجرا در: Supabase Dashboard → SQL Editor → Run
++-- idempotent است؛ اجرای مکرر بی‌ضرر.
++-- پیش‌نیاز: مایگریشن‌های کیف پول (v1 ، ledger_align ، v2) اجرا شده باشند.
++-- ============================================================
++
++begin;
++
++-- ------------------------------------------------------------
++-- ۱) گریدهای مشتریان عادی (وفاداری بر اساس مجموع خرید)
++-- ------------------------------------------------------------
++create table if not exists public.customer_grades (
++  id uuid primary key default gen_random_uuid(),
++  name text not null,
++  min_total bigint not null default 0,
++  discount_percent numeric(5,2) not null default 0,
++  color text default '#6b4f3a',
++  sort_order integer not null default 0,
++  is_active boolean not null default true,
++  created_at timestamptz not null default now()
++);
++
++-- پیش‌فرض‌های اولیه (مدیر بعداً از پنل تغییر می‌دهد) — با UUID ثابت تا اجرای مجدد تکراری نسازد
++insert into public.customer_grades (id, name, min_total, discount_percent, color, sort_order)
++values
++  ('00000000-0000-0000-0000-00000000a001', 'برنز',   0,          0, '#a1785a', 1),
++  ('00000000-0000-0000-0000-00000000a002', 'نقره‌ای', 10000000,  2, '#9aa5b1', 2),
++  ('00000000-0000-0000-0000-00000000a003', 'طلایی',  30000000,   4, '#d4af37', 3),
++  ('00000000-0000-0000-0000-00000000a004', 'الماس',  70000000,   6, '#7c9eb8', 4)
++on conflict (id) do nothing;
++
++-- ------------------------------------------------------------
++-- ۲) ستون‌های جدید مشتری: احراز، نوع، گرید، مسدودسازی
++-- ------------------------------------------------------------
++alter table public.customers add column if not exists verification_status text not null default 'unverified';
++alter table public.customers add column if not exists verified_at timestamptz;
++alter table public.customers add column if not exists customer_type text not null default 'normal';
++alter table public.customers add column if not exists total_purchase bigint not null default 0;
++alter table public.customers add column if not exists grade_updated_at timestamptz;
++alter table public.customers add column if not exists wallet_blocked boolean not null default false;
++alter table public.customers add column if not exists card_charge_blocked boolean not null default false;
++
++do $$
++begin
++  -- چک‌ها فقط اگر نبودند ساخته می‌شوند (نام ثابت برای idempotency)
++  if not exists (select 1 from pg_constraint where conname = 'customers_verification_status_check') then
++    alter table public.customers add constraint customers_verification_status_check
++      check (verification_status in ('unverified', 'pending', 'verified'));
++  end if;
++  if not exists (select 1 from pg_constraint where conname = 'customers_customer_type_check') then
++    alter table public.customers add constraint customers_customer_type_check
++      check (customer_type in ('normal', 'organization'));
++  end if;
++end $$;
++
++-- گرید فعلی مشتری‌ها از روی مجموع خرید محاسبه‌شده فعلی پر نمی‌شود؛
++-- فاز ۳ (پچ ۲۳) بعد از هر سفارش تکمیل‌شده ارتقا می‌دهد.
++
++-- ------------------------------------------------------------
++-- ۳) دعوت‌نامه ثبت‌نام (QR / لینک — تک‌مصرف با انقضا)
++-- ------------------------------------------------------------
++create table if not exists public.registration_invites (
++  id uuid primary key default gen_random_uuid(),
++  token text not null unique,
++  expires_at timestamptz not null,
++  used_at timestamptz,
++  used_phone text,
++  is_active boolean not null default true,
++  created_by text default 'admin',
++  created_at timestamptz not null default now()
++);
++
++-- ------------------------------------------------------------
++-- ۴) درخواست فعال‌سازی حضوری کیف پول (مشتری → ادمین)
++-- ------------------------------------------------------------
++create table if not exists public.wallet_activation_requests (
++  id uuid primary key default gen_random_uuid(),
++  customer_id uuid not null references public.customers(id) on delete cascade,
++  name text,
++  phone text,
++  status text not null default 'pending',
++  reviewed_at timestamptz,
++  created_at timestamptz not null default now()
++);
++create index if not exists wallet_act_req_status_idx
++  on public.wallet_activation_requests (status, created_at desc);
++
++-- ------------------------------------------------------------
++-- ۵) درخواست شارژ کارت‌به‌کارت با رسید (فاز ۲ — جدول از حالا ساخته می‌شود)
++-- ------------------------------------------------------------
++create table if not exists public.wallet_charge_requests (
++  id uuid primary key default gen_random_uuid(),
++  customer_id uuid not null references public.customers(id) on delete cascade,
++  amount bigint not null,
++  status text not null default 'pending',
++  receipt_url text,
++  tracking_no text,
++  paid_at timestamptz,
++  reject_reason text,
++  reviewed_at timestamptz,
++  created_at timestamptz not null default now()
++);
++create index if not exists wallet_charge_req_status_idx
++  on public.wallet_charge_requests (status, created_at desc);
++
++-- ------------------------------------------------------------
++-- ۶) اشتراک ماهیانه (فاز ۴ — جدول‌ها از حالا ساخته می‌شوند)
++-- ------------------------------------------------------------
++create table if not exists public.subscription_plans (
++  id uuid primary key default gen_random_uuid(),
++  title text not null,
++  price bigint not null,
++  duration_days integer not null default 30,
++  discount_percent numeric(5,2) not null default 0,
++  benefits text,
++  is_active boolean not null default true,
++  created_at timestamptz not null default now()
++);
++
++create table if not exists public.customer_subscriptions (
++  id uuid primary key default gen_random_uuid(),
++  customer_id uuid not null references public.customers(id) on delete cascade,
++  plan_id uuid not null references public.subscription_plans(id),
++  starts_at timestamptz not null default now(),
++  expires_at timestamptz not null,
++  status text not null default 'active',
++  payment_kind text,
++  created_at timestamptz not null default now()
++);
++create index if not exists customer_subs_customer_idx
++  on public.customer_subscriptions (customer_id, status, expires_at desc);
++
++-- ------------------------------------------------------------
++-- ۷) تنظیمات: سوییچ‌های سراسری + سیاست تخفیف
++-- ------------------------------------------------------------
++alter table public.settings add column if not exists wallet_card_charge_enabled boolean not null default false;
++alter table public.settings add column if not exists wallet_charge_min bigint not null default 50000;
++alter table public.settings add column if not exists membership_enabled boolean not null default true;
++alter table public.settings add column if not exists discount_policy text not null default 'max';
++alter table public.settings add column if not exists grade_stack_cap numeric(5,2) not null default 10;
++
++do $$
++begin
++  if not exists (select 1 from pg_constraint where conname = 'settings_discount_policy_check') then
++    alter table public.settings add constraint settings_discount_policy_check
++      check (discount_policy in ('max', 'membership_first', 'grade_first', 'stacked'));
++  end if;
++end $$;
++
++-- ------------------------------------------------------------
++-- ۸) دفتر کیف پول: انواع تراکنش جدید + بازسازی wallet_charge
++--    (الگوی هات‌فیکس ۱۷.۳: اول drop هر دو نسخه، بعد ساخت نسخه نهایی)
++-- ------------------------------------------------------------
++alter table public.wallet_transactions
++  drop constraint if exists wallet_transactions_kind_check;
++alter table public.wallet_transactions
++  add constraint wallet_transactions_kind_check
++  check (kind in ('refund', 'spend', 'adjust', 'admin_charge', 'online_charge',
++                  'receipt_charge', 'subscription_purchase', 'wallet_activation'));
++
++drop function if exists public.wallet_charge(uuid, bigint, text);
++drop function if exists public.wallet_charge(uuid, bigint, text, text);
++drop function if exists public.wallet_charge(uuid, bigint, text, text, uuid);
++
++create or replace function public.wallet_charge(
++  p_customer_id uuid,
++  p_amount bigint,
++  p_kind text default 'admin_charge',
++  p_note text default null,
++  p_order_id uuid default null
++)
++returns void
++language plpgsql
++security definer
++set search_path to 'public'
++as $$
++begin
++  if p_amount is null or p_amount <= 0 then
++    raise exception 'invalid_amount';
++  end if;
++  if p_kind not in ('admin_charge', 'online_charge', 'refund',
++                    'receipt_charge', 'subscription_purchase') then
++    raise exception 'invalid_kind';
++  end if;
++  if (select wallet_balance(p_customer_id)) + p_amount > 9223372036854775807::bigint then
++    raise exception 'overflow';
++  end if;
++
++  insert into wallet_transactions
++    (customer_id, customer_phone, amount, kind, status, order_id, note, created_by)
++  select
++    c.id,
++    c.phone,
++    p_amount,
++    p_kind,
++    'settled',
++    p_order_id,
++    p_note,
++    case p_kind
++      when 'admin_charge' then 'admin'
++      when 'receipt_charge' then 'admin'
++      else 'customer'
++    end
++  from customers c
++  where c.id = p_customer_id;
++
++  if not found then
++    raise exception 'customer_not_found';
++  end if;
++end $$;
++
++-- رویداد «فعال‌سازی کیف پول» مبلغ صفر دارد و از کد سرور مستقیم درج می‌شود
++-- (خارج از wallet_charge چون آن تابع مبلغ مثبت می‌خواهد)
++
++commit;
