@@ -1,0 +1,136 @@
+diff --git a/app/my-orders/MyOrdersClient.tsx b/app/my-orders/MyOrdersClient.tsx
+index 48fd4a6..1bff63c 100644
+--- a/app/my-orders/MyOrdersClient.tsx
++++ b/app/my-orders/MyOrdersClient.tsx
+@@ -57,6 +57,14 @@ export default function MyOrdersClient() {
+   const [walletState, setWalletState] = useState<'idle' | 'loading' | 'ready' | 'login' | 'error'>('idle')
+   const [walletLoadedOnce, setWalletLoadedOnce] = useState(false)
+ 
++  // 🔐 ورود با کد پیامکی (OTP) — کلید کیف پول و پرداخت با کیف پول همین‌جاست
++  const [otpStep, setOtpStep] = useState<'phone' | 'code'>('phone')
++  const [otpPhone, setOtpPhone] = useState('')
++  const [otpCode, setOtpCode] = useState('')
++  const [otpBusy, setOtpBusy] = useState(false)
++  const [otpError, setOtpError] = useState<string | null>(null)
++  const [otpInfo, setOtpInfo] = useState<string | null>(null)
++
+   useEffect(() => {
+     async function loadData() {
+       try {
+@@ -117,6 +125,45 @@ export default function MyOrdersClient() {
+     if (!walletLoadedOnce) {
+       setWalletLoadedOnce(true)
+       loadWallet()
++      // پیش‌پر کردن شماره از آخرین سفارش همین دستگاه — فقط برای راحتی، تأیید همچنان با OTP است
++      if (customer?.phone) setOtpPhone(customer.phone)
++    }
++  }
++
++  async function sendOtp() {
++    setOtpBusy(true); setOtpError(null); setOtpInfo(null)
++    try {
++      const res = await fetch('/api/auth/otp/send', {
++        method: 'POST',
++        headers: { 'Content-Type': 'application/json' },
++        body: JSON.stringify({ phone: otpPhone }),
++      })
++      const data = await res.json().catch(() => null)
++      if (!res.ok) throw new Error(data?.error || 'ارسال کد ناموفق بود')
++      setOtpStep('code')
++      setOtpInfo(`کد ۶ رقمی به ${otpPhone.trim()} پیامک شد.`)
++    } catch (err: any) {
++      setOtpError(err.message)
++    } finally {
++      setOtpBusy(false)
++    }
++  }
++
++  async function verifyOtp() {
++    setOtpBusy(true); setOtpError(null); setOtpInfo(null)
++    try {
++      const res = await fetch('/api/auth/otp/verify', {
++        method: 'POST',
++        headers: { 'Content-Type': 'application/json' },
++        body: JSON.stringify({ phone: otpPhone, code: otpCode }),
++      })
++      const data = await res.json().catch(() => null)
++      if (!res.ok) throw new Error(data?.error || 'تأیید کد ناموفق بود')
++      await loadWallet()
++    } catch (err: any) {
++      setOtpError(err.message)
++    } finally {
++      setOtpBusy(false)
+     }
+   }
+ 
+@@ -293,12 +340,65 @@ export default function MyOrdersClient() {
+           )}
+ 
+           {walletState === 'login' && (
+-            <div className="my-orders-empty" style={{ lineHeight: 2 }}>
+-              👛 برای دیدن کیف پول باید با شماره موبایل وارد شوی.<br />
+-              <small style={{ color: '#766f64', fontSize: '12px' }}>
+-                کافی است یک سفارش ثبت کنی و شماره‌ات را با کد پیامکی تأیید کنی؛
+-                کیف پولِ همان شماره به این دستگاه وصل می‌شود.
++            <div style={{ background: '#fff', border: '1px solid #e3ddd2', borderRadius: '14px', padding: '18px', marginTop: '16px' }}>
++              <div style={{ fontSize: '28px', textAlign: 'center' }}>🔐</div>
++              <strong style={{ display: 'block', textAlign: 'center', fontSize: '14px', color: '#29251f', marginTop: '6px' }}>
++                برای دیدن کیف پول، شماره موبایل را تأیید کن
++              </strong>
++              <small style={{ display: 'block', textAlign: 'center', fontSize: '11px', color: '#766f64', marginTop: '4px' }}>
++                کیف پول به شماره‌ای وصل است که برایش شارژ ثبت شده؛ با تأیید همان شماره،
++                موجودی و تراکنش‌ها اینجا نمایش داده می‌شود و در صفحه پرداخت هم گزینه‌ی «کیف پول» فعال می‌شود.
+               </small>
++
++              {otpStep === 'phone' ? (
++                <div style={{ display: 'flex', gap: '8px', marginTop: '14px' }}>
++                  <input
++                    dir="ltr"
++                    value={otpPhone}
++                    onChange={(e) => setOtpPhone(e.target.value)}
++                    placeholder="09xxxxxxxxx"
++                    inputMode="numeric"
++                    style={{ flex: 1, padding: '10px 12px', borderRadius: '10px', border: '1px solid #e3ddd2', fontSize: '14px', minWidth: 0 }}
++                  />
++                  <button
++                    onClick={sendOtp}
++                    disabled={otpBusy || otpPhone.trim().length < 10}
++                    style={{ padding: '10px 16px', borderRadius: '10px', border: 'none', background: '#6b4f3a', color: '#fff', fontSize: '13px', fontWeight: 'bold', cursor: otpBusy || otpPhone.trim().length < 10 ? 'default' : 'pointer', whiteSpace: 'nowrap', opacity: otpBusy || otpPhone.trim().length < 10 ? 0.6 : 1 }}
++                  >
++                    {otpBusy ? '⏳' : 'ارسال کد'}
++                  </button>
++                </div>
++              ) : (
++                <div style={{ marginTop: '14px' }}>
++                  <div style={{ display: 'flex', gap: '8px' }}>
++                    <input
++                      dir="ltr"
++                      value={otpCode}
++                      onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
++                      placeholder="- - - - - -"
++                      inputMode="numeric"
++                      maxLength={6}
++                      style={{ flex: 1, padding: '10px 12px', borderRadius: '10px', border: '1px solid #e3ddd2', fontSize: '16px', textAlign: 'center', letterSpacing: '4px', minWidth: 0 }}
++                    />
++                    <button
++                      onClick={verifyOtp}
++                      disabled={otpBusy || otpCode.length !== 6}
++                      style={{ padding: '10px 16px', borderRadius: '10px', border: 'none', background: '#2d5d3e', color: '#fff', fontSize: '13px', fontWeight: 'bold', cursor: otpBusy || otpCode.length !== 6 ? 'default' : 'pointer', whiteSpace: 'nowrap', opacity: otpBusy || otpCode.length !== 6 ? 0.6 : 1 }}
++                    >
++                      {otpBusy ? '⏳' : 'تأیید'}
++                    </button>
++                  </div>
++                  <button
++                    onClick={() => { setOtpStep('phone'); setOtpCode(''); setOtpInfo(null); setOtpError(null) }}
++                    style={{ background: 'none', border: 'none', color: '#9a6b3f', fontSize: '11px', marginTop: '10px', cursor: 'pointer', padding: 0 }}
++                  >
++                    ← تغییر شماره / ارسال مجدد کد
++                  </button>
++                </div>
++              )}
++
++              {otpInfo && <div style={{ color: '#2d5d3e', fontSize: '12px', marginTop: '10px', textAlign: 'center' }}>{otpInfo}</div>}
++              {otpError && <div style={{ color: '#9b3c32', fontSize: '12px', marginTop: '10px', textAlign: 'center' }}>{otpError}</div>}
+             </div>
+           )}
+ 
