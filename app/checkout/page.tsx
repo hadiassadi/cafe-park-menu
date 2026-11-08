@@ -8,8 +8,8 @@ import { useCart } from '@/lib/cart-context'
 const formatPrice = (price: number) => new Intl.NumberFormat('fa-IR').format(Math.round(price))
 const toLatinDigits = (s: string) => s.replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06f0)).replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660))
 
-type PaymentMethod = 'online' | 'cash' | 'card' | 'transfer'
-type PaymentSettings = { payment_enabled: boolean; payment_online_enabled: boolean; payment_cash_enabled: boolean; payment_card_enabled: boolean; payment_transfer_enabled: boolean; payment_min_online_amount: number; payment_transfer_bank_name: string | null; payment_transfer_account_number: string | null; payment_transfer_card_number: string | null; payment_transfer_account_holder: string | null; payment_transfer_requires_review: boolean }
+type PaymentMethod = 'online' | 'cash' | 'card' | 'transfer' | 'wallet'
+type PaymentSettings = { payment_enabled: boolean; payment_online_enabled: boolean; payment_cash_enabled: boolean; payment_card_enabled: boolean; payment_transfer_enabled: boolean; payment_wallet_enabled: boolean; payment_min_online_amount: number; payment_transfer_bank_name: string | null; payment_transfer_account_number: string | null; payment_transfer_card_number: string | null; payment_transfer_account_holder: string | null; payment_transfer_requires_review: boolean }
 
 function CheckoutForm() {
   const router = useRouter()
@@ -36,6 +36,7 @@ function CheckoutForm() {
   const [paymentSettings, setPaymentSettings] = useState<PaymentSettings | null>(null)
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash')
   const [settingsLoading, setSettingsLoading] = useState(true)
+  const [walletBalance, setWalletBalance] = useState<number | null>(null)
 
   // ✅ تخفیف باشگاه فقط برای اعضای سازمانی
   const isOrgMember = !!(membershipInfo?.orgName && membershipInfo.orgName !== 'باشگاه مشتریان')
@@ -74,6 +75,13 @@ function CheckoutForm() {
         setSettingsLoading(false)
       })
       .catch(() => setSettingsLoading(false))
+
+    fetch('/api/payment/wallet', { cache: 'no-store' })
+      .then((res) => res.json())
+      .then((data) =>
+        setWalletBalance(typeof data?.balance === 'number' ? data.balance : null)
+      )
+      .catch(() => setWalletBalance(null))
   }, [])
 
   useEffect(() => {
@@ -204,6 +212,22 @@ function CheckoutForm() {
         return
       }
 
+      if (paymentMethod === 'wallet') {
+        const payRes = await fetch('/api/payment/wallet', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ orderId }),
+        })
+        const payData = await payRes.json()
+        if (!payRes.ok) {
+          try { sessionStorage.setItem(`cafe-park-order-success-${orderId}`, '1') } catch {}
+          window.location.href = `/order/${orderId}?payment_error=${encodeURIComponent(payData.error || 'پرداخت با کیف پول ناموفق بود')}`
+          return
+        }
+        window.location.href = `/order/${orderId}`
+        return
+      }
+
       await fetch('/api/payment/set-method', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ orderId, method: paymentMethod }) })
       window.location.href = `/order/${orderId}`
     } catch (err) {
@@ -218,6 +242,11 @@ function CheckoutForm() {
     if (paymentSettings.payment_online_enabled && !belowMin) availableMethods.push('online')
     if (paymentSettings.payment_cash_enabled || paymentSettings.payment_card_enabled) availableMethods.push('cash')
     if (paymentSettings.payment_transfer_enabled) availableMethods.push('transfer')
+    if (
+      paymentSettings.payment_wallet_enabled &&
+      walletBalance != null &&
+      walletBalance >= finalTotal
+    ) availableMethods.push('wallet')
   }
   if (availableMethods.length === 0) availableMethods.push('cash')
   if (!availableMethods.includes(paymentMethod)) setPaymentMethod(availableMethods[0])
@@ -227,6 +256,7 @@ function CheckoutForm() {
     cash: { icon: '💵', title: 'پرداخت در محل', hint: 'نقدی یا کارت‌خوان' },
     card: { icon: '💳', title: 'کارت‌خوان', hint: 'پرداخت حضوری' },
     transfer: { icon: '🏦', title: 'کارت به کارت', hint: 'واریز + آپلود رسید' },
+    wallet: { icon: '👛', title: 'کیف پول', hint: 'پرداخت از موجودی کیف پول' },
   }
 
   return (

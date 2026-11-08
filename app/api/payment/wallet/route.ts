@@ -1,0 +1,108 @@
+import { apiError } from '@/lib/api-error'
+import 'server-only'
+import { NextRequest, NextResponse } from 'next/server'
+import { supabaseAdmin } from '@/lib/supabase/server'
+import { getDeviceHash, UUID_RE } from '@/lib/orders/owner'
+import { getVerifiedPhoneHash } from '@/lib/sms/otp'
+import { getSessionWalletBalance } from '@/lib/wallet/wallet'
+import { paymentErrorMessage } from '@/lib/payment/methods'
+
+export const dynamic = 'force-dynamic'
+
+/** موجودی کیف پول نشست فعلی — برای نمایش دکمه «پرداخت با کیف پول» */
+export async function GET() {
+  try {
+    const balance = await getSessionWalletBalance()
+    return NextResponse.json(
+      { balance },
+      { headers: { 'Cache-Control': 'no-store' } }
+    )
+  } catch (err) {
+    console.error('[payment/wallet][GET]', err)
+    return NextResponse.json({ balance: null })
+  }
+}
+
+/** پرداخت باقی‌مانده سفارش از کیف پول مشتری */
+export async function POST(req: NextRequest) {
+  try {
+    const body = await req.json().catch(() => null)
+    const orderId = body?.orderId
+
+    if (typeof orderId !== 'string' || !UUID_RE.test(orderId)) {
+      return NextResponse.json({ error: 'اطلاعات نامعتبر است' }, { status: 400 })
+    }
+
+    const phoneHash = await getVerifiedPhoneHash()
+    if (!phoneHash) {
+      return NextResponse.json(
+        { error: 'برای پرداخت با کیف پول باید با تأیید شماره (OTP) وارد شده باشی' },
+        { status: 401 }
+      )
+    }
+
+    const deviceHash = await getDeviceHash()
+    if (!deviceHash) {
+      return NextResponse.json({ error: 'سفارش پیدا نشد' }, { status: 404 })
+    }
+
+    const db = supabaseAdmin()
+
+    const { data: customer } = await db
+      .from('customers')
+      .select('id, phone')
+      .eq('phone_hash', phoneHash)
+      .maybeSingle()
+
+    if (!customer?.id) {
+      return NextResponse.json(
+        { error: 'کیف پولی برای این نشست پیدا نشد' },
+        { status: 404 }
+      )
+    }
+
+    // مالکیت سفارش با دستگاه + تطابق شماره سفارش با شماره کیف پول
+    const { data: order, error: orderErr } = await db
+      .from('orders')
+      .select('id, customer_phone')
+      .eq('id', orderId)
+      .eq('device_id_hash', deviceHash)
+      .maybeSingle()
+
+    if (orderErr) {
+      console.error('[payment/wallet] order read:', orderErr.message)
+      return NextResponse.json({ error: 'خطای سرور' }, { status: 500 })
+    }
+    if (!order) {
+      return NextResponse.json({ error: 'سفارش پیدا نشد' }, { status: 404 })
+    }
+    if (order.customer_phone !== customer.phone) {
+      return NextResponse.json(
+        { error: 'برای پرداخت با کیف پول، شماره سفارش باید همان شماره تأییدشده باشد' },
+        { status: 403 }
+      )
+    }
+
+    const { data: result, error } = await db.rpc('pay_order_with_wallet', {
+      p_order_id: orderId,
+      p_device_hash: deviceHash,
+    })
+
+    if (error) {
+      console.error('[payment/wallet] rpc:', error.message)
+      return NextResponse.json(
+        { error: paymentErrorMessage(error.message) },
+        { status: 400 }
+      )
+    }
+
+    return NextResponse.json({
+      success: true,
+      paid: Number(result?.paid ?? 0),
+      balance: Number(result?.balance ?? 0),
+    })
+  } catch (err) {
+    console.error('[payment/wallet]', err)
+    return apiError(err)
+  }
+}
