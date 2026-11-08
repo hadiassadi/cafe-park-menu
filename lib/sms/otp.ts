@@ -146,6 +146,8 @@ export async function upsertVerifiedCustomer(
   phone: string,
   deviceIdHash: string | null
 ): Promise<void> {
+  const pHash = phoneHash(phone)
+
   const { data: existing } = await db
     .from('customers')
     .select('id')
@@ -154,13 +156,19 @@ export async function upsertVerifiedCustomer(
 
   if (existing?.id) {
     if (deviceIdHash) {
-      await db.from('customers').update({ device_id_hash: deviceIdHash }).eq('id', existing.id)
+      await db
+        .from('customers')
+        .update({ device_id_hash: deviceIdHash, phone_hash: pHash })
+        .eq('id', existing.id)
+    } else {
+      await db.from('customers').update({ phone_hash: pHash }).eq('id', existing.id)
     }
     return
   }
 
   await db.from('customers').insert({
     phone,
+    phone_hash: pHash,
     ...(deviceIdHash ? { device_id_hash: deviceIdHash } : {}),
   })
 }
