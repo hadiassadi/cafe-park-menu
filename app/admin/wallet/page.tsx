@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+import Link from 'next/link'
 import { QRCodeSVG } from 'qrcode.react'
 import { formatPersianDate } from '@/lib/format-date'
 
@@ -16,6 +17,27 @@ type WalletTx = {
 type WalletView = {
   balance: number
   transactions: WalletTx[]
+}
+
+type Invite = {
+  id: string
+  token: string
+  expires_at: string
+  used_at: string | null
+  used_phone: string | null
+  used_device_info: string | null
+  used_device_hash: string | null
+  is_active: boolean
+  created_at: string
+}
+
+type ActivationRequest = {
+  id: string
+  name: string | null
+  phone: string | null
+  status: string
+  created_at: string
+  customer: { verification_status: string; wallet_blocked: boolean; device_info: string | null } | null
 }
 
 const KIND_LABELS: Record<string, string> = {
@@ -36,6 +58,38 @@ const toEnDigits = (s: string) =>
     .replace(/[۰-۹]/g, (d) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d)))
     .replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
 
+type InviteTone = 'active' | 'used' | 'expired' | 'revoked'
+
+function inviteStatus(inv: Invite): { label: string; tone: InviteTone } {
+  if (!inv.is_active) return { label: 'باطل‌شده', tone: 'revoked' }
+  if (inv.used_at) return { label: 'استفاده‌شده', tone: 'used' }
+  if (new Date(inv.expires_at).getTime() < Date.now()) return { label: 'منقضی', tone: 'expired' }
+  return { label: 'فعال', tone: 'active' }
+}
+
+const TONE_STYLE: Record<InviteTone, { bg: string; color: string }> = {
+  active: { bg: '#e6f6ea', color: '#176a32' },
+  used: { bg: '#e6ecf0', color: '#2a5a7a' },
+  expired: { bg: '#f4efe6', color: '#8a6d3b' },
+  revoked: { bg: '#fdeaea', color: '#8f2020' },
+}
+
+const btnSecondary: React.CSSProperties = {
+  padding: '6px 12px',
+  borderRadius: 8,
+  border: '1px solid #ccc',
+  background: '#fff',
+  fontSize: 12,
+  cursor: 'pointer',
+  whiteSpace: 'nowrap',
+}
+
+const btnDanger: React.CSSProperties = {
+  ...btnSecondary,
+  border: '1px solid #e5b5b5',
+  color: '#8f2020',
+}
+
 export default function WalletPage() {
   const [phone, setPhone] = useState('')
   const [view, setView] = useState<WalletView | null>(null)
@@ -45,18 +99,14 @@ export default function WalletPage() {
   const [note, setNote] = useState('')
   const [charging, setCharging] = useState(false)
 
-  // 🎟 دعوت مشتری (QR / لینک)
-  const [invite, setInvite] = useState<{ token: string; expires_at: string } | null>(null)
-  const [inviteList, setInviteList] = useState<
-    { id: string; token: string; expires_at: string; used_at: string | null; used_phone: string | null; is_active: boolean; created_at: string }[]
-  >([])
+  // 🎟 دعوت مشتری (QR / لینک) — لیست پایدار؛ QR و لینک هر ردیف همیشه در دسترس است
+  const [inviteList, setInviteList] = useState<Invite[]>([])
   const [inviteBusy, setInviteBusy] = useState(false)
-  const [copied, setCopied] = useState(false)
+  const [qrToken, setQrToken] = useState<string | null>(null)
+  const [copiedToken, setCopiedToken] = useState<string | null>(null)
 
   // 📥 درخواست‌های فعال‌سازی حضوری
-  const [requests, setRequests] = useState<
-    { id: string; name: string | null; phone: string | null; status: string; created_at: string }[]
-  >([])
+  const [requests, setRequests] = useState<ActivationRequest[]>([])
   const [reviewBusy, setReviewBusy] = useState<string | null>(null)
 
   const loadRequests = useCallback(async () => {
@@ -82,7 +132,6 @@ export default function WalletPage() {
 
   async function createInvite() {
     setInviteBusy(true)
-    setCopied(false)
     try {
       const res = await fetch('/api/admin/wallet/invites', {
         method: 'POST',
@@ -90,7 +139,7 @@ export default function WalletPage() {
       })
       const json = await res.json()
       if (res.ok && json.invite) {
-        setInvite(json.invite)
+        setQrToken(json.invite.token)
         await loadInvites()
       } else {
         setMsg({ kind: 'err', text: json.error || 'ساخت لینک ناموفق بود' })
@@ -103,13 +152,13 @@ export default function WalletPage() {
   }
 
   async function revokeInvite(id: string) {
+    if (!confirm('این دعوت‌نامه باطل شود؟')) return
     try {
       await fetch(`/api/admin/wallet/invites?id=${encodeURIComponent(id)}`, {
         method: 'DELETE',
         credentials: 'same-origin',
       })
       await loadInvites()
-      if (invite) setInvite(null)
     } catch {}
   }
 
@@ -117,11 +166,36 @@ export default function WalletPage() {
     const url = `${window.location.origin}/register/${token}`
     navigator.clipboard?.writeText(url).then(
       () => {
-        setCopied(true)
-        setTimeout(() => setCopied(false), 2000)
+        setCopiedToken(token)
+        setTimeout(() => setCopiedToken(null), 2000)
       },
       () => {}
     )
+  }
+
+  /** باز کردن کیف پول یک مشتری از داخل لیست دعوت‌نامه‌ها/درخواست‌ها */
+  function openWalletFor(p: string) {
+    setPhone(p)
+    // load از state جدید استفاده می‌کند؛ مستقیم صدا می‌زنیم
+    ;(async () => {
+      setMsg(null)
+      setView(null)
+      setLoading(true)
+      try {
+        const res = await fetch(`/api/admin/wallet?phone=${encodeURIComponent(p)}`, {
+          cache: 'no-store',
+          credentials: 'same-origin',
+        })
+        const json = await res.json()
+        if (res.ok) setView(json)
+        else setMsg({ kind: 'err', text: json.error || 'خواندن ناموفق بود' })
+      } catch {
+        setMsg({ kind: 'err', text: 'ارتباط با سرور برقرار نشد' })
+      } finally {
+        setLoading(false)
+      }
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    })()
   }
 
   async function reviewRequest(id: string, action: 'approve' | 'reject') {
@@ -202,7 +276,7 @@ export default function WalletPage() {
   }
 
   return (
-    <div style={{ maxWidth: 640, margin: '0 auto', padding: '24px 16px' }}>
+    <div style={{ maxWidth: 760, margin: '0 auto', padding: '24px 16px' }}>
       <h1 style={{ fontSize: 20, marginBottom: 4 }}>👛 کیف پول مشتریان</h1>
       <p style={{ opacity: 0.7, fontSize: 13, lineHeight: 2 }}>
         جست‌وجو با شماره موبایل؛ شارژ دستی فقط برای مشتری‌هایی که سابقه دارند (حداقل یک‌بار سفارش یا ورود با OTP).
@@ -249,10 +323,10 @@ export default function WalletPage() {
         </button>
       </form>
 
-      {/* 🎟 دعوت مشتری — QR / لینک تک‌مصرف */}
+      {/* 🎟 دعوت مشتری — لیست همه‌ی کدها با وضعیت */}
       <div style={{ marginTop: 24, padding: '14px 18px', borderRadius: 10, border: '1px solid #e5e0da' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <strong style={{ fontSize: 14 }}>🎟 دعوت مشتری (QR / لینک)</strong>
+          <strong style={{ fontSize: 14 }}>🎟 کدهای دعوت مشتری</strong>
           <button
             type="button"
             onClick={createInvite}
@@ -268,66 +342,90 @@ export default function WalletPage() {
               cursor: inviteBusy ? 'default' : 'pointer',
             }}
           >
-            {inviteBusy ? '…' : '+ ساخت لینک جدید'}
+            {inviteBusy ? '…' : '+ ساخت کد جدید'}
           </button>
         </div>
         <p style={{ opacity: 0.65, fontSize: 12, lineHeight: 1.9, margin: '6px 0 0' }}>
-          مشتری QR را اسکن می‌کند یا لینک را در پیام‌رسان می‌گیرد؛ با تکمیل فرم، حسابش فوراً تأیید و کیف پول همان دستگاه فعال می‌شود.
+          مشتری QR را اسکن می‌کند یا لینک را در پیام‌رسان می‌گیرد؛ با تکمیل فرم، حسابش فوراً تأیید و کیف پول فعال می‌شود.
+          QR و لینک هر کد از همین لیست همیشه در دسترس است.
         </p>
 
-        {invite && (
-          <div style={{ display: 'flex', gap: 16, alignItems: 'center', marginTop: 12, flexWrap: 'wrap' }}>
-            <div style={{ background: '#fff', padding: 10, borderRadius: 10, border: '1px solid #e5e0da' }}>
-              <QRCodeSVG value={`${typeof window !== 'undefined' ? window.location.origin : ''}/register/${invite.token}`} size={120} />
-            </div>
-            <div style={{ flex: 1, minWidth: 220 }}>
-              <code dir="ltr" style={{ display: 'block', fontSize: 11, background: '#f7f2ec', padding: '8px 10px', borderRadius: 8, wordBreak: 'break-all' }}>
-                {typeof window !== 'undefined' ? `${window.location.origin}/register/${invite.token}` : `/register/${invite.token}`}
-              </code>
-              <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center' }}>
-                <button
-                  type="button"
-                  onClick={() => copyInviteLink(invite.token)}
-                  style={{ padding: '7px 12px', borderRadius: 8, border: '1px solid #ccc', background: '#fff', fontSize: 12, cursor: 'pointer' }}
-                >
-                  {copied ? 'کپی شد ✓' : 'کپی لینک برای ارسال'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => revokeInvite(inviteList.find((i) => i.token === invite.token)?.id ?? '')}
-                  style={{ padding: '7px 12px', borderRadius: 8, border: '1px solid #e5b5b5', background: '#fff', color: '#8f2020', fontSize: 12, cursor: 'pointer' }}
-                >
-                  باطل کردن
-                </button>
-                <span style={{ opacity: 0.6, fontSize: 11 }}>
-                  مهلت: {formatPersianDate(invite.expires_at)}
-                </span>
-              </div>
-            </div>
-          </div>
-        )}
+        {inviteList.length === 0 ? (
+          <p style={{ opacity: 0.6, fontSize: 13, marginTop: 10 }}>هنوز کد دعوتی ساخته نشده است.</p>
+        ) : (
+          <div style={{ marginTop: 12, display: 'grid', gap: 8 }}>
+            {inviteList.map((inv) => {
+              const st = inviteStatus(inv)
+              const showQr = qrToken === inv.token
+              return (
+                <div key={inv.id} style={{ border: '1px solid #e5e0da', borderRadius: 10, padding: '10px 12px', background: st.tone === 'active' ? '#fffdf7' : '#faf8f5' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      <code dir="ltr" style={{ fontSize: 12, background: '#f7f2ec', padding: '3px 8px', borderRadius: 6 }}>
+                        {inv.token.slice(0, 10)}…
+                      </code>
+                      <span style={{ background: TONE_STYLE[st.tone].bg, color: TONE_STYLE[st.tone].color, borderRadius: 999, padding: '2px 10px', fontSize: 11, fontWeight: 700 }}>
+                        {st.label}
+                      </span>
+                      <span style={{ opacity: 0.6, fontSize: 11 }}>
+                        ساخته: {formatPersianDate(inv.created_at)} · مهلت: {formatPersianDate(inv.expires_at)}
+                      </span>
+                    </div>
 
-        {inviteList.length > 0 && (
-          <div style={{ marginTop: 12, display: 'grid', gap: 6 }}>
-            {inviteList.slice(0, 6).map((inv) => (
-              <div key={inv.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, padding: '6px 10px', background: '#faf7f3', borderRadius: 8 }}>
-                <code dir="ltr">{inv.token.slice(0, 8)}…</code>
-                <span style={{ opacity: 0.7 }}>
-                  {inv.used_at
-                    ? `استفاده‌شده → ${inv.used_phone ?? ''}`
-                    : !inv.is_active
-                      ? 'باطل‌شده'
-                      : new Date(inv.expires_at).getTime() < Date.now()
-                        ? 'منقضی'
-                        : 'فعال'}
-                </span>
-              </div>
-            ))}
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      {st.tone === 'active' && (
+                        <>
+                          <button type="button" style={btnSecondary} onClick={() => setQrToken(showQr ? null : inv.token)}>
+                            {showQr ? 'بستن QR' : 'QR'}
+                          </button>
+                          <button type="button" style={btnSecondary} onClick={() => copyInviteLink(inv.token)}>
+                            {copiedToken === inv.token ? 'کپی شد ✓' : 'کپی لینک'}
+                          </button>
+                          <button type="button" style={btnDanger} onClick={() => revokeInvite(inv.id)}>
+                            باطل کردن
+                          </button>
+                        </>
+                      )}
+                      {st.tone === 'used' && inv.used_phone && (
+                        <>
+                          <button type="button" style={btnSecondary} onClick={() => openWalletFor(inv.used_phone!)}>
+                            👛 کیف پول
+                          </button>
+                          <Link href={`/admin/orders?phone=${encodeURIComponent(inv.used_phone)}`} style={{ ...btnSecondary, textDecoration: 'none' }}>
+                            🧾 سفارش‌ها
+                          </Link>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  {st.tone === 'used' && (
+                    <div style={{ marginTop: 8, fontSize: 12, color: '#4a5568', display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+                      <span>📲 ثبت‌نام با: <strong dir="ltr">{inv.used_phone ?? '—'}</strong></span>
+                      {inv.used_device_info && <span>📱 دستگاه: <strong>{inv.used_device_info}</strong></span>}
+                    </div>
+                  )}
+
+                  {showQr && (
+                    <div style={{ marginTop: 10, display: 'flex', gap: 14, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+                      <div style={{ background: '#fff', padding: 10, borderRadius: 10, border: '1px solid #e5e0da' }}>
+                        <QRCodeSVG value={`${typeof window !== 'undefined' ? window.location.origin : ''}/register/${inv.token}`} size={130} />
+                      </div>
+                      <div style={{ flex: 1, minWidth: 220 }}>
+                        <code dir="ltr" style={{ display: 'block', fontSize: 11, background: '#f7f2ec', padding: '8px 10px', borderRadius: 8, wordBreak: 'break-all' }}>
+                          {typeof window !== 'undefined' ? `${window.location.origin}/register/${inv.token}` : `/register/${inv.token}`}
+                        </code>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
           </div>
         )}
       </div>
 
-      {/* 📥 درخواست‌های فعال‌سازی حضوری */}
+      {/* 📥 درخواست‌های فعال‌سازی حضوری — لیست با دسترسی به پرونده و سفارش‌ها */}
       <div style={{ marginTop: 16, padding: '14px 18px', borderRadius: 10, border: '1px solid #e5e0da' }}>
         <strong style={{ fontSize: 14 }}>
           📥 درخواست‌های فعال‌سازی
@@ -354,34 +452,53 @@ export default function WalletPage() {
             {requests.map((r) => (
               <div key={r.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '10px 12px', borderRadius: 8, border: '1px solid #e5e0da', fontSize: 13 }}>
                 <div>
-                  <div style={{ fontWeight: 700 }}>
+                  <div style={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                     {r.name || 'بدون نام'} — <span dir="ltr">{r.phone ?? '?'}</span>
+                    {r.customer?.verification_status === 'verified' && (
+                      <span style={{ background: '#e6f6ea', color: '#176a32', borderRadius: 999, padding: '1px 8px', fontSize: 10, fontWeight: 700 }}>احرازشده ✓</span>
+                    )}
+                    {r.customer?.wallet_blocked && (
+                      <span style={{ background: '#fdeaea', color: '#8f2020', borderRadius: 999, padding: '1px 8px', fontSize: 10, fontWeight: 700 }}>کیف پول مسدود</span>
+                    )}
                   </div>
                   <div style={{ opacity: 0.65, fontSize: 11 }}>
                     {formatPersianDate(r.created_at)}
                     {r.status !== 'pending' ? (r.status === 'approved' ? ' — تأییدشده ✓' : ' — رد‌شده ✗') : ''}
+                    {r.customer?.device_info ? ` — 📱 ${r.customer.device_info}` : ''}
                   </div>
                 </div>
-                {r.status === 'pending' && (
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <button
-                      type="button"
-                      onClick={() => reviewRequest(r.id, 'approve')}
-                      disabled={reviewBusy === r.id}
-                      style={{ padding: '7px 14px', borderRadius: 8, border: 'none', background: '#2e7d32', color: '#fff', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}
-                    >
-                      {reviewBusy === r.id ? '…' : 'تأیید حضوری'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => reviewRequest(r.id, 'reject')}
-                      disabled={reviewBusy === r.id}
-                      style={{ padding: '7px 14px', borderRadius: 8, border: '1px solid #e5b5b5', background: '#fff', color: '#8f2020', fontSize: 12, cursor: 'pointer' }}
-                    >
-                      رد
-                    </button>
-                  </div>
-                )}
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                  {r.phone && (
+                    <>
+                      <Link href={`/admin/orders?phone=${encodeURIComponent(r.phone)}`} style={{ ...btnSecondary, textDecoration: 'none' }}>
+                        🧾 سفارش‌ها
+                      </Link>
+                      <Link href={`/admin/customers?phone=${encodeURIComponent(r.phone)}`} style={{ ...btnSecondary, textDecoration: 'none' }}>
+                        👤 پرونده
+                      </Link>
+                    </>
+                  )}
+                  {r.status === 'pending' && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => reviewRequest(r.id, 'approve')}
+                        disabled={reviewBusy === r.id}
+                        style={{ padding: '7px 14px', borderRadius: 8, border: 'none', background: '#2e7d32', color: '#fff', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}
+                      >
+                        {reviewBusy === r.id ? '…' : 'تأیید حضوری'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => reviewRequest(r.id, 'reject')}
+                        disabled={reviewBusy === r.id}
+                        style={{ padding: '7px 14px', borderRadius: 8, border: '1px solid #e5b5b5', background: '#fff', color: '#8f2020', fontSize: 12, cursor: 'pointer' }}
+                      >
+                        رد
+                      </button>
+                    </>
+                  )}
+                </div>
               </div>
             ))}
           </div>

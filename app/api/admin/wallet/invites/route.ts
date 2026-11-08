@@ -20,9 +20,9 @@ export async function GET(req: NextRequest) {
   const db = supabaseAdmin()
   const { data, error } = await db
     .from('registration_invites')
-    .select('id, token, expires_at, used_at, used_phone, is_active, created_at')
+    .select('id, token, expires_at, used_at, used_phone, used_device_info, used_device_hash, is_active, created_at')
     .order('created_at', { ascending: false })
-    .limit(30)
+    .limit(50)
 
   if (error) {
     console.error('[admin/wallet/invites] GET', error.message)

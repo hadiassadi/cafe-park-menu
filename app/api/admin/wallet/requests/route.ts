@@ -35,8 +35,31 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'خطای سرور' }, { status: 500 })
   }
 
+  // پرونده‌ی مشتری هر درخواست (وضعیت احراز/کیف پول) — با یک کوئری برای همه‌ی شماره‌ها
+  const activationRows = activation.data ?? []
+  const phones = activationRows.map((r) => r.phone).filter((p): p is string => !!p)
+  const profileByPhone = new Map<string, { verification_status: string; wallet_blocked: boolean; device_info: string | null }>()
+  if (phones.length > 0) {
+    const { data: profiles } = await db
+      .from('customers')
+      .select('phone, verification_status, wallet_blocked, device_info')
+      .in('phone', phones)
+    for (const p of profiles ?? []) {
+      profileByPhone.set(p.phone, {
+        verification_status: p.verification_status,
+        wallet_blocked: !!p.wallet_blocked,
+        device_info: p.device_info ?? null,
+      })
+    }
+  }
+
+  const activationRequests = activationRows.map((r) => ({
+    ...r,
+    customer: r.phone ? profileByPhone.get(r.phone) ?? null : null,
+  }))
+
   return NextResponse.json({
-    activationRequests: activation.data ?? [],
+    activationRequests,
     chargeRequests: charges.error ? [] : charges.data ?? [],
   })
 }

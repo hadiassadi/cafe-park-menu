@@ -39,24 +39,32 @@ export async function GET() {
     // خواندن اطلاعات مشتریان (یادداشت، تگ، تأیید شماره، وضعیت اعتبار)
     const { data: metaCustomers } = await db
       .from('customers')
-      .select('phone, notes, tags, phone_verified_at, credit_override')
+      .select('phone, name, notes, tags, phone_verified_at, credit_override, verification_status, wallet_blocked, device_info')
 
     const metaMap = new Map<
       string,
       {
+        profile_name: string | null
         notes: string | null
         tags: string[]
         phone_verified_at: string | null
         credit_override: string
+        verification_status: string | null
+        wallet_blocked: boolean
+        device_info: string | null
       }
     >()
     for (const c of metaCustomers ?? []) {
       if (!c.phone) continue
       metaMap.set(normalizePhone(c.phone), {
+        profile_name: c.name ?? null,
         notes: c.notes || null,
         tags: Array.isArray(c.tags) ? c.tags : [],
         phone_verified_at: c.phone_verified_at ?? null,
         credit_override: c.credit_override || 'default',
+        verification_status: c.verification_status ?? null,
+        wallet_blocked: !!c.wallet_blocked,
+        device_info: c.device_info ?? null,
       })
     }
 
@@ -152,6 +160,10 @@ export async function GET() {
         has_record: !!meta,
         phone_verified_at: meta?.phone_verified_at ?? null,
         credit_override: meta?.credit_override ?? 'default',
+        profile_name: meta?.profile_name ?? null,
+        verification_status: meta?.verification_status ?? null,
+        wallet_blocked: meta?.wallet_blocked ?? false,
+        device_info: meta?.device_info ?? null,
         settled_orders: settledByPhone.get(c.phone) ?? 0,
         open_debt: openDebt,
       }

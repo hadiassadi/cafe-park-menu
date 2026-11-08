@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { canSpendFromWallet, otpButtonEnabled, walletAccessState } from '../rules'
+import { canSpendFromWallet, otpButtonEnabled, walletAccessState } from '../lib/wallet/rules'
 
 describe('walletAccessState', () => {
   it('کیف پول خاموش در تنظیمات → disabled (اولویت اول)', () => {
