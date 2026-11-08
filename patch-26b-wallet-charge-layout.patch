@@ -1,0 +1,31 @@
+diff --git a/app/my-orders/MyOrdersClient.tsx b/app/my-orders/MyOrdersClient.tsx
+index 9fc2852..4b55ee2 100644
+--- a/app/my-orders/MyOrdersClient.tsx
++++ b/app/my-orders/MyOrdersClient.tsx
+@@ -633,14 +633,15 @@ export default function MyOrdersClient() {
+ 
+                   {showChargeForm && (
+                     <div style={{ display: 'grid', gap: '8px', marginTop: '12px' }}>
+-                      <div style={{ display: 'flex', gap: '8px' }}>
++                      {/* تک‌ستونه: اینپوت‌ها عرض ذاتی دارند و در ردیف افقی از کارت بیرون می‌زنند */}
++                      <div style={{ display: 'grid', gap: '8px' }}>
+                         <input
+                           dir="ltr"
+                           value={chargeAmount}
+                           onChange={(e) => setChargeAmount(e.target.value)}
+                           placeholder={`مبلغ (حداقل ${formatPrice(wstatus.chargeMin ?? 50000)})`}
+                           inputMode="numeric"
+-                          style={{ flex: 1, padding: '10px 12px', borderRadius: '10px', border: '1px solid #e3ddd2', fontSize: '13px', minWidth: 0 }}
++                          style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: '10px', border: '1px solid #e3ddd2', fontSize: '13px' }}
+                         />
+                         <input
+                           dir="ltr"
+@@ -648,7 +649,7 @@ export default function MyOrdersClient() {
+                           onChange={(e) => setChargeTracking(e.target.value)}
+                           placeholder="شماره پیگیری"
+                           inputMode="numeric"
+-                          style={{ flex: 1, padding: '10px 12px', borderRadius: '10px', border: '1px solid #e3ddd2', fontSize: '13px', minWidth: 0 }}
++                          style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: '10px', border: '1px solid #e3ddd2', fontSize: '13px' }}
+                         />
+                       </div>
+                       <label style={{ display: 'block', fontSize: '12px', color: '#766f64' }}>
