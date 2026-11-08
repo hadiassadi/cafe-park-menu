@@ -1,0 +1,886 @@
+From 750ab7756ea457e5152e28c869b6e258880a8b79 Mon Sep 17 00:00:00 2001
+From: Z User <z@container>
+Date: Sun, 8 Nov 2026 18:39:48 +0000
+Subject: [PATCH] feat: customer archive/restore + guarded hard delete
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+- customers.archived_at ستون جدید + کلید امنیتی admin_allow_delete_customers
+- اکشن آرشیو: مخفی از لیست فعال‌ها، قطع نشست/کیف پول، حفظ سفارش‌ها
+- بازگردانی از بخش آرشیو + رستوریشن خودکار با ثبت‌نام دعوتی دوباره
+- حذف کامل فقط از آرشیو + گارد موجودی صفر + کلید تنظیمات
+- نمای فعال/آرشیو در لیست مشتریان ادمین
+---
+ app/admin/customers/CustomersManager.tsx      | 358 +++++++++++++-----
+ app/admin/settings/page.tsx                   |  21 +-
+ app/api/admin/customers/route.ts              |  72 +++-
+ app/api/customers/archive/route.ts            |  88 +++++
+ app/api/customers/delete/route.ts             |  25 +-
+ app/api/register/complete/route.ts            |   1 +
+ app/api/settings/route.ts                     |   1 +
+ .../migrations/20261110_customer_archive.sql  |  10 +
+ 8 files changed, 461 insertions(+), 115 deletions(-)
+ create mode 100644 app/api/customers/archive/route.ts
+ create mode 100644 supabase/migrations/20261110_customer_archive.sql
+
+diff --git a/app/admin/customers/CustomersManager.tsx b/app/admin/customers/CustomersManager.tsx
+index 9f64cd2..3731c4e 100644
+--- a/app/admin/customers/CustomersManager.tsx
++++ b/app/admin/customers/CustomersManager.tsx
+@@ -25,6 +25,8 @@ type CustomerData = {
+   verification_status: string | null
+   wallet_blocked: boolean
+   device_info: string | null
++  archived: boolean
++  archived_at: string | null
+ }
+ 
+ const PRESET_TAGS = [
+@@ -76,8 +78,10 @@ export default function CustomersManager() {
+     new: 0,
+     inactive: 0,
+     problematic: 0,
++    archived: 0,
+   })
+   const [loading, setLoading] = useState(true)
++  const [view, setView] = useState<'active' | 'archived'>('active')
+   const [search, setSearch] = useState('')
+   const [filter, setFilter] = useState<CustomerFilter>('all')
+   const [cancelFilter, setCancelFilter] = useState<CancelFilter>('all')
+@@ -95,41 +99,72 @@ export default function CustomersManager() {
+   const [editWalletBlocked, setEditWalletBlocked] = useState(false)
+   const [confirmDelete, setConfirmDelete] = useState(false)
+   const [deleting, setDeleting] = useState(false)
++  // 📦 آرشیو / بازگردانی
++  const [confirmArchive, setConfirmArchive] = useState(false)
++  const [archiving, setArchiving] = useState(false)
++  const [restoring, setRestoring] = useState(false)
+ 
+   // ✅ لود داده‌ها از API امن سرور (نه مستقیم از دیتابیس)
+-  useEffect(() => {
+-    let cancelled = false
+-
+-    fetch('/api/admin/customers', { cache: 'no-store' })
+-      .then((res) => res.json())
+-      .then((data) => {
+-        if (!cancelled) {
+-          if (data.customers) {
+-            setCustomers(data.customers)
+-            setSummary(data.summary)
+-            // لینک عمیق از بخش کیف پول: /admin/customers?phone=09xxxxxxxxx
+-            try {
+-              const p = (new URLSearchParams(window.location.search).get('phone') || '').replace(/[^\d]/g, '')
+-              const target = data.customers.find((c: CustomerData) => c.phone === p)
+-              if (target) {
+-                setSearch(p)
+-                openCustomer(target)
+-              }
+-            } catch {}
++  async function loadCustomers(v: 'active' | 'archived', deepLinkPhone = '') {
++    setLoading(true)
++    try {
++      const res = await fetch(
++        `/api/admin/customers${v === 'archived' ? '?view=archived' : ''}`,
++        { cache: 'no-store' }
++      )
++      const data = await res.json()
++      if (data.customers) {
++        setCustomers(data.customers)
++        setSummary(data.summary)
++        if (deepLinkPhone) {
++          // لینک عمیق از بخش کیف پول: /admin/customers?phone=09xxxxxxxxx
++          const target = data.customers.find((c: CustomerData) => c.phone === deepLinkPhone)
++          if (target) {
++            setSearch(deepLinkPhone)
++            openCustomer(target)
++          } else if (v === 'active') {
++            // شاید مشتری آرشیو شده باشد — در نمای آرشیو دنبالش بگرد
++            const res2 = await fetch('/api/admin/customers?view=archived', { cache: 'no-store' })
++            const data2 = await res2.json()
++            const target2 = data2.customers?.find((c: CustomerData) => c.phone === deepLinkPhone)
++            if (target2) {
++              setView('archived')
++              setCustomers(data2.customers)
++              setSummary(data2.summary)
++              setSearch(deepLinkPhone)
++              openCustomer(target2)
++            }
+           }
+-          setLoading(false)
+         }
+-      })
+-      .catch((err) => {
+-        console.error(err)
+-        if (!cancelled) setLoading(false)
+-      })
+-
+-    return () => {
+-      cancelled = true
++      }
++    } catch (err) {
++      console.error(err)
++    } finally {
++      setLoading(false)
+     }
++  }
++
++  useEffect(() => {
++    const p = (() => {
++      try {
++        return (new URLSearchParams(window.location.search).get('phone') || '').replace(/[^\d]/g, '')
++      } catch {
++        return ''
++      }
++    })()
++    loadCustomers('active', p)
+   }, [])
+ 
++  function switchView(v: 'active' | 'archived') {
++    if (v === view) return
++    setView(v)
++    setSearch('')
++    setFilter('all')
++    setCancelFilter('all')
++    setSelectedCustomer(null)
++    loadCustomers(v)
++  }
++
+   const cancelCounts = useMemo(() => {
+     return {
+       all: customers.length,
+@@ -193,6 +228,9 @@ export default function CustomersManager() {
+     setEditWalletBlocked(!!customer.wallet_blocked)
+     setConfirmDelete(false)
+     setDeleting(false)
++    setConfirmArchive(false)
++    setArchiving(false)
++    setRestoring(false)
+ 
+     setNewTagInput('')
+     setSaveMessage(null)
+@@ -214,6 +252,7 @@ export default function CustomersManager() {
+       const data = await res.json().catch(() => null)
+       if (!res.ok) throw new Error(data?.error || 'حذف ناموفق بود')
+       setCustomers((prev) => prev.filter((c) => c.phone !== selectedCustomer.phone))
++      setSummary((s) => ({ ...s, total: Math.max(0, s.total - 1), archived: Math.max(0, s.archived - 1) }))
+       setSelectedCustomer(null)
+     } catch (err) {
+       setSaveMessage(`❌ ${err instanceof Error ? err.message : 'خطا در حذف'}`)
+@@ -223,6 +262,56 @@ export default function CustomersManager() {
+     }
+   }
+ 
++  // 📦 آرشیو: مشتری از لیست فعال‌ها و پنل مشتری خارج می‌شود ولی تاریخچه‌اش می‌ماند
++  async function archiveCustomer() {
++    if (!selectedCustomer || !confirmArchive) {
++      setConfirmArchive(true)
++      return
++    }
++    setArchiving(true)
++    setSaveMessage(null)
++    try {
++      const res = await fetch('/api/customers/archive', {
++        method: 'POST',
++        headers: { 'Content-Type': 'application/json' },
++        body: JSON.stringify({ phone: selectedCustomer.phone, archive: true }),
++      })
++      const data = await res.json().catch(() => null)
++      if (!res.ok) throw new Error(data?.error || 'آرشیو ناموفق بود')
++      setCustomers((prev) => prev.filter((c) => c.phone !== selectedCustomer.phone))
++      setSummary((s) => ({ ...s, total: Math.max(0, s.total - 1), archived: s.archived + 1 }))
++      setSelectedCustomer(null)
++    } catch (err) {
++      setSaveMessage(`❌ ${err instanceof Error ? err.message : 'خطا در آرشیو'}`)
++    } finally {
++      setArchiving(false)
++      setConfirmArchive(false)
++    }
++  }
++
++  // ↩️ بازگردانی از آرشیو
++  async function restoreCustomer() {
++    if (!selectedCustomer) return
++    setRestoring(true)
++    setSaveMessage(null)
++    try {
++      const res = await fetch('/api/customers/archive', {
++        method: 'POST',
++        headers: { 'Content-Type': 'application/json' },
++        body: JSON.stringify({ phone: selectedCustomer.phone, archive: false }),
++      })
++      const data = await res.json().catch(() => null)
++      if (!res.ok) throw new Error(data?.error || 'بازگردانی ناموفق بود')
++      setCustomers((prev) => prev.filter((c) => c.phone !== selectedCustomer.phone))
++      setSummary((s) => ({ ...s, total: s.total + 1, archived: Math.max(0, s.archived - 1) }))
++      setSelectedCustomer(null)
++    } catch (err) {
++      setSaveMessage(`❌ ${err instanceof Error ? err.message : 'خطا در بازگردانی'}`)
++    } finally {
++      setRestoring(false)
++    }
++  }
++
+   function togglePresetTag(tagKey: string) {
+     const tagLabel = PRESET_TAGS.find((t) => t.key === tagKey)?.label
+     if (!tagLabel) return
+@@ -396,44 +485,66 @@ export default function CustomersManager() {
+             <span>🔍</span>
+             <input
+               type="search"
+-              placeholder="جستجوی نام یا شماره تماس..."
++              placeholder={view === 'archived' ? 'جستجو در آرشیو...' : 'جستجوی نام یا شماره تماس...'}
+               value={search}
+               onChange={(e) => setSearch(e.target.value)}
+             />
+           </div>
+-        </div>
+-
+-        <div className="customers-filters">
+-          {(Object.keys(FILTER_LABELS) as CustomerFilter[]).map((f) => (
++          <div className="customers-filters" style={{ margin: '10px 0 0' }}>
+             <button
+-              key={f}
+               type="button"
+-              className={`filter-chip ${filter === f ? 'active' : ''}`}
+-              onClick={() => setFilter(f)}
++              className={`filter-chip ${view === 'active' ? 'active' : ''}`}
++              onClick={() => switchView('active')}
+             >
+-              {FILTER_LABELS[f]}
++              👥 فعال‌ها
++              <span className="chip-count">{formatPrice(summary.total)}</span>
++            </button>
++            <button
++              type="button"
++              className={`filter-chip ${view === 'archived' ? 'active' : ''}`}
++              onClick={() => switchView('archived')}
++            >
++              📦 آرشیو
++              <span className="chip-count">{formatPrice(summary.archived)}</span>
+             </button>
+-          ))}
+-        </div>
+-
+-        <div className="customers-cancel-filters">
+-          <span className="customers-cancel-label">🚫 فیلتر لغو:</span>
+-          <div className="customers-cancel-chips">
+-            {(Object.keys(CANCEL_FILTER_LABELS) as CancelFilter[]).map((f) => (
+-              <button
+-                key={f}
+-                type="button"
+-                className={`filter-chip cancel-chip ${
+-                  cancelFilter === f ? 'active' : ''
+-                } ${f !== 'all' ? 'chip-danger' : ''}`}
+-                onClick={() => setCancelFilter(f)}
+-              >
+-                {CANCEL_FILTER_LABELS[f]}
+-                <span className="chip-count">{formatPrice(cancelCounts[f])}</span>
+-              </button>
+-            ))}
+           </div>
+         </div>
++
++        {view === 'active' && (
++          <>
++            <div className="customers-filters">
++              {(Object.keys(FILTER_LABELS) as CustomerFilter[]).map((f) => (
++                <button
++                  key={f}
++                  type="button"
++                  className={`filter-chip ${filter === f ? 'active' : ''}`}
++                  onClick={() => setFilter(f)}
++                >
++                  {FILTER_LABELS[f]}
++                </button>
++              ))}
++            </div>
++
++            <div className="customers-cancel-filters">
++              <span className="customers-cancel-label">🚫 فیلتر لغو:</span>
++              <div className="customers-cancel-chips">
++                {(Object.keys(CANCEL_FILTER_LABELS) as CancelFilter[]).map((f) => (
++                  <button
++                    key={f}
++                    type="button"
++                    className={`filter-chip cancel-chip ${
++                      cancelFilter === f ? 'active' : ''
++                    } ${f !== 'all' ? 'chip-danger' : ''}`}
++                    onClick={() => setCancelFilter(f)}
++                  >
++                    {CANCEL_FILTER_LABELS[f]}
++                    <span className="chip-count">{formatPrice(cancelCounts[f])}</span>
++                  </button>
++                ))}
++              </div>
++            </div>
++          </>
++        )}
+       </section>
+ 
+       {loading ? (
+@@ -447,7 +558,9 @@ export default function CustomersManager() {
+               ? 'مشتری‌ای با این مشخصات پیدا نشد.'
+               : cancelFilterActive
+                 ? 'مشتری‌ای با این تعداد لغو پیدا نشد.'
+-                : 'هنوز مشتری‌ای ثبت نشده است.'}
++                : view === 'archived'
++                  ? 'آرشیو خالی است. مشتری‌ای که آرشیو شود از لیست فعال‌ها به اینجا منتقل می‌شود.'
++                  : 'هنوز مشتری‌ای ثبت نشده است.'}
+           </p>
+         </div>
+       ) : (
+@@ -482,6 +595,9 @@ export default function CustomersManager() {
+                   {customer.verification_status === 'verified' && (
+                     <span className="customer-badge" style={{ background: '#e6f6ea', color: '#176a32' }}>✅ احراز</span>
+                   )}
++                  {customer.archived && (
++                    <span className="customer-badge" style={{ background: '#eee9df', color: '#6b4f3a' }}>📦 آرشیو</span>
++                  )}
+                   {customer.wallet_blocked && (
+                     <span className="customer-badge" style={{ background: '#fdeaea', color: '#8f2020' }}>🚫 کیف پول</span>
+                   )}
+@@ -491,6 +607,12 @@ export default function CustomersManager() {
+                 </div>
+ 
+                 <div className="customer-card-body">
++                  {customer.archived && (
++                    <div className="customer-stat">
++                      <span>📦</span>
++                      <span>آرشیو شده: {timeAgo(customer.archived_at)}</span>
++                    </div>
++                  )}
+                   <div className="customer-stat">
+                     <span>🛒</span>
+                     <span>{formatPrice(customer.order_count)} سفارش موفق</span>
+@@ -580,38 +702,47 @@ export default function CustomersManager() {
+             <div className="modal-body">
+               <div className="info-card">
+                 <h3>👤 پروفایل ثبت‌نامی</h3>
+-                <div className="info-row" style={{ display: 'block' }}>
+-                  <span>نام مشتری (نمایش در فرم‌ها و چک‌اوت):</span>
+-                  <input
+-                    type="text"
+-                    value={editName}
+-                    onChange={(e) => setEditName(e.target.value)}
+-                    placeholder="نام و نام خانوادگی"
+-                    disabled={saving}
+-                    style={{ width: '100%', padding: '8px', marginTop: '6px', boxSizing: 'border-box' }}
+-                  />
+-                </div>
+-                <div className="info-row" style={{ marginTop: '10px' }}>
+-                  <span>وضعیت حساب (ثبت‌نام دعوتی/OTP):</span>
+-                  <select
+-                    value={editVerification}
+-                    onChange={(e) => setEditVerification(e.target.value as 'verified' | 'unverified')}
+-                    disabled={saving}
+-                    style={{ padding: '6px 8px' }}
+-                  >
+-                    <option value="verified">✅ تأیید شده</option>
+-                    <option value="unverified">⛔ تأیید نشده</option>
+-                  </select>
+-                </div>
+-                <label style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '10px', cursor: 'pointer' }}>
+-                  <input
+-                    type="checkbox"
+-                    checked={editWalletBlocked}
+-                    onChange={(e) => setEditWalletBlocked(e.target.checked)}
+-                    disabled={saving}
+-                  />
+-                  <span>🚫 مسدودسازی کیف پول این مشتری</span>
+-                </label>
++                {selectedCustomer.archived ? (
++                  <div className="admin-message" style={{ background: '#fdf9f4', color: '#6b4f3a', marginBottom: '10px' }}>
++                    📦 این مشتری آرشیو شده است؛ از لیست فعال‌ها و پنل مشتری مخفی است و دسترسی کیف پولش غیرفعال شده.
++                    با ثبت‌نام دعوتیِ دوباره یا دکمه‌ی «بازگردانی» حسابش زنده می‌شود.
++                  </div>
++                ) : (
++                  <>
++                    <div className="info-row" style={{ display: 'block' }}>
++                      <span>نام مشتری (نمایش در فرم‌ها و چک‌اوت):</span>
++                      <input
++                        type="text"
++                        value={editName}
++                        onChange={(e) => setEditName(e.target.value)}
++                        placeholder="نام و نام خانوادگی"
++                        disabled={saving}
++                        style={{ width: '100%', padding: '8px', marginTop: '6px', boxSizing: 'border-box' }}
++                      />
++                    </div>
++                    <div className="info-row" style={{ marginTop: '10px' }}>
++                      <span>وضعیت حساب (ثبت‌نام دعوتی/OTP):</span>
++                      <select
++                        value={editVerification}
++                        onChange={(e) => setEditVerification(e.target.value as 'verified' | 'unverified')}
++                        disabled={saving}
++                        style={{ padding: '6px 8px' }}
++                      >
++                        <option value="verified">✅ تأیید شده</option>
++                        <option value="unverified">⛔ تأیید نشده</option>
++                      </select>
++                    </div>
++                    <label style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '10px', cursor: 'pointer' }}>
++                      <input
++                        type="checkbox"
++                        checked={editWalletBlocked}
++                        onChange={(e) => setEditWalletBlocked(e.target.checked)}
++                        disabled={saving}
++                      />
++                      <span>🚫 مسدودسازی کیف پول این مشتری</span>
++                    </label>
++                  </>
++                )}
+                 <div className="info-row" style={{ marginTop: '10px' }}>
+                   <span>📱 دستگاه ثبت‌نام:</span>
+                   <strong style={{ fontSize: '12px' }}>{selectedCustomer.device_info || 'نامشخص'}</strong>
+@@ -645,8 +776,9 @@ export default function CustomersManager() {
+                   <strong>{timeAgo(selectedCustomer.last_order_at)}</strong>
+                 </div>
+               </div>
+-              <div className="info-card" style={{ marginTop: '16px' }}>
+-                <h3>💳 اعتبار پرداخت حضوری</h3>
++              {!selectedCustomer.archived && (
++                <div className="info-card" style={{ marginTop: '16px' }}>
++                  <h3>💳 اعتبار پرداخت حضوری</h3>
+                 <div className="info-row">
+                   <span>سفارش تسویه‌شده:</span>
+                   <strong>{formatPrice(selectedCustomer.settled_orders)}</strong>
+@@ -678,7 +810,8 @@ export default function CustomersManager() {
+                   <option value="allow">همیشه مجاز</option>
+                   <option value="block">همیشه مسدود</option>
+                 </select>
+-              </div>
++                </div>
++              )}
+ 
+               <div className="info-card" style={{ marginTop: '16px' }}>
+                 <h3>🏷️ تگ‌ها</h3>
+@@ -751,15 +884,38 @@ export default function CustomersManager() {
+             </div>
+ 
+             <div className="modal-footer">
+-              <button
+-                type="button"
+-                className="btn"
+-                onClick={deleteCustomer}
+-                disabled={deleting || saving}
+-                style={{ background: confirmDelete ? '#8f2020' : '#fff', color: confirmDelete ? '#fff' : '#8f2020', border: '1px solid #e5b5b5' }}
+-              >
+-                {deleting ? '...' : confirmDelete ? '⚠️ تأیید حذف ثبت‌نام' : '🗑 حذف ثبت‌نام'}
+-              </button>
++              {selectedCustomer.archived ? (
++                <>
++                  <button
++                    type="button"
++                    className="btn"
++                    onClick={restoreCustomer}
++                    disabled={restoring || deleting || saving}
++                    style={{ background: '#2d5d3e', color: '#fff', border: '1px solid #2d5d3e' }}
++                  >
++                    {restoring ? '...' : '↩️ بازگردانی'}
++                  </button>
++                  <button
++                    type="button"
++                    className="btn"
++                    onClick={deleteCustomer}
++                    disabled={deleting || restoring || saving}
++                    style={{ background: confirmDelete ? '#8f2020' : '#fff', color: confirmDelete ? '#fff' : '#8f2020', border: '1px solid #e5b5b5' }}
++                  >
++                    {deleting ? '...' : confirmDelete ? '⚠️ تأیید حذف کامل' : '🗑 حذف کامل'}
++                  </button>
++                </>
++              ) : (
++                <button
++                  type="button"
++                  className="btn"
++                  onClick={archiveCustomer}
++                  disabled={archiving || deleting || saving}
++                  style={{ background: confirmArchive ? '#9b6a1f' : '#fff', color: confirmArchive ? '#fff' : '#9b6a1f', border: '1px solid #e2cfa8' }}
++                >
++                  {archiving ? '...' : confirmArchive ? '⚠️ تأیید آرشیو' : '📦 آرشیو'}
++                </button>
++              )}
+               <button type="button" className="btn" onClick={() => setSelectedCustomer(null)} disabled={saving}>
+                 بستن
+               </button>
+diff --git a/app/admin/settings/page.tsx b/app/admin/settings/page.tsx
+index b7c286d..bbb9c9a 100644
+--- a/app/admin/settings/page.tsx
++++ b/app/admin/settings/page.tsx
+@@ -69,6 +69,7 @@ type BoolKey =
+   | 'rubika_enabled'
+   // ✅ جدید
+   | 'admin_allow_delete_orders'
++  | 'admin_allow_delete_customers'
+ 
+ type Settings = Record<TextKey, string> &
+   Record<BoolKey, boolean> & {
+@@ -115,6 +116,7 @@ const BOOL_DEFAULTS: Record<BoolKey, boolean> = {
+   whatsapp_enabled: true, eitaa_enabled: false, bale_enabled: false, rubika_enabled: false,
+   // ✅ جدید: پیش‌فرض روشن
+   admin_allow_delete_orders: true,
++  admin_allow_delete_customers: true,
+ }
+ 
+ const BOOL_KEYS = Object.keys(BOOL_DEFAULTS) as BoolKey[]
+@@ -506,7 +508,11 @@ function previewOf(key: SectionKey, f: Settings): string {
+     }
+     case 'share': return f.og_enabled ? f.og_title || 'پیش‌فرض' : 'غیرفعال'
+     // ✅ جدید
+-    case 'security': return f.admin_allow_delete_orders ? 'حذف سفارش: فعال' : 'حذف سفارش: غیرفعال'
++    case 'security':
++      return [
++        f.admin_allow_delete_orders ? 'حذف سفارش: فعال' : 'حذف سفارش: غیرفعال',
++        f.admin_allow_delete_customers ? 'حذف مشتری: فعال' : 'حذف مشتری: غیرفعال',
++      ].join(' · ')
+   }
+ }
+ 
+@@ -888,6 +894,19 @@ export default function SettingsPage() {
+                 ⚠️ با غیرفعال کردن این گزینه، دکمه حذف از پنل سفارش‌ها مخفی می‌شه و API هم درخواست‌ها رو رد می‌کنه. سفارش‌های قبلاً حذف‌شده دست‌نخورده باقی می‌مونن.
+               </p>
+             )}
++            <div className="toggle-row" style={{ marginTop: 16 }}>
++              <div>
++                <strong>حذف کامل مشتری</strong>
++                <small>
++                  حذف کامل ثبت‌نام فقط از بخش «آرشیو» مشتریان ممکنه، بعد از آرشیو کردن و صفر شدن موجودی کیف پول. اگه خاموش باشه، آرشیو و بازگردانی همچنان کار می‌کنه ولی حذف کامل هیچ‌وقت رخ نمی‌ده.
++                </small>
++              </div>
++              <Switch
++                checked={draft.admin_allow_delete_customers}
++                onChange={(v) => setBool('admin_allow_delete_customers', v)}
++                label={draft.admin_allow_delete_customers ? 'فعال' : 'غیرفعال'}
++              />
++            </div>
+           </>
+         )
+       default: return null
+diff --git a/app/api/admin/customers/route.ts b/app/api/admin/customers/route.ts
+index 112b1f1..e6e351e 100644
+--- a/app/api/admin/customers/route.ts
++++ b/app/api/admin/customers/route.ts
+@@ -1,5 +1,5 @@
+ import { apiError } from '@/lib/api-error'
+-import { NextResponse } from 'next/server'
++import { NextRequest, NextResponse } from 'next/server'
+ import { createClient } from '@supabase/supabase-js'
+ import { requireAdmin } from '@/lib/admin/require-admin'
+ 
+@@ -14,11 +14,14 @@ function createAdminDb() {
+ 
+ const normalizePhone = (v: unknown) => String(v ?? '').replace(/[^\d]/g, '')
+ 
+-export async function GET() {
++export async function GET(req: NextRequest) {
+   try {
+     const denied = await requireAdmin()
+     if (denied) return denied
+ 
++    // view=archived → فقط مشتریان آرشیوشده؛ پیش‌فرض → فقط فعال‌ها
++    const view = req.nextUrl.searchParams.get('view') === 'archived' ? 'archived' : 'active'
++
+     const db = createAdminDb()
+     const now = new Date()
+     const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+@@ -36,10 +39,10 @@ export async function GET() {
+       )
+     }
+ 
+-    // خواندن اطلاعات مشتریان (یادداشت، تگ، تأیید شماره، وضعیت اعتبار)
++    // خواندن اطلاعات مشتریان (یادداشت، تگ، تأیید شماره، وضعیت اعتبار، آرشیو)
+     const { data: metaCustomers } = await db
+       .from('customers')
+-      .select('phone, name, notes, tags, phone_verified_at, credit_override, verification_status, wallet_blocked, device_info')
++      .select('phone, name, notes, tags, phone_verified_at, credit_override, verification_status, wallet_blocked, device_info, archived_at')
+ 
+     const metaMap = new Map<
+       string,
+@@ -52,6 +55,7 @@ export async function GET() {
+         verification_status: string | null
+         wallet_blocked: boolean
+         device_info: string | null
++        archived_at: string | null
+       }
+     >()
+     for (const c of metaCustomers ?? []) {
+@@ -65,6 +69,7 @@ export async function GET() {
+         verification_status: c.verification_status ?? null,
+         wallet_blocked: !!c.wallet_blocked,
+         device_info: c.device_info ?? null,
++        archived_at: c.archived_at ?? null,
+       })
+     }
+ 
+@@ -166,28 +171,73 @@ export async function GET() {
+         device_info: meta?.device_info ?? null,
+         settled_orders: settledByPhone.get(c.phone) ?? 0,
+         open_debt: openDebt,
++        archived: !!meta?.archived_at,
++        archived_at: meta?.archived_at ?? null,
+       }
+     })
+ 
+-    customers.sort((a, b) => {
++    // مشتریانِ فقط-پروفایل (بدون هیچ سفارشی) که آرشیو شده‌اند — در نمای آرشیو هم دیده شوند
++    const archivedMetaOnly = (metaCustomers ?? [])
++      .filter(
++        (c) =>
++          c.archived_at &&
++          c.phone &&
++          !customerMap.has(normalizePhone(c.phone))
++      )
++      .map((c) => ({
++        phone: normalizePhone(c.phone),
++        name: c.name || 'بدون نام',
++        order_count: 0,
++        total_spent: 0,
++        cancelled_count: 0,
++        first_order_at: null,
++        last_order_at: null,
++        notes: c.notes || null,
++        tags: Array.isArray(c.tags) ? c.tags : [],
++        has_record: true,
++        phone_verified_at: c.phone_verified_at ?? null,
++        credit_override: c.credit_override || 'default',
++        profile_name: c.name ?? null,
++        verification_status: c.verification_status ?? null,
++        wallet_blocked: !!c.wallet_blocked,
++        device_info: c.device_info ?? null,
++        settled_orders: 0,
++        open_debt: 0,
++        archived: true,
++        archived_at: c.archived_at as string,
++      }))
++
++    const allRows = [...customers, ...archivedMetaOnly]
++    const activeRows = allRows.filter((r) => !r.archived)
++    const archivedRows = allRows
++      .filter((r) => r.archived)
++      .sort(
++        (a, b) =>
++          new Date(b.archived_at || 0).getTime() - new Date(a.archived_at || 0).getTime()
++      )
++
++    const finalCustomers = view === 'archived' ? archivedRows : activeRows
++
++    finalCustomers.sort((a, b) => {
+       const aTime = a.last_order_at ? new Date(a.last_order_at).getTime() : 0
+       const bTime = b.last_order_at ? new Date(b.last_order_at).getTime() : 0
+       return bTime - aTime
+     })
+ 
+     const summary = {
+-      total: customers.length,
+-      loyal: customers.filter((c) => c.order_count >= 5).length,
+-      new: customers.filter((c) => c.order_count === 1).length,
+-      inactive: customers.filter((c) => {
++      total: finalCustomers.length,
++      loyal: finalCustomers.filter((c) => c.order_count >= 5).length,
++      new: finalCustomers.filter((c) => c.order_count === 1).length,
++      inactive: finalCustomers.filter((c) => {
+         if (!c.last_order_at) return false
+         return new Date(c.last_order_at) < thirtyDaysAgo
+       }).length,
+-      problematic: customers.filter((c) => c.cancelled_count >= 5).length,
++      problematic: finalCustomers.filter((c) => c.cancelled_count >= 5).length,
++      archived: archivedRows.length,
+     }
+ 
+     return NextResponse.json(
+-      { customers, summary },
++      { customers: finalCustomers, summary },
+       { headers: { 'Cache-Control': 'no-store' } }
+     )
+   } catch (err: any) {
+diff --git a/app/api/customers/archive/route.ts b/app/api/customers/archive/route.ts
+new file mode 100644
+index 0000000..f0fabef
+--- /dev/null
++++ b/app/api/customers/archive/route.ts
+@@ -0,0 +1,88 @@
++import { apiError } from '@/lib/api-error'
++import { NextRequest, NextResponse } from 'next/server'
++import { requireAdmin } from '@/lib/admin/require-admin'
++import { supabaseAdmin } from '@/lib/supabase/server'
++
++export const dynamic = 'force-dynamic'
++
++/**
++ * آرشیو / بازگردانی ثبت‌نام مشتری توسط مدیر — POST { phone, archive }
++ *
++ * آرشیو (archive: true):
++ *  - archived_at ست می‌شود و از لیست مشتریان فعال و پنل مشتری مخفی می‌شود
++ *  - verification_status به unverified برمی‌گردد → نشست و کیف پول همان لحظه غیرفعال می‌شود
++ *  - سفارش‌ها، آمار و تاریخچه دست‌نخورده می‌مانند
++ *  - اگر همان شماره/دستگاه با دعوت‌نامه‌ی جدید ثبت‌نام کند، حساب خودش دوباره زنده و تأیید می‌شود
++ *
++ * بازگردانی (archive: false):
++ *  - archived_at خالی و حساب دوباره تأیید می‌شود
++ */
++export async function POST(req: NextRequest) {
++  try {
++    const denied = await requireAdmin()
++    if (denied) return denied
++
++    const body = await req.json().catch(() => null)
++    const phone = typeof body?.phone === 'string' ? body.phone.replace(/[^\d]/g, '') : ''
++    const archive = body?.archive !== false
++
++    if (!/^09\d{9}$/.test(phone)) {
++      return NextResponse.json({ error: 'شماره تلفن معتبر نیست' }, { status: 400 })
++    }
++
++    const db = supabaseAdmin()
++
++    const { data: customer, error: custErr } = await db
++      .from('customers')
++      .select('id, name, verification_status, archived_at')
++      .eq('phone', phone)
++      .maybeSingle()
++
++    if (custErr) {
++      console.error('[customers/archive] read:', custErr.message)
++      return NextResponse.json({ error: 'خطای پایگاه داده' }, { status: 500 })
++    }
++    if (!customer) {
++      return NextResponse.json({ error: 'ثبت‌نامی برای این شماره پیدا نشد' }, { status: 404 })
++    }
++
++    const now = new Date().toISOString()
++
++    if (archive) {
++      if (customer.archived_at) {
++        return NextResponse.json({ error: 'این مشتری قبلاً آرشیو شده است' }, { status: 409 })
++      }
++      const { error: upErr } = await db
++        .from('customers')
++        .update({ archived_at: now, verification_status: 'unverified', updated_at: now })
++        .eq('id', customer.id)
++      if (upErr) {
++        console.error('[customers/archive] archive:', upErr.message)
++        return NextResponse.json({ error: 'آرشیو ناموفق بود' }, { status: 500 })
++      }
++      return NextResponse.json({ ok: true, archived: true })
++    }
++
++    // بازگردانی
++    if (!customer.archived_at) {
++      return NextResponse.json({ error: 'این مشتری آرشیو نشده است' }, { status: 409 })
++    }
++    const { error: upErr } = await db
++      .from('customers')
++      .update({
++        archived_at: null,
++        verification_status: 'verified',
++        verified_at: now,
++        updated_at: now,
++      })
++      .eq('id', customer.id)
++    if (upErr) {
++      console.error('[customers/archive] restore:', upErr.message)
++      return NextResponse.json({ error: 'بازگردانی ناموفق بود' }, { status: 500 })
++    }
++    return NextResponse.json({ ok: true, archived: false })
++  } catch (err) {
++    console.error('[customers/archive]', err)
++    return apiError(err)
++  }
++}
+diff --git a/app/api/customers/delete/route.ts b/app/api/customers/delete/route.ts
+index 5089149..a61c9de 100644
+--- a/app/api/customers/delete/route.ts
++++ b/app/api/customers/delete/route.ts
+@@ -7,9 +7,11 @@ import { supabaseAdmin } from '@/lib/supabase/server'
+ export const dynamic = 'force-dynamic'
+ 
+ /**
+- * حذف ثبت‌نام مشتری توسط مدیر — POST { phone }
++ * حذف کامل ثبت‌نام مشتری توسط مدیر — POST { phone }
+  * گاردهای امنیتی:
+  *  - فقط ادمین احرازشده
++ *  - کلید «حذف کامل مشتری» در تنظیمات امنیت باید روشن باشد
++ *  - فقط برای مشتریِ آرشیوشده (حذف مستقیم از لیست فعال ممنوع — اول آرشیو کن)
+  *  - موجودی کیف پول باید صفر باشد (بازگشت وجه اول انجام شود)
+  *  - تراکنش‌های دفتر کیف پول هم پاک می‌شوند تا ردیف یتیم نماند
+  * سفارش‌ها دست‌نخورده می‌مانند (تاریخچه CRM حفظ می‌شود).
+@@ -28,9 +30,22 @@ export async function POST(req: NextRequest) {
+ 
+     const db = supabaseAdmin()
+ 
++    // کلید امنیتی: حذف کامل مشتری
++    const { data: settings } = await db
++      .from('settings')
++      .select('admin_allow_delete_customers')
++      .eq('id', 1)
++      .maybeSingle()
++    if (settings && settings.admin_allow_delete_customers === false) {
++      return NextResponse.json(
++        { error: 'حذف کامل مشتری در تنظیمات امنیت غیرفعال شده است' },
++        { status: 403 }
++      )
++    }
++
+     const { data: customer, error: custErr } = await db
+       .from('customers')
+-      .select('id, name')
++      .select('id, name, archived_at')
+       .eq('phone', phone)
+       .maybeSingle()
+ 
+@@ -41,6 +56,12 @@ export async function POST(req: NextRequest) {
+     if (!customer) {
+       return NextResponse.json({ error: 'ثبت‌نامی برای این شماره پیدا نشد' }, { status: 404 })
+     }
++    if (!customer.archived_at) {
++      return NextResponse.json(
++        { error: 'حذف کامل فقط از بخش آرشیو ممکن است؛ اول این مشتری را آرشیو کن' },
++        { status: 409 }
++      )
++    }
+ 
+     // موجودی کیف پول باید صفر باشد
+     const { data: balance, error: balErr } = await db.rpc('wallet_balance', {
+diff --git a/app/api/register/complete/route.ts b/app/api/register/complete/route.ts
+index af9ee74..9a0453e 100644
+--- a/app/api/register/complete/route.ts
++++ b/app/api/register/complete/route.ts
+@@ -128,6 +128,7 @@ export async function POST(req: NextRequest) {
+           verified_at: new Date().toISOString(),
+           device_id_hash: deviceHash,
+           device_info: deviceLabel,
++          archived_at: null, // حساب آرشیوشده با ثبت‌نام دعوتی دوباره زنده می‌شود
+         })
+         .eq('id', customerId)
+       if (upErr) {
+diff --git a/app/api/settings/route.ts b/app/api/settings/route.ts
+index 100cb7b..7222496 100644
+--- a/app/api/settings/route.ts
++++ b/app/api/settings/route.ts
+@@ -104,6 +104,7 @@ const BOOL_FIELDS = [
+   'rubika_enabled',
+   // ✅ امنیت (جدید)
+   'admin_allow_delete_orders',
++  'admin_allow_delete_customers',
+ ]
+ 
+ // مقدارهای مجاز برای فیلدهای انتخابی
+diff --git a/supabase/migrations/20261110_customer_archive.sql b/supabase/migrations/20261110_customer_archive.sql
+new file mode 100644
+index 0000000..9f89294
+--- /dev/null
++++ b/supabase/migrations/20261110_customer_archive.sql
+@@ -0,0 +1,10 @@
++-- پچ ۲۴ — آرشیو/بازگردانی مشتری + حذف کامل کنترل‌شده
++-- اجرا: Supabase SQL Editor (idempotent)
++
++-- آرشیو مشتری: ستون زمان آرشیو شدن (null = فعال)
++-- اثر آرشیو: verification_status به unverified برمی‌گردد → نشست و کیف پول فوراً غیرفعال می‌شود،
++-- از لیست مشتریان فعال مخفی می‌شود و با ثبت‌نام دعوتیِ دوباره، خودش زنده می‌شود.
++alter table public.customers add column if not exists archived_at timestamptz;
++
++-- کلید امنیتی: اجازه‌ی حذف کامل ثبت‌نام مشتری (فقط از بخش آرشیو)
++alter table public.settings add column if not exists admin_allow_delete_customers boolean not null default true;
+-- 
+2.47.3
+
