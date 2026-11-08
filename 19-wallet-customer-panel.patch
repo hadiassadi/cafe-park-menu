@@ -1,0 +1,274 @@
+diff --git a/app/my-orders/MyOrdersClient.tsx b/app/my-orders/MyOrdersClient.tsx
+index 2e053cc..48fd4a6 100644
+--- a/app/my-orders/MyOrdersClient.tsx
++++ b/app/my-orders/MyOrdersClient.tsx
+@@ -4,11 +4,13 @@ import { useEffect, useState } from 'react'
+ import Link from 'next/link'
+ import { useCart } from '@/lib/cart-context'
+ import { formatPersianDate } from '@/lib/format-date'
++import { walletTxKindLabel, walletTxKindIcon, walletTxStatusLabel } from '@/lib/wallet/labels'
+ 
+ const formatPrice = (n: number) => new Intl.NumberFormat('fa-IR').format(Math.round(n))
+ 
+ type OrderItem = { product_name: string; option_name: string | null; unit_price: number; quantity: number; variant_option_id?: string | null; variant_group_id?: string | null; product_id?: string | null; image_url?: string | null }
+ type Order = { id: string; order_number: number; items: OrderItem[]; subtotal: number; original_subtotal: number | null; coupon_code: string | null; coupon_discount: number | null; status: string; created_at: string; cancelled_by: string | null; cancellation_reason_label: string | null; customer_name: string; customer_phone: string; payment_status?: string; payment_method?: string; paid_amount?: number }
++type WalletTx = { id: string; amount: number; kind: string; status: string | null; note: string | null; order_id: string | null; created_at: string }
+ 
+ const STATUS_INFO: Record<string, { label: string; color: string; icon: string }> = {
+   pending: { label: 'در انتظار تأیید', color: '#9a6b3f', icon: '⏳' },
+@@ -24,6 +26,7 @@ const getPaymentMethodLabel = (method: string | null | undefined) => {
+   if (method === 'cash') return 'نقدی';
+   if (method === 'card') return 'کارت‌خوان';
+   if (method === 'transfer') return 'کارت به کارت';
++  if (method === 'wallet') return 'کیف پول';
+   return 'نامشخص';
+ };
+ 
+@@ -33,7 +36,7 @@ export default function MyOrdersClient() {
+   const [loading, setLoading] = useState(true)
+   
+   // ✅ تب‌های اصلی (سفارش‌های باز / تاریخچه)
+-  const [activeTab, setActiveTab] = useState<'open' | 'history' | 'debt'>('open')
++  const [activeTab, setActiveTab] = useState<'open' | 'history' | 'debt' | 'wallet'>('open')
+   const [customer, setCustomer] = useState<{ name: string; phone: string } | null>(null)
+   const [toast, setToast] = useState<string | null>(null)
+   const [showMemberModal, setShowMemberModal] = useState(false)
+@@ -49,6 +52,11 @@ export default function MyOrdersClient() {
+   const [membership, setMembership] = useState<{ orgId: string, orgName: string } | null>(null)
+   const [rules, setRules] = useState<{ general: string; org: string }>({ general: 'در حال بارگذاری...', org: 'در حال بارگذاری...' })
+ 
++  // 👛 کیف پول مشتری — با اولین باز کردن تب لود می‌شود
++  const [walletView, setWalletView] = useState<{ balance: number; transactions: WalletTx[] } | null>(null)
++  const [walletState, setWalletState] = useState<'idle' | 'loading' | 'ready' | 'login' | 'error'>('idle')
++  const [walletLoadedOnce, setWalletLoadedOnce] = useState(false)
++
+   useEffect(() => {
+     async function loadData() {
+       try {
+@@ -87,6 +95,31 @@ export default function MyOrdersClient() {
+     setTimeout(() => { window.location.href = '/cart' }, 800)
+   }
+ 
++  async function loadWallet() {
++    setWalletState('loading')
++    try {
++      const res = await fetch('/api/wallet', { cache: 'no-store' })
++      if (res.status === 401) { setWalletState('login'); return }
++      const data = await res.json().catch(() => null)
++      if (!res.ok || !data) throw new Error('خطا در خواندن کیف پول')
++      setWalletView({
++        balance: Number(data.balance ?? 0),
++        transactions: Array.isArray(data.transactions) ? data.transactions : [],
++      })
++      setWalletState('ready')
++    } catch {
++      setWalletState('error')
++    }
++  }
++
++  function openWalletTab() {
++    setActiveTab('wallet')
++    if (!walletLoadedOnce) {
++      setWalletLoadedOnce(true)
++      loadWallet()
++    }
++  }
++
+   const handleRegisterSubmit = async (e: React.FormEvent) => {
+     e.preventDefault()
+     if (!acceptRules) return setRegisterMsg({ type: 'error', text: 'لطفاً قوانین و شرایط را بپذیرید.' })
+@@ -177,6 +210,18 @@ export default function MyOrdersClient() {
+           >
+             💸 بدهی‌ها{debtOrders.length > 0 ? ` (${debtOrders.length.toLocaleString('fa-IR')})` : ''}
+           </button>
++          <button
++            onClick={openWalletTab}
++            style={{
++              flex: 1, padding: '14px 10px', fontSize: '14px', fontWeight: 'bold',
++              background: 'transparent', border: 'none',
++              borderBottom: activeTab === 'wallet' ? '3px solid #2d5d3e' : '3px solid transparent',
++              color: activeTab === 'wallet' ? '#2d5d3e' : '#766f64',
++              cursor: 'pointer', transition: 'all 0.2s ease'
++            }}
++          >
++            👛 کیف پول
++          </button>
+ 
+         </div>
+       </div>
+@@ -241,7 +286,84 @@ export default function MyOrdersClient() {
+         </div>
+       )}
+ 
+-      {filteredOrders.length === 0 ? (
++      {activeTab === 'wallet' ? (
++        <div>
++          {walletState === 'loading' && (
++            <div className="my-orders-empty">👛 در حال بارگذاری کیف پول...</div>
++          )}
++
++          {walletState === 'login' && (
++            <div className="my-orders-empty" style={{ lineHeight: 2 }}>
++              👛 برای دیدن کیف پول باید با شماره موبایل وارد شوی.<br />
++              <small style={{ color: '#766f64', fontSize: '12px' }}>
++                کافی است یک سفارش ثبت کنی و شماره‌ات را با کد پیامکی تأیید کنی؛
++                کیف پولِ همان شماره به این دستگاه وصل می‌شود.
++              </small>
++            </div>
++          )}
++
++          {walletState === 'error' && (
++            <div className="my-orders-empty" style={{ lineHeight: 2 }}>
++              ⚠️ خطا در خواندن کیف پول.<br />
++              <button onClick={loadWallet} className="primary-btn" style={{ marginTop: 10, padding: '8px 20px', borderRadius: 8, cursor: 'pointer' }}>
++                تلاش دوباره
++              </button>
++            </div>
++          )}
++
++          {walletState === 'ready' && walletView && (
++            <>
++              <div style={{ background: 'linear-gradient(135deg, #e5f0e6 0%, #f2f8f2 100%)', border: '1.5px solid #477052', borderRadius: '14px', padding: '18px', textAlign: 'center', marginTop: '16px' }}>
++                <div style={{ fontSize: '30px' }}>👛</div>
++                <div style={{ fontSize: '12px', color: '#3d6b48', marginTop: '4px' }}>موجودی کیف پول</div>
++                <strong style={{ fontSize: '24px', color: '#2d5d3e' }}>
++                  {formatPrice(walletView.balance)} <small style={{ fontSize: '13px' }}>تومان</small>
++                </strong>
++                <small style={{ display: 'block', fontSize: '11px', color: '#766f64', marginTop: '8px' }}>
++                  در صفحه پرداخت، وقتی مبلغ سفارش کمتر یا مساوی موجودی باشد گزینه‌ی «کیف پول» نمایش داده می‌شود.
++                </small>
++              </div>
++
++              {walletView.transactions.length === 0 ? (
++                <div className="my-orders-empty" style={{ marginTop: '16px' }}>
++                  هنوز تراکنشی در کیف پولت ثبت نشده است.
++                </div>
++              ) : (
++                <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
++                  <div style={{ fontSize: '13px', fontWeight: 'bold', color: '#6b4f3a' }}>📜 تراکنش‌های اخیر</div>
++                  {walletView.transactions.map((tx) => {
++                    const credit = tx.amount >= 0
++                    return (
++                      <div key={tx.id} style={{ background: '#fff', border: '1px solid #ebe6de', borderRadius: '12px', padding: '12px 14px', display: 'flex', alignItems: 'center', gap: '12px' }}>
++                        <div style={{ fontSize: '22px' }}>{walletTxKindIcon(tx.kind)}</div>
++                        <div style={{ flex: 1, minWidth: 0 }}>
++                          <div style={{ fontSize: '13px', fontWeight: 'bold', color: '#29251f' }}>
++                            {walletTxKindLabel(tx.kind)}
++                            <small style={{ fontWeight: 'normal', color: '#766f64', marginRight: '8px' }}>
++                              {walletTxStatusLabel(tx.status)}
++                            </small>
++                          </div>
++                          <small style={{ fontSize: '11px', color: '#766f64', display: 'block' }}>
++                            {formatPersianDate(tx.created_at)}{tx.note ? ` — ${tx.note}` : ''}
++                          </small>
++                          {tx.order_id && (
++                            <Link href={`/order/${tx.order_id}`} style={{ fontSize: '11px', color: '#9a6b3f' }}>
++                              مشاهده سفارش ←
++                            </Link>
++                          )}
++                        </div>
++                        <strong style={{ fontSize: '14px', color: credit ? '#2d5d3e' : '#9b3c32', whiteSpace: 'nowrap' }} dir="ltr">
++                          {credit ? '+' : '-'}{formatPrice(Math.abs(tx.amount))}
++                        </strong>
++                      </div>
++                    )
++                  })}
++                </div>
++              )}
++            </>
++          )}
++        </div>
++      ) : filteredOrders.length === 0 ? (
+         <div className="my-orders-empty">
+                     {activeTab === 'open'
+             ? 'در حال حاضر هیچ سفارش بازی ندارید.'
+diff --git a/lib/wallet/labels.ts b/lib/wallet/labels.ts
+new file mode 100644
+index 0000000..f8940f7
+--- /dev/null
++++ b/lib/wallet/labels.ts
+@@ -0,0 +1,39 @@
++// lib/wallet/labels.ts
++
++/**
++ * برچسب‌های فارسی تراکنش‌های کیف پول — نسخه‌ی client-safe.
++ * عمداً بدون import 'server-only' تا کامپوننت‌های مشتری (my-orders) هم بتوانند استفاده کنند.
++ * نسخه‌ی سرویس‌ساید معادل در lib/wallet/wallet.ts (WALLET_KIND_LABELS) نگهداری می‌شود؛
++ * برچسب‌های مشترک باید هم‌قد بمانند.
++ */
++
++export const WALLET_CLIENT_KIND_LABELS: Record<string, string> = {
++  admin_charge: 'شارژ توسط ادمین',
++  online_charge: 'شارژ آنلاین',
++  refund: 'بازگشت وجه',
++  spend: 'پرداخت سفارش',
++  adjust: 'اصلاح حساب',
++}
++
++export function walletTxKindLabel(kind: string): string {
++  return WALLET_CLIENT_KIND_LABELS[kind] ?? kind
++}
++
++export const WALLET_STATUS_LABELS: Record<string, string> = {
++  settled: 'تسویه شده',
++  pending: 'در انتظار',
++  failed: 'ناموفق',
++}
++
++/** ردیف‌های قدیمی status=null دارند — همان تسویه‌شده معنا می‌دهند */
++export function walletTxStatusLabel(status: string | null | undefined): string {
++  if (!status) return WALLET_STATUS_LABELS.settled
++  return WALLET_STATUS_LABELS[status] ?? status
++}
++
++export function walletTxKindIcon(kind: string): string {
++  if (kind === 'refund') return '↩️'
++  if (kind === 'spend') return '🧾'
++  if (kind === 'adjust') return '⚖️'
++  return '💰' // admin_charge / online_charge
++}
+diff --git a/tests/wallet-labels.test.ts b/tests/wallet-labels.test.ts
+new file mode 100644
+index 0000000..be18d96
+--- /dev/null
++++ b/tests/wallet-labels.test.ts
+@@ -0,0 +1,39 @@
++import { describe, it, expect } from 'vitest'
++import {
++  walletTxKindLabel,
++  walletTxStatusLabel,
++  walletTxKindIcon,
++} from '../lib/wallet/labels'
++
++describe('برچسب‌های تراکنش کیف پول (سمت مشتری)', () => {
++  it('انواع شناخته‌شده برچسب فارسی دارند', () => {
++    expect(walletTxKindLabel('admin_charge')).toBe('شارژ توسط ادمین')
++    expect(walletTxKindLabel('online_charge')).toBe('شارژ آنلاین')
++    expect(walletTxKindLabel('refund')).toBe('بازگشت وجه')
++    expect(walletTxKindLabel('spend')).toBe('پرداخت سفارش')
++    expect(walletTxKindLabel('adjust')).toBe('اصلاح حساب')
++  })
++
++  it('نوع ناشناخته بدون تغییر برمی‌گردد', () => {
++    expect(walletTxKindLabel('mystery')).toBe('mystery')
++    expect(walletTxKindLabel('')).toBe('')
++  })
++
++  it('وضعیت‌ها برچسب دارند و null/خالی تسویه‌شده معنا می‌دهد', () => {
++    expect(walletTxStatusLabel('settled')).toBe('تسویه شده')
++    expect(walletTxStatusLabel('pending')).toBe('در انتظار')
++    expect(walletTxStatusLabel('failed')).toBe('ناموفق')
++    expect(walletTxStatusLabel(null)).toBe('تسویه شده')
++    expect(walletTxStatusLabel(undefined)).toBe('تسویه شده')
++    expect(walletTxStatusLabel('weird')).toBe('weird')
++  })
++
++  it('آیکون هر نوع مشخص است', () => {
++    expect(walletTxKindIcon('refund')).toBe('↩️')
++    expect(walletTxKindIcon('spend')).toBe('🧾')
++    expect(walletTxKindIcon('adjust')).toBe('⚖️')
++    expect(walletTxKindIcon('admin_charge')).toBe('💰')
++    expect(walletTxKindIcon('online_charge')).toBe('💰')
++    expect(walletTxKindIcon('ناشناخته')).toBe('💰')
++  })
++})
