@@ -3,28 +3,9 @@ import 'server-only'
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase/server'
 import { getDeviceHash, UUID_RE } from '@/lib/orders/owner'
+import { IMAGE_SIGNED_URL_TTL, MAX_IMAGE_SIZE, detectImage } from '@/lib/upload/image'
 
 export const dynamic = 'force-dynamic'
-
-const MAX_SIZE = 5 * 1024 * 1024
-const SIGNED_URL_TTL = 60 * 60 * 24 * 30 // سی روز
-
-function detectImage(b: Uint8Array): { mime: string; ext: string } | null {
-  if (b.length < 12) return null
-  if (b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) {
-    return { mime: 'image/jpeg', ext: 'jpg' }
-  }
-  if (b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) {
-    return { mime: 'image/png', ext: 'png' }
-  }
-  if (
-    b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 &&
-    b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50
-  ) {
-    return { mime: 'image/webp', ext: 'webp' }
-  }
-  return null
-}
 
 export async function POST(req: NextRequest) {
   try {
@@ -40,7 +21,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'شناسه‌ی سفارش نامعتبر است' }, { status: 400 })
     }
 
-    if (file.size === 0 || file.size > MAX_SIZE) {
+    if (file.size === 0 || file.size > MAX_IMAGE_SIZE) {
       return NextResponse.json(
         { error: 'حجم فایل نباید بیشتر از ۵ مگابایت باشد' },
         { status: 400 }
@@ -127,7 +108,7 @@ export async function POST(req: NextRequest) {
 
     const { data: signedUrlData, error: signError } = await db.storage
       .from('receipts')
-      .createSignedUrl(fileName, SIGNED_URL_TTL)
+      .createSignedUrl(fileName, IMAGE_SIGNED_URL_TTL)
 
     if (signError || !signedUrlData) {
       console.error('[upload-receipt] sign url error:', signError)

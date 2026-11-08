@@ -1,0 +1,1475 @@
+diff --git a/TASKS.md b/TASKS.md
+index fd699c9..7327042 100644
+--- a/TASKS.md
++++ b/TASKS.md
+@@ -1,7 +1,7 @@
+ # 📋 TASKS — کافه پارک
+ 
+ > فقط چک‌لیست. تیک‌زدن = تغییر `[ ]` به `[x]` و انتقال خط به بخش «انجام‌شده».
+-> آخرین به‌روزرسانی: ۱۴۰۵/۰۸/۱۰
++> آخرین به‌روزرسانی: ۱۴۰۵/۰۸/۱۷
+ 
+ ## 🔄 در حال انجام
+ - [ ] صفحهٔ `/admin/orders/new` (سفارش حضوری)
+@@ -65,9 +65,9 @@
+ - [x] ادمین: صف درخواست‌های فعال‌سازی با تأیید/رد
+ ### فاز ۲ — پچ ۲۲ (چک‌اوت و شارژ کارت‌به‌کارت)
+ - [ ] کیف پول اولِ روش‌های پرداخت + حالت‌های غیرفعال با دلیل (موجودی صفر/ناکافی)
+-- [ ] شارژ کارت‌به‌کارت: مبلغ (کف ۵۰ هزار، بدون سقف) → شماره کارت → آپلود رسید + شماره پیگیری → صف تأیید ادمین → receipt_charge
+-- [ ] تاریخچه کامل با صفحه‌بندی «نمایش بیشتر»
+-- [ ] سوییچ‌های سراسری + استثنای هر مشتری در پنل ادمین
++- [x] شارژ کارت‌به‌کارت: مبلغ (کف ۵۰ هزار، بدون سقف) → شماره کارت → آپلود رسید + شماره پیگیری → صف تأیید ادمین → receipt_charge ← پچ ۲۶
++- [x] تاریخچه کامل با صفحه‌بندی «نمایش بیشتر» ← پچ ۲۶
++- [x] سوییچ‌های سراسری + استثنای هر مشتری در پنل ادمین ← پچ ۲۶
+ ### فاز ۳ — پچ ۲۳ (گرید و موتور تخفیف)
+ - [ ] ارتقای خودکار گرید از total_purchase بعد از هر سفارش تکمیل‌شده (فقط ارتقا)
+ - [ ] سیاست تخفیف مدیر: max / membership_first / grade_first / stacked(با سقف)
+@@ -97,3 +97,14 @@
+ - [x] درخواست‌های فعال‌سازی: وضعیت احراز/مسدودی مشتری، دستگاه، لینک سفارش‌ها و پرونده‌ی مشتری از همان لیست
+ - [x] /admin/orders?phone= فیلتر خودکار با شماره تماس
+ - [x] مایگریشن: registration_invites.used_device_info/used_device_hash + customers.device_info
++
++### پچ ۲۶ — تکمیل فاز ۲: شارژ کارت‌به‌کارت + صف تأیید ادمین (۱۴۰۵/۰۸/۱۷)
++- [x] مشتری از تب کیف پول: کارت «🏦 شارژ کارت‌به‌کارت» با شماره کارت مقصد (از تنظیمات واریز به حساب) + دکمه کپی؛ فرم مبلغ + شماره پیگیری + آپلود عکس رسید
++- [x] POST /api/wallet/charge-request: گارد فقط-احرازشده، مسدودیت کیف پول/شارژ، سوییچ‌های سراسری، کف/سقف مبلغ از تنظیمات، جلوگیری از درخواست هم‌زمان دوم، آپلود رسید در باکت receipts با تشخیص magic bytes
++- [x] پنل ادمین (/admin/wallet): کارت «⚙️ تنظیمات کیف پول» (سوییچ شارژ کارت‌به‌کارت + کف/سقف شارژ) و کارت «🧾 رسیدهای شارژ» با دیدن رسید، پرونده مشتری، «تأیید و شارژ» (درج receipt_charge با RPC) و «رد» با دلیل الزامی
++- [x] POST /api/admin/wallet/requests نوع charge را هم بررسی می‌کند؛ قفل اتمیک با UPDATE گارددار status=pending تا تأیید هم‌زمان دوبار شارژ نسازد؛ خطای میانه → برگشت خودکار به صف
++- [x] چیپ وضعیت برای مشتری: درخواست در انتظار تأیید / ردشده با دلیل، بالای تراکنش‌ها
++- [x] صفحه‌بندی تاریخچه: GET /api/wallet با ?offset= (صفحه‌ی ۲۰تایی) + دکمه «نمایش تراکنش‌های قدیمی‌تر» وقتی hasMore
++- [x] مایگریشن: settings.wallet_charge_max (پیش‌فرض ۱۰ میلیون) — کف از قبل wallet_charge_min بود
++- [x] استثنای هر مشتری: تأیید رسیدِ مشتریِ card_charge_blocked مسدود است؛ چیپ «شارژ مسدود» در صف ادمین
++- [x] تسک‌های فاز ۲ (شارژ کارت‌به‌کارت، صفحه‌بندی، سوییچ‌های سراسری) تیک خورد
+diff --git a/app/admin/wallet/page.tsx b/app/admin/wallet/page.tsx
+index e3f1514..5af699f 100644
+--- a/app/admin/wallet/page.tsx
++++ b/app/admin/wallet/page.tsx
+@@ -40,6 +40,26 @@ type ActivationRequest = {
+   customer: { verification_status: string; wallet_blocked: boolean; device_info: string | null } | null
+ }
+ 
++type ChargeRequest = {
++  id: string
++  amount: number
++  status: string
++  receipt_url: string | null
++  tracking_no: string | null
++  reject_reason: string | null
++  created_at: string
++  customer: { phone: string | null; name: string | null; wallet_blocked: boolean; card_charge_blocked: boolean } | null
++}
++
++type WalletSettings = {
++  wallet_card_charge_enabled: boolean
++  wallet_charge_min: number
++  wallet_charge_max: number
++  payment_transfer_bank_name: string | null
++  payment_transfer_card_number: string | null
++  payment_transfer_account_holder: string | null
++}
++
+ const KIND_LABELS: Record<string, string> = {
+   admin_charge: 'شارژ توسط ادمین',
+   online_charge: 'شارژ آنلاین',
+@@ -109,11 +129,21 @@ export default function WalletPage() {
+   const [requests, setRequests] = useState<ActivationRequest[]>([])
+   const [reviewBusy, setReviewBusy] = useState<string | null>(null)
+ 
++  // 🧾 رسیدهای شارژ کارت‌به‌کارت
++  const [chargeReqs, setChargeReqs] = useState<ChargeRequest[]>([])
++
++  // ⚙️ تنظیمات کیف پول (سوییچ‌های سراسری)
++  const [wset, setWset] = useState<WalletSettings | null>(null)
++  const [setBusy, setSetBusy] = useState(false)
++
+   const loadRequests = useCallback(async () => {
+     try {
+       const res = await fetch('/api/admin/wallet/requests', { cache: 'no-store', credentials: 'same-origin' })
+       const json = await res.json()
+-      if (res.ok) setRequests(json.activationRequests ?? [])
++      if (res.ok) {
++        setRequests(json.activationRequests ?? [])
++        setChargeReqs(json.chargeRequests ?? [])
++      }
+     } catch {}
+   }, [])
+ 
+@@ -125,10 +155,48 @@ export default function WalletPage() {
+     } catch {}
+   }, [])
+ 
++  const loadSettings = useCallback(async () => {
++    try {
++      const res = await fetch('/api/admin/wallet/settings', { cache: 'no-store', credentials: 'same-origin' })
++      const json = await res.json()
++      if (res.ok) setWset(json)
++    } catch {}
++  }, [])
++
+   useEffect(() => {
+     loadRequests()
+     loadInvites()
+-  }, [loadRequests, loadInvites])
++    loadSettings()
++  }, [loadRequests, loadInvites, loadSettings])
++
++  async function saveSettings() {
++    if (!wset) return
++    setSetBusy(true)
++    setMsg(null)
++    try {
++      const res = await fetch('/api/admin/wallet/settings', {
++        method: 'POST',
++        headers: { 'Content-Type': 'application/json' },
++        credentials: 'same-origin',
++        body: JSON.stringify({
++          wallet_card_charge_enabled: wset.wallet_card_charge_enabled,
++          wallet_charge_min: wset.wallet_charge_min,
++          wallet_charge_max: wset.wallet_charge_max,
++        }),
++      })
++      const json = await res.json()
++      if (!res.ok) {
++        setMsg({ kind: 'err', text: json.error || 'ذخیره ناموفق بود' })
++      } else {
++        setMsg({ kind: 'ok', text: 'تنظیمات کیف پول ذخیره شد ✓' })
++        await loadSettings()
++      }
++    } catch {
++      setMsg({ kind: 'err', text: 'ارتباط با سرور برقرار نشد' })
++    } finally {
++      setSetBusy(false)
++    }
++  }
+ 
+   async function createInvite() {
+     setInviteBusy(true)
+@@ -224,6 +292,43 @@ export default function WalletPage() {
+     }
+   }
+ 
++  /** تأیید/رد رسید شارژ — رد دلیل الزامی دارد (برای مشتری نمایش داده می‌شود) */
++  async function reviewCharge(id: string, action: 'approve' | 'reject') {
++    let rejectReason: string | undefined
++    if (action === 'reject') {
++      const input = prompt('دلیل رد (برای مشتری نمایش داده می‌شود):')
++      if (input === null) return
++      if (!input.trim()) {
++        setMsg({ kind: 'err', text: 'برای رد کردن، نوشتن دلیل الزامی است' })
++        return
++      }
++      rejectReason = input.trim()
++    }
++    setReviewBusy(id)
++    try {
++      const res = await fetch('/api/admin/wallet/requests', {
++        method: 'POST',
++        headers: { 'Content-Type': 'application/json' },
++        credentials: 'same-origin',
++        body: JSON.stringify({ id, type: 'charge', action, reject_reason: rejectReason }),
++      })
++      const json = await res.json()
++      if (!res.ok) {
++        setMsg({ kind: 'err', text: json.error || 'بررسی ناموفق بود' })
++      } else {
++        setMsg({
++          kind: 'ok',
++          text: action === 'approve' ? 'رسید تأیید شد و کیف پول مشتری شارژ شد ✓' : 'درخواست شارژ رد شد',
++        })
++      }
++      await loadRequests()
++    } catch {
++      setMsg({ kind: 'err', text: 'ارتباط با سرور برقرار نشد' })
++    } finally {
++      setReviewBusy(null)
++    }
++  }
++
+   async function load(e?: React.FormEvent) {
+     e?.preventDefault()
+     setMsg(null)
+@@ -323,6 +428,94 @@ export default function WalletPage() {
+         </button>
+       </form>
+ 
++      {/* ⚙️ تنظیمات کیف پول — سوییچ‌های سراسری */}
++      <div style={{ marginTop: 24, padding: '14px 18px', borderRadius: 10, border: '1px solid #e5e0da' }}>
++        <strong style={{ fontSize: 14 }}>⚙️ تنظیمات کیف پول</strong>
++        {!wset ? (
++          <p style={{ opacity: 0.6, fontSize: 13 }}>در حال بارگذاری…</p>
++        ) : (
++          <>
++            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, marginTop: 10 }}>
++              <div style={{ minWidth: 0 }}>
++                <div style={{ fontSize: 13, fontWeight: 700 }}>🏦 شارژ کارت‌به‌کارت توسط مشتری</div>
++                <small style={{ opacity: 0.65, fontSize: 11.5, lineHeight: 1.8, display: 'block' }}>
++                  وقتی روشن باشد، مشتری از تب کیف پول پنلش رسید واریز می‌فرستد و از همین صفحه تأییدش می‌کنی.
++                </small>
++              </div>
++              <button
++                type="button"
++                className={`auto-switch ${wset.wallet_card_charge_enabled ? 'on' : 'off'}`}
++                onClick={() => setWset({ ...wset, wallet_card_charge_enabled: !wset.wallet_card_charge_enabled })}
++                disabled={setBusy}
++              >
++                <span className="auto-switch-track"><span className="auto-switch-thumb" /></span>
++              </button>
++            </div>
++
++            <div style={{ display: 'flex', gap: 10, marginTop: 12, flexWrap: 'wrap' }}>
++              <label style={{ flex: 1, minWidth: 160, fontSize: 12 }}>
++                کف شارژ (تومان)
++                <input
++                  type="number"
++                  dir="ltr"
++                  min={1000}
++                  step={1000}
++                  value={wset.wallet_charge_min}
++                  onChange={(e) => setWset({ ...wset, wallet_charge_min: Math.max(0, Number(e.target.value) || 0) })}
++                  style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #ccc', fontSize: 13, marginTop: 4 }}
++                />
++              </label>
++              <label style={{ flex: 1, minWidth: 160, fontSize: 12 }}>
++                سقف شارژ (تومان)
++                <input
++                  type="number"
++                  dir="ltr"
++                  min={1000}
++                  step={1000}
++                  value={wset.wallet_charge_max}
++                  onChange={(e) => setWset({ ...wset, wallet_charge_max: Math.max(0, Number(e.target.value) || 0) })}
++                  style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #ccc', fontSize: 13, marginTop: 4 }}
++                />
++              </label>
++            </div>
++
++            {wset.payment_transfer_card_number ? (
++              <small style={{ display: 'block', opacity: 0.65, fontSize: 11.5, marginTop: 10 }}>
++                کارت مقصدی که مشتری می‌بیند: <strong dir="ltr">{wset.payment_transfer_card_number}</strong>
++                {wset.payment_transfer_bank_name ? ` (${wset.payment_transfer_bank_name})` : ''} — از{' '}
++                <Link href="/admin/settings/payment" style={{ color: '#6f4e37' }}>تنظیمات پرداخت</Link> تغییرش بده.
++              </small>
++            ) : (
++              <small style={{ display: 'block', color: '#8f2020', fontSize: 11.5, marginTop: 10 }}>
++                ⚠️ هنوز شماره کارت مقصد تنظیم نشده — از{' '}
++                <Link href="/admin/settings/payment" style={{ color: '#8f2020' }}>تنظیمات پرداخت → واریز به حساب</Link> شماره کارت را وارد کن؛
++                تا آن موقع فرم شارژ برای مشتری باز نمی‌شود.
++              </small>
++            )}
++
++            <div style={{ marginTop: 12 }}>
++              <button
++                type="button"
++                onClick={saveSettings}
++                disabled={setBusy}
++                style={{
++                  padding: '8px 16px',
++                  borderRadius: 8,
++                  border: 'none',
++                  background: setBusy ? '#999' : '#6f4e37',
++                  color: '#fff',
++                  fontWeight: 700,
++                  fontSize: 13,
++                  cursor: setBusy ? 'default' : 'pointer',
++                }}
++              >
++                {setBusy ? '…' : '💾 ذخیره تنظیمات'}
++              </button>
++            </div>
++          </>
++        )}
++      </div>
++
+       {/* 🎟 دعوت مشتری — لیست همه‌ی کدها با وضعیت */}
+       <div style={{ marginTop: 24, padding: '14px 18px', borderRadius: 10, border: '1px solid #e5e0da' }}>
+         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+@@ -505,6 +698,94 @@ export default function WalletPage() {
+         )}
+       </div>
+ 
++      {/* 🧾 رسیدهای شارژ کارت‌به‌کارت — تأیید = شارژ واقعی کیف پول */}
++      <div style={{ marginTop: 16, padding: '14px 18px', borderRadius: 10, border: '1px solid #e5e0da' }}>
++        <strong style={{ fontSize: 14 }}>
++          🧾 رسیدهای شارژ کارت‌به‌کارت
++          {chargeReqs.filter((r) => r.status === 'pending').length > 0 && (
++            <span
++              style={{
++                marginRight: 8,
++                background: '#8f2020',
++                color: '#fff',
++                borderRadius: 999,
++                padding: '2px 8px',
++                fontSize: 11,
++              }}
++            >
++              {chargeReqs.filter((r) => r.status === 'pending').length}
++            </span>
++          )}
++        </strong>
++
++        {chargeReqs.length === 0 ? (
++          <p style={{ opacity: 0.6, fontSize: 13 }}>درخواست شارژی ثبت نشده است.</p>
++        ) : (
++          <div style={{ marginTop: 10, display: 'grid', gap: 8 }}>
++            {chargeReqs.map((r) => (
++              <div key={r.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '10px 12px', borderRadius: 8, border: '1px solid #e5e0da', fontSize: 13, background: r.status === 'pending' ? '#fffdf7' : '#faf8f5' }}>
++                <div style={{ minWidth: 0 }}>
++                  <div style={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
++                    {fmt(r.amount)} تومان
++                    {r.customer?.name && <span>— {r.customer.name}</span>}
++                    {r.customer?.phone && <span dir="ltr" style={{ fontWeight: 'normal', opacity: 0.75 }}>{r.customer.phone}</span>}
++                    {r.status === 'pending' && (
++                      <span style={{ background: '#fff4d9', color: '#8a6d3b', borderRadius: 999, padding: '1px 8px', fontSize: 10, fontWeight: 700 }}>در انتظار بررسی</span>
++                    )}
++                    {r.status === 'approved' && (
++                      <span style={{ background: '#e6f6ea', color: '#176a32', borderRadius: 999, padding: '1px 8px', fontSize: 10, fontWeight: 700 }}>تأییدشده ✓</span>
++                    )}
++                    {r.status === 'rejected' && (
++                      <span style={{ background: '#fdeaea', color: '#8f2020', borderRadius: 999, padding: '1px 8px', fontSize: 10, fontWeight: 700 }}>ردشده ✗</span>
++                    )}
++                    {r.customer?.card_charge_blocked && (
++                      <span style={{ background: '#fdeaea', color: '#8f2020', borderRadius: 999, padding: '1px 8px', fontSize: 10, fontWeight: 700 }}>شارژ مسدود</span>
++                    )}
++                  </div>
++                  <div style={{ opacity: 0.65, fontSize: 11 }}>
++                    {formatPersianDate(r.created_at)}
++                    {r.tracking_no ? ` — پیگیری: ${r.tracking_no}` : ''}
++                    {r.status === 'rejected' && r.reject_reason ? ` — دلیل: ${r.reject_reason}` : ''}
++                  </div>
++                </div>
++                <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
++                  {r.customer?.phone && (
++                    <Link href={`/admin/customers?phone=${encodeURIComponent(r.customer.phone)}`} style={{ ...btnSecondary, textDecoration: 'none' }}>
++                      👤 پرونده
++                    </Link>
++                  )}
++                  {r.receipt_url && (
++                    <a href={r.receipt_url} target="_blank" rel="noopener noreferrer" style={{ ...btnSecondary, textDecoration: 'none' }}>
++                      🧾 دیدن رسید
++                    </a>
++                  )}
++                  {r.status === 'pending' && (
++                    <>
++                      <button
++                        type="button"
++                        onClick={() => reviewCharge(r.id, 'approve')}
++                        disabled={reviewBusy === r.id}
++                        style={{ padding: '7px 14px', borderRadius: 8, border: 'none', background: '#2e7d32', color: '#fff', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}
++                      >
++                        {reviewBusy === r.id ? '…' : 'تأیید و شارژ'}
++                      </button>
++                      <button
++                        type="button"
++                        onClick={() => reviewCharge(r.id, 'reject')}
++                        disabled={reviewBusy === r.id}
++                        style={{ padding: '7px 14px', borderRadius: 8, border: '1px solid #e5b5b5', background: '#fff', color: '#8f2020', fontSize: 12, cursor: 'pointer' }}
++                      >
++                        رد
++                      </button>
++                    </>
++                  )}
++                </div>
++              </div>
++            ))}
++          </div>
++        )}
++      </div>
++
+       {view && (
+         <>
+           <div
+diff --git a/app/api/admin/wallet/requests/route.ts b/app/api/admin/wallet/requests/route.ts
+index 9c97b74..6d6144f 100644
+--- a/app/api/admin/wallet/requests/route.ts
++++ b/app/api/admin/wallet/requests/route.ts
+@@ -58,13 +58,41 @@ export async function GET(req: NextRequest) {
+     customer: r.phone ? profileByPhone.get(r.phone) ?? null : null,
+   }))
+ 
++  // پرونده‌ی مشتری رسیدهای شارژ — با یک کوئری روی شناسه‌ها
++  const chargeRows = charges.error ? [] : charges.data ?? []
++  const customerIds = [...new Set(chargeRows.map((r) => r.customer_id))]
++  const profileById = new Map<string, { phone: string | null; name: string | null; wallet_blocked: boolean; card_charge_blocked: boolean }>()
++  if (customerIds.length > 0) {
++    const { data: profiles } = await db
++      .from('customers')
++      .select('id, phone, name, wallet_blocked, card_charge_blocked')
++      .in('id', customerIds)
++    for (const p of profiles ?? []) {
++      profileById.set(p.id, {
++        phone: p.phone ?? null,
++        name: p.name ?? null,
++        wallet_blocked: !!p.wallet_blocked,
++        card_charge_blocked: !!p.card_charge_blocked,
++      })
++    }
++  }
++
++  const chargeRequests = chargeRows.map((r) => ({
++    ...r,
++    customer: profileById.get(r.customer_id) ?? null,
++  }))
++
+   return NextResponse.json({
+     activationRequests,
+-    chargeRequests: charges.error ? [] : charges.data ?? [],
++    chargeRequests,
+   })
+ }
+ 
+-/** تأیید/رد درخواست — POST { id, type: 'activation', action: 'approve' | 'reject' } */
++/**
++ * تأیید/رد درخواست — POST
++ * { id, type: 'activation', action: 'approve' | 'reject' }
++ * { id, type: 'charge', action: 'approve' | 'reject', reject_reason? }
++ */
+ export async function POST(req: NextRequest) {
+   const denied = await guardAdmin()
+   if (denied) return NextResponse.json(denied, { status: 403 })
+@@ -78,12 +106,15 @@ export async function POST(req: NextRequest) {
+     const type = body?.type
+     const action = body?.action
+ 
+-    if (!/^[0-9a-f-]{36}$/i.test(id) || type !== 'activation' || !['approve', 'reject'].includes(action)) {
++    if (!/^[0-9a-f-]{36}$/i.test(id) || !['activation', 'charge'].includes(type) || !['approve', 'reject'].includes(action)) {
+       return NextResponse.json({ error: 'اطلاعات نامعتبر است' }, { status: 400 })
+     }
+ 
+     const db = supabaseAdmin()
+ 
++    if (type === 'charge') return reviewChargeRequest(db, id, action, body?.reject_reason)
++
++    // ---------- فعال‌سازی حضوری ----------
+     // درخواست باید در وضعیت pending باشد (جلوی تأیید دوباره گرفته می‌شود)
+     const { data: request } = await db
+       .from('wallet_activation_requests')
+@@ -125,3 +156,78 @@ export async function POST(req: NextRequest) {
+     return NextResponse.json({ error: 'خطای سرور' }, { status: 500 })
+   }
+ }
++
++/** تأیید رسید شارژ: درج تراکنش receipt_charge با RPC؛ رد: ثبت دلیل. هر دو با گارد pending */
++async function reviewChargeRequest(
++  db: ReturnType<typeof supabaseAdmin>,
++  id: string,
++  action: 'approve' | 'reject',
++  reasonRaw: unknown
++): Promise<NextResponse> {
++  // اول درخواست را «قفل» می‌کنیم (UPDATE گارددار) تا دو ادمین هم‌زمان دوبار شارژ نزنند
++  const rejectReason =
++    action === 'reject' && typeof reasonRaw === 'string' && reasonRaw.trim()
++      ? reasonRaw.trim().slice(0, 200)
++      : null
++
++  const { data: claimed, error: claimErr } = await db
++    .from('wallet_charge_requests')
++    .update({
++      status: action === 'approve' ? 'approved' : 'rejected',
++      reject_reason: rejectReason,
++      reviewed_at: new Date().toISOString(),
++    })
++    .eq('id', id)
++    .eq('status', 'pending')
++    .select('customer_id, amount, tracking_no')
++
++  if (claimErr) {
++    console.error('[admin/wallet/requests] charge claim:', claimErr.message)
++    return NextResponse.json({ error: 'ثبت نتیجه ناموفق بود' }, { status: 500 })
++  }
++  if (!claimed || claimed.length === 0) {
++    return NextResponse.json({ error: 'این درخواست قبلاً بررسی شده است' }, { status: 409 })
++  }
++
++  const request = claimed[0]
++
++  if (action === 'approve') {
++    // استثنای هر مشتری: شارژ کارت‌به‌کارتِ مسدودشده تأیید نمی‌شود
++    const { data: cust } = await db
++      .from('customers')
++      .select('card_charge_blocked')
++      .eq('id', request.customer_id)
++      .maybeSingle()
++    if (cust?.card_charge_blocked) {
++      // برگرداندن به صف تا ادمین بعد از رفع مسدودی دوباره تصمیم بگیرد
++      await db
++        .from('wallet_charge_requests')
++        .update({ status: 'pending', reviewed_at: null })
++        .eq('id', id)
++      return NextResponse.json(
++        { error: 'شارژ کارت‌به‌کارت این مشتری مسدود است؛ از «پرونده» غیرفعالش کن یا درخواست را رد کن' },
++        { status: 409 }
++      )
++    }
++
++    const amount = Number(request.amount)
++    const note = `شارژ با تأیید رسید${request.tracking_no ? ` — پیگیری: ${request.tracking_no}` : ''}`
++    const { error: txErr } = await db.rpc('wallet_charge', {
++      p_customer_id: request.customer_id,
++      p_amount: amount,
++      p_kind: 'receipt_charge',
++      p_note: note,
++    })
++    if (txErr) {
++      console.error('[admin/wallet/requests] receipt_charge rpc:', txErr.message)
++      // تراکنش ثبت نشد — درخواست به صف برمی‌گردد
++      await db
++        .from('wallet_charge_requests')
++        .update({ status: 'pending', reviewed_at: null })
++        .eq('id', id)
++      return NextResponse.json({ error: 'ثبت تراکنش شارژ ناموفق بود' }, { status: 500 })
++    }
++  }
++
++  return NextResponse.json({ ok: true, status: action === 'approve' ? 'approved' : 'rejected' })
++}
+diff --git a/app/api/admin/wallet/settings/route.ts b/app/api/admin/wallet/settings/route.ts
+new file mode 100644
+index 0000000..2ce3e44
+--- /dev/null
++++ b/app/api/admin/wallet/settings/route.ts
+@@ -0,0 +1,91 @@
++import 'server-only'
++import { NextRequest, NextResponse } from 'next/server'
++import { rateLimit, tooMany } from '@/lib/rate-limit'
++import { guardAdmin } from '@/lib/admin/assert-admin'
++import { supabaseAdmin } from '@/lib/supabase/server'
++
++export const dynamic = 'force-dynamic'
++
++const WALLET_SETTING_FIELDS =
++  'wallet_card_charge_enabled, wallet_charge_min, wallet_charge_max, payment_transfer_bank_name, payment_transfer_card_number, payment_transfer_account_holder'
++
++/** تنظیمات کیف پول برای پنل ادمین — GET */
++export async function GET(req: NextRequest) {
++  const denied = await guardAdmin()
++  if (denied) return NextResponse.json(denied, { status: 403 })
++
++  const rl = rateLimit(req, 'admin-wallet-set-get', 60, 60_000)
++  if (!rl.ok) return tooMany(rl)
++
++  const { data, error } = await supabaseAdmin()
++    .from('settings')
++    .select(WALLET_SETTING_FIELDS)
++    .eq('id', 1)
++    .single()
++
++  if (error) {
++    console.error('[admin/wallet/settings] GET:', error.message)
++    return NextResponse.json({ error: 'خطای سرور' }, { status: 500 })
++  }
++
++  return NextResponse.json(data)
++}
++
++/** ذخیره‌ی سوییچ‌های سراسری — POST { wallet_card_charge_enabled, wallet_charge_min, wallet_charge_max } */
++export async function POST(req: NextRequest) {
++  const denied = await guardAdmin()
++  if (denied) return NextResponse.json(denied, { status: 403 })
++
++  const rl = rateLimit(req, 'admin-wallet-set-post', 30, 60_000)
++  if (!rl.ok) return tooMany(rl)
++
++  try {
++    const body = await req.json().catch(() => null)
++
++    const patch: {
++      wallet_card_charge_enabled?: boolean
++      wallet_charge_min?: number
++      wallet_charge_max?: number
++    } = {}
++
++    if (typeof body?.wallet_card_charge_enabled === 'boolean') {
++      patch.wallet_card_charge_enabled = body.wallet_card_charge_enabled
++    }
++
++    for (const key of ['wallet_charge_min', 'wallet_charge_max'] as const) {
++      const v = body?.[key]
++      if (v === undefined || v === null || v === '') continue
++      const n = Number(v)
++      if (!Number.isInteger(n) || n < 1_000 || n > 100_000_000) {
++        return NextResponse.json(
++          { error: 'کف/سقف شارژ باید عددی بین ۱٬۰۰۰ و ۱۰۰٬۰۰۰٬۰۰۰ تومان باشد' },
++          { status: 400 }
++        )
++      }
++      patch[key] = n
++    }
++
++    if (
++      patch.wallet_charge_min !== undefined &&
++      patch.wallet_charge_max !== undefined &&
++      patch.wallet_charge_min > patch.wallet_charge_max
++    ) {
++      return NextResponse.json({ error: 'کف شارژ نمی‌تواند از سقف بیشتر باشد' }, { status: 400 })
++    }
++
++    if (Object.keys(patch).length === 0) {
++      return NextResponse.json({ error: 'هیچ فیلد معتبری ارسال نشده است' }, { status: 400 })
++    }
++
++    const { error } = await supabaseAdmin().from('settings').update(patch).eq('id', 1)
++    if (error) {
++      console.error('[admin/wallet/settings] POST:', error.message)
++      return NextResponse.json({ error: 'ذخیره ناموفق بود' }, { status: 500 })
++    }
++
++    return NextResponse.json({ ok: true })
++  } catch (err) {
++    console.error('[admin/wallet/settings] POST', err)
++    return NextResponse.json({ error: 'خطای سرور' }, { status: 500 })
++  }
++}
+diff --git a/app/api/upload-receipt/route.ts b/app/api/upload-receipt/route.ts
+index 19b0259..de2c55f 100644
+--- a/app/api/upload-receipt/route.ts
++++ b/app/api/upload-receipt/route.ts
+@@ -3,29 +3,10 @@ import 'server-only'
+ import { NextRequest, NextResponse } from 'next/server'
+ import { supabaseAdmin } from '@/lib/supabase/server'
+ import { getDeviceHash, UUID_RE } from '@/lib/orders/owner'
++import { IMAGE_SIGNED_URL_TTL, MAX_IMAGE_SIZE, detectImage } from '@/lib/upload/image'
+ 
+ export const dynamic = 'force-dynamic'
+ 
+-const MAX_SIZE = 5 * 1024 * 1024
+-const SIGNED_URL_TTL = 60 * 60 * 24 * 30 // سی روز
+-
+-function detectImage(b: Uint8Array): { mime: string; ext: string } | null {
+-  if (b.length < 12) return null
+-  if (b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) {
+-    return { mime: 'image/jpeg', ext: 'jpg' }
+-  }
+-  if (b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) {
+-    return { mime: 'image/png', ext: 'png' }
+-  }
+-  if (
+-    b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 &&
+-    b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50
+-  ) {
+-    return { mime: 'image/webp', ext: 'webp' }
+-  }
+-  return null
+-}
+-
+ export async function POST(req: NextRequest) {
+   try {
+     const formData = await req.formData().catch(() => null)
+@@ -40,7 +21,7 @@ export async function POST(req: NextRequest) {
+       return NextResponse.json({ error: 'شناسه‌ی سفارش نامعتبر است' }, { status: 400 })
+     }
+ 
+-    if (file.size === 0 || file.size > MAX_SIZE) {
++    if (file.size === 0 || file.size > MAX_IMAGE_SIZE) {
+       return NextResponse.json(
+         { error: 'حجم فایل نباید بیشتر از ۵ مگابایت باشد' },
+         { status: 400 }
+@@ -127,7 +108,7 @@ export async function POST(req: NextRequest) {
+ 
+     const { data: signedUrlData, error: signError } = await db.storage
+       .from('receipts')
+-      .createSignedUrl(fileName, SIGNED_URL_TTL)
++      .createSignedUrl(fileName, IMAGE_SIGNED_URL_TTL)
+ 
+     if (signError || !signedUrlData) {
+       console.error('[upload-receipt] sign url error:', signError)
+diff --git a/app/api/wallet/charge-request/route.ts b/app/api/wallet/charge-request/route.ts
+new file mode 100644
+index 0000000..cc1c649
+--- /dev/null
++++ b/app/api/wallet/charge-request/route.ts
+@@ -0,0 +1,143 @@
++import 'server-only'
++import { NextRequest, NextResponse } from 'next/server'
++import { rateLimit, tooMany } from '@/lib/rate-limit'
++import { supabaseAdmin } from '@/lib/supabase/server'
++import { resolveWalletCustomer, getWalletFlags } from '@/lib/wallet/wallet'
++import {
++  chargeAmountError,
++  isChargeAmount,
++  isValidTrackingNo,
++  normalizeTrackingNo,
++} from '@/lib/wallet/charge'
++import { IMAGE_SIGNED_URL_TTL, MAX_IMAGE_SIZE, detectImage } from '@/lib/upload/image'
++
++export const dynamic = 'force-dynamic'
++
++/**
++ * ثبت درخواست شارژ کارت‌به‌کارت توسط مشتری — POST multipart/form-data
++ * فیلدها: amount (مبلغ به تومان)، tracking_no (شماره پیگیری)، file (عکس رسید)
++ * درخواست در wallet_charge_requests با وضعیت pending می‌نشیند؛
++ * شارژ واقعی کیف پول فقط بعد از تأیید ادمین انجام می‌شود.
++ */
++export async function POST(req: NextRequest) {
++  const rl = rateLimit(req, 'wallet-charge-req', 5, 60 * 60_000)
++  if (!rl.ok) return tooMany(rl)
++
++  try {
++    const customer = await resolveWalletCustomer()
++    if (!customer) {
++      return NextResponse.json(
++        { error: 'برای ثبت درخواست شارژ، اول با شماره موبایل وارد شو' },
++        { status: 401 }
++      )
++    }
++    if (customer.wallet_blocked) {
++      return NextResponse.json({ error: 'کیف پول شما توسط مدیر مسدود شده است' }, { status: 403 })
++    }
++    if (customer.card_charge_blocked) {
++      return NextResponse.json(
++        { error: 'شارژ کارت‌به‌کارت برای حساب شما غیرفعال است؛ با مدیر کافه تماس بگیر' },
++        { status: 403 }
++      )
++    }
++
++    const flags = await getWalletFlags()
++    if (!flags.walletEnabled || !flags.cardChargeEnabled) {
++      return NextResponse.json({ error: 'شارژ کارت‌به‌کارت در دسترس نیست' }, { status: 403 })
++    }
++    if (!flags.cardInfo) {
++      return NextResponse.json(
++        { error: 'شماره کارت مقصد تنظیم نشده است؛ با مدیر کافه تماس بگیر' },
++        { status: 403 }
++      )
++    }
++
++    const formData = await req.formData().catch(() => null)
++    const file = formData?.get('file')
++    const amountRaw = formData?.get('amount')
++    const trackingRaw = formData?.get('tracking_no')
++
++    if (!(file instanceof File) || typeof amountRaw !== 'string' || typeof trackingRaw !== 'string') {
++      return NextResponse.json({ error: 'مبلغ، شماره پیگیری و عکس رسید الزامی است' }, { status: 400 })
++    }
++
++    const amount = Number(normalizeTrackingNo(amountRaw))
++    if (!isChargeAmount(amount, flags.chargeMin, flags.chargeMax)) {
++      return NextResponse.json({ error: chargeAmountError(flags.chargeMin, flags.chargeMax) }, { status: 400 })
++    }
++
++    const trackingNo = normalizeTrackingNo(trackingRaw)
++    if (!isValidTrackingNo(trackingNo)) {
++      return NextResponse.json(
++        { error: 'شماره پیگیری باید ۴ تا ۳۰ رقم باشد' },
++        { status: 400 }
++      )
++    }
++
++    if (file.size === 0 || file.size > MAX_IMAGE_SIZE) {
++      return NextResponse.json(
++        { error: 'حجم عکس رسید نباید بیشتر از ۵ مگابایت باشد' },
++        { status: 400 }
++      )
++    }
++
++    const db = supabaseAdmin()
++
++    // هر مشتری در هر لحظه فقط یک درخواست در انتظار تأیید دارد
++    const { data: dup } = await db
++      .from('wallet_charge_requests')
++      .select('id')
++      .eq('customer_id', customer.id)
++      .eq('status', 'pending')
++      .maybeSingle()
++    if (dup) {
++      return NextResponse.json(
++        { error: 'شما یک درخواست شارژ در انتظار تأیید دارید' },
++        { status: 409 }
++      )
++    }
++
++    const buffer = new Uint8Array(await file.arrayBuffer())
++    const detected = detectImage(buffer)
++    if (!detected) {
++      return NextResponse.json({ error: 'فقط عکس JPG، PNG یا WebP مجاز است' }, { status: 400 })
++    }
++
++    const fileName = `wallet-${customer.id}-${Date.now()}.${detected.ext}`
++    const { error: uploadError } = await db.storage
++      .from('receipts')
++      .upload(fileName, buffer, { contentType: detected.mime, upsert: false })
++    if (uploadError) {
++      console.error('[wallet/charge-request] storage:', uploadError.message)
++      return NextResponse.json({ error: 'خطا در ذخیره‌ی رسید' }, { status: 500 })
++    }
++
++    const { data: signed, error: signError } = await db.storage
++      .from('receipts')
++      .createSignedUrl(fileName, IMAGE_SIGNED_URL_TTL)
++    if (signError || !signed) {
++      console.error('[wallet/charge-request] sign:', signError?.message)
++      await db.storage.from('receipts').remove([fileName])
++      return NextResponse.json({ error: 'خطا در ساخت لینک رسید' }, { status: 500 })
++    }
++
++    const { error: insertError } = await db.from('wallet_charge_requests').insert({
++      customer_id: customer.id,
++      amount,
++      status: 'pending',
++      receipt_url: signed.signedUrl,
++      tracking_no: trackingNo,
++      paid_at: new Date().toISOString(),
++    })
++    if (insertError) {
++      console.error('[wallet/charge-request] insert:', insertError.message)
++      await db.storage.from('receipts').remove([fileName])
++      return NextResponse.json({ error: 'ثبت درخواست ناموفق بود' }, { status: 500 })
++    }
++
++    return NextResponse.json({ ok: true })
++  } catch (err) {
++    console.error('[wallet/charge-request] POST', err)
++    return NextResponse.json({ error: 'خطای سرور' }, { status: 500 })
++  }
++}
+diff --git a/app/api/wallet/route.ts b/app/api/wallet/route.ts
+index 6c06a66..18b3654 100644
+--- a/app/api/wallet/route.ts
++++ b/app/api/wallet/route.ts
+@@ -1,10 +1,16 @@
+ import 'server-only'
+ import { NextRequest, NextResponse } from 'next/server'
+ import { rateLimit, tooMany } from '@/lib/rate-limit'
+-import { getWalletView, resolveWalletCustomer } from '@/lib/wallet/wallet'
++import {
++  getCustomerChargeRequests,
++  getWalletView,
++  resolveWalletCustomer,
++} from '@/lib/wallet/wallet'
+ 
+ export const dynamic = 'force-dynamic'
+ 
++const PAGE_SIZE = 20
++
+ /** کیف پول مشتری — نشست تأییدشده (OTP/دعوت) یا دستگاهِ مشتریِ احرازشده */
+ export async function GET(req: NextRequest) {
+   const rl = rateLimit(req, 'wallet-get', 30, 60_000)
+@@ -19,8 +25,14 @@ export async function GET(req: NextRequest) {
+       return NextResponse.json({ error: 'کیف پول شما توسط مدیر مسدود شده است' }, { status: 403 })
+     }
+ 
+-    const view = await getWalletView(customer.id)
+-    return NextResponse.json(view)
++    const offsetRaw = Number.parseInt(req.nextUrl.searchParams.get('offset') ?? '0', 10)
++    const offset = Number.isFinite(offsetRaw) && offsetRaw > 0 ? offsetRaw : 0
++
++    const view = await getWalletView(customer.id, { limit: PAGE_SIZE, offset })
++    // درخواست‌های شارژ فقط در صفحه‌ی اول — آپلود دوباره لازم نیست
++    const chargeRequests = offset === 0 ? await getCustomerChargeRequests(customer.id) : undefined
++
++    return NextResponse.json({ ...view, chargeRequests })
+   } catch (err) {
+     console.error('[wallet] GET', err)
+     return NextResponse.json({ error: 'خطای سرور' }, { status: 500 })
+diff --git a/app/my-orders/MyOrdersClient.tsx b/app/my-orders/MyOrdersClient.tsx
+index d42d424..9fc2852 100644
+--- a/app/my-orders/MyOrdersClient.tsx
++++ b/app/my-orders/MyOrdersClient.tsx
+@@ -5,12 +5,14 @@ import Link from 'next/link'
+ import { useCart } from '@/lib/cart-context'
+ import { formatPersianDate } from '@/lib/format-date'
+ import { walletTxKindLabel, walletTxKindIcon, walletTxStatusLabel } from '@/lib/wallet/labels'
++import { normalizeTrackingNo } from '@/lib/wallet/charge'
+ 
+ const formatPrice = (n: number) => new Intl.NumberFormat('fa-IR').format(Math.round(n))
+ 
+ type OrderItem = { product_name: string; option_name: string | null; unit_price: number; quantity: number; variant_option_id?: string | null; variant_group_id?: string | null; product_id?: string | null; image_url?: string | null }
+ type Order = { id: string; order_number: number; items: OrderItem[]; subtotal: number; original_subtotal: number | null; coupon_code: string | null; coupon_discount: number | null; status: string; created_at: string; cancelled_by: string | null; cancellation_reason_label: string | null; customer_name: string; customer_phone: string; payment_status?: string; payment_method?: string; paid_amount?: number }
+ type WalletTx = { id: string; amount: number; kind: string; status: string | null; note: string | null; order_id: string | null; created_at: string }
++type ChargeReq = { id: string; amount: number; status: string; tracking_no: string | null; reject_reason: string | null; created_at: string }
+ 
+ const STATUS_INFO: Record<string, { label: string; color: string; icon: string }> = {
+   pending: { label: 'در انتظار تأیید', color: '#9a6b3f', icon: '⏳' },
+@@ -53,16 +55,20 @@ export default function MyOrdersClient() {
+   const [rules, setRules] = useState<{ general: string; org: string }>({ general: 'در حال بارگذاری...', org: 'در حال بارگذاری...' })
+ 
+   // 👛 کیف پول مشتری — با اولین باز کردن تب لود می‌شود
+-  const [walletView, setWalletView] = useState<{ balance: number; transactions: WalletTx[] } | null>(null)
++  const [walletView, setWalletView] = useState<{ balance: number; transactions: WalletTx[]; hasMore?: boolean; chargeRequests?: ChargeReq[] } | null>(null)
+   const [walletState, setWalletState] = useState<'idle' | 'loading' | 'ready' | 'login' | 'error' | 'blocked'>('idle')
+   const [walletLoadedOnce, setWalletLoadedOnce] = useState(false)
++  const [moreBusy, setMoreBusy] = useState(false)
+ 
+   // 🔐 وضعیت احراز/فعال‌سازی — در ورود به پنل چک می‌شود
+   const [wstatus, setWstatus] = useState<{
+     walletEnabled: boolean
+     cardChargeEnabled: boolean
+     smsConfigured: boolean
+-    customer: { id: string; name: string | null; phone: string | null; verification_status: string; wallet_blocked: boolean; balance: number } | null
++    chargeMin?: number
++    chargeMax?: number
++    cardInfo?: { bankName: string | null; cardNumber: string; accountHolder: string | null } | null
++    customer: { id: string; name: string | null; phone: string | null; verification_status: string; wallet_blocked: boolean; card_charge_blocked?: boolean; balance: number } | null
+   } | null>(null)
+ 
+   // 🤝 درخواست فعال‌سازی حضوری از مدیر
+@@ -70,6 +76,14 @@ export default function MyOrdersClient() {
+   const [reqError, setReqError] = useState<string | null>(null)
+   const [showOtpForm, setShowOtpForm] = useState(false)
+ 
++  // 🏦 شارژ کارت‌به‌کارت — فرم و وضعیت ارسال
++  const [showChargeForm, setShowChargeForm] = useState(false)
++  const [chargeAmount, setChargeAmount] = useState('')
++  const [chargeTracking, setChargeTracking] = useState('')
++  const [chargeFile, setChargeFile] = useState<File | null>(null)
++  const [chargeBusy, setChargeBusy] = useState(false)
++  const [chargeMsg, setChargeMsg] = useState<{ ok: boolean; text: string } | null>(null)
++
+   useEffect(() => {
+     fetch('/api/wallet/status', { cache: 'no-store' })
+       .then((r) => r.json())
+@@ -146,21 +160,76 @@ export default function MyOrdersClient() {
+     setTimeout(() => { window.location.href = '/cart' }, 800)
+   }
+ 
+-  async function loadWallet() {
+-    setWalletState('loading')
++  async function loadWallet(opts?: { more?: boolean }) {
++    const more = !!opts?.more
++    const offset = more ? (walletView?.transactions.length ?? 0) : 0
++    if (more) setMoreBusy(true)
++    else setWalletState('loading')
+     try {
+-      const res = await fetch('/api/wallet', { cache: 'no-store' })
++      const res = await fetch(`/api/wallet${offset ? `?offset=${offset}` : ''}`, { cache: 'no-store' })
+       if (res.status === 401) { setWalletState('login'); return }
+       if (res.status === 403) { setWalletState('blocked'); return }
+       const data = await res.json().catch(() => null)
+       if (!res.ok || !data) throw new Error('خطا در خواندن کیف پول')
+-      setWalletView({
++      const page = {
+         balance: Number(data.balance ?? 0),
+-        transactions: Array.isArray(data.transactions) ? data.transactions : [],
+-      })
+-      setWalletState('ready')
++        transactions: Array.isArray(data.transactions) ? (data.transactions as WalletTx[]) : [],
++        hasMore: Boolean(data.hasMore),
++        chargeRequests: Array.isArray(data.chargeRequests) ? (data.chargeRequests as ChargeReq[]) : undefined,
++      }
++      if (more) {
++        // صفحه‌ی بعدی: تراکنش‌ها اضافه می‌شوند؛ چیپ‌های درخواست‌ها از صفحه‌ی اول می‌مانند
++        setWalletView((prev) => (prev
++          ? { ...page, transactions: [...prev.transactions, ...page.transactions], chargeRequests: prev.chargeRequests }
++          : page))
++      } else {
++        setWalletView(page)
++        setWalletState('ready')
++      }
+     } catch {
+-      setWalletState('error')
++      if (!more) setWalletState('error')
++    } finally {
++      if (more) setMoreBusy(false)
++    }
++  }
++
++  async function submitCharge() {
++    const min = wstatus?.chargeMin ?? 50000
++    const max = wstatus?.chargeMax ?? 10_000_000
++    const amount = Number(normalizeTrackingNo(chargeAmount))
++    if (!amount || amount < min || amount > max) {
++      setChargeMsg({ ok: false, text: `مبلغ باید بین ${formatPrice(min)} و ${formatPrice(max)} تومان باشد` })
++      return
++    }
++    const tracking = normalizeTrackingNo(chargeTracking)
++    if (tracking.length < 4) {
++      setChargeMsg({ ok: false, text: 'شماره پیگیری واریز را وارد کن (حداقل ۴ رقم)' })
++      return
++    }
++    if (!chargeFile) {
++      setChargeMsg({ ok: false, text: 'عکس رسید واریز را انتخاب کن' })
++      return
++    }
++    setChargeBusy(true)
++    setChargeMsg(null)
++    try {
++      const fd = new FormData()
++      fd.append('amount', String(amount))
++      fd.append('tracking_no', tracking)
++      fd.append('file', chargeFile)
++      const res = await fetch('/api/wallet/charge-request', { method: 'POST', body: fd })
++      const data = await res.json().catch(() => null)
++      if (!res.ok) throw new Error(data?.error || 'ثبت درخواست ناموفق بود')
++      setChargeMsg({ ok: true, text: '✅ درخواستت ثبت شد؛ بعد از تأیید مدیر، کیف پولت شارژ می‌شود.' })
++      setChargeAmount('')
++      setChargeTracking('')
++      setChargeFile(null)
++      setShowChargeForm(false)
++      await loadWallet()
++    } catch (err: any) {
++      setChargeMsg({ ok: false, text: err.message })
++    } finally {
++      setChargeBusy(false)
+     }
+   }
+ 
+@@ -503,7 +572,7 @@ export default function MyOrdersClient() {
+           {walletState === 'error' && (
+             <div className="my-orders-empty" style={{ lineHeight: 2 }}>
+               ⚠️ خطا در خواندن کیف پول.<br />
+-              <button onClick={loadWallet} className="primary-btn" style={{ marginTop: 10, padding: '8px 20px', borderRadius: 8, cursor: 'pointer' }}>
++              <button onClick={() => loadWallet()} className="primary-btn" style={{ marginTop: 10, padding: '8px 20px', borderRadius: 8, cursor: 'pointer' }}>
+                 تلاش دوباره
+               </button>
+             </div>
+@@ -522,6 +591,98 @@ export default function MyOrdersClient() {
+                 </small>
+               </div>
+ 
++              {/* چیپ وضعیت درخواست‌های شارژ کارت‌به‌کارت (در انتظار / ردشده) */}
++              {(walletView.chargeRequests ?? []).filter((r) => r.status !== 'approved').slice(0, 3).map((r) => (
++                <div key={r.id} style={{ background: r.status === 'pending' ? '#fff4d9' : '#fdecea', border: `1px solid ${r.status === 'pending' ? '#ecd9a8' : '#f5c6c0'}`, borderRadius: '10px', padding: '8px 12px', marginTop: '10px', fontSize: '11.5px', color: r.status === 'pending' ? '#8a6d3b' : '#9b3c32', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
++                  <span style={{ lineHeight: 1.8 }}>
++                    {r.status === 'pending' ? '⏳' : '❌'} درخواست شارژ {formatPrice(r.amount)} تومان —{' '}
++                    {r.status === 'pending' ? 'در انتظار تأیید مدیر' : `رد شد${r.reject_reason ? `: ${r.reject_reason}` : ''}`}
++                  </span>
++                  {r.tracking_no && <span dir="ltr" style={{ opacity: 0.7 }}>#{r.tracking_no}</span>}
++                </div>
++              ))}
++
++              {/* 🏦 شارژ کارت‌به‌کارت — فقط وقتی ادمین روشنش کرده و مشتری مسدود نباشد */}
++              {wstatus?.cardChargeEnabled && wstatus.customer && !wstatus.customer.card_charge_blocked && wstatus.cardInfo && (
++                <div style={{ background: '#fff', border: '1.5px solid #e3ddd2', borderRadius: '14px', padding: '14px', marginTop: '12px' }}>
++                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
++                    <strong style={{ fontSize: '13.5px', color: '#29251f' }}>🏦 شارژ کارت‌به‌کارت</strong>
++                    <button onClick={() => setShowChargeForm(!showChargeForm)} style={{ background: 'none', border: 'none', color: '#9a6b3f', fontSize: '12px', cursor: 'pointer', fontFamily: 'inherit' }}>
++                      {showChargeForm ? 'بستن' : 'شارژ می‌خواهم +'}
++                    </button>
++                  </div>
++                  <small style={{ display: 'block', fontSize: '11px', color: '#766f64', marginTop: '4px', lineHeight: 1.8 }}>
++                    به کارت زیر واریز کن؛ بعد مبلغ و شماره پیگیری را با عکس رسید بفرست تا مدیر تأیید کند.
++                  </small>
++
++                  <div style={{ background: '#fbf9f5', border: '1px dashed #d8d0c4', borderRadius: '10px', padding: '10px 12px', marginTop: '10px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
++                    <div style={{ flex: 1, minWidth: 0 }}>
++                      {wstatus.cardInfo.bankName && <div style={{ fontSize: '11px', color: '#766f64' }}>{wstatus.cardInfo.bankName}</div>}
++                      <strong style={{ fontSize: '14px', color: '#29251f', display: 'block', direction: 'ltr', textAlign: 'right', letterSpacing: '1px', wordBreak: 'break-all' }}>
++                        {wstatus.cardInfo.cardNumber}
++                      </strong>
++                      {wstatus.cardInfo.accountHolder && <div style={{ fontSize: '11px', color: '#766f64' }}>به نام {wstatus.cardInfo.accountHolder}</div>}
++                    </div>
++                    <button
++                      onClick={() => { navigator.clipboard?.writeText(wstatus!.cardInfo!.cardNumber); setToast('شماره کارت کپی شد ✓') }}
++                      style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid #d8d0c4', background: '#fff', color: '#6b4f3a', fontSize: '11.5px', fontWeight: 'bold', cursor: 'pointer', fontFamily: 'inherit' }}
++                    >
++                      📋 کپی
++                    </button>
++                  </div>
++
++                  {showChargeForm && (
++                    <div style={{ display: 'grid', gap: '8px', marginTop: '12px' }}>
++                      <div style={{ display: 'flex', gap: '8px' }}>
++                        <input
++                          dir="ltr"
++                          value={chargeAmount}
++                          onChange={(e) => setChargeAmount(e.target.value)}
++                          placeholder={`مبلغ (حداقل ${formatPrice(wstatus.chargeMin ?? 50000)})`}
++                          inputMode="numeric"
++                          style={{ flex: 1, padding: '10px 12px', borderRadius: '10px', border: '1px solid #e3ddd2', fontSize: '13px', minWidth: 0 }}
++                        />
++                        <input
++                          dir="ltr"
++                          value={chargeTracking}
++                          onChange={(e) => setChargeTracking(e.target.value)}
++                          placeholder="شماره پیگیری"
++                          inputMode="numeric"
++                          style={{ flex: 1, padding: '10px 12px', borderRadius: '10px', border: '1px solid #e3ddd2', fontSize: '13px', minWidth: 0 }}
++                        />
++                      </div>
++                      <label style={{ display: 'block', fontSize: '12px', color: '#766f64' }}>
++                        📷 عکس رسید واریز:
++                        <input
++                          type="file"
++                          accept="image/*"
++                          onChange={(e) => setChargeFile(e.target.files?.[0] ?? null)}
++                          style={{ display: 'block', marginTop: '6px', fontSize: '12px' }}
++                        />
++                        {chargeFile && <small style={{ display: 'block', color: '#2d5d3e', marginTop: '4px' }}>{chargeFile.name}</small>}
++                      </label>
++                      <button
++                        onClick={submitCharge}
++                        disabled={chargeBusy}
++                        style={{
++                          padding: '11px 14px', borderRadius: '10px', border: 'none',
++                          background: chargeBusy ? '#999' : '#2d5d3e',
++                          color: '#fff', fontSize: '13px', fontWeight: 'bold',
++                          cursor: chargeBusy ? 'default' : 'pointer', fontFamily: 'inherit',
++                        }}
++                      >
++                        {chargeBusy ? '⏳ در حال ارسال...' : '📩 ارسال درخواست شارژ'}
++                      </button>
++                      {chargeMsg && (
++                        <div style={{ fontSize: '11.5px', textAlign: 'center', color: chargeMsg.ok ? '#2d5d3e' : '#9b3c32', lineHeight: 1.8 }}>
++                          {chargeMsg.text}
++                        </div>
++                      )}
++                    </div>
++                  )}
++                </div>
++              )}
++
+               {walletView.transactions.length === 0 ? (
+                 <div className="my-orders-empty" style={{ marginTop: '16px' }}>
+                   هنوز تراکنشی در کیف پولت ثبت نشده است.
+@@ -556,6 +717,21 @@ export default function MyOrdersClient() {
+                       </div>
+                     )
+                   })}
++
++                  {walletView.hasMore && (
++                    <button
++                      onClick={() => loadWallet({ more: true })}
++                      disabled={moreBusy}
++                      style={{
++                        marginTop: '4px', width: '100%', padding: '10px', borderRadius: '10px',
++                        border: '1px solid #e3ddd2', background: '#fff', color: '#6b4f3a',
++                        fontSize: '13px', fontWeight: 'bold',
++                        cursor: moreBusy ? 'default' : 'pointer', fontFamily: 'inherit',
++                      }}
++                    >
++                      {moreBusy ? '⏳' : '⬇️ نمایش تراکنش‌های قدیمی‌تر'}
++                    </button>
++                  )}
+                 </div>
+               )}
+             </>
+diff --git a/lib/upload/image.ts b/lib/upload/image.ts
+new file mode 100644
+index 0000000..52246c4
+--- /dev/null
++++ b/lib/upload/image.ts
+@@ -0,0 +1,27 @@
++// lib/upload/image.ts
++
++/**
++ * تشخیص نوع تصویر از روی امضای بایت‌ها (magic bytes) — مشترک بین
++ * رسید سفارش (/api/upload-receipt) و رسید شارژ کیف پول (/api/wallet/charge-request).
++ * به نام فایل یا content-type کلاینت اعتماد نمی‌کنیم.
++ */
++
++export const MAX_IMAGE_SIZE = 5 * 1024 * 1024 // ۵ مگابایت
++export const IMAGE_SIGNED_URL_TTL = 60 * 60 * 24 * 30 // سی روز
++
++export function detectImage(b: Uint8Array): { mime: string; ext: string } | null {
++  if (b.length < 12) return null
++  if (b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) {
++    return { mime: 'image/jpeg', ext: 'jpg' }
++  }
++  if (b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) {
++    return { mime: 'image/png', ext: 'png' }
++  }
++  if (
++    b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 &&
++    b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50
++  ) {
++    return { mime: 'image/webp', ext: 'webp' }
++  }
++  return null
++}
+diff --git a/lib/wallet/charge.ts b/lib/wallet/charge.ts
+new file mode 100644
+index 0000000..1e7e52b
+--- /dev/null
++++ b/lib/wallet/charge.ts
+@@ -0,0 +1,58 @@
++// lib/wallet/charge.ts
++
++/**
++ * اعتبارسنجی درخواست شارژ کارت‌به‌کارت — نسخه‌ی client-safe.
++ * عمداً بدون import 'server-only' تا تست‌ها و کامپوننت‌های مشتری هم استفاده کنند.
++ */
++
++const FA_DIGITS = '۰۱۲۳۴۵۶۷۸۹'
++const AR_DIGITS = '٠١٢٣٤٥٦٧٨٩'
++
++/** ارقام فارسی/عربی کیبورد را به انگلیسی تبدیل می‌کند */
++export function toEnDigits(s: string): string {
++  return s
++    .replace(/[۰-۹]/g, (d) => String(FA_DIGITS.indexOf(d)))
++    .replace(/[٠-٩]/g, (d) => String(AR_DIGITS.indexOf(d)))
++}
++
++/** شماره پیگیری: فقط رقم می‌ماند (خط تیره/فاصله‌ی کاربر پاک می‌شود) */
++export function normalizeTrackingNo(s: string): string {
++  return toEnDigits(String(s ?? '')).replace(/\D/g, '')
++}
++
++export const TRACKING_MIN_DIGITS = 4
++export const TRACKING_MAX_DIGITS = 30
++
++export function isValidTrackingNo(s: string): boolean {
++  return (
++    typeof s === 'string' &&
++    s.length >= TRACKING_MIN_DIGITS &&
++    s.length <= TRACKING_MAX_DIGITS
++  )
++}
++
++/** مبلغ شارژ: عدد صحیح داخل بازه‌ی [min, max] — min/max از تنظیمات ادمین می‌آید */
++export function isChargeAmount(
++  v: unknown,
++  min: number,
++  max: number
++): v is number {
++  if (typeof v !== 'number' || !Number.isInteger(v)) return false
++  if (!Number.isFinite(min) || !Number.isFinite(max) || min > max) return false
++  return v >= min && v <= max
++}
++
++export const CHARGE_STATUS_LABELS: Record<string, string> = {
++  pending: 'در انتظار تأیید',
++  approved: 'تأیید شد',
++  rejected: 'رد شد',
++}
++
++export function chargeStatusLabel(status: string): string {
++  return CHARGE_STATUS_LABELS[status] ?? status
++}
++
++/** پیام فارسی برای رد شدن مبلغ سمت مشتری */
++export function chargeAmountError(min: number, max: number): string {
++  return `مبلغ باید بین ${min.toLocaleString('fa-IR')} و ${max.toLocaleString('fa-IR')} تومان باشد`
++}
+diff --git a/lib/wallet/wallet.ts b/lib/wallet/wallet.ts
+index 8482179..13d48ae 100644
+--- a/lib/wallet/wallet.ts
++++ b/lib/wallet/wallet.ts
+@@ -17,6 +17,18 @@ export type WalletTx = {
+ export type WalletView = {
+   balance: number
+   transactions: WalletTx[]
++  /** فقط وقتی صفحه‌بندی فعال است معنا دارد؛ true یعنی ردیف بیشتری هست */
++  hasMore?: boolean
++}
++
++/** درخواست شارژ کارت‌به‌کارتِ خود مشتری — برای نمایش وضعیت در پنل */
++export type CustomerChargeRequest = {
++  id: string
++  amount: number
++  status: string
++  tracking_no: string | null
++  reject_reason: string | null
++  created_at: string
+ }
+ 
+ // مبالغ به تومان؛ سقف/کف منطقی برای جلوگیری از ورودی‌های مسخره
+@@ -137,17 +149,28 @@ export async function resolveCustomerByDevice(): Promise<ResolvedWalletCustomer
+ }
+ 
+ /** سوییچ‌های سراسری کیف پول + آیا پیامک تنظیم شده؟ */
++export type WalletCardInfo = {
++  bankName: string | null
++  cardNumber: string
++  accountHolder: string | null
++}
++
+ export type WalletFlags = {
+   walletEnabled: boolean
+   cardChargeEnabled: boolean
+   chargeMin: number
++  chargeMax: number
++  /** کارت مقصد شارژ کارت‌به‌کارت — همان حساب «واریز به حساب» پرداخت */
++  cardInfo: WalletCardInfo | null
+   smsConfigured: boolean
+ }
+ 
+ export async function getWalletFlags(): Promise<WalletFlags> {
+   const { data } = await supabaseAdmin()
+     .from('settings')
+-    .select('payment_wallet_enabled, wallet_card_charge_enabled, wallet_charge_min, sms_api_key')
++    .select(
++      'payment_wallet_enabled, wallet_card_charge_enabled, wallet_charge_min, wallet_charge_max, payment_transfer_bank_name, payment_transfer_card_number, payment_transfer_account_holder, sms_api_key'
++    )
+     .eq('id', 1)
+     .single()
+ 
+@@ -155,6 +178,14 @@ export async function getWalletFlags(): Promise<WalletFlags> {
+     walletEnabled: Boolean(data?.payment_wallet_enabled),
+     cardChargeEnabled: Boolean(data?.wallet_card_charge_enabled),
+     chargeMin: Number(data?.wallet_charge_min ?? 50000),
++    chargeMax: Number(data?.wallet_charge_max ?? 10_000_000),
++    cardInfo: data?.payment_transfer_card_number
++      ? {
++          bankName: (data.payment_transfer_bank_name as string) ?? null,
++          cardNumber: data.payment_transfer_card_number as string,
++          accountHolder: (data.payment_transfer_account_holder as string) ?? null,
++        }
++      : null,
+     smsConfigured: Boolean(data?.sms_api_key || process.env.KAVENEGAR_API_KEY),
+   }
+ }
+@@ -202,8 +233,17 @@ export async function ensureActivationTx(customerId: string): Promise<void> {
+   if (error) console.error('[wallet] activation tx failed:', error.message)
+ }
+ 
+-export async function getWalletView(customerId: string): Promise<WalletView> {
++/**
++ * نمای کیف پول با صفحه‌بندی — limit+1 خوانده می‌شود تا hasMore قابل اعتماد باشد.
++ * ادمین (adminWalletByPhone) با پیش‌فرض‌ها همه‌ی ۵۰ ردیف را می‌گیرد.
++ */
++export async function getWalletView(
++  customerId: string,
++  opts?: { limit?: number; offset?: number }
++): Promise<WalletView> {
+   const db = supabaseAdmin()
++  const limit = Math.min(Math.max(opts?.limit ?? 50, 1), 100)
++  const offset = Math.max(opts?.offset ?? 0, 0)
+ 
+   const { data: balanceData, error: balanceError } = await db.rpc('wallet_balance', {
+     p_customer_id: customerId,
+@@ -218,17 +258,39 @@ export async function getWalletView(customerId: string): Promise<WalletView> {
+     .select('id, amount, kind, status, note, order_id, created_at')
+     .eq('customer_id', customerId)
+     .order('created_at', { ascending: false })
+-    .limit(50)
++    .range(offset, offset + limit) // limit+1 سطر برای تشخیص hasMore
+ 
+   if (txError) {
+     console.error('[wallet] tx read failed:', txError.message)
+     throw new Error('خطا در خواندن تراکنش‌ها')
+   }
+ 
++  const rows = (tx ?? []) as WalletTx[]
++  const hasMore = rows.length > limit
++
+   return {
+     balance: Number(balanceData ?? 0),
+-    transactions: (tx ?? []) as WalletTx[],
++    transactions: hasMore ? rows.slice(0, limit) : rows,
++    hasMore,
++  }
++}
++
++/** درخواست‌های شارژ کارت‌به‌کارت خود مشتری (آخرین ۱۰ مورد) — برای چیپ وضعیت در پنل */
++export async function getCustomerChargeRequests(
++  customerId: string,
++  limit = 10
++): Promise<CustomerChargeRequest[]> {
++  const { data, error } = await supabaseAdmin()
++    .from('wallet_charge_requests')
++    .select('id, amount, status, tracking_no, reject_reason, created_at')
++    .eq('customer_id', customerId)
++    .order('created_at', { ascending: false })
++    .limit(limit)
++  if (error) {
++    console.error('[wallet] charge requests read failed:', error.message)
++    return []
+   }
++  return (data ?? []) as CustomerChargeRequest[]
+ }
+ 
+ /** شارژ توسط ادمین بر اساس شماره تلفن مشتری */
+diff --git a/supabase/migrations/20261111_wallet_charge_max.sql b/supabase/migrations/20261111_wallet_charge_max.sql
+new file mode 100644
+index 0000000..4fa829a
+--- /dev/null
++++ b/supabase/migrations/20261111_wallet_charge_max.sql
+@@ -0,0 +1,8 @@
++-- ============================================================
++-- پچ ۲۶ — سقف شارژ کارت‌به‌کارت (کف از قبل wallet_charge_min بود)
++-- اجرا در: Supabase Dashboard → SQL Editor → Run
++-- idempotent است؛ اجرای مکرر بی‌ضرر.
++-- ============================================================
++
++alter table public.settings
++  add column if not exists wallet_charge_max bigint not null default 10000000;
+diff --git a/tests/wallet-charge.test.ts b/tests/wallet-charge.test.ts
+new file mode 100644
+index 0000000..ad87ca7
+--- /dev/null
++++ b/tests/wallet-charge.test.ts
+@@ -0,0 +1,96 @@
++import { describe, it, expect } from 'vitest'
++import {
++  isChargeAmount,
++  isValidTrackingNo,
++  normalizeTrackingNo,
++  chargeStatusLabel,
++  chargeAmountError,
++  TRACKING_MIN_DIGITS,
++  TRACKING_MAX_DIGITS,
++} from '../lib/wallet/charge'
++
++describe('isChargeAmount — مبلغ شارژ کارت‌به‌کارت', () => {
++  const min = 50_000
++  const max = 10_000_000
++
++  it('مبالغ صحیح داخل بازه را قبول می‌کند', () => {
++    expect(isChargeAmount(min, min, max)).toBe(true)
++    expect(isChargeAmount(max, min, max)).toBe(true)
++    expect(isChargeAmount(200_000, min, max)).toBe(true)
++  })
++
++  it('کف و سقف تنظیمشده‌ی ادمین را رعایت می‌کند', () => {
++    expect(isChargeAmount(30_000, 50_000, max)).toBe(false)
++    expect(isChargeAmount(20_000_000, min, 10_000_000)).toBe(false)
++    expect(isChargeAmount(60_000, 50_000, 55_000)).toBe(false)
++  })
++
++  it('ورودی غیر صحیح یا غیر عدد را رد می‌کند', () => {
++    expect(isChargeAmount('200000', min, max)).toBe(false)
++    expect(isChargeAmount(1500.5, min, max)).toBe(false)
++    expect(isChargeAmount(null, min, max)).toBe(false)
++    expect(isChargeAmount(undefined, min, max)).toBe(false)
++    expect(isChargeAmount(Number.NaN, min, max)).toBe(false)
++  })
++
++  it('با پیکربندی خراب (min > max) هیچ عددی قبول نمی‌شود', () => {
++    expect(isChargeAmount(100_000, 200_000, 100_000)).toBe(false)
++  })
++})
++
++describe('normalizeTrackingNo — شماره پیگیری', () => {
++  it('ارقام فارسی را به انگلیسی تبدیل می‌کند', () => {
++    expect(normalizeTrackingNo('۱۲۳۴۵')).toBe('12345')
++  })
++
++  it('ارقام عربی را هم پشتیبانی می‌کند', () => {
++    expect(normalizeTrackingNo('٤٥٦٧')).toBe('4567')
++  })
++
++  it('خط تیره و فاصله و حروف را پاک می‌کند', () => {
++    expect(normalizeTrackingNo('1234 - 5678')).toBe('12345678')
++    expect(normalizeTrackingNo('TRX 9012')).toBe('9012')
++  })
++
++  it('ورودی خالی/تعریف‌نشده رشته‌ی خالی می‌دهد', () => {
++    expect(normalizeTrackingNo('')).toBe('')
++    expect(normalizeTrackingNo(undefined as unknown as string)).toBe('')
++  })
++})
++
++describe('isValidTrackingNo', () => {
++  it('کوتاه‌تر از حداقل رقم رد می‌شود', () => {
++    expect(isValidTrackingNo('1'.repeat(TRACKING_MIN_DIGITS - 1))).toBe(false)
++    expect(isValidTrackingNo('123')).toBe(false)
++  })
++
++  it('طول مجاز را قبول می‌کند', () => {
++    expect(isValidTrackingNo('1234')).toBe(true)
++    expect(isValidTrackingNo('1'.repeat(TRACKING_MAX_DIGITS))).toBe(true)
++  })
++
++  it('بلندتر از حداکثر رقم رد می‌شود', () => {
++    expect(isValidTrackingNo('1'.repeat(TRACKING_MAX_DIGITS + 1))).toBe(false)
++  })
++})
++
++describe('chargeStatusLabel — برچسب وضعیت درخواست', () => {
++  it('برای وضعیت‌های شناخته‌شده برچسب فارسی دارد', () => {
++    expect(chargeStatusLabel('pending')).toBe('در انتظار تأیید')
++    expect(chargeStatusLabel('approved')).toBe('تأیید شد')
++    expect(chargeStatusLabel('rejected')).toBe('رد شد')
++  })
++
++  it('وضعیت ناشناخته را عیناً برمی‌گرداند', () => {
++    expect(chargeStatusLabel('mystery')).toBe('mystery')
++  })
++})
++
++describe('chargeAmountError — پیام خطای مبلغ', () => {
++  it('کف و سقف را با ارقام فارسی نشان می‌دهد', () => {
++    const msg = chargeAmountError(50_000, 10_000_000)
++    expect(msg).toContain('۵۰٬۰۰۰')
++    expect(msg).toContain('۱۰٬۰۰۰٬۰۰۰')
++    expect(msg).toContain('تومان')
++  })
++})

@@ -1,9 +1,15 @@
 import 'server-only'
 import { NextRequest, NextResponse } from 'next/server'
 import { rateLimit, tooMany } from '@/lib/rate-limit'
-import { getWalletView, resolveWalletCustomer } from '@/lib/wallet/wallet'
+import {
+  getCustomerChargeRequests,
+  getWalletView,
+  resolveWalletCustomer,
+} from '@/lib/wallet/wallet'
 
 export const dynamic = 'force-dynamic'
+
+const PAGE_SIZE = 20
 
 /** کیف پول مشتری — نشست تأییدشده (OTP/دعوت) یا دستگاهِ مشتریِ احرازشده */
 export async function GET(req: NextRequest) {
@@ -19,8 +25,14 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'کیف پول شما توسط مدیر مسدود شده است' }, { status: 403 })
     }
 
-    const view = await getWalletView(customer.id)
-    return NextResponse.json(view)
+    const offsetRaw = Number.parseInt(req.nextUrl.searchParams.get('offset') ?? '0', 10)
+    const offset = Number.isFinite(offsetRaw) && offsetRaw > 0 ? offsetRaw : 0
+
+    const view = await getWalletView(customer.id, { limit: PAGE_SIZE, offset })
+    // درخواست‌های شارژ فقط در صفحه‌ی اول — آپلود دوباره لازم نیست
+    const chargeRequests = offset === 0 ? await getCustomerChargeRequests(customer.id) : undefined
+
+    return NextResponse.json({ ...view, chargeRequests })
   } catch (err) {
     console.error('[wallet] GET', err)
     return NextResponse.json({ error: 'خطای سرور' }, { status: 500 })
