@@ -36,7 +36,11 @@ function CheckoutForm() {
   const [paymentSettings, setPaymentSettings] = useState<PaymentSettings | null>(null)
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash')
   const [settingsLoading, setSettingsLoading] = useState(true)
-  const [walletBalance, setWalletBalance] = useState<number | null>(null)
+  const [walletInfo, setWalletInfo] = useState<{ balance: number; blocked: boolean } | null>(null)
+
+  // 👛 کیف پول نشست فعلی (ثبت‌نام با دعوت/OTP) — فقط اگر شناسایی شود نمایش داده می‌شود
+  const walletAvailable = !!(walletInfo && walletInfo.balance != null && !walletInfo.blocked)
+  const walletBalance = walletAvailable ? walletInfo!.balance : null
 
   // ✅ تخفیف باشگاه فقط برای اعضای سازمانی
   const isOrgMember = !!(membershipInfo?.orgName && membershipInfo.orgName !== 'باشگاه مشتریان')
@@ -48,6 +52,8 @@ function CheckoutForm() {
   const totalDiscount = membershipDiscount + couponDiscount
   const finalTotal = Math.max(0, totalPrice - totalDiscount) + takeawayTotal
   const allTakeaway = items.length > 0 && items.every((i) => i.takeaway)
+  // اگر موجودی کیف پول برای کل سفارش کافی نباشد، گزینه کیف پول نمایش داده می‌شود ولی غیرفعال است
+  const walletShort = walletAvailable && walletBalance != null && walletBalance < finalTotal
 
   useEffect(() => {
     fetch('/api/customer/me', { cache: 'no-store' })
@@ -79,22 +85,32 @@ function CheckoutForm() {
     fetch('/api/payment/wallet', { cache: 'no-store' })
       .then((res) => res.json())
       .then((data) =>
-        setWalletBalance(typeof data?.balance === 'number' ? data.balance : null)
+        setWalletInfo(
+          typeof data?.balance === 'number' && !data?.blocked
+            ? { balance: data.balance, blocked: false }
+            : null
+        )
       )
-      .catch(() => setWalletBalance(null))
+      .catch(() => setWalletInfo(null))
   }, [])
 
   useEffect(() => {
     if (items.length === 0) return
+    // شماره تأییدشده هم فرستاده می‌شود تا عضویت سازمانی بدون قفل‌شدن به یک دستگاه پیدا شود
+    const calcPhone = toLatinDigits(customerInfo?.phone || phone)
+    const body: Record<string, unknown> = {
+      items: items.map(i => ({ product_id: i.productId, quantity: i.quantity, unit_price: i.unitPrice })),
+    }
+    if (/^09\d{9}$/.test(calcPhone)) body.phone = calcPhone
     fetch('/api/membership/calculate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ items: items.map(i => ({ product_id: i.productId, quantity: i.quantity, unit_price: i.unitPrice })) })
+      body: JSON.stringify(body)
     })
       .then(res => res.json())
       .then(data => setMembershipInfo(data))
       .catch(() => setMembershipInfo(null))
-  }, [items])
+  }, [items, customerInfo?.phone, phone])
 
   // اگر کاربر سازمانی شد، کوپن را پاک کن
   useEffect(() => {
@@ -242,11 +258,9 @@ function CheckoutForm() {
     if (paymentSettings.payment_online_enabled && !belowMin) availableMethods.push('online')
     if (paymentSettings.payment_cash_enabled || paymentSettings.payment_card_enabled) availableMethods.push('cash')
     if (paymentSettings.payment_transfer_enabled) availableMethods.push('transfer')
-    if (
-      paymentSettings.payment_wallet_enabled &&
-      walletBalance != null &&
-      walletBalance >= finalTotal
-    ) availableMethods.push('wallet')
+    // کیف پول تا وقتی نشست شناسایی‌شده وجود دارد نمایش داده می‌شود؛
+    // اگر موجودی کافی نباشد غیرفعال می‌شود (نه اینکه کلاً پنهان باشد).
+    if (paymentSettings.payment_wallet_enabled && walletAvailable) availableMethods.push('wallet')
   }
   if (availableMethods.length === 0) availableMethods.push('cash')
   if (!availableMethods.includes(paymentMethod)) setPaymentMethod(availableMethods[0])
@@ -275,6 +289,11 @@ function CheckoutForm() {
             {customerInfo.phone && (
               <small style={{ color: '#766f64', fontSize: '13px' }}>
                 شماره تماس شما: <span dir="ltr">{customerInfo.phone}</span>
+              </small>
+            )}
+            {walletAvailable && (
+              <small style={{ display: 'block', color: '#2d5d3e', fontSize: '13px', fontWeight: 700, marginTop: '6px' }}>
+                👛 موجودی کیف پول: {formatPrice(walletBalance as number)} تومان
               </small>
             )}
           </div>
@@ -430,25 +449,31 @@ function CheckoutForm() {
               {availableMethods.map((m) => {
                 const info = METHOD_INFO[m]
                 const isSelected = paymentMethod === m;
+                const isWalletShort = m === 'wallet' && walletShort
+                const hint = isWalletShort
+                  ? `موجودی: ${formatPrice(walletBalance as number)} تومان — کافی نیست`
+                  : info.hint
                 return (
-                  <button 
-                    key={m} 
-                    type="button" 
-                    className={`payment-method-option ${isSelected ? 'selected' : ''}`} 
-                    onClick={() => setPaymentMethod(m)} 
-                    disabled={saving} 
-                    style={{ 
-                      padding: '12px', 
+                  <button
+                    key={m}
+                    type="button"
+                    className={`payment-method-option ${isSelected ? 'selected' : ''}`}
+                    onClick={() => setPaymentMethod(m)}
+                    disabled={saving || isWalletShort}
+                    style={{
+                      padding: '12px',
                       minHeight: 'auto',
                       border: isSelected ? '2px solid #6b4f3a' : '1px solid #e3ddd2',
                       background: isSelected ? '#f5f0e9' : '#fffdf9',
-                      transition: 'all 0.2s ease'
+                      transition: 'all 0.2s ease',
+                      opacity: isWalletShort ? 0.55 : 1,
+                      cursor: isWalletShort ? 'default' : 'pointer'
                     }}
                   >
                     <div className="payment-method-option-icon" style={{ width: '32px', height: '32px', fontSize: '18px', background: '#fff' }}>{info.icon}</div>
                     <div className="payment-method-option-info">
                       <strong style={{ fontSize: '13px', color: isSelected ? '#6b4f3a' : '#29251f' }}>{info.title}</strong>
-                      <small style={{ fontSize: '10px', color: isSelected ? '#766f64' : '#9a9287' }}>{info.hint}</small>
+                      <small style={{ fontSize: '10px', color: isSelected ? '#766f64' : '#9a9287' }}>{hint}</small>
                     </div>
                     {isSelected && <span className="payment-method-option-check" style={{ background: '#6b4f3a', color: '#fff' }}>✓</span>}
                   </button>

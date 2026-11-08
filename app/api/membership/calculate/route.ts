@@ -5,21 +5,45 @@ import { supabaseAdmin } from '@/lib/supabase/server'
 import { hashData } from '@/lib/utils/hash'
 import { rateLimit, tooMany } from '@/lib/rate-limit'
 
+const ORG_MEMBER_SELECT = 'id, organization_id, organizations(name, discount_percent, max_daily_orders, max_total_orders, expires_at)'
+
+function normalizePhone(v: unknown): string {
+  return String(v ?? '')
+    .replace(/[۰-۹]/g, (d) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d)))
+    .replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
+    .replace(/\D/g, '')
+    .replace(/^98/, '0')
+    .replace(/^9(\d{9})$/, '0$1')
+}
+
 export async function POST(req: Request) {
   // بازدارنده‌ی اسپم: حداکثر ۱۲۰ درخواست در دقیقه از هر IP
   const rl = rateLimit(req, 'membership-calculate', 120, 60_000)
   if (!rl.ok) return tooMany(rl)
 
   try {
-    const { items } = await req.json()
+    const { items, phone } = await req.json()
     const cookieStore = await cookies()
     const deviceToken = cookieStore.get('cafe_device_token')?.value
-    if (!deviceToken) return NextResponse.json({ discount: 0, discountPercent: 0, eligibleProductIds: [] })
+    if (!deviceToken && !phone) return NextResponse.json({ discount: 0, discountPercent: 0, eligibleProductIds: [] })
 
-    const deviceIdHash = hashData(deviceToken)
     const db = supabaseAdmin()
 
-    const { data: member } = await db.from('organization_members').select('id, organization_id, organizations(name, discount_percent, max_daily_orders, max_total_orders, expires_at)').eq('device_id_hash', deviceIdHash).eq('is_registered', true).maybeSingle()
+    // عضویت سازمانی: اول با دستگاه، اگر نبود با شماره تلفن تأییدشده (ثبت‌نام با دعوت مدیر
+    // به شماره گره می‌خورد نه دستگاه — مشتری نباید برای تخفیف به یک دستگاه قفل شود)
+    let member: any | undefined
+    if (deviceToken) {
+      const deviceIdHash = hashData(deviceToken)
+      const { data } = await db.from('organization_members').select(ORG_MEMBER_SELECT).eq('device_id_hash', deviceIdHash).eq('is_registered', true).maybeSingle()
+      member = data
+    }
+    if (!member && typeof phone === 'string') {
+      const p = normalizePhone(phone)
+      if (/^09\d{9}$/.test(p)) {
+        const { data } = await db.from('organization_members').select(ORG_MEMBER_SELECT).eq('phone_hash', hashData(p)).eq('is_registered', true).maybeSingle()
+        member = data
+      }
+    }
     if (!member || !member.organizations) return NextResponse.json({ discount: 0, discountPercent: 0, eligibleProductIds: [] })
 
     const org = member.organizations as any
