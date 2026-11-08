@@ -124,6 +124,16 @@ export async function updateOrderStatus(
   const { error } = await db.from('orders').update(updateData).eq('id', id)
   if (error) return { error: error.message }
 
+  // تحویل شد → مجموع خرید مشتری +۱ و ارتقای گرید (RPC اتمیک، idempotent؛ خطا بحرانی نیست)
+  if (status === 'delivered') {
+    const { error: creditErr } = await db.rpc('credit_completed_purchase', {
+      p_order_id: id,
+    })
+    if (creditErr) {
+      console.error('[updateOrderStatus] credit_completed_purchase:', creditErr)
+    }
+  }
+
   if (['confirmed', 'preparing', 'ready', 'delivered'].includes(status)) {
     sendPushToOrder(id, status).catch((err) =>
       console.error('[updateOrderStatus] push failed:', err)

@@ -37,6 +37,8 @@ function CheckoutForm() {
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash')
   const [settingsLoading, setSettingsLoading] = useState(true)
   const [walletInfo, setWalletInfo] = useState<{ balance: number; blocked: boolean } | null>(null)
+  // 🏆 گرید وفاداری نشست فعلی — فقط پیش‌نمایش؛ محاسبه‌ی قطعی سمت سرور است
+  const [gradeInfo, setGradeInfo] = useState<{ name: string; discountPercent: number; color: string | null } | null>(null)
 
   // 👛 کیف پول نشست فعلی (ثبت‌نام با دعوت/OTP) — فقط اگر شناسایی شود نمایش داده می‌شود
   const walletAvailable = !!(walletInfo && walletInfo.balance != null && !walletInfo.blocked)
@@ -84,13 +86,18 @@ function CheckoutForm() {
 
     fetch('/api/payment/wallet', { cache: 'no-store' })
       .then((res) => res.json())
-      .then((data) =>
+      .then((data) => {
         setWalletInfo(
           typeof data?.balance === 'number' && !data?.blocked
             ? { balance: data.balance, blocked: false }
             : null
         )
-      )
+        if (data?.grade && typeof data.grade.discountPercent === 'number' && data.grade.discountPercent > 0) {
+          setGradeInfo({ name: String(data.grade.name ?? ''), discountPercent: Number(data.grade.discountPercent), color: data.grade.color ?? null })
+        } else {
+          setGradeInfo(null)
+        }
+      })
       .catch(() => setWalletInfo(null))
   }, [])
 
@@ -445,6 +452,12 @@ function CheckoutForm() {
         {!settingsLoading && (
           <div className="checkout-card">
             <div className="checkout-card-title">💳 روش پرداخت</div>
+            {gradeInfo && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', background: '#fdf6e3', border: `1px solid ${gradeInfo.color ?? '#d99f59'}`, borderRadius: '10px', padding: '8px 12px', marginBottom: '10px', fontSize: '11.5px', color: '#6b4f3a' }}>
+                <span style={{ width: 10, height: 10, borderRadius: '50%', background: gradeInfo.color ?? '#6b4f3a', flex: '0 0 auto' }} />
+                🏆 گرید {gradeInfo.name}: {formatPrice(gradeInfo.discountPercent)}٪ تخفیف روی اقلام مشمول — در ثبت نهایی خودکار اعمال می‌شود
+              </div>
+            )}
             <div className="payment-methods-selector" style={{ gap: '8px' }}>
               {availableMethods.map((m) => {
                 const info = METHOD_INFO[m]

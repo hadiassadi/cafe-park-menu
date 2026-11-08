@@ -3,6 +3,7 @@ import { cookies } from 'next/headers'
 import { supabaseAdmin } from '../supabase/server' // ایمپورت نسبی: توسط vitest هم لود می‌شود
 import { getVerifiedPhoneHash } from '../sms/otp' // ایمپورت نسبی: توسط vitest هم لود می‌شود
 import { getDeviceHash } from '../orders/owner'
+import { getVerifiedCustomerGrade, type ResolvedGrade } from '../customers/grades'
 
 export type WalletTx = {
   id: string
@@ -191,24 +192,30 @@ export async function getWalletFlags(): Promise<WalletFlags> {
 }
 
 /** وضعیت کامل برای پنل مشتری: پرچم‌ها + مشتریِ شناسایی‌شده + موجودی */
+/** وضعیت کامل برای پنل مشتری: پرچم‌ها + مشتریِ شناسایی‌شده + موجودی + گرید */
 export type WalletStatus = WalletFlags & {
   customer: (ResolvedWalletCustomer & { balance: number }) | null
+  grade: ResolvedGrade | null
 }
 
 export async function getWalletStatus(): Promise<WalletStatus> {
   const flags = await getWalletFlags()
   const customer = await resolveWalletCustomer()
 
-  if (!customer) return { ...flags, customer: null }
+  if (!customer) return { ...flags, customer: null, grade: null }
 
-  const { data, error } = await supabaseAdmin().rpc('wallet_balance', {
-    p_customer_id: customer.id,
-  })
+  const [{ data, error }, grade] = await Promise.all([
+    supabaseAdmin().rpc('wallet_balance', { p_customer_id: customer.id }),
+    getVerifiedCustomerGrade(customer.phone).catch((err) => {
+      console.error('[wallet] grade lookup failed:', err)
+      return null
+    }),
+  ])
   if (error) {
     console.error('[wallet] status balance failed:', error.message)
-    return { ...flags, customer: { ...customer, balance: 0 } }
+    return { ...flags, customer: { ...customer, balance: 0 }, grade }
   }
-  return { ...flags, customer: { ...customer, balance: Number(data ?? 0) } }
+  return { ...flags, customer: { ...customer, balance: Number(data ?? 0) }, grade }
 }
 
 /** ثبت یک‌باره‌ی رویداد «فعال‌سازی کیف پول» در دفتر (idempotent) */
