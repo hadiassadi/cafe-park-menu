@@ -7,9 +7,11 @@ import { supabaseAdmin } from '@/lib/supabase/server'
 export const dynamic = 'force-dynamic'
 
 /**
- * حذف ثبت‌نام مشتری توسط مدیر — POST { phone }
+ * حذف کامل ثبت‌نام مشتری توسط مدیر — POST { phone }
  * گاردهای امنیتی:
  *  - فقط ادمین احرازشده
+ *  - کلید «حذف کامل مشتری» در تنظیمات امنیت باید روشن باشد
+ *  - فقط برای مشتریِ آرشیوشده (حذف مستقیم از لیست فعال ممنوع — اول آرشیو کن)
  *  - موجودی کیف پول باید صفر باشد (بازگشت وجه اول انجام شود)
  *  - تراکنش‌های دفتر کیف پول هم پاک می‌شوند تا ردیف یتیم نماند
  * سفارش‌ها دست‌نخورده می‌مانند (تاریخچه CRM حفظ می‌شود).
@@ -28,9 +30,22 @@ export async function POST(req: NextRequest) {
 
     const db = supabaseAdmin()
 
+    // کلید امنیتی: حذف کامل مشتری
+    const { data: settings } = await db
+      .from('settings')
+      .select('admin_allow_delete_customers')
+      .eq('id', 1)
+      .maybeSingle()
+    if (settings && settings.admin_allow_delete_customers === false) {
+      return NextResponse.json(
+        { error: 'حذف کامل مشتری در تنظیمات امنیت غیرفعال شده است' },
+        { status: 403 }
+      )
+    }
+
     const { data: customer, error: custErr } = await db
       .from('customers')
-      .select('id, name')
+      .select('id, name, archived_at')
       .eq('phone', phone)
       .maybeSingle()
 
@@ -40,6 +55,12 @@ export async function POST(req: NextRequest) {
     }
     if (!customer) {
       return NextResponse.json({ error: 'ثبت‌نامی برای این شماره پیدا نشد' }, { status: 404 })
+    }
+    if (!customer.archived_at) {
+      return NextResponse.json(
+        { error: 'حذف کامل فقط از بخش آرشیو ممکن است؛ اول این مشتری را آرشیو کن' },
+        { status: 409 }
+      )
     }
 
     // موجودی کیف پول باید صفر باشد

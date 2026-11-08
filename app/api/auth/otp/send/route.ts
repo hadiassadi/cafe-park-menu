@@ -39,7 +39,12 @@ export async function POST(req: NextRequest) {
     const db = supabaseAdmin()
     const cfg = await fetchSmsConfig(db)
     if (cfg.error || !cfg.config) {
-      return NextResponse.json({ error: cfg.error ?? 'پیامک تنظیم نشده است' }, { status: 503 })
+      // جزئیات فنی فقط در لاگ سرور می‌ماند؛ به مشتری پیام خنثی داده می‌شود
+      console.error('[otp/send] sms not configured:', cfg.error)
+      return NextResponse.json(
+        { error: 'فعلاً ورود با کد پیامکی غیرفعال است؛ از مدیر کافه کمک بگیر' },
+        { status: 503 }
+      )
     }
 
     const code = generateOtpCode()

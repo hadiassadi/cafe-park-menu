@@ -104,6 +104,7 @@ const BOOL_FIELDS = [
   'rubika_enabled',
   // ✅ امنیت (جدید)
   'admin_allow_delete_orders',
+  'admin_allow_delete_customers',
 ]
 
 // مقدارهای مجاز برای فیلدهای انتخابی

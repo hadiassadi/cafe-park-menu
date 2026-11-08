@@ -1,5 +1,5 @@
 import { apiError } from '@/lib/api-error'
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { requireAdmin } from '@/lib/admin/require-admin'
 
@@ -14,10 +14,13 @@ function createAdminDb() {
 
 const normalizePhone = (v: unknown) => String(v ?? '').replace(/[^\d]/g, '')
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
     const denied = await requireAdmin()
     if (denied) return denied
+
+    // view=archived → فقط مشتریان آرشیوشده؛ پیش‌فرض → فقط فعال‌ها
+    const view = req.nextUrl.searchParams.get('view') === 'archived' ? 'archived' : 'active'
 
     const db = createAdminDb()
     const now = new Date()
@@ -36,10 +39,10 @@ export async function GET() {
       )
     }
 
-    // خواندن اطلاعات مشتریان (یادداشت، تگ، تأیید شماره، وضعیت اعتبار)
+    // خواندن اطلاعات مشتریان (یادداشت، تگ، تأیید شماره، وضعیت اعتبار، آرشیو)
     const { data: metaCustomers } = await db
       .from('customers')
-      .select('phone, name, notes, tags, phone_verified_at, credit_override, verification_status, wallet_blocked, device_info')
+      .select('phone, name, notes, tags, phone_verified_at, credit_override, verification_status, wallet_blocked, device_info, archived_at')
 
     const metaMap = new Map<
       string,
@@ -52,6 +55,7 @@ export async function GET() {
         verification_status: string | null
         wallet_blocked: boolean
         device_info: string | null
+        archived_at: string | null
       }
     >()
     for (const c of metaCustomers ?? []) {
@@ -65,6 +69,7 @@ export async function GET() {
         verification_status: c.verification_status ?? null,
         wallet_blocked: !!c.wallet_blocked,
         device_info: c.device_info ?? null,
+        archived_at: c.archived_at ?? null,
       })
     }
 
@@ -166,28 +171,73 @@ export async function GET() {
         device_info: meta?.device_info ?? null,
         settled_orders: settledByPhone.get(c.phone) ?? 0,
         open_debt: openDebt,
+        archived: !!meta?.archived_at,
+        archived_at: meta?.archived_at ?? null,
       }
     })
 
-    customers.sort((a, b) => {
+    // مشتریانِ فقط-پروفایل (بدون هیچ سفارشی) که آرشیو شده‌اند — در نمای آرشیو هم دیده شوند
+    const archivedMetaOnly = (metaCustomers ?? [])
+      .filter(
+        (c) =>
+          c.archived_at &&
+          c.phone &&
+          !customerMap.has(normalizePhone(c.phone))
+      )
+      .map((c) => ({
+        phone: normalizePhone(c.phone),
+        name: c.name || 'بدون نام',
+        order_count: 0,
+        total_spent: 0,
+        cancelled_count: 0,
+        first_order_at: null,
+        last_order_at: null,
+        notes: c.notes || null,
+        tags: Array.isArray(c.tags) ? c.tags : [],
+        has_record: true,
+        phone_verified_at: c.phone_verified_at ?? null,
+        credit_override: c.credit_override || 'default',
+        profile_name: c.name ?? null,
+        verification_status: c.verification_status ?? null,
+        wallet_blocked: !!c.wallet_blocked,
+        device_info: c.device_info ?? null,
+        settled_orders: 0,
+        open_debt: 0,
+        archived: true,
+        archived_at: c.archived_at as string,
+      }))
+
+    const allRows = [...customers, ...archivedMetaOnly]
+    const activeRows = allRows.filter((r) => !r.archived)
+    const archivedRows = allRows
+      .filter((r) => r.archived)
+      .sort(
+        (a, b) =>
+          new Date(b.archived_at || 0).getTime() - new Date(a.archived_at || 0).getTime()
+      )
+
+    const finalCustomers = view === 'archived' ? archivedRows : activeRows
+
+    finalCustomers.sort((a, b) => {
       const aTime = a.last_order_at ? new Date(a.last_order_at).getTime() : 0
       const bTime = b.last_order_at ? new Date(b.last_order_at).getTime() : 0
       return bTime - aTime
     })
 
     const summary = {
-      total: customers.length,
-      loyal: customers.filter((c) => c.order_count >= 5).length,
-      new: customers.filter((c) => c.order_count === 1).length,
-      inactive: customers.filter((c) => {
+      total: finalCustomers.length,
+      loyal: finalCustomers.filter((c) => c.order_count >= 5).length,
+      new: finalCustomers.filter((c) => c.order_count === 1).length,
+      inactive: finalCustomers.filter((c) => {
         if (!c.last_order_at) return false
         return new Date(c.last_order_at) < thirtyDaysAgo
       }).length,
-      problematic: customers.filter((c) => c.cancelled_count >= 5).length,
+      problematic: finalCustomers.filter((c) => c.cancelled_count >= 5).length,
+      archived: archivedRows.length,
     }
 
     return NextResponse.json(
-      { customers, summary },
+      { customers: finalCustomers, summary },
       { headers: { 'Cache-Control': 'no-store' } }
     )
   } catch (err: any) {

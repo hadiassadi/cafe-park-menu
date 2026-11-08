@@ -25,6 +25,8 @@ type CustomerData = {
   verification_status: string | null
   wallet_blocked: boolean
   device_info: string | null
+  archived: boolean
+  archived_at: string | null
 }
 
 const PRESET_TAGS = [
@@ -76,8 +78,10 @@ export default function CustomersManager() {
     new: 0,
     inactive: 0,
     problematic: 0,
+    archived: 0,
   })
   const [loading, setLoading] = useState(true)
+  const [view, setView] = useState<'active' | 'archived'>('active')
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<CustomerFilter>('all')
   const [cancelFilter, setCancelFilter] = useState<CancelFilter>('all')
@@ -95,40 +99,71 @@ export default function CustomersManager() {
   const [editWalletBlocked, setEditWalletBlocked] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  // 📦 آرشیو / بازگردانی
+  const [confirmArchive, setConfirmArchive] = useState(false)
+  const [archiving, setArchiving] = useState(false)
+  const [restoring, setRestoring] = useState(false)
 
   // ✅ لود داده‌ها از API امن سرور (نه مستقیم از دیتابیس)
-  useEffect(() => {
-    let cancelled = false
-
-    fetch('/api/admin/customers', { cache: 'no-store' })
-      .then((res) => res.json())
-      .then((data) => {
-        if (!cancelled) {
-          if (data.customers) {
-            setCustomers(data.customers)
-            setSummary(data.summary)
-            // لینک عمیق از بخش کیف پول: /admin/customers?phone=09xxxxxxxxx
-            try {
-              const p = (new URLSearchParams(window.location.search).get('phone') || '').replace(/[^\d]/g, '')
-              const target = data.customers.find((c: CustomerData) => c.phone === p)
-              if (target) {
-                setSearch(p)
-                openCustomer(target)
-              }
-            } catch {}
+  async function loadCustomers(v: 'active' | 'archived', deepLinkPhone = '') {
+    setLoading(true)
+    try {
+      const res = await fetch(
+        `/api/admin/customers${v === 'archived' ? '?view=archived' : ''}`,
+        { cache: 'no-store' }
+      )
+      const data = await res.json()
+      if (data.customers) {
+        setCustomers(data.customers)
+        setSummary(data.summary)
+        if (deepLinkPhone) {
+          // لینک عمیق از بخش کیف پول: /admin/customers?phone=09xxxxxxxxx
+          const target = data.customers.find((c: CustomerData) => c.phone === deepLinkPhone)
+          if (target) {
+            setSearch(deepLinkPhone)
+            openCustomer(target)
+          } else if (v === 'active') {
+            // شاید مشتری آرشیو شده باشد — در نمای آرشیو دنبالش بگرد
+            const res2 = await fetch('/api/admin/customers?view=archived', { cache: 'no-store' })
+            const data2 = await res2.json()
+            const target2 = data2.customers?.find((c: CustomerData) => c.phone === deepLinkPhone)
+            if (target2) {
+              setView('archived')
+              setCustomers(data2.customers)
+              setSummary(data2.summary)
+              setSearch(deepLinkPhone)
+              openCustomer(target2)
+            }
           }
-          setLoading(false)
         }
-      })
-      .catch((err) => {
-        console.error(err)
-        if (!cancelled) setLoading(false)
-      })
-
-    return () => {
-      cancelled = true
+      }
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setLoading(false)
     }
+  }
+
+  useEffect(() => {
+    const p = (() => {
+      try {
+        return (new URLSearchParams(window.location.search).get('phone') || '').replace(/[^\d]/g, '')
+      } catch {
+        return ''
+      }
+    })()
+    loadCustomers('active', p)
   }, [])
+
+  function switchView(v: 'active' | 'archived') {
+    if (v === view) return
+    setView(v)
+    setSearch('')
+    setFilter('all')
+    setCancelFilter('all')
+    setSelectedCustomer(null)
+    loadCustomers(v)
+  }
 
   const cancelCounts = useMemo(() => {
     return {
@@ -193,6 +228,9 @@ export default function CustomersManager() {
     setEditWalletBlocked(!!customer.wallet_blocked)
     setConfirmDelete(false)
     setDeleting(false)
+    setConfirmArchive(false)
+    setArchiving(false)
+    setRestoring(false)
 
     setNewTagInput('')
     setSaveMessage(null)
@@ -214,12 +252,63 @@ export default function CustomersManager() {
       const data = await res.json().catch(() => null)
       if (!res.ok) throw new Error(data?.error || 'حذف ناموفق بود')
       setCustomers((prev) => prev.filter((c) => c.phone !== selectedCustomer.phone))
+      setSummary((s) => ({ ...s, total: Math.max(0, s.total - 1), archived: Math.max(0, s.archived - 1) }))
       setSelectedCustomer(null)
     } catch (err) {
       setSaveMessage(`❌ ${err instanceof Error ? err.message : 'خطا در حذف'}`)
     } finally {
       setDeleting(false)
       setConfirmDelete(false)
+    }
+  }
+
+  // 📦 آرشیو: مشتری از لیست فعال‌ها و پنل مشتری خارج می‌شود ولی تاریخچه‌اش می‌ماند
+  async function archiveCustomer() {
+    if (!selectedCustomer || !confirmArchive) {
+      setConfirmArchive(true)
+      return
+    }
+    setArchiving(true)
+    setSaveMessage(null)
+    try {
+      const res = await fetch('/api/customers/archive', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: selectedCustomer.phone, archive: true }),
+      })
+      const data = await res.json().catch(() => null)
+      if (!res.ok) throw new Error(data?.error || 'آرشیو ناموفق بود')
+      setCustomers((prev) => prev.filter((c) => c.phone !== selectedCustomer.phone))
+      setSummary((s) => ({ ...s, total: Math.max(0, s.total - 1), archived: s.archived + 1 }))
+      setSelectedCustomer(null)
+    } catch (err) {
+      setSaveMessage(`❌ ${err instanceof Error ? err.message : 'خطا در آرشیو'}`)
+    } finally {
+      setArchiving(false)
+      setConfirmArchive(false)
+    }
+  }
+
+  // ↩️ بازگردانی از آرشیو
+  async function restoreCustomer() {
+    if (!selectedCustomer) return
+    setRestoring(true)
+    setSaveMessage(null)
+    try {
+      const res = await fetch('/api/customers/archive', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: selectedCustomer.phone, archive: false }),
+      })
+      const data = await res.json().catch(() => null)
+      if (!res.ok) throw new Error(data?.error || 'بازگردانی ناموفق بود')
+      setCustomers((prev) => prev.filter((c) => c.phone !== selectedCustomer.phone))
+      setSummary((s) => ({ ...s, total: s.total + 1, archived: Math.max(0, s.archived - 1) }))
+      setSelectedCustomer(null)
+    } catch (err) {
+      setSaveMessage(`❌ ${err instanceof Error ? err.message : 'خطا در بازگردانی'}`)
+    } finally {
+      setRestoring(false)
     }
   }
 
@@ -396,44 +485,66 @@ export default function CustomersManager() {
             <span>🔍</span>
             <input
               type="search"
-              placeholder="جستجوی نام یا شماره تماس..."
+              placeholder={view === 'archived' ? 'جستجو در آرشیو...' : 'جستجوی نام یا شماره تماس...'}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
-        </div>
-
-        <div className="customers-filters">
-          {(Object.keys(FILTER_LABELS) as CustomerFilter[]).map((f) => (
+          <div className="customers-filters" style={{ margin: '10px 0 0' }}>
             <button
-              key={f}
               type="button"
-              className={`filter-chip ${filter === f ? 'active' : ''}`}
-              onClick={() => setFilter(f)}
+              className={`filter-chip ${view === 'active' ? 'active' : ''}`}
+              onClick={() => switchView('active')}
             >
-              {FILTER_LABELS[f]}
+              👥 فعال‌ها
+              <span className="chip-count">{formatPrice(summary.total)}</span>
             </button>
-          ))}
-        </div>
-
-        <div className="customers-cancel-filters">
-          <span className="customers-cancel-label">🚫 فیلتر لغو:</span>
-          <div className="customers-cancel-chips">
-            {(Object.keys(CANCEL_FILTER_LABELS) as CancelFilter[]).map((f) => (
-              <button
-                key={f}
-                type="button"
-                className={`filter-chip cancel-chip ${
-                  cancelFilter === f ? 'active' : ''
-                } ${f !== 'all' ? 'chip-danger' : ''}`}
-                onClick={() => setCancelFilter(f)}
-              >
-                {CANCEL_FILTER_LABELS[f]}
-                <span className="chip-count">{formatPrice(cancelCounts[f])}</span>
-              </button>
-            ))}
+            <button
+              type="button"
+              className={`filter-chip ${view === 'archived' ? 'active' : ''}`}
+              onClick={() => switchView('archived')}
+            >
+              📦 آرشیو
+              <span className="chip-count">{formatPrice(summary.archived)}</span>
+            </button>
           </div>
         </div>
+
+        {view === 'active' && (
+          <>
+            <div className="customers-filters">
+              {(Object.keys(FILTER_LABELS) as CustomerFilter[]).map((f) => (
+                <button
+                  key={f}
+                  type="button"
+                  className={`filter-chip ${filter === f ? 'active' : ''}`}
+                  onClick={() => setFilter(f)}
+                >
+                  {FILTER_LABELS[f]}
+                </button>
+              ))}
+            </div>
+
+            <div className="customers-cancel-filters">
+              <span className="customers-cancel-label">🚫 فیلتر لغو:</span>
+              <div className="customers-cancel-chips">
+                {(Object.keys(CANCEL_FILTER_LABELS) as CancelFilter[]).map((f) => (
+                  <button
+                    key={f}
+                    type="button"
+                    className={`filter-chip cancel-chip ${
+                      cancelFilter === f ? 'active' : ''
+                    } ${f !== 'all' ? 'chip-danger' : ''}`}
+                    onClick={() => setCancelFilter(f)}
+                  >
+                    {CANCEL_FILTER_LABELS[f]}
+                    <span className="chip-count">{formatPrice(cancelCounts[f])}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
       </section>
 
       {loading ? (
@@ -447,7 +558,9 @@ export default function CustomersManager() {
               ? 'مشتری‌ای با این مشخصات پیدا نشد.'
               : cancelFilterActive
                 ? 'مشتری‌ای با این تعداد لغو پیدا نشد.'
-                : 'هنوز مشتری‌ای ثبت نشده است.'}
+                : view === 'archived'
+                  ? 'آرشیو خالی است. مشتری‌ای که آرشیو شود از لیست فعال‌ها به اینجا منتقل می‌شود.'
+                  : 'هنوز مشتری‌ای ثبت نشده است.'}
           </p>
         </div>
       ) : (
@@ -482,6 +595,9 @@ export default function CustomersManager() {
                   {customer.verification_status === 'verified' && (
                     <span className="customer-badge" style={{ background: '#e6f6ea', color: '#176a32' }}>✅ احراز</span>
                   )}
+                  {customer.archived && (
+                    <span className="customer-badge" style={{ background: '#eee9df', color: '#6b4f3a' }}>📦 آرشیو</span>
+                  )}
                   {customer.wallet_blocked && (
                     <span className="customer-badge" style={{ background: '#fdeaea', color: '#8f2020' }}>🚫 کیف پول</span>
                   )}
@@ -491,6 +607,12 @@ export default function CustomersManager() {
                 </div>
 
                 <div className="customer-card-body">
+                  {customer.archived && (
+                    <div className="customer-stat">
+                      <span>📦</span>
+                      <span>آرشیو شده: {timeAgo(customer.archived_at)}</span>
+                    </div>
+                  )}
                   <div className="customer-stat">
                     <span>🛒</span>
                     <span>{formatPrice(customer.order_count)} سفارش موفق</span>
@@ -580,38 +702,47 @@ export default function CustomersManager() {
             <div className="modal-body">
               <div className="info-card">
                 <h3>👤 پروفایل ثبت‌نامی</h3>
-                <div className="info-row" style={{ display: 'block' }}>
-                  <span>نام مشتری (نمایش در فرم‌ها و چک‌اوت):</span>
-                  <input
-                    type="text"
-                    value={editName}
-                    onChange={(e) => setEditName(e.target.value)}
-                    placeholder="نام و نام خانوادگی"
-                    disabled={saving}
-                    style={{ width: '100%', padding: '8px', marginTop: '6px', boxSizing: 'border-box' }}
-                  />
-                </div>
-                <div className="info-row" style={{ marginTop: '10px' }}>
-                  <span>وضعیت حساب (ثبت‌نام دعوتی/OTP):</span>
-                  <select
-                    value={editVerification}
-                    onChange={(e) => setEditVerification(e.target.value as 'verified' | 'unverified')}
-                    disabled={saving}
-                    style={{ padding: '6px 8px' }}
-                  >
-                    <option value="verified">✅ تأیید شده</option>
-                    <option value="unverified">⛔ تأیید نشده</option>
-                  </select>
-                </div>
-                <label style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '10px', cursor: 'pointer' }}>
-                  <input
-                    type="checkbox"
-                    checked={editWalletBlocked}
-                    onChange={(e) => setEditWalletBlocked(e.target.checked)}
-                    disabled={saving}
-                  />
-                  <span>🚫 مسدودسازی کیف پول این مشتری</span>
-                </label>
+                {selectedCustomer.archived ? (
+                  <div className="admin-message" style={{ background: '#fdf9f4', color: '#6b4f3a', marginBottom: '10px' }}>
+                    📦 این مشتری آرشیو شده است؛ از لیست فعال‌ها و پنل مشتری مخفی است و دسترسی کیف پولش غیرفعال شده.
+                    با ثبت‌نام دعوتیِ دوباره یا دکمه‌ی «بازگردانی» حسابش زنده می‌شود.
+                  </div>
+                ) : (
+                  <>
+                    <div className="info-row" style={{ display: 'block' }}>
+                      <span>نام مشتری (نمایش در فرم‌ها و چک‌اوت):</span>
+                      <input
+                        type="text"
+                        value={editName}
+                        onChange={(e) => setEditName(e.target.value)}
+                        placeholder="نام و نام خانوادگی"
+                        disabled={saving}
+                        style={{ width: '100%', padding: '8px', marginTop: '6px', boxSizing: 'border-box' }}
+                      />
+                    </div>
+                    <div className="info-row" style={{ marginTop: '10px' }}>
+                      <span>وضعیت حساب (ثبت‌نام دعوتی/OTP):</span>
+                      <select
+                        value={editVerification}
+                        onChange={(e) => setEditVerification(e.target.value as 'verified' | 'unverified')}
+                        disabled={saving}
+                        style={{ padding: '6px 8px' }}
+                      >
+                        <option value="verified">✅ تأیید شده</option>
+                        <option value="unverified">⛔ تأیید نشده</option>
+                      </select>
+                    </div>
+                    <label style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '10px', cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={editWalletBlocked}
+                        onChange={(e) => setEditWalletBlocked(e.target.checked)}
+                        disabled={saving}
+                      />
+                      <span>🚫 مسدودسازی کیف پول این مشتری</span>
+                    </label>
+                  </>
+                )}
                 <div className="info-row" style={{ marginTop: '10px' }}>
                   <span>📱 دستگاه ثبت‌نام:</span>
                   <strong style={{ fontSize: '12px' }}>{selectedCustomer.device_info || 'نامشخص'}</strong>
@@ -645,8 +776,9 @@ export default function CustomersManager() {
                   <strong>{timeAgo(selectedCustomer.last_order_at)}</strong>
                 </div>
               </div>
-              <div className="info-card" style={{ marginTop: '16px' }}>
-                <h3>💳 اعتبار پرداخت حضوری</h3>
+              {!selectedCustomer.archived && (
+                <div className="info-card" style={{ marginTop: '16px' }}>
+                  <h3>💳 اعتبار پرداخت حضوری</h3>
                 <div className="info-row">
                   <span>سفارش تسویه‌شده:</span>
                   <strong>{formatPrice(selectedCustomer.settled_orders)}</strong>
@@ -678,7 +810,8 @@ export default function CustomersManager() {
                   <option value="allow">همیشه مجاز</option>
                   <option value="block">همیشه مسدود</option>
                 </select>
-              </div>
+                </div>
+              )}
 
               <div className="info-card" style={{ marginTop: '16px' }}>
                 <h3>🏷️ تگ‌ها</h3>
@@ -751,15 +884,38 @@ export default function CustomersManager() {
             </div>
 
             <div className="modal-footer">
-              <button
-                type="button"
-                className="btn"
-                onClick={deleteCustomer}
-                disabled={deleting || saving}
-                style={{ background: confirmDelete ? '#8f2020' : '#fff', color: confirmDelete ? '#fff' : '#8f2020', border: '1px solid #e5b5b5' }}
-              >
-                {deleting ? '...' : confirmDelete ? '⚠️ تأیید حذف ثبت‌نام' : '🗑 حذف ثبت‌نام'}
-              </button>
+              {selectedCustomer.archived ? (
+                <>
+                  <button
+                    type="button"
+                    className="btn"
+                    onClick={restoreCustomer}
+                    disabled={restoring || deleting || saving}
+                    style={{ background: '#2d5d3e', color: '#fff', border: '1px solid #2d5d3e' }}
+                  >
+                    {restoring ? '...' : '↩️ بازگردانی'}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn"
+                    onClick={deleteCustomer}
+                    disabled={deleting || restoring || saving}
+                    style={{ background: confirmDelete ? '#8f2020' : '#fff', color: confirmDelete ? '#fff' : '#8f2020', border: '1px solid #e5b5b5' }}
+                  >
+                    {deleting ? '...' : confirmDelete ? '⚠️ تأیید حذف کامل' : '🗑 حذف کامل'}
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={archiveCustomer}
+                  disabled={archiving || deleting || saving}
+                  style={{ background: confirmArchive ? '#9b6a1f' : '#fff', color: confirmArchive ? '#fff' : '#9b6a1f', border: '1px solid #e2cfa8' }}
+                >
+                  {archiving ? '...' : confirmArchive ? '⚠️ تأیید آرشیو' : '📦 آرشیو'}
+                </button>
+              )}
               <button type="button" className="btn" onClick={() => setSelectedCustomer(null)} disabled={saving}>
                 بستن
               </button>
