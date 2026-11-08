@@ -17,6 +17,18 @@ export type WalletTx = {
 export type WalletView = {
   balance: number
   transactions: WalletTx[]
+  /** فقط وقتی صفحه‌بندی فعال است معنا دارد؛ true یعنی ردیف بیشتری هست */
+  hasMore?: boolean
+}
+
+/** درخواست شارژ کارت‌به‌کارتِ خود مشتری — برای نمایش وضعیت در پنل */
+export type CustomerChargeRequest = {
+  id: string
+  amount: number
+  status: string
+  tracking_no: string | null
+  reject_reason: string | null
+  created_at: string
 }
 
 // مبالغ به تومان؛ سقف/کف منطقی برای جلوگیری از ورودی‌های مسخره
@@ -137,17 +149,28 @@ export async function resolveCustomerByDevice(): Promise<ResolvedWalletCustomer 
 }
 
 /** سوییچ‌های سراسری کیف پول + آیا پیامک تنظیم شده؟ */
+export type WalletCardInfo = {
+  bankName: string | null
+  cardNumber: string
+  accountHolder: string | null
+}
+
 export type WalletFlags = {
   walletEnabled: boolean
   cardChargeEnabled: boolean
   chargeMin: number
+  chargeMax: number
+  /** کارت مقصد شارژ کارت‌به‌کارت — همان حساب «واریز به حساب» پرداخت */
+  cardInfo: WalletCardInfo | null
   smsConfigured: boolean
 }
 
 export async function getWalletFlags(): Promise<WalletFlags> {
   const { data } = await supabaseAdmin()
     .from('settings')
-    .select('payment_wallet_enabled, wallet_card_charge_enabled, wallet_charge_min, sms_api_key')
+    .select(
+      'payment_wallet_enabled, wallet_card_charge_enabled, wallet_charge_min, wallet_charge_max, payment_transfer_bank_name, payment_transfer_card_number, payment_transfer_account_holder, sms_api_key'
+    )
     .eq('id', 1)
     .single()
 
@@ -155,6 +178,14 @@ export async function getWalletFlags(): Promise<WalletFlags> {
     walletEnabled: Boolean(data?.payment_wallet_enabled),
     cardChargeEnabled: Boolean(data?.wallet_card_charge_enabled),
     chargeMin: Number(data?.wallet_charge_min ?? 50000),
+    chargeMax: Number(data?.wallet_charge_max ?? 10_000_000),
+    cardInfo: data?.payment_transfer_card_number
+      ? {
+          bankName: (data.payment_transfer_bank_name as string) ?? null,
+          cardNumber: data.payment_transfer_card_number as string,
+          accountHolder: (data.payment_transfer_account_holder as string) ?? null,
+        }
+      : null,
     smsConfigured: Boolean(data?.sms_api_key || process.env.KAVENEGAR_API_KEY),
   }
 }
@@ -202,8 +233,17 @@ export async function ensureActivationTx(customerId: string): Promise<void> {
   if (error) console.error('[wallet] activation tx failed:', error.message)
 }
 
-export async function getWalletView(customerId: string): Promise<WalletView> {
+/**
+ * نمای کیف پول با صفحه‌بندی — limit+1 خوانده می‌شود تا hasMore قابل اعتماد باشد.
+ * ادمین (adminWalletByPhone) با پیش‌فرض‌ها همه‌ی ۵۰ ردیف را می‌گیرد.
+ */
+export async function getWalletView(
+  customerId: string,
+  opts?: { limit?: number; offset?: number }
+): Promise<WalletView> {
   const db = supabaseAdmin()
+  const limit = Math.min(Math.max(opts?.limit ?? 50, 1), 100)
+  const offset = Math.max(opts?.offset ?? 0, 0)
 
   const { data: balanceData, error: balanceError } = await db.rpc('wallet_balance', {
     p_customer_id: customerId,
@@ -218,17 +258,39 @@ export async function getWalletView(customerId: string): Promise<WalletView> {
     .select('id, amount, kind, status, note, order_id, created_at')
     .eq('customer_id', customerId)
     .order('created_at', { ascending: false })
-    .limit(50)
+    .range(offset, offset + limit) // limit+1 سطر برای تشخیص hasMore
 
   if (txError) {
     console.error('[wallet] tx read failed:', txError.message)
     throw new Error('خطا در خواندن تراکنش‌ها')
   }
 
+  const rows = (tx ?? []) as WalletTx[]
+  const hasMore = rows.length > limit
+
   return {
     balance: Number(balanceData ?? 0),
-    transactions: (tx ?? []) as WalletTx[],
+    transactions: hasMore ? rows.slice(0, limit) : rows,
+    hasMore,
   }
+}
+
+/** درخواست‌های شارژ کارت‌به‌کارت خود مشتری (آخرین ۱۰ مورد) — برای چیپ وضعیت در پنل */
+export async function getCustomerChargeRequests(
+  customerId: string,
+  limit = 10
+): Promise<CustomerChargeRequest[]> {
+  const { data, error } = await supabaseAdmin()
+    .from('wallet_charge_requests')
+    .select('id, amount, status, tracking_no, reject_reason, created_at')
+    .eq('customer_id', customerId)
+    .order('created_at', { ascending: false })
+    .limit(limit)
+  if (error) {
+    console.error('[wallet] charge requests read failed:', error.message)
+    return []
+  }
+  return (data ?? []) as CustomerChargeRequest[]
 }
 
 /** شارژ توسط ادمین بر اساس شماره تلفن مشتری */

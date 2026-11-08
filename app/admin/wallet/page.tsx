@@ -40,6 +40,26 @@ type ActivationRequest = {
   customer: { verification_status: string; wallet_blocked: boolean; device_info: string | null } | null
 }
 
+type ChargeRequest = {
+  id: string
+  amount: number
+  status: string
+  receipt_url: string | null
+  tracking_no: string | null
+  reject_reason: string | null
+  created_at: string
+  customer: { phone: string | null; name: string | null; wallet_blocked: boolean; card_charge_blocked: boolean } | null
+}
+
+type WalletSettings = {
+  wallet_card_charge_enabled: boolean
+  wallet_charge_min: number
+  wallet_charge_max: number
+  payment_transfer_bank_name: string | null
+  payment_transfer_card_number: string | null
+  payment_transfer_account_holder: string | null
+}
+
 const KIND_LABELS: Record<string, string> = {
   admin_charge: 'شارژ توسط ادمین',
   online_charge: 'شارژ آنلاین',
@@ -109,11 +129,21 @@ export default function WalletPage() {
   const [requests, setRequests] = useState<ActivationRequest[]>([])
   const [reviewBusy, setReviewBusy] = useState<string | null>(null)
 
+  // 🧾 رسیدهای شارژ کارت‌به‌کارت
+  const [chargeReqs, setChargeReqs] = useState<ChargeRequest[]>([])
+
+  // ⚙️ تنظیمات کیف پول (سوییچ‌های سراسری)
+  const [wset, setWset] = useState<WalletSettings | null>(null)
+  const [setBusy, setSetBusy] = useState(false)
+
   const loadRequests = useCallback(async () => {
     try {
       const res = await fetch('/api/admin/wallet/requests', { cache: 'no-store', credentials: 'same-origin' })
       const json = await res.json()
-      if (res.ok) setRequests(json.activationRequests ?? [])
+      if (res.ok) {
+        setRequests(json.activationRequests ?? [])
+        setChargeReqs(json.chargeRequests ?? [])
+      }
     } catch {}
   }, [])
 
@@ -125,10 +155,48 @@ export default function WalletPage() {
     } catch {}
   }, [])
 
+  const loadSettings = useCallback(async () => {
+    try {
+      const res = await fetch('/api/admin/wallet/settings', { cache: 'no-store', credentials: 'same-origin' })
+      const json = await res.json()
+      if (res.ok) setWset(json)
+    } catch {}
+  }, [])
+
   useEffect(() => {
     loadRequests()
     loadInvites()
-  }, [loadRequests, loadInvites])
+    loadSettings()
+  }, [loadRequests, loadInvites, loadSettings])
+
+  async function saveSettings() {
+    if (!wset) return
+    setSetBusy(true)
+    setMsg(null)
+    try {
+      const res = await fetch('/api/admin/wallet/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({
+          wallet_card_charge_enabled: wset.wallet_card_charge_enabled,
+          wallet_charge_min: wset.wallet_charge_min,
+          wallet_charge_max: wset.wallet_charge_max,
+        }),
+      })
+      const json = await res.json()
+      if (!res.ok) {
+        setMsg({ kind: 'err', text: json.error || 'ذخیره ناموفق بود' })
+      } else {
+        setMsg({ kind: 'ok', text: 'تنظیمات کیف پول ذخیره شد ✓' })
+        await loadSettings()
+      }
+    } catch {
+      setMsg({ kind: 'err', text: 'ارتباط با سرور برقرار نشد' })
+    } finally {
+      setSetBusy(false)
+    }
+  }
 
   async function createInvite() {
     setInviteBusy(true)
@@ -214,6 +282,43 @@ export default function WalletPage() {
         setMsg({
           kind: 'ok',
           text: action === 'approve' ? 'مشتری تأیید شد ✓ — کیف پولش فعال است' : 'درخواست رد شد',
+        })
+      }
+      await loadRequests()
+    } catch {
+      setMsg({ kind: 'err', text: 'ارتباط با سرور برقرار نشد' })
+    } finally {
+      setReviewBusy(null)
+    }
+  }
+
+  /** تأیید/رد رسید شارژ — رد دلیل الزامی دارد (برای مشتری نمایش داده می‌شود) */
+  async function reviewCharge(id: string, action: 'approve' | 'reject') {
+    let rejectReason: string | undefined
+    if (action === 'reject') {
+      const input = prompt('دلیل رد (برای مشتری نمایش داده می‌شود):')
+      if (input === null) return
+      if (!input.trim()) {
+        setMsg({ kind: 'err', text: 'برای رد کردن، نوشتن دلیل الزامی است' })
+        return
+      }
+      rejectReason = input.trim()
+    }
+    setReviewBusy(id)
+    try {
+      const res = await fetch('/api/admin/wallet/requests', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ id, type: 'charge', action, reject_reason: rejectReason }),
+      })
+      const json = await res.json()
+      if (!res.ok) {
+        setMsg({ kind: 'err', text: json.error || 'بررسی ناموفق بود' })
+      } else {
+        setMsg({
+          kind: 'ok',
+          text: action === 'approve' ? 'رسید تأیید شد و کیف پول مشتری شارژ شد ✓' : 'درخواست شارژ رد شد',
         })
       }
       await loadRequests()
@@ -322,6 +427,94 @@ export default function WalletPage() {
           {loading ? '…' : 'جست‌وجو'}
         </button>
       </form>
+
+      {/* ⚙️ تنظیمات کیف پول — سوییچ‌های سراسری */}
+      <div style={{ marginTop: 24, padding: '14px 18px', borderRadius: 10, border: '1px solid #e5e0da' }}>
+        <strong style={{ fontSize: 14 }}>⚙️ تنظیمات کیف پول</strong>
+        {!wset ? (
+          <p style={{ opacity: 0.6, fontSize: 13 }}>در حال بارگذاری…</p>
+        ) : (
+          <>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, marginTop: 10 }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 700 }}>🏦 شارژ کارت‌به‌کارت توسط مشتری</div>
+                <small style={{ opacity: 0.65, fontSize: 11.5, lineHeight: 1.8, display: 'block' }}>
+                  وقتی روشن باشد، مشتری از تب کیف پول پنلش رسید واریز می‌فرستد و از همین صفحه تأییدش می‌کنی.
+                </small>
+              </div>
+              <button
+                type="button"
+                className={`auto-switch ${wset.wallet_card_charge_enabled ? 'on' : 'off'}`}
+                onClick={() => setWset({ ...wset, wallet_card_charge_enabled: !wset.wallet_card_charge_enabled })}
+                disabled={setBusy}
+              >
+                <span className="auto-switch-track"><span className="auto-switch-thumb" /></span>
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', gap: 10, marginTop: 12, flexWrap: 'wrap' }}>
+              <label style={{ flex: 1, minWidth: 160, fontSize: 12 }}>
+                کف شارژ (تومان)
+                <input
+                  type="number"
+                  dir="ltr"
+                  min={1000}
+                  step={1000}
+                  value={wset.wallet_charge_min}
+                  onChange={(e) => setWset({ ...wset, wallet_charge_min: Math.max(0, Number(e.target.value) || 0) })}
+                  style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #ccc', fontSize: 13, marginTop: 4 }}
+                />
+              </label>
+              <label style={{ flex: 1, minWidth: 160, fontSize: 12 }}>
+                سقف شارژ (تومان)
+                <input
+                  type="number"
+                  dir="ltr"
+                  min={1000}
+                  step={1000}
+                  value={wset.wallet_charge_max}
+                  onChange={(e) => setWset({ ...wset, wallet_charge_max: Math.max(0, Number(e.target.value) || 0) })}
+                  style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #ccc', fontSize: 13, marginTop: 4 }}
+                />
+              </label>
+            </div>
+
+            {wset.payment_transfer_card_number ? (
+              <small style={{ display: 'block', opacity: 0.65, fontSize: 11.5, marginTop: 10 }}>
+                کارت مقصدی که مشتری می‌بیند: <strong dir="ltr">{wset.payment_transfer_card_number}</strong>
+                {wset.payment_transfer_bank_name ? ` (${wset.payment_transfer_bank_name})` : ''} — از{' '}
+                <Link href="/admin/settings/payment" style={{ color: '#6f4e37' }}>تنظیمات پرداخت</Link> تغییرش بده.
+              </small>
+            ) : (
+              <small style={{ display: 'block', color: '#8f2020', fontSize: 11.5, marginTop: 10 }}>
+                ⚠️ هنوز شماره کارت مقصد تنظیم نشده — از{' '}
+                <Link href="/admin/settings/payment" style={{ color: '#8f2020' }}>تنظیمات پرداخت → واریز به حساب</Link> شماره کارت را وارد کن؛
+                تا آن موقع فرم شارژ برای مشتری باز نمی‌شود.
+              </small>
+            )}
+
+            <div style={{ marginTop: 12 }}>
+              <button
+                type="button"
+                onClick={saveSettings}
+                disabled={setBusy}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: 8,
+                  border: 'none',
+                  background: setBusy ? '#999' : '#6f4e37',
+                  color: '#fff',
+                  fontWeight: 700,
+                  fontSize: 13,
+                  cursor: setBusy ? 'default' : 'pointer',
+                }}
+              >
+                {setBusy ? '…' : '💾 ذخیره تنظیمات'}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
 
       {/* 🎟 دعوت مشتری — لیست همه‌ی کدها با وضعیت */}
       <div style={{ marginTop: 24, padding: '14px 18px', borderRadius: 10, border: '1px solid #e5e0da' }}>
@@ -491,6 +684,94 @@ export default function WalletPage() {
                       <button
                         type="button"
                         onClick={() => reviewRequest(r.id, 'reject')}
+                        disabled={reviewBusy === r.id}
+                        style={{ padding: '7px 14px', borderRadius: 8, border: '1px solid #e5b5b5', background: '#fff', color: '#8f2020', fontSize: 12, cursor: 'pointer' }}
+                      >
+                        رد
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* 🧾 رسیدهای شارژ کارت‌به‌کارت — تأیید = شارژ واقعی کیف پول */}
+      <div style={{ marginTop: 16, padding: '14px 18px', borderRadius: 10, border: '1px solid #e5e0da' }}>
+        <strong style={{ fontSize: 14 }}>
+          🧾 رسیدهای شارژ کارت‌به‌کارت
+          {chargeReqs.filter((r) => r.status === 'pending').length > 0 && (
+            <span
+              style={{
+                marginRight: 8,
+                background: '#8f2020',
+                color: '#fff',
+                borderRadius: 999,
+                padding: '2px 8px',
+                fontSize: 11,
+              }}
+            >
+              {chargeReqs.filter((r) => r.status === 'pending').length}
+            </span>
+          )}
+        </strong>
+
+        {chargeReqs.length === 0 ? (
+          <p style={{ opacity: 0.6, fontSize: 13 }}>درخواست شارژی ثبت نشده است.</p>
+        ) : (
+          <div style={{ marginTop: 10, display: 'grid', gap: 8 }}>
+            {chargeReqs.map((r) => (
+              <div key={r.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '10px 12px', borderRadius: 8, border: '1px solid #e5e0da', fontSize: 13, background: r.status === 'pending' ? '#fffdf7' : '#faf8f5' }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                    {fmt(r.amount)} تومان
+                    {r.customer?.name && <span>— {r.customer.name}</span>}
+                    {r.customer?.phone && <span dir="ltr" style={{ fontWeight: 'normal', opacity: 0.75 }}>{r.customer.phone}</span>}
+                    {r.status === 'pending' && (
+                      <span style={{ background: '#fff4d9', color: '#8a6d3b', borderRadius: 999, padding: '1px 8px', fontSize: 10, fontWeight: 700 }}>در انتظار بررسی</span>
+                    )}
+                    {r.status === 'approved' && (
+                      <span style={{ background: '#e6f6ea', color: '#176a32', borderRadius: 999, padding: '1px 8px', fontSize: 10, fontWeight: 700 }}>تأییدشده ✓</span>
+                    )}
+                    {r.status === 'rejected' && (
+                      <span style={{ background: '#fdeaea', color: '#8f2020', borderRadius: 999, padding: '1px 8px', fontSize: 10, fontWeight: 700 }}>ردشده ✗</span>
+                    )}
+                    {r.customer?.card_charge_blocked && (
+                      <span style={{ background: '#fdeaea', color: '#8f2020', borderRadius: 999, padding: '1px 8px', fontSize: 10, fontWeight: 700 }}>شارژ مسدود</span>
+                    )}
+                  </div>
+                  <div style={{ opacity: 0.65, fontSize: 11 }}>
+                    {formatPersianDate(r.created_at)}
+                    {r.tracking_no ? ` — پیگیری: ${r.tracking_no}` : ''}
+                    {r.status === 'rejected' && r.reject_reason ? ` — دلیل: ${r.reject_reason}` : ''}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                  {r.customer?.phone && (
+                    <Link href={`/admin/customers?phone=${encodeURIComponent(r.customer.phone)}`} style={{ ...btnSecondary, textDecoration: 'none' }}>
+                      👤 پرونده
+                    </Link>
+                  )}
+                  {r.receipt_url && (
+                    <a href={r.receipt_url} target="_blank" rel="noopener noreferrer" style={{ ...btnSecondary, textDecoration: 'none' }}>
+                      🧾 دیدن رسید
+                    </a>
+                  )}
+                  {r.status === 'pending' && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => reviewCharge(r.id, 'approve')}
+                        disabled={reviewBusy === r.id}
+                        style={{ padding: '7px 14px', borderRadius: 8, border: 'none', background: '#2e7d32', color: '#fff', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}
+                      >
+                        {reviewBusy === r.id ? '…' : 'تأیید و شارژ'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => reviewCharge(r.id, 'reject')}
                         disabled={reviewBusy === r.id}
                         style={{ padding: '7px 14px', borderRadius: 8, border: '1px solid #e5b5b5', background: '#fff', color: '#8f2020', fontSize: 12, cursor: 'pointer' }}
                       >

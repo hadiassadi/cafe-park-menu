@@ -5,12 +5,14 @@ import Link from 'next/link'
 import { useCart } from '@/lib/cart-context'
 import { formatPersianDate } from '@/lib/format-date'
 import { walletTxKindLabel, walletTxKindIcon, walletTxStatusLabel } from '@/lib/wallet/labels'
+import { normalizeTrackingNo } from '@/lib/wallet/charge'
 
 const formatPrice = (n: number) => new Intl.NumberFormat('fa-IR').format(Math.round(n))
 
 type OrderItem = { product_name: string; option_name: string | null; unit_price: number; quantity: number; variant_option_id?: string | null; variant_group_id?: string | null; product_id?: string | null; image_url?: string | null }
 type Order = { id: string; order_number: number; items: OrderItem[]; subtotal: number; original_subtotal: number | null; coupon_code: string | null; coupon_discount: number | null; status: string; created_at: string; cancelled_by: string | null; cancellation_reason_label: string | null; customer_name: string; customer_phone: string; payment_status?: string; payment_method?: string; paid_amount?: number }
 type WalletTx = { id: string; amount: number; kind: string; status: string | null; note: string | null; order_id: string | null; created_at: string }
+type ChargeReq = { id: string; amount: number; status: string; tracking_no: string | null; reject_reason: string | null; created_at: string }
 
 const STATUS_INFO: Record<string, { label: string; color: string; icon: string }> = {
   pending: { label: 'در انتظار تأیید', color: '#9a6b3f', icon: '⏳' },
@@ -53,22 +55,34 @@ export default function MyOrdersClient() {
   const [rules, setRules] = useState<{ general: string; org: string }>({ general: 'در حال بارگذاری...', org: 'در حال بارگذاری...' })
 
   // 👛 کیف پول مشتری — با اولین باز کردن تب لود می‌شود
-  const [walletView, setWalletView] = useState<{ balance: number; transactions: WalletTx[] } | null>(null)
+  const [walletView, setWalletView] = useState<{ balance: number; transactions: WalletTx[]; hasMore?: boolean; chargeRequests?: ChargeReq[] } | null>(null)
   const [walletState, setWalletState] = useState<'idle' | 'loading' | 'ready' | 'login' | 'error' | 'blocked'>('idle')
   const [walletLoadedOnce, setWalletLoadedOnce] = useState(false)
+  const [moreBusy, setMoreBusy] = useState(false)
 
   // 🔐 وضعیت احراز/فعال‌سازی — در ورود به پنل چک می‌شود
   const [wstatus, setWstatus] = useState<{
     walletEnabled: boolean
     cardChargeEnabled: boolean
     smsConfigured: boolean
-    customer: { id: string; name: string | null; phone: string | null; verification_status: string; wallet_blocked: boolean; balance: number } | null
+    chargeMin?: number
+    chargeMax?: number
+    cardInfo?: { bankName: string | null; cardNumber: string; accountHolder: string | null } | null
+    customer: { id: string; name: string | null; phone: string | null; verification_status: string; wallet_blocked: boolean; card_charge_blocked?: boolean; balance: number } | null
   } | null>(null)
 
   // 🤝 درخواست فعال‌سازی حضوری از مدیر
   const [reqState, setReqState] = useState<'idle' | 'busy' | 'sent' | 'error'>('idle')
   const [reqError, setReqError] = useState<string | null>(null)
   const [showOtpForm, setShowOtpForm] = useState(false)
+
+  // 🏦 شارژ کارت‌به‌کارت — فرم و وضعیت ارسال
+  const [showChargeForm, setShowChargeForm] = useState(false)
+  const [chargeAmount, setChargeAmount] = useState('')
+  const [chargeTracking, setChargeTracking] = useState('')
+  const [chargeFile, setChargeFile] = useState<File | null>(null)
+  const [chargeBusy, setChargeBusy] = useState(false)
+  const [chargeMsg, setChargeMsg] = useState<{ ok: boolean; text: string } | null>(null)
 
   useEffect(() => {
     fetch('/api/wallet/status', { cache: 'no-store' })
@@ -146,21 +160,76 @@ export default function MyOrdersClient() {
     setTimeout(() => { window.location.href = '/cart' }, 800)
   }
 
-  async function loadWallet() {
-    setWalletState('loading')
+  async function loadWallet(opts?: { more?: boolean }) {
+    const more = !!opts?.more
+    const offset = more ? (walletView?.transactions.length ?? 0) : 0
+    if (more) setMoreBusy(true)
+    else setWalletState('loading')
     try {
-      const res = await fetch('/api/wallet', { cache: 'no-store' })
+      const res = await fetch(`/api/wallet${offset ? `?offset=${offset}` : ''}`, { cache: 'no-store' })
       if (res.status === 401) { setWalletState('login'); return }
       if (res.status === 403) { setWalletState('blocked'); return }
       const data = await res.json().catch(() => null)
       if (!res.ok || !data) throw new Error('خطا در خواندن کیف پول')
-      setWalletView({
+      const page = {
         balance: Number(data.balance ?? 0),
-        transactions: Array.isArray(data.transactions) ? data.transactions : [],
-      })
-      setWalletState('ready')
+        transactions: Array.isArray(data.transactions) ? (data.transactions as WalletTx[]) : [],
+        hasMore: Boolean(data.hasMore),
+        chargeRequests: Array.isArray(data.chargeRequests) ? (data.chargeRequests as ChargeReq[]) : undefined,
+      }
+      if (more) {
+        // صفحه‌ی بعدی: تراکنش‌ها اضافه می‌شوند؛ چیپ‌های درخواست‌ها از صفحه‌ی اول می‌مانند
+        setWalletView((prev) => (prev
+          ? { ...page, transactions: [...prev.transactions, ...page.transactions], chargeRequests: prev.chargeRequests }
+          : page))
+      } else {
+        setWalletView(page)
+        setWalletState('ready')
+      }
     } catch {
-      setWalletState('error')
+      if (!more) setWalletState('error')
+    } finally {
+      if (more) setMoreBusy(false)
+    }
+  }
+
+  async function submitCharge() {
+    const min = wstatus?.chargeMin ?? 50000
+    const max = wstatus?.chargeMax ?? 10_000_000
+    const amount = Number(normalizeTrackingNo(chargeAmount))
+    if (!amount || amount < min || amount > max) {
+      setChargeMsg({ ok: false, text: `مبلغ باید بین ${formatPrice(min)} و ${formatPrice(max)} تومان باشد` })
+      return
+    }
+    const tracking = normalizeTrackingNo(chargeTracking)
+    if (tracking.length < 4) {
+      setChargeMsg({ ok: false, text: 'شماره پیگیری واریز را وارد کن (حداقل ۴ رقم)' })
+      return
+    }
+    if (!chargeFile) {
+      setChargeMsg({ ok: false, text: 'عکس رسید واریز را انتخاب کن' })
+      return
+    }
+    setChargeBusy(true)
+    setChargeMsg(null)
+    try {
+      const fd = new FormData()
+      fd.append('amount', String(amount))
+      fd.append('tracking_no', tracking)
+      fd.append('file', chargeFile)
+      const res = await fetch('/api/wallet/charge-request', { method: 'POST', body: fd })
+      const data = await res.json().catch(() => null)
+      if (!res.ok) throw new Error(data?.error || 'ثبت درخواست ناموفق بود')
+      setChargeMsg({ ok: true, text: '✅ درخواستت ثبت شد؛ بعد از تأیید مدیر، کیف پولت شارژ می‌شود.' })
+      setChargeAmount('')
+      setChargeTracking('')
+      setChargeFile(null)
+      setShowChargeForm(false)
+      await loadWallet()
+    } catch (err: any) {
+      setChargeMsg({ ok: false, text: err.message })
+    } finally {
+      setChargeBusy(false)
     }
   }
 
@@ -503,7 +572,7 @@ export default function MyOrdersClient() {
           {walletState === 'error' && (
             <div className="my-orders-empty" style={{ lineHeight: 2 }}>
               ⚠️ خطا در خواندن کیف پول.<br />
-              <button onClick={loadWallet} className="primary-btn" style={{ marginTop: 10, padding: '8px 20px', borderRadius: 8, cursor: 'pointer' }}>
+              <button onClick={() => loadWallet()} className="primary-btn" style={{ marginTop: 10, padding: '8px 20px', borderRadius: 8, cursor: 'pointer' }}>
                 تلاش دوباره
               </button>
             </div>
@@ -521,6 +590,98 @@ export default function MyOrdersClient() {
                   در صفحه‌ی پرداخت می‌توانی موجودی کیف پول را خرج کنی.
                 </small>
               </div>
+
+              {/* چیپ وضعیت درخواست‌های شارژ کارت‌به‌کارت (در انتظار / ردشده) */}
+              {(walletView.chargeRequests ?? []).filter((r) => r.status !== 'approved').slice(0, 3).map((r) => (
+                <div key={r.id} style={{ background: r.status === 'pending' ? '#fff4d9' : '#fdecea', border: `1px solid ${r.status === 'pending' ? '#ecd9a8' : '#f5c6c0'}`, borderRadius: '10px', padding: '8px 12px', marginTop: '10px', fontSize: '11.5px', color: r.status === 'pending' ? '#8a6d3b' : '#9b3c32', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                  <span style={{ lineHeight: 1.8 }}>
+                    {r.status === 'pending' ? '⏳' : '❌'} درخواست شارژ {formatPrice(r.amount)} تومان —{' '}
+                    {r.status === 'pending' ? 'در انتظار تأیید مدیر' : `رد شد${r.reject_reason ? `: ${r.reject_reason}` : ''}`}
+                  </span>
+                  {r.tracking_no && <span dir="ltr" style={{ opacity: 0.7 }}>#{r.tracking_no}</span>}
+                </div>
+              ))}
+
+              {/* 🏦 شارژ کارت‌به‌کارت — فقط وقتی ادمین روشنش کرده و مشتری مسدود نباشد */}
+              {wstatus?.cardChargeEnabled && wstatus.customer && !wstatus.customer.card_charge_blocked && wstatus.cardInfo && (
+                <div style={{ background: '#fff', border: '1.5px solid #e3ddd2', borderRadius: '14px', padding: '14px', marginTop: '12px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <strong style={{ fontSize: '13.5px', color: '#29251f' }}>🏦 شارژ کارت‌به‌کارت</strong>
+                    <button onClick={() => setShowChargeForm(!showChargeForm)} style={{ background: 'none', border: 'none', color: '#9a6b3f', fontSize: '12px', cursor: 'pointer', fontFamily: 'inherit' }}>
+                      {showChargeForm ? 'بستن' : 'شارژ می‌خواهم +'}
+                    </button>
+                  </div>
+                  <small style={{ display: 'block', fontSize: '11px', color: '#766f64', marginTop: '4px', lineHeight: 1.8 }}>
+                    به کارت زیر واریز کن؛ بعد مبلغ و شماره پیگیری را با عکس رسید بفرست تا مدیر تأیید کند.
+                  </small>
+
+                  <div style={{ background: '#fbf9f5', border: '1px dashed #d8d0c4', borderRadius: '10px', padding: '10px 12px', marginTop: '10px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      {wstatus.cardInfo.bankName && <div style={{ fontSize: '11px', color: '#766f64' }}>{wstatus.cardInfo.bankName}</div>}
+                      <strong style={{ fontSize: '14px', color: '#29251f', display: 'block', direction: 'ltr', textAlign: 'right', letterSpacing: '1px', wordBreak: 'break-all' }}>
+                        {wstatus.cardInfo.cardNumber}
+                      </strong>
+                      {wstatus.cardInfo.accountHolder && <div style={{ fontSize: '11px', color: '#766f64' }}>به نام {wstatus.cardInfo.accountHolder}</div>}
+                    </div>
+                    <button
+                      onClick={() => { navigator.clipboard?.writeText(wstatus!.cardInfo!.cardNumber); setToast('شماره کارت کپی شد ✓') }}
+                      style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid #d8d0c4', background: '#fff', color: '#6b4f3a', fontSize: '11.5px', fontWeight: 'bold', cursor: 'pointer', fontFamily: 'inherit' }}
+                    >
+                      📋 کپی
+                    </button>
+                  </div>
+
+                  {showChargeForm && (
+                    <div style={{ display: 'grid', gap: '8px', marginTop: '12px' }}>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <input
+                          dir="ltr"
+                          value={chargeAmount}
+                          onChange={(e) => setChargeAmount(e.target.value)}
+                          placeholder={`مبلغ (حداقل ${formatPrice(wstatus.chargeMin ?? 50000)})`}
+                          inputMode="numeric"
+                          style={{ flex: 1, padding: '10px 12px', borderRadius: '10px', border: '1px solid #e3ddd2', fontSize: '13px', minWidth: 0 }}
+                        />
+                        <input
+                          dir="ltr"
+                          value={chargeTracking}
+                          onChange={(e) => setChargeTracking(e.target.value)}
+                          placeholder="شماره پیگیری"
+                          inputMode="numeric"
+                          style={{ flex: 1, padding: '10px 12px', borderRadius: '10px', border: '1px solid #e3ddd2', fontSize: '13px', minWidth: 0 }}
+                        />
+                      </div>
+                      <label style={{ display: 'block', fontSize: '12px', color: '#766f64' }}>
+                        📷 عکس رسید واریز:
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) => setChargeFile(e.target.files?.[0] ?? null)}
+                          style={{ display: 'block', marginTop: '6px', fontSize: '12px' }}
+                        />
+                        {chargeFile && <small style={{ display: 'block', color: '#2d5d3e', marginTop: '4px' }}>{chargeFile.name}</small>}
+                      </label>
+                      <button
+                        onClick={submitCharge}
+                        disabled={chargeBusy}
+                        style={{
+                          padding: '11px 14px', borderRadius: '10px', border: 'none',
+                          background: chargeBusy ? '#999' : '#2d5d3e',
+                          color: '#fff', fontSize: '13px', fontWeight: 'bold',
+                          cursor: chargeBusy ? 'default' : 'pointer', fontFamily: 'inherit',
+                        }}
+                      >
+                        {chargeBusy ? '⏳ در حال ارسال...' : '📩 ارسال درخواست شارژ'}
+                      </button>
+                      {chargeMsg && (
+                        <div style={{ fontSize: '11.5px', textAlign: 'center', color: chargeMsg.ok ? '#2d5d3e' : '#9b3c32', lineHeight: 1.8 }}>
+                          {chargeMsg.text}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {walletView.transactions.length === 0 ? (
                 <div className="my-orders-empty" style={{ marginTop: '16px' }}>
@@ -556,6 +717,21 @@ export default function MyOrdersClient() {
                       </div>
                     )
                   })}
+
+                  {walletView.hasMore && (
+                    <button
+                      onClick={() => loadWallet({ more: true })}
+                      disabled={moreBusy}
+                      style={{
+                        marginTop: '4px', width: '100%', padding: '10px', borderRadius: '10px',
+                        border: '1px solid #e3ddd2', background: '#fff', color: '#6b4f3a',
+                        fontSize: '13px', fontWeight: 'bold',
+                        cursor: moreBusy ? 'default' : 'pointer', fontFamily: 'inherit',
+                      }}
+                    >
+                      {moreBusy ? '⏳' : '⬇️ نمایش تراکنش‌های قدیمی‌تر'}
+                    </button>
+                  )}
                 </div>
               )}
             </>
