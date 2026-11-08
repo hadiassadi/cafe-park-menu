@@ -1,6 +1,6 @@
 // فهرست یکتای روش‌های پرداخت. هم سرور و هم کلاینت از همین فایل می‌خوانند.
 
-export const PAYMENT_METHODS = ['cash', 'card', 'transfer', 'online'] as const
+export const PAYMENT_METHODS = ['cash', 'card', 'transfer', 'online', 'wallet'] as const
 export type PaymentMethod = (typeof PAYMENT_METHODS)[number]
 
 export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
@@ -8,6 +8,7 @@ export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
   card: 'کارت‌خوان',
   transfer: 'کارت به کارت',
   online: 'آنلاین',
+  wallet: 'کیف پول',
 }
 
 export function isPaymentMethod(v: unknown): v is PaymentMethod {
@@ -20,6 +21,7 @@ export type PaymentSettingsFlags = {
   payment_card_enabled?: boolean | null
   payment_transfer_enabled?: boolean | null
   payment_online_enabled?: boolean | null
+  payment_wallet_enabled?: boolean | null
 }
 
 // روش‌های فعال بر اساس تنظیمات پرداخت
@@ -30,6 +32,7 @@ export function getEnabledMethods(s: PaymentSettingsFlags | null | undefined): P
   if (s.payment_card_enabled) out.push('card')
   if (s.payment_transfer_enabled) out.push('transfer')
   if (s.payment_online_enabled) out.push('online')
+  if (s.payment_wallet_enabled) out.push('wallet')
   return out
 }
 
@@ -42,5 +45,12 @@ export function paymentErrorMessage(raw: string | undefined | null): string {
   if (m.includes('order_not_found')) return 'سفارش پیدا نشد.'
   if (m.includes('invalid_amount')) return 'مبلغ نامعتبر است.'
   if (m.includes('payment_already_final')) return 'وضعیت این پرداخت قبلاً مشخص شده است.'
+  if (m.includes('insufficient_wallet_balance'))
+    return 'موجودی کیف پول کافی نیست؛ اول کیف پول را شارژ کن.'
+  if (m.includes('nothing_to_pay')) return 'چیزی برای پرداخت باقی نمانده است.'
+  if (m.includes('wallet_customer_not_found'))
+    return 'کیف پولی برای شمارهٔ این سفارش پیدا نشد.'
+  if (m.includes('pending_receipts'))
+    return 'رسید در انتظار بررسی دارد؛ ابتدا باید مدیر آن را تأیید یا رد کند.'
   return 'خطا در ثبت پرداخت'
 }

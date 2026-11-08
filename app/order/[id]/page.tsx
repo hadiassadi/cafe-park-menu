@@ -125,7 +125,9 @@ export default function OrderPage({
     payment_cash_enabled: boolean
     payment_card_enabled: boolean
     payment_transfer_enabled: boolean
+    payment_wallet_enabled: boolean
   } | null>(null)
+  const [walletBalance, setWalletBalance] = useState<number | null>(null)
 
   useEffect(() => {
     setMounted(true)
@@ -187,6 +189,12 @@ export default function OrderPage({
     fetch('/api/payment/settings', { cache: 'no-store' })
       .then((res) => res.json())
       .then((data) => setPaymentSettings(data))
+      .catch(() => {})
+    fetch('/api/payment/wallet', { cache: 'no-store' })
+      .then((res) => res.json())
+      .then((data) =>
+        setWalletBalance(typeof data?.balance === 'number' ? data.balance : null)
+      )
       .catch(() => {})
   }, [])
 
@@ -372,6 +380,38 @@ export default function OrderPage({
     }
   }
 
+  async function handlePayWallet() {
+    if (!order || paying) return
+    setPaying(true)
+    setPaymentError(null)
+    setPaymentSuccess(null)
+
+    try {
+      const res = await fetch('/api/payment/wallet', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderId: order.id }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'خطا در پرداخت با کیف پول')
+
+      setOrder({
+        ...order,
+        payment_method: 'wallet',
+        payment_status: 'paid',
+      })
+      setWalletBalance(typeof data.balance === 'number' ? data.balance : null)
+      setPaymentSuccess(
+        `✅ ${formatPrice(data.paid ?? 0)} تومان از کیف پول پرداخت شد`
+      )
+      setTimeout(() => setPaymentSuccess(null), 4000)
+    } catch (err) {
+      setPaymentError(err instanceof Error ? err.message : 'خطا')
+    } finally {
+      setPaying(false)
+    }
+  }
+
   if (loading) {
     return (
       <div className="order-detail-container" style={{ textAlign: 'center', paddingTop: '50px' }}>
@@ -403,13 +443,24 @@ export default function OrderPage({
   const isCard = order.payment_method === 'card'
   const isOnline = order.payment_method === 'online'
   const isTransfer = order.payment_method === 'transfer'
+  const isWallet = order.payment_method === 'wallet'
 
   const needsOnlinePayment = isOnline && (isUnpaid || isFailed)
   const needsTransferReceipt = isTransfer && (isUnpaid || isPendingReview || isFailed)
+  const needsWalletPayment = isWallet && (isUnpaid || isFailed)
 
   // ✅ رسید (عکس یا متن) ارسال شده و منتظر تعیین‌تکلیف مدیر هستیم
   const receiptSubmitted =
     isTransfer && isPendingReview && !!(order.payment_receipt_url || order.payment_note)
+
+  // ✅ پرداخت با کیف پول: فعال در تنظیمات + نشست OTP + موجودی کافی + رسیدی در انتظار نباشد
+  const walletPayable =
+    paymentSettings?.payment_enabled === true &&
+    paymentSettings?.payment_wallet_enabled === true &&
+    walletBalance != null &&
+    walletBalance >= order.subtotal &&
+    !receiptSubmitted
+
   // ✅ سفارش تحویل‌شده و تسویه‌نشده (بدهی)
   const isDebt =
     order.status === 'delivered' && !isPaid && !isCancelled
@@ -417,13 +468,20 @@ export default function OrderPage({
     isDebt &&
     paymentSettings?.payment_enabled === true &&
     paymentSettings?.payment_online_enabled === true
+  const canPayDebtWallet =
+    isDebt &&
+    !isPendingReview &&
+    paymentSettings?.payment_enabled === true &&
+    paymentSettings?.payment_wallet_enabled === true &&
+    walletBalance != null &&
+    walletBalance >= order.subtotal
 
   const showPaymentSection =
     !isCancelled &&
     !isPaid &&
     order.status !== 'delivered' &&
     paymentSettings?.payment_enabled === true &&
-    (needsOnlinePayment || needsTransferReceipt || isFailed)
+    (needsOnlinePayment || needsTransferReceipt || isFailed || needsWalletPayment)
 
   const shouldShowBanner = !bannerDismissed && !isCancelled && (isPaid || isCash || isCard)
 
@@ -591,6 +649,19 @@ export default function OrderPage({
             </button>
           )}
 
+          {canPayDebtWallet && !(debtReceiptSent || isPendingReview) && (
+            <button
+              type="button"
+              className="order-payment-btn primary"
+              onClick={handlePayWallet}
+              disabled={paying}
+            >
+              {paying
+                ? '...'
+                : `👛 پرداخت با کیف پول (${formatPrice(walletBalance ?? 0)} تومان موجودی)`}
+            </button>
+          )}
+
 
                     {paymentSettings?.payment_enabled === true &&
             paymentSettings?.payment_transfer_enabled === true && (
@@ -630,6 +701,12 @@ export default function OrderPage({
               )}
 
               <div className="order-payment-methods">
+                {walletPayable && (
+                  <button type="button" className="order-payment-method-btn" onClick={() => { setShowChangeMethod(false); handlePayWallet() }} disabled={paying}>
+                    <span className="order-payment-method-icon">👛</span>
+                    <div><strong>کیف پول</strong><small>موجودی: {formatPrice(walletBalance ?? 0)} تومان</small></div>
+                  </button>
+                )}
                 {paymentSettings?.payment_online_enabled && (
                   <button type="button" className="order-payment-method-btn" onClick={() => { setShowChangeMethod(false); handlePayOnline() }} disabled={paying}>
                     <span className="order-payment-method-icon">💳</span>
@@ -702,6 +779,13 @@ export default function OrderPage({
                 {needsOnlinePayment && paymentSettings?.payment_online_enabled && (
                   <button type="button" className="order-payment-btn primary" onClick={handlePayOnline} disabled={paying}>
                     {paying ? '...' : `💳 پرداخت آنلاین ${formatPrice(order.subtotal)} تومان`}
+                  </button>
+                )}
+                {walletPayable && (
+                  <button type="button" className="order-payment-btn primary" onClick={handlePayWallet} disabled={paying}>
+                    {paying
+                      ? '...'
+                      : `👛 پرداخت با کیف پول (${formatPrice(walletBalance ?? 0)} تومان موجودی)`}
                   </button>
                 )}
                 <button

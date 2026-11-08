@@ -24,6 +24,10 @@ const MAP: Record<string, { status: number; text: string }> = {
     status: 400,
     text: 'بازپرداخت به کیف پول هنوز فعال نیست؛ روش نقدی یا دستی درگاه را انتخاب کنید',
   },
+  wallet_customer_not_found: {
+    status: 400,
+    text: 'مشتریِ این سفارش کیف پول ندارد؛ بازگشت نقدی را انتخاب کنید',
+  },
 
 }
 

@@ -122,6 +122,22 @@ export async function adminChargeByPhone(
   return { ok: true }
 }
 
+/** موجودی کیف پول نشست فعلی (اگر با OTP وارد نباشد یا خطا بخورد null) */
+export async function getSessionWalletBalance(): Promise<number | null> {
+  const customer = await resolveWalletCustomer()
+  if (!customer) return null
+
+  const db = supabaseAdmin()
+  const { data, error } = await db.rpc('wallet_balance', {
+    p_customer_id: customer.id,
+  })
+  if (error) {
+    console.error('[wallet] session balance rpc failed:', error.message)
+    return null
+  }
+  return Number(data ?? 0)
+}
+
 /** نمای کیف پول برای ادمین، بر اساس شماره تلفن */
 export async function adminWalletByPhone(phone: string): Promise<WalletView | null> {
   const db = supabaseAdmin()

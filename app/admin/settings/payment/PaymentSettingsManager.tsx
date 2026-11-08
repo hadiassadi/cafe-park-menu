@@ -173,6 +173,16 @@ export default function PaymentSettingsManager() {
                   <span className="auto-switch-track"><span className="auto-switch-thumb" /></span>
                 </button>
               </div>
+              <div className={`payment-method-card ${settings.payment_wallet_enabled ? 'active' : ''}`}>
+                <div className="payment-method-icon">👛</div>
+                <div className="payment-method-info">
+                  <strong>کیف پول مشتری</strong>
+                  <small>پرداخت از موجودی + بازپرداخت لغو</small>
+                </div>
+                <button type="button" className={`auto-switch ${settings.payment_wallet_enabled ? 'on' : 'off'}`} onClick={() => update('payment_wallet_enabled', !settings.payment_wallet_enabled)} disabled={saving}>
+                  <span className="auto-switch-track"><span className="auto-switch-thumb" /></span>
+                </button>
+              </div>
             </div>
           </section>
 

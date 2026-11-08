@@ -17,6 +17,7 @@ export type PaymentSettings = {
   payment_cash_enabled: boolean
   payment_card_enabled: boolean
   payment_transfer_enabled: boolean
+  payment_wallet_enabled: boolean
   payment_gateway: string
   payment_merchant_id: string | null // ✅ برگشت
   payment_sandbox_mode: boolean
@@ -30,7 +31,7 @@ export type PaymentSettings = {
 }
 
 const PAYMENT_FIELDS =
-  'payment_enabled, payment_online_enabled, payment_cash_enabled, payment_card_enabled, payment_transfer_enabled, payment_gateway, payment_merchant_id, payment_sandbox_mode, payment_min_online_amount, payment_transfer_bank_name, payment_transfer_account_number, payment_transfer_card_number, payment_transfer_account_holder, payment_transfer_requires_review, payment_transfer_auto_verify'
+  'payment_enabled, payment_online_enabled, payment_cash_enabled, payment_card_enabled, payment_transfer_enabled, payment_wallet_enabled, payment_gateway, payment_merchant_id, payment_sandbox_mode, payment_min_online_amount, payment_transfer_bank_name, payment_transfer_account_number, payment_transfer_card_number, payment_transfer_account_holder, payment_transfer_requires_review, payment_transfer_auto_verify'
 
 // فقط همین فیلدها اجازه‌ی نوشته‌شدن دارند
 const ALLOWED_KEYS = PAYMENT_FIELDS.split(',').map((k) => k.trim())
@@ -76,7 +77,8 @@ export async function updatePaymentSettings(
       !settings.payment_cash_enabled &&
       !settings.payment_card_enabled &&
       !settings.payment_online_enabled &&
-      !settings.payment_transfer_enabled
+      !settings.payment_transfer_enabled &&
+      !settings.payment_wallet_enabled
     ) {
       return { error: 'حداقل یکی از روش‌های پرداخت باید فعال باشد' }
     }

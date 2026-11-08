@@ -5,6 +5,13 @@ import {
   isValidWalletAmount,
   walletKindLabel,
 } from '../lib/wallet/wallet'
+import {
+  PAYMENT_METHODS,
+  PAYMENT_METHOD_LABELS,
+  getEnabledMethods,
+  isPaymentMethod,
+  paymentErrorMessage,
+} from '../lib/payment/methods'
 
 // هش‌ها به HASH_SALT نیاز دارند — خوانده‌شدنش lazy است
 process.env.HASH_SALT ||= 'vitest-hash-salt-0123456789abcdef'
@@ -38,5 +45,34 @@ describe('walletKindLabel', () => {
   })
   it('نوع ناشناخته را عیناً برمی‌گرداند', () => {
     expect(walletKindLabel('mystery')).toBe('mystery')
+  })
+})
+
+describe('payment methods — کیف پول', () => {
+  it('wallet در فهرست روش‌های پرداخت هست', () => {
+    expect(PAYMENT_METHODS).toContain('wallet')
+    expect(isPaymentMethod('wallet')).toBe(true)
+    expect(isPaymentMethod('credit')).toBe(false)
+  })
+
+  it('برچسب فارسی کیف پول', () => {
+    expect(PAYMENT_METHOD_LABELS.wallet).toBe('کیف پول')
+  })
+
+  it('getEnabledMethods فقط با پرچم فعال، wallet را برمی‌گرداند', () => {
+    expect(
+      getEnabledMethods({ payment_enabled: true, payment_wallet_enabled: true })
+    ).toContain('wallet')
+    expect(getEnabledMethods({ payment_enabled: true })).not.toContain('wallet')
+    expect(
+      getEnabledMethods({ payment_enabled: false, payment_wallet_enabled: true })
+    ).toEqual([])
+  })
+
+  it('پیام‌های خطای پرداخت با کیف پول', () => {
+    expect(paymentErrorMessage('insufficient_wallet_balance')).toContain('موجودی')
+    expect(paymentErrorMessage('nothing_to_pay')).toContain('باقی نمانده')
+    expect(paymentErrorMessage('wallet_customer_not_found')).toContain('کیف پول')
+    expect(paymentErrorMessage('random_db_error')).toBe('خطا در ثبت پرداخت')
   })
 })

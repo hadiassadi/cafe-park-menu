@@ -18,6 +18,10 @@ describe('cancelErrorInfo', () => {
     expect(cancelErrorInfo('pending_receipts')?.text).toContain('تأیید یا رد')
   })
 
+  it('مشتری بدون کیف پول → پیام پیشنهاد بازگشت نقدی', () => {
+    expect(cancelErrorInfo('wallet_customer_not_found')?.text).toContain('بازگشت نقدی')
+  })
+
   it('کد ناشناخته → null (خطای عمومی 500 در لایه بالاتر)', () => {
     expect(cancelErrorInfo('some other database failure')).toBeNull()
     expect(cancelErrorInfo(undefined)).toBeNull()

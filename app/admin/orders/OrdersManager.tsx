@@ -1125,7 +1125,9 @@ export default function OrdersManager({
                       ? '💵'
                       : order.payment_method === 'card'
                         ? '💳'
-                        : '🏦'}{' '}
+                        : order.payment_method === 'wallet'
+                          ? '👛'
+                          : '🏦'}{' '}
                   {PAYMENT_METHOD_LABELS[order.payment_method || ''] ||
                     'نامشخص'}{' '}
                   —{' '}
@@ -2009,19 +2011,18 @@ export default function OrdersManager({
 
                     <button
                       type="button"
-                      className="btn"
+                      className={`btn ${refundMethod === 'wallet' ? 'primary-btn' : ''}`}
                       style={{
                         minHeight: '56px',
                         justifyContent: 'flex-start',
                         textAlign: 'right',
-                        opacity: 0.5,
-                        cursor: 'not-allowed',
                       }}
-                      disabled
+                      onClick={() => setRefundMethod('wallet')}
+                      disabled={cancelling}
                     >
-                      👛 کیف پول مشتری (به‌زودی)
+                      👛 کیف پول مشتری
                       <small style={{ display: 'block', fontWeight: 400 }}>
-                        بعد از تکمیل کیف پول فعال می‌شود
+                        فوراً به کیف پول مشتری برمی‌گردد
                       </small>
                     </button>
                   </div>
