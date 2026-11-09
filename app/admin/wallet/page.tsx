@@ -47,6 +47,8 @@ type ChargeRequest = {
   receipt_url: string | null
   tracking_no: string | null
   reject_reason: string | null
+  purpose?: string
+  plan_name?: string | null
   created_at: string
   customer: { phone: string | null; name: string | null; wallet_blocked: boolean; card_charge_blocked: boolean } | null
 }
@@ -292,8 +294,8 @@ export default function WalletPage() {
     }
   }
 
-  /** تأیید/رد رسید شارژ — رد دلیل الزامی دارد (برای مشتری نمایش داده می‌شود) */
-  async function reviewCharge(id: string, action: 'approve' | 'reject') {
+  /** تأیید/رد رسید — شارژ کیف پول یا ساخت اشتراک (بر اساس purpose)؛ رد دلیل الزامی دارد */
+  async function reviewCharge(id: string, action: 'approve' | 'reject', purpose?: string) {
     let rejectReason: string | undefined
     if (action === 'reject') {
       const input = prompt('دلیل رد (برای مشتری نمایش داده می‌شود):')
@@ -315,11 +317,12 @@ export default function WalletPage() {
       const json = await res.json()
       if (!res.ok) {
         setMsg({ kind: 'err', text: json.error || 'بررسی ناموفق بود' })
+      } else if (action === 'approve' && purpose === 'subscription') {
+        setMsg({ kind: 'ok', text: 'رسید تأیید شد و اشتراک مشتری فعال شد ✓' })
+      } else if (action === 'approve') {
+        setMsg({ kind: 'ok', text: 'رسید تأیید شد و کیف پول مشتری شارژ شد ✓' })
       } else {
-        setMsg({
-          kind: 'ok',
-          text: action === 'approve' ? 'رسید تأیید شد و کیف پول مشتری شارژ شد ✓' : 'درخواست شارژ رد شد',
-        })
+        setMsg({ kind: 'ok', text: 'درخواست رد شد' })
       }
       await loadRequests()
     } catch {
@@ -727,6 +730,11 @@ export default function WalletPage() {
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                     {fmt(r.amount)} تومان
+                    {r.purpose === 'subscription' && (
+                      <span style={{ background: '#efe6ff', color: '#5b2c92', borderRadius: 999, padding: '1px 8px', fontSize: 10, fontWeight: 700 }}>
+                        ⭐ خرید اشتراک{r.plan_name ? `: ${r.plan_name}` : ''}
+                      </span>
+                    )}
                     {r.customer?.name && <span>— {r.customer.name}</span>}
                     {r.customer?.phone && <span dir="ltr" style={{ fontWeight: 'normal', opacity: 0.75 }}>{r.customer.phone}</span>}
                     {r.status === 'pending' && (
@@ -763,11 +771,11 @@ export default function WalletPage() {
                     <>
                       <button
                         type="button"
-                        onClick={() => reviewCharge(r.id, 'approve')}
+                        onClick={() => reviewCharge(r.id, 'approve', r.purpose)}
                         disabled={reviewBusy === r.id}
                         style={{ padding: '7px 14px', borderRadius: 8, border: 'none', background: '#2e7d32', color: '#fff', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}
                       >
-                        {reviewBusy === r.id ? '…' : 'تأیید و شارژ'}
+                        {reviewBusy === r.id ? '…' : r.purpose === 'subscription' ? 'تأیید و فعال‌سازی' : 'تأیید و شارژ'}
                       </button>
                       <button
                         type="button"

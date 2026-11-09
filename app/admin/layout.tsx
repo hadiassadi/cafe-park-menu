@@ -141,6 +141,7 @@ export default function AdminLayout({
 	{ href: '/admin/wallet', label: 'کیف پول مشتریان', icon: '👛' },
 	{ href: '/admin/settings/club', label: 'قوانین اعتبار', icon: '🛡️' },
 	{ href: '/admin/settings/grades', label: 'گرید مشتریان', icon: '🏆' },
+	{ href: '/admin/settings/subscriptions', label: 'اشتراک ماهیانه', icon: '⭐' },
     { href: '/admin/settings', label: 'تنظیمات', icon: '⚙️' },
   ]
 

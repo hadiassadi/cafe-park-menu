@@ -39,6 +39,8 @@ function CheckoutForm() {
   const [walletInfo, setWalletInfo] = useState<{ balance: number; blocked: boolean } | null>(null)
   // 🏆 گرید وفاداری نشست فعلی — فقط پیش‌نمایش؛ محاسبه‌ی قطعی سمت سرور است
   const [gradeInfo, setGradeInfo] = useState<{ name: string; discountPercent: number; color: string | null } | null>(null)
+  // ⭐ اشتراک ماهیانه نشست فعلی — فقط پیش‌نمایش
+  const [subInfo, setSubInfo] = useState<{ planName: string; discountPercent: number } | null>(null)
 
   // 👛 کیف پول نشست فعلی (ثبت‌نام با دعوت/OTP) — فقط اگر شناسایی شود نمایش داده می‌شود
   const walletAvailable = !!(walletInfo && walletInfo.balance != null && !walletInfo.blocked)
@@ -96,6 +98,11 @@ function CheckoutForm() {
           setGradeInfo({ name: String(data.grade.name ?? ''), discountPercent: Number(data.grade.discountPercent), color: data.grade.color ?? null })
         } else {
           setGradeInfo(null)
+        }
+        if (data?.subscription && typeof data.subscription.discountPercent === 'number' && data.subscription.discountPercent > 0) {
+          setSubInfo({ planName: String(data.subscription.planName ?? ''), discountPercent: Number(data.subscription.discountPercent) })
+        } else {
+          setSubInfo(null)
         }
       })
       .catch(() => setWalletInfo(null))
@@ -456,6 +463,12 @@ function CheckoutForm() {
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', background: '#fdf6e3', border: `1px solid ${gradeInfo.color ?? '#d99f59'}`, borderRadius: '10px', padding: '8px 12px', marginBottom: '10px', fontSize: '11.5px', color: '#6b4f3a' }}>
                 <span style={{ width: 10, height: 10, borderRadius: '50%', background: gradeInfo.color ?? '#6b4f3a', flex: '0 0 auto' }} />
                 🏆 گرید {gradeInfo.name}: {formatPrice(gradeInfo.discountPercent)}٪ تخفیف روی اقلام مشمول — در ثبت نهایی خودکار اعمال می‌شود
+              </div>
+            )}
+            {subInfo && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', background: '#f7f1ff', border: '1px solid #8f6bc4', borderRadius: '10px', padding: '8px 12px', marginBottom: '10px', fontSize: '11.5px', color: '#4a2c73' }}>
+                <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#8f6bc4', flex: '0 0 auto' }} />
+                ⭐ اشتراک {subInfo.planName}: {formatPrice(subInfo.discountPercent)}٪ تخفیف روی اقلام مشمول — در ثبت نهایی خودکار اعمال می‌شود
               </div>
             )}
             <div className="payment-methods-selector" style={{ gap: '8px' }}>

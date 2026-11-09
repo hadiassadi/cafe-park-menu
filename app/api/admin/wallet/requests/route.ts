@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
       .limit(50),
     db
       .from('wallet_charge_requests')
-      .select('id, customer_id, amount, status, receipt_url, tracking_no, reject_reason, created_at')
+      .select('id, customer_id, amount, status, receipt_url, tracking_no, reject_reason, purpose, plan_name, created_at')
       .order('created_at', { ascending: false })
       .limit(50),
   ])
@@ -179,7 +179,7 @@ async function reviewChargeRequest(
     })
     .eq('id', id)
     .eq('status', 'pending')
-    .select('customer_id, amount, tracking_no')
+    .select('customer_id, amount, tracking_no, purpose, plan_id, plan_name')
 
   if (claimErr) {
     console.error('[admin/wallet/requests] charge claim:', claimErr.message)
@@ -205,9 +205,40 @@ async function reviewChargeRequest(
         .update({ status: 'pending', reviewed_at: null })
         .eq('id', id)
       return NextResponse.json(
-        { error: 'شارژ کارت‌به‌کارت این مشتری مسدود است؛ از «پرونده» غیرفعالش کن یا درخواست را رد کن' },
+        { error: 'پرداخت کارت‌به‌کارت این مشتری مسدود است؛ از «پرونده» غیرفعالش کن یا درخواست را رد کن' },
         { status: 409 }
       )
+    }
+
+    // درخواست خرید اشتراک: به‌جای شارژ کیف پول، اشتراک ساخته می‌شود
+    if (request.purpose === 'subscription') {
+      if (!request.plan_id) {
+        await db
+          .from('wallet_charge_requests')
+          .update({ status: 'pending', reviewed_at: null })
+          .eq('id', id)
+        return NextResponse.json({ error: 'پلن این درخواست یافت نشد' }, { status: 500 })
+      }
+      const { error: grantErr } = await db.rpc('grant_subscription', {
+        p_customer_id: request.customer_id,
+        p_plan_id: request.plan_id,
+        p_source: 'card_to_card',
+      })
+      if (grantErr) {
+        console.error('[admin/wallet/requests] grant_subscription:', grantErr.message)
+        await db
+          .from('wallet_charge_requests')
+          .update({ status: 'pending', reviewed_at: null })
+          .eq('id', id)
+        if (grantErr.message.includes('already_active')) {
+          return NextResponse.json(
+            { error: 'مشتری اشتراک فعال دارد؛ درخواست را رد کن یا صبر کن اشتراکش منقضی شود' },
+            { status: 409 }
+          )
+        }
+        return NextResponse.json({ error: 'ساخت اشتراک ناموفق بود' }, { status: 500 })
+      }
+      return NextResponse.json({ ok: true, status: 'approved' })
     }
 
     const amount = Number(request.amount)

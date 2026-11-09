@@ -1,0 +1,2310 @@
+diff --git a/TASKS.md b/TASKS.md
+index 766c242..4989543 100644
+--- a/TASKS.md
++++ b/TASKS.md
+@@ -74,8 +74,8 @@
+ - [x] تخفیف کالا/دسته‌بندی فعلی دست‌نخورده؛ بیرون‌بر و خدمات همیشه بدون تخفیف ← پچ ۲۷ (پایه‌ی تخفیف همان eligible_subtotal با فلگ coupon_eligible است)
+ - [x] مدیریت گریدها در پنل ادمین (نام، بازه مبلغ، درصد، رنگ) ← پچ ۲۷ + انتخاب سیاست و سقف تجمیعی
+ ### فاز ۴ — پچ ۲۴ (اشتراک ماهیانه)
+-- [ ] پلن‌ها (قیمت، مدت، درصد تخفیف، مزایا، دامنه آیتم‌ها) + خرید با کیف پول/کارت‌به‌کارت
+-- [ ] گزینه آنلاین (زرین‌پال/نکست‌پی/بانک‌ها) نمایان ولی غیرفعال تا فعال شدن تنظیمات
++- [x] پلن‌ها (قیمت، مدت، درصد تخفیف، مزایا) + خرید با کیف پول/کارت‌به‌کارت ← پچ ۲۸ (دامنه آیتم‌ها = فلگ «بدون تخفیف» مشترک با باشگاه/گرید؛ محدوده‌ی دسته‌ای بعداً)
++- [x] گزینه آنلاین (زرین‌پال/نکست‌پی/بانک‌ها) نمایان ولی غیرفعال تا فعال شدن تنظیمات ← پچ ۲۸ (دکمه‌ی «آنلاین — به‌زودی» در کارت پلن‌ها)
+ ### فاز ۵ — پچ ۲۵ (درگاه آنلاین + تکمیلی)
+ - [ ] شارژ آنلاین درگاه‌محور + ضدتکرار شناسه شارژ
+ - [ ] یادآوری انقضای اشتراک (اگر پیامک تنظیم بود) + جمع بدهی کیف پول‌ها در داشبورد ادمین
+@@ -117,3 +117,14 @@
+ - [x] کوپن فقط وقتی هیچ تخفیف باشگاه/گریدی اعمال نشده باشد (رفتار قبلی برای باشگاه حفظ شد)
+ - [x] پنل ادمین /admin/settings/grades: CRUD گرید (نام، کف مبلغ، درصد، رنگ، ترتیب، فعال/غیرفعال) + انتخاب سیاست تخفیف + سقف تجمیعی؛ حذف گریدِ درحال‌استفاده مسدود (به‌جایش غیرفعال کن)
+ - [x] مشتری: چیپ «🏆 گرید …» در کارت پروفایل پنل + نوار پیش‌نمایش تخفیف گرید در چک‌اوت (از /api/payment/wallet)؛ برچسب ردیف تخفیف در صفحه سفارش/فاکتور: تخفیف گرید / باشگاه + گرید
++
++### پچ ۲۸ — فاز ۴: اشتراک ماهیانه (۱۴۰۵/۰۸/۱۸)
++- [x] مایگریشن: جدول subscription_plans (نام، قیمت، مدت روز، درصد، مزایا، ترتیب، فعال) + customer_subscriptions (اسنپ‌شات پلن در لحظه‌ی خرید) + ایندکس یکتای «یک اشتراک فعال برای هر مشتری» + RLS/revoke (فقط سرور) + settings.subscription_enabled + orders.subscription_discount + ستون‌های purpose/plan_id/plan_name روی wallet_charge_requests
++- [x] RPC اتمیک purchase_subscription_with_wallet: قفل مشاوره‌ای مشتری، انقضای خودکار ردیف گذشته‌تاریخ، گارد «اشتراک فعال داری»، کسر مبلغ با تراکنش subscription_purchase، ساخت اشتراک — همه در یک تراکنش
++- [x] RPC grant_subscription: اعطا بدون کیف پول برای تأیید رسید کارت‌به‌کارت؛ همان گارد فعال
++- [x] درخواست کارت‌به‌کارت در همان صف شارژ: wallet_charge_requests.purpose='subscription' + رسید در bucket receipts؛ تأیید ادمین = فعال‌سازی اشتراک (بج «⭐ خرید اشتراک» و دکمه «تأیید و فعال‌سازی» در صف /admin/wallet)
++- [x] موتور تخفیف در POST /api/orders: اشتراک جایگزین سهم باشگاه می‌شود (هرکدام بیشتر برنده است؛ پرداختی برنده = بدون سوزاندن سهمیه باشگاه) و ترکیبش با گرید همان سیاست مدیر است؛ برچسب‌های SUBSCRIPTION / SUBSCRIPTION+GRADE در فاکتور
++- [x] پایه‌ی تخفیف همان eligible_subtotal است؛ فلگ «بدون تخفیف» محصول/دسته و هزینه‌ی بیرون‌بر هرگز تخفیف اشتراک نمی‌گیرند — منطق قبلی دست‌نخورده
++- [x] کوپن همان قانون قبلی: فقط وقتی هیچ تخفیف باشگاه/اشتراک/گریدی اعمال نشده باشد
++- [x] پنل ادمین /admin/settings/subscriptions: سوییچ سراسری + CRUD پلن + فهرست ۵۰ اشتراک اخیر؛ حذف پلنِ استفاده‌شده یا دارای درخواستِ در انتظار مسدود است (به‌جایش غیرفعال کن)
++- [x] مشتری: بخش «⭐ اشتراک ماهیانه» در پنل (چیپ اشتراک فعال با تاریخ پایان + پلن‌ها + خرید با کیف پول + فرم رسید کارت‌به‌کارت + دکمه غیرفعال «آنلاین — به‌زودی»)؛ چیپ وضعیت درخواست در تب کیف پول؛ نوار پیش‌نمایش تخفیف اشتراک در چک‌اوت (از /api/payment/wallet)
+diff --git a/app/admin/layout.tsx b/app/admin/layout.tsx
+index 501f4e5..746e043 100644
+--- a/app/admin/layout.tsx
++++ b/app/admin/layout.tsx
+@@ -141,6 +141,7 @@ export default function AdminLayout({
+ 	{ href: '/admin/wallet', label: 'کیف پول مشتریان', icon: '👛' },
+ 	{ href: '/admin/settings/club', label: 'قوانین اعتبار', icon: '🛡️' },
+ 	{ href: '/admin/settings/grades', label: 'گرید مشتریان', icon: '🏆' },
++	{ href: '/admin/settings/subscriptions', label: 'اشتراک ماهیانه', icon: '⭐' },
+     { href: '/admin/settings', label: 'تنظیمات', icon: '⚙️' },
+   ]
+ 
+diff --git a/app/admin/settings/subscriptions/SubscriptionsManager.tsx b/app/admin/settings/subscriptions/SubscriptionsManager.tsx
+new file mode 100644
+index 0000000..77af175
+--- /dev/null
++++ b/app/admin/settings/subscriptions/SubscriptionsManager.tsx
+@@ -0,0 +1,364 @@
++'use client'
++
++import { useEffect, useState } from 'react'
++import Link from 'next/link'
++import {
++  listPlans,
++  savePlan,
++  deletePlan,
++  saveSubscriptionFlags,
++  type AdminPlan,
++  type AdminSubscriptionRow,
++  type SubscriptionFlagsForm,
++} from './actions'
++import {
++  durationLabel,
++  planInputError,
++  subscriptionSourceLabel,
++  subscriptionStatusLabel,
++  formatEndsAt,
++} from '@/lib/subscriptions/plans'
++
++type DraftPlan = {
++  id: string | null
++  name: string
++  price: string
++  duration_days: string
++  discount_percent: string
++  benefits: string
++  sort_order: string
++  is_active: boolean
++}
++
++const EMPTY_DRAFT: DraftPlan = {
++  id: null,
++  name: '',
++  price: '100000',
++  duration_days: '30',
++  discount_percent: '5',
++  benefits: '',
++  sort_order: '10',
++  is_active: true,
++}
++
++const formatPrice = (n: number) => new Intl.NumberFormat('fa-IR').format(n)
++
++export default function SubscriptionsManager() {
++  const [plans, setPlans] = useState<AdminPlan[]>([])
++  const [flags, setFlags] = useState<SubscriptionFlagsForm | null>(null)
++  const [subscriptions, setSubscriptions] = useState<AdminSubscriptionRow[]>([])
++  const [draft, setDraft] = useState<DraftPlan | null>(null)
++  const [loading, setLoading] = useState(true)
++  const [saving, setSaving] = useState(false)
++  const [message, setMessage] = useState<string | null>(null)
++  const [error, setError] = useState<string | null>(null)
++
++  async function refresh() {
++    const result = await listPlans()
++    if (result.error) setError(result.error)
++    else {
++      setPlans(result.plans ?? [])
++      setFlags(result.flags ?? null)
++      setSubscriptions(result.subscriptions ?? [])
++      setError(null)
++    }
++    setLoading(false)
++  }
++
++  useEffect(() => {
++    refresh()
++  }, [])
++
++  function flash(text: string) {
++    setMessage(text)
++    setTimeout(() => setMessage(null), 3000)
++  }
++
++  async function handleSaveDraft() {
++    if (!draft) return
++    setSaving(true)
++    setError(null)
++    const input = {
++      id: draft.id,
++      name: draft.name,
++      price: Number(draft.price.replace(/[^\d-]/g, '')),
++      duration_days: Number(draft.duration_days.replace(/[^\d-]/g, '')),
++      discount_percent: Number(draft.discount_percent.replace(/[^\d-]/g, '')),
++      benefits: draft.benefits,
++      sort_order: Number(draft.sort_order.replace(/[^\d-]/g, '')),
++      is_active: draft.is_active,
++    }
++    const vErr = planInputError(input)
++    if (vErr) {
++      setError(vErr)
++      setSaving(false)
++      return
++    }
++    const result = await savePlan(input)
++    if (result.error) setError(result.error)
++    else {
++      setDraft(null)
++      flash('✅ پلن ذخیره شد')
++      await refresh()
++    }
++    setSaving(false)
++  }
++
++  async function handleDelete(p: AdminPlan) {
++    if (!window.confirm(`پلن «${p.name}» حذف شود؟`)) return
++    setSaving(true)
++    setError(null)
++    const result = await deletePlan(p.id)
++    if (result.error) setError(result.error)
++    else {
++      flash('🗑️ پلن حذف شد')
++      await refresh()
++    }
++    setSaving(false)
++  }
++
++  async function handleSaveFlags() {
++    if (!flags) return
++    setSaving(true)
++    setError(null)
++    const result = await saveSubscriptionFlags(flags)
++    if (result.error) setError(result.error)
++    else flash('✅ تنظیمات ذخیره شد')
++    setSaving(false)
++  }
++
++  if (loading) {
++    return (
++      <div className="admin-main">
++        <div className="admin-header">
++          <div>
++            <h1>⭐ اشتراک ماهیانه</h1>
++            <p className="admin-subtitle">در حال بارگذاری...</p>
++          </div>
++        </div>
++      </div>
++    )
++  }
++
++  return (
++    <div className="admin-main payment-settings-page">
++      <div className="admin-header">
++        <div>
++          <h1>⭐ اشتراک ماهیانه</h1>
++          <p className="admin-subtitle">
++            پلن تخفیف ماهیانه؛ خرید با کیف پول یا تأیید رسید کارت‌به‌کارت از صف «کیف پول مشتریان»
++          </p>
++        </div>
++        <Link href="/admin/settings" className="btn">← تنظیمات</Link>
++      </div>
++
++      {message && <div className="admin-message">{message}</div>}
++      {error && <div className="admin-error">❌ {error}</div>}
++
++      {/* ───── سوییچ سراسری ───── */}
++      <section className="admin-card payment-section">
++        <div className="payment-section-header-static">
++          <div className="payment-section-icon">🔀</div>
++          <div>
++            <h2 className="payment-section-title">وضعیت اشتراک ماهیانه</h2>
++            <p className="payment-section-hint">
++              خاموش بودن سوییچ، بخش خرید اشتراک در پنل مشتری و چک‌اوت مخفی می‌شود؛ اشتراک‌های فعال تخفیفشان ادامه دارد
++            </p>
++          </div>
++        </div>
++
++        {flags && (
++          <>
++            <label style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px', marginTop: '8px', borderRadius: '10px', border: `1.5px solid ${flags.subscription_enabled ? '#2e7d32' : '#e5e0da'}`, background: flags.subscription_enabled ? '#e6f6ea' : '#fff', cursor: 'pointer' }}>
++              <input
++                type="checkbox"
++                checked={flags.subscription_enabled}
++                onChange={(e) => setFlags({ ...flags, subscription_enabled: e.target.checked })}
++              />
++              <span style={{ fontSize: '13px' }}>
++                <strong>خرید اشتراک فعال است</strong>
++                <small style={{ display: 'block', color: '#766f64', fontSize: '11.5px' }}>
++                  مشتری می‌تواند از پنل خودش پلن بخرد (کیف پول یا کارت‌به‌کارت)
++                </small>
++              </span>
++            </label>
++            <div className="payment-save-bar">
++              <button type="button" className="btn primary-btn" onClick={handleSaveFlags} disabled={saving}>
++                {saving ? '...' : '💾 ذخیره'}
++              </button>
++            </div>
++          </>
++        )}
++      </section>
++
++      {/* ───── لیست پلن‌ها ───── */}
++      <section className="admin-card payment-section">
++        <div className="payment-section-header-static">
++          <div className="payment-section-icon">📋</div>
++          <div>
++            <h2 className="payment-section-title">پلن‌ها ({plans.length.toLocaleString('fa-IR')})</h2>
++            <p className="payment-section-hint">
++              تخفیف اشتراک روی اقلام مشمول (فلگ «بدون تخفیف» محترم است) اعمال می‌شود
++            </p>
++          </div>
++        </div>
++
++        {plans.length === 0 && (
++          <p className="empty-admin">هنوز پلنی ثبت نشده است.</p>
++        )}
++
++        {plans.map((p) => (
++          <div
++            key={p.id}
++            style={{
++              display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap',
++              padding: '10px 12px', marginTop: '8px', borderRadius: '10px',
++              border: '1px solid #e5e0da', background: '#fff',
++              opacity: p.is_active ? 1 : 0.55,
++            }}
++          >
++            <strong style={{ fontSize: '13px', minWidth: '80px' }}>
++              ⭐ {p.name}
++              {!p.is_active && <small style={{ color: '#9b3c32' }}> (غیرفعال)</small>}
++            </strong>
++            <small style={{ color: '#766f64', fontSize: '11.5px' }}>
++              {formatPrice(p.price)} تومان · {durationLabel(p.duration_days)} · {formatPrice(p.discount_percent)}٪ تخفیف
++              {p.benefits ? ` · ${p.benefits.slice(0, 40)}` : ''}
++            </small>
++            <span style={{ flex: 1 }} />
++            <button
++              type="button"
++              className="btn"
++              onClick={() =>
++                setDraft({
++                  id: p.id,
++                  name: p.name,
++                  price: String(p.price),
++                  duration_days: String(p.duration_days),
++                  discount_percent: String(p.discount_percent),
++                  benefits: p.benefits ?? '',
++                  sort_order: String(p.sort_order),
++                  is_active: p.is_active,
++                })
++              }
++              disabled={saving}
++            >
++              ✏️ ویرایش
++            </button>
++            <button type="button" className="btn btn-cancel" onClick={() => handleDelete(p)} disabled={saving}>
++              🗑️
++            </button>
++          </div>
++        ))}
++
++        {/* فرم افزودن/ویرایش */}
++        {draft ? (
++          <div style={{ marginTop: '14px', padding: '12px', border: '1.5px solid #d8d0c4', borderRadius: '10px', background: '#fbf9f5' }}>
++            <strong style={{ fontSize: '13px' }}>
++              {draft.id ? `✏️ ویرایش «${draft.name}»` : '➕ پلن جدید'}
++            </strong>
++            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px', marginTop: '10px' }}>
++              <div className="field">
++                <label>نام پلن</label>
++                <input value={draft.name} maxLength={60} placeholder="ماهانه" onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
++              </div>
++              <div className="field">
++                <label>قیمت (تومان)</label>
++                <input type="number" min="0" value={draft.price} onChange={(e) => setDraft({ ...draft, price: e.target.value })} />
++              </div>
++              <div className="field">
++                <label>مدت (روز)</label>
++                <input type="number" min="1" max="3650" value={draft.duration_days} onChange={(e) => setDraft({ ...draft, duration_days: e.target.value })} />
++              </div>
++              <div className="field">
++                <label>درصد تخفیف</label>
++                <input type="number" min="0" max="100" value={draft.discount_percent} onChange={(e) => setDraft({ ...draft, discount_percent: e.target.value })} />
++              </div>
++              <div className="field">
++                <label>ترتیب نمایش</label>
++                <input type="number" min="0" max="999" value={draft.sort_order} onChange={(e) => setDraft({ ...draft, sort_order: e.target.value })} />
++              </div>
++              <div className="field">
++                <label>وضعیت</label>
++                <select value={draft.is_active ? '1' : '0'} onChange={(e) => setDraft({ ...draft, is_active: e.target.value === '1' })}>
++                  <option value="1">فعال</option>
++                  <option value="0">غیرفعال</option>
++                </select>
++              </div>
++              <div className="field" style={{ gridColumn: '1 / -1' }}>
++                <label>مزایا (اختیاری — برای نمایش به مشتری)</label>
++                <textarea
++                  value={draft.benefits}
++                  maxLength={300}
++                  rows={2}
++                  placeholder="مثلاً: دسر هدیه در هر سفارش، صندلی اولویت‌دار"
++                  onChange={(e) => setDraft({ ...draft, benefits: e.target.value })}
++                />
++              </div>
++            </div>
++            <div className="payment-save-bar">
++              <button type="button" className="btn primary-btn" onClick={handleSaveDraft} disabled={saving}>
++                {saving ? '...' : '💾 ذخیره پلن'}
++              </button>
++              <button type="button" className="btn" onClick={() => setDraft(null)} disabled={saving}>
++                انصراف
++              </button>
++            </div>
++          </div>
++        ) : (
++          <div className="payment-save-bar">
++            <button type="button" className="btn primary-btn" onClick={() => setDraft({ ...EMPTY_DRAFT })} disabled={saving}>
++              ➕ افزودن پلن
++            </button>
++          </div>
++        )}
++      </section>
++
++      {/* ───── اشتراک‌های اخیر ───── */}
++      <section className="admin-card payment-section">
++        <div className="payment-section-header-static">
++          <div className="payment-section-icon">👥</div>
++          <div>
++            <h2 className="payment-section-title">اشتراک‌های اخیر ({subscriptions.length.toLocaleString('fa-IR')})</h2>
++            <p className="payment-section-hint">۵۰ ردیف آخر — انقضای خودکار با تاریخ پایان</p>
++          </div>
++        </div>
++
++        {subscriptions.length === 0 && (
++          <p className="empty-admin">هنوز اشتراکی خریداری نشده است.</p>
++        )}
++
++        {subscriptions.map((s) => (
++          <div
++            key={s.id}
++            style={{
++              display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap',
++              padding: '10px 12px', marginTop: '8px', borderRadius: '10px',
++              border: '1px solid #e5e0da', background: '#fff',
++              opacity: s.status === 'active' ? 1 : 0.55,
++            }}
++          >
++            <strong style={{ fontSize: '13px' }}>⭐ {s.plan_name}</strong>
++            <small style={{ color: '#766f64', fontSize: '11.5px' }}>
++              {s.customer_name || '—'}
++              {s.customer_phone && <span dir="ltr"> · {s.customer_phone}</span>}
++              {' · '}{formatPrice(s.discount_percent)}٪ تخفیف
++              {' · '}{formatPrice(s.price_paid)} تومان
++              {s.status === 'active' ? ` · فعال تا ${formatEndsAt(s.ends_at)}` : ` · ${subscriptionStatusLabel(s.status)}`}
++              {' · '}{subscriptionSourceLabel(s.source)}
++            </small>
++            {s.customer_phone && (
++              <Link
++                href={`/admin/customers?phone=${encodeURIComponent(s.customer_phone)}`}
++                className="btn"
++                style={{ textDecoration: 'none' }}
++              >
++                👤 پرونده
++              </Link>
++            )}
++          </div>
++        ))}
++      </section>
++    </div>
++  )
++}
+diff --git a/app/admin/settings/subscriptions/actions.ts b/app/admin/settings/subscriptions/actions.ts
+new file mode 100644
+index 0000000..24a76b9
+--- /dev/null
++++ b/app/admin/settings/subscriptions/actions.ts
+@@ -0,0 +1,234 @@
++'use server'
++
++import { revalidatePath } from 'next/cache'
++import { createClient } from '@supabase/supabase-js'
++import { assertAdmin, assertAdminId } from '@/lib/admin/assert-admin'
++import { planInputError, type PlanInput } from '@/lib/subscriptions/plans'
++
++function createAdminDb() {
++  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
++  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
++  if (!url || !key) throw new Error('Missing Supabase admin env')
++  return createClient(url, key, { auth: { persistSession: false } })
++}
++
++export type AdminPlan = {
++  id: string
++  name: string
++  price: number
++  duration_days: number
++  discount_percent: number
++  benefits: string | null
++  sort_order: number
++  is_active: boolean
++}
++
++export type AdminSubscriptionRow = {
++  id: string
++  customer_phone: string | null
++  customer_name: string | null
++  plan_name: string
++  discount_percent: number
++  price_paid: number
++  ends_at: string
++  source: string
++  status: string
++}
++
++export type SubscriptionFlagsForm = {
++  subscription_enabled: boolean
++}
++
++function toNum(v: unknown): number | null {
++  const n = Number(v)
++  return Number.isFinite(n) ? n : null
++}
++
++export async function listPlans(): Promise<{
++  plans?: AdminPlan[]
++  flags?: SubscriptionFlagsForm
++  subscriptions?: AdminSubscriptionRow[]
++  error?: string
++}> {
++  try {
++    await assertAdmin()
++    const db = createAdminDb()
++
++    const [{ data: plans, error: pErr }, { data: settings, error: sErr }, { data: subs, error: subErr }] =
++      await Promise.all([
++        db
++          .from('subscription_plans')
++          .select('id, name, price, duration_days, discount_percent, benefits, sort_order, is_active')
++          .order('sort_order', { ascending: true })
++          .order('price', { ascending: true }),
++        db
++          .from('settings')
++          .select('subscription_enabled')
++          .eq('id', 1)
++          .maybeSingle(),
++        db
++          .from('customer_subscriptions')
++          .select('id, plan_name, discount_percent, price_paid, ends_at, source, status, customers(phone, name)')
++          .order('created_at', { ascending: false })
++          .limit(50),
++      ])
++
++    if (pErr) {
++      console.error('[subscriptions] plans list:', pErr)
++      return { error: 'خطا در خواندن پلن‌ها' }
++    }
++    if (sErr) {
++      console.error('[subscriptions] settings:', sErr)
++      return { error: 'خطا در خواندن تنظیمات اشتراک' }
++    }
++    if (subErr) {
++      console.error('[subscriptions] list subs:', subErr)
++      return { error: 'خطا در خواندن اشتراک‌ها' }
++    }
++
++    return {
++      plans: (plans ?? []).map((p: any) => ({
++        id: String(p.id),
++        name: String(p.name ?? ''),
++        price: Number(p.price ?? 0),
++        duration_days: Number(p.duration_days ?? 30),
++        discount_percent: Number(p.discount_percent ?? 0),
++        benefits: (p.benefits as string) ?? null,
++        sort_order: Number(p.sort_order ?? 10),
++        is_active: p.is_active !== false,
++      })),
++      flags: { subscription_enabled: settings?.subscription_enabled === true },
++      subscriptions: (subs ?? []).map((s: any) => ({
++        id: String(s.id),
++        customer_phone: (s.customers?.phone as string) ?? null,
++        customer_name: (s.customers?.name as string) ?? null,
++        plan_name: String(s.plan_name ?? ''),
++        discount_percent: Number(s.discount_percent ?? 0),
++        price_paid: Number(s.price_paid ?? 0),
++        ends_at: String(s.ends_at ?? ''),
++        source: String(s.source ?? 'wallet'),
++        status: String(s.status ?? 'active'),
++      })),
++    }
++  } catch (err: any) {
++    console.error('[subscriptions] list unexpected:', err)
++    return { error: err?.message || 'خطای غیرمنتظره' }
++  }
++}
++
++export async function savePlan(input: PlanInput): Promise<{ success?: boolean; error?: string }> {
++  try {
++    await assertAdminId()
++    const vErr = planInputError(input)
++    if (vErr) return { error: vErr }
++
++    const db = createAdminDb()
++    const row = {
++      name: String(input.name).trim(),
++      price: Math.round(input.price),
++      duration_days: input.duration_days,
++      discount_percent: input.discount_percent,
++      benefits: String(input.benefits ?? '').trim() || null,
++      sort_order: input.sort_order,
++      is_active: input.is_active === true,
++    }
++
++    if (input.id) {
++      const { error } = await db.from('subscription_plans').update(row).eq('id', String(input.id))
++      if (error) {
++        console.error('[subscriptions] update:', error)
++        return { error: 'خطا در ذخیره‌ی پلن' }
++      }
++    } else {
++      const { error } = await db.from('subscription_plans').insert(row)
++      if (error) {
++        console.error('[subscriptions] insert:', error)
++        return { error: 'خطا در ساخت پلن' }
++      }
++    }
++
++    revalidatePath('/admin/settings/subscriptions')
++    return { success: true }
++  } catch (err: any) {
++    console.error('[subscriptions] save unexpected:', err)
++    return { error: err?.message || 'خطای غیرمنتظره' }
++  }
++}
++
++export async function deletePlan(id: string): Promise<{ success?: boolean; error?: string }> {
++  try {
++    await assertAdminId()
++    if (!id) return { error: 'شناسه پلن نامعتبر است' }
++
++    const db = createAdminDb()
++
++    // اگر اشتراکی روی این پلن خریداری شده، حذف نکن — غیرفعال کن
++    const { count, error: countErr } = await db
++      .from('customer_subscriptions')
++      .select('id', { count: 'exact', head: true })
++      .eq('plan_id', id)
++
++    if (countErr) {
++      console.error('[subscriptions] delete count:', countErr)
++      return { error: 'خطا در بررسی استفاده‌کنندگان پلن' }
++    }
++    if ((count ?? 0) > 0) {
++      return {
++        error: `${(count ?? 0).toLocaleString('fa-IR')} اشتراک روی این پلن خریداری شده؛ به‌جای حذف، پلن را «غیرفعال» کن.`,
++      }
++    }
++
++    // اگر درخواستِ در انتظاری روی این پلن است، حذف مسدود شود تا رسید ادمین معلق نماند
++    const { count: pendingCount, error: pendErr } = await db
++      .from('wallet_charge_requests')
++      .select('id', { count: 'exact', head: true })
++      .eq('plan_id', id)
++      .eq('status', 'pending')
++    if (pendErr) {
++      console.error('[subscriptions] delete pending count:', pendErr)
++      return { error: 'خطا در بررسی درخواست‌های در انتظار' }
++    }
++    if ((pendingCount ?? 0) > 0) {
++      return {
++        error: `${(pendingCount ?? 0).toLocaleString('fa-IR')} درخواستِ در انتظارِ تأیید روی این پلن است؛ اول در صف «کیف پول مشتریان» نتیجه را مشخص کن.`,
++      }
++    }
++
++    const { error } = await db.from('subscription_plans').delete().eq('id', id)
++    if (error) {
++      console.error('[subscriptions] delete:', error)
++      return { error: 'خطا در حذف پلن' }
++    }
++
++    revalidatePath('/admin/settings/subscriptions')
++    return { success: true }
++  } catch (err: any) {
++    console.error('[subscriptions] delete unexpected:', err)
++    return { error: err?.message || 'خطای غیرمنتظره' }
++  }
++}
++
++export async function saveSubscriptionFlags(
++  input: SubscriptionFlagsForm
++): Promise<{ success?: boolean; error?: string }> {
++  try {
++    await assertAdminId()
++
++    const db = createAdminDb()
++    const { error } = await db
++      .from('settings')
++      .update({ subscription_enabled: input?.subscription_enabled === true })
++      .eq('id', 1)
++
++    if (error) {
++      console.error('[subscriptions] flags save:', error)
++      return { error: 'خطا در ذخیره‌ی تنظیمات اشتراک' }
++    }
++
++    revalidatePath('/admin/settings/subscriptions')
++    return { success: true }
++  } catch (err: any) {
++    console.error('[subscriptions] flags unexpected:', err)
++    return { error: err?.message || 'خطای غیرمنتظره' }
++  }
++}
+diff --git a/app/admin/settings/subscriptions/page.tsx b/app/admin/settings/subscriptions/page.tsx
+new file mode 100644
+index 0000000..4939f94
+--- /dev/null
++++ b/app/admin/settings/subscriptions/page.tsx
+@@ -0,0 +1,13 @@
++import type { Metadata } from 'next'
++import SubscriptionsManager from './SubscriptionsManager'
++
++export const metadata: Metadata = {
++  title: 'اشتراک ماهیانه',
++  robots: { index: false, follow: false },
++}
++
++export const dynamic = 'force-dynamic'
++
++export default function SubscriptionsSettingsPage() {
++  return <SubscriptionsManager />
++}
+diff --git a/app/admin/wallet/page.tsx b/app/admin/wallet/page.tsx
+index 5af699f..1c0b682 100644
+--- a/app/admin/wallet/page.tsx
++++ b/app/admin/wallet/page.tsx
+@@ -47,6 +47,8 @@ type ChargeRequest = {
+   receipt_url: string | null
+   tracking_no: string | null
+   reject_reason: string | null
++  purpose?: string
++  plan_name?: string | null
+   created_at: string
+   customer: { phone: string | null; name: string | null; wallet_blocked: boolean; card_charge_blocked: boolean } | null
+ }
+@@ -292,8 +294,8 @@ export default function WalletPage() {
+     }
+   }
+ 
+-  /** تأیید/رد رسید شارژ — رد دلیل الزامی دارد (برای مشتری نمایش داده می‌شود) */
+-  async function reviewCharge(id: string, action: 'approve' | 'reject') {
++  /** تأیید/رد رسید — شارژ کیف پول یا ساخت اشتراک (بر اساس purpose)؛ رد دلیل الزامی دارد */
++  async function reviewCharge(id: string, action: 'approve' | 'reject', purpose?: string) {
+     let rejectReason: string | undefined
+     if (action === 'reject') {
+       const input = prompt('دلیل رد (برای مشتری نمایش داده می‌شود):')
+@@ -315,11 +317,12 @@ export default function WalletPage() {
+       const json = await res.json()
+       if (!res.ok) {
+         setMsg({ kind: 'err', text: json.error || 'بررسی ناموفق بود' })
++      } else if (action === 'approve' && purpose === 'subscription') {
++        setMsg({ kind: 'ok', text: 'رسید تأیید شد و اشتراک مشتری فعال شد ✓' })
++      } else if (action === 'approve') {
++        setMsg({ kind: 'ok', text: 'رسید تأیید شد و کیف پول مشتری شارژ شد ✓' })
+       } else {
+-        setMsg({
+-          kind: 'ok',
+-          text: action === 'approve' ? 'رسید تأیید شد و کیف پول مشتری شارژ شد ✓' : 'درخواست شارژ رد شد',
+-        })
++        setMsg({ kind: 'ok', text: 'درخواست رد شد' })
+       }
+       await loadRequests()
+     } catch {
+@@ -727,6 +730,11 @@ export default function WalletPage() {
+                 <div style={{ minWidth: 0 }}>
+                   <div style={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                     {fmt(r.amount)} تومان
++                    {r.purpose === 'subscription' && (
++                      <span style={{ background: '#efe6ff', color: '#5b2c92', borderRadius: 999, padding: '1px 8px', fontSize: 10, fontWeight: 700 }}>
++                        ⭐ خرید اشتراک{r.plan_name ? `: ${r.plan_name}` : ''}
++                      </span>
++                    )}
+                     {r.customer?.name && <span>— {r.customer.name}</span>}
+                     {r.customer?.phone && <span dir="ltr" style={{ fontWeight: 'normal', opacity: 0.75 }}>{r.customer.phone}</span>}
+                     {r.status === 'pending' && (
+@@ -763,11 +771,11 @@ export default function WalletPage() {
+                     <>
+                       <button
+                         type="button"
+-                        onClick={() => reviewCharge(r.id, 'approve')}
++                        onClick={() => reviewCharge(r.id, 'approve', r.purpose)}
+                         disabled={reviewBusy === r.id}
+                         style={{ padding: '7px 14px', borderRadius: 8, border: 'none', background: '#2e7d32', color: '#fff', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}
+                       >
+-                        {reviewBusy === r.id ? '…' : 'تأیید و شارژ'}
++                        {reviewBusy === r.id ? '…' : r.purpose === 'subscription' ? 'تأیید و فعال‌سازی' : 'تأیید و شارژ'}
+                       </button>
+                       <button
+                         type="button"
+diff --git a/app/api/admin/wallet/requests/route.ts b/app/api/admin/wallet/requests/route.ts
+index 6d6144f..d704af0 100644
+--- a/app/api/admin/wallet/requests/route.ts
++++ b/app/api/admin/wallet/requests/route.ts
+@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
+       .limit(50),
+     db
+       .from('wallet_charge_requests')
+-      .select('id, customer_id, amount, status, receipt_url, tracking_no, reject_reason, created_at')
++      .select('id, customer_id, amount, status, receipt_url, tracking_no, reject_reason, purpose, plan_name, created_at')
+       .order('created_at', { ascending: false })
+       .limit(50),
+   ])
+@@ -179,7 +179,7 @@ async function reviewChargeRequest(
+     })
+     .eq('id', id)
+     .eq('status', 'pending')
+-    .select('customer_id, amount, tracking_no')
++    .select('customer_id, amount, tracking_no, purpose, plan_id, plan_name')
+ 
+   if (claimErr) {
+     console.error('[admin/wallet/requests] charge claim:', claimErr.message)
+@@ -205,11 +205,42 @@ async function reviewChargeRequest(
+         .update({ status: 'pending', reviewed_at: null })
+         .eq('id', id)
+       return NextResponse.json(
+-        { error: 'شارژ کارت‌به‌کارت این مشتری مسدود است؛ از «پرونده» غیرفعالش کن یا درخواست را رد کن' },
++        { error: 'پرداخت کارت‌به‌کارت این مشتری مسدود است؛ از «پرونده» غیرفعالش کن یا درخواست را رد کن' },
+         { status: 409 }
+       )
+     }
+ 
++    // درخواست خرید اشتراک: به‌جای شارژ کیف پول، اشتراک ساخته می‌شود
++    if (request.purpose === 'subscription') {
++      if (!request.plan_id) {
++        await db
++          .from('wallet_charge_requests')
++          .update({ status: 'pending', reviewed_at: null })
++          .eq('id', id)
++        return NextResponse.json({ error: 'پلن این درخواست یافت نشد' }, { status: 500 })
++      }
++      const { error: grantErr } = await db.rpc('grant_subscription', {
++        p_customer_id: request.customer_id,
++        p_plan_id: request.plan_id,
++        p_source: 'card_to_card',
++      })
++      if (grantErr) {
++        console.error('[admin/wallet/requests] grant_subscription:', grantErr.message)
++        await db
++          .from('wallet_charge_requests')
++          .update({ status: 'pending', reviewed_at: null })
++          .eq('id', id)
++        if (grantErr.message.includes('already_active')) {
++          return NextResponse.json(
++            { error: 'مشتری اشتراک فعال دارد؛ درخواست را رد کن یا صبر کن اشتراکش منقضی شود' },
++            { status: 409 }
++          )
++        }
++        return NextResponse.json({ error: 'ساخت اشتراک ناموفق بود' }, { status: 500 })
++      }
++      return NextResponse.json({ ok: true, status: 'approved' })
++    }
++
+     const amount = Number(request.amount)
+     const note = `شارژ با تأیید رسید${request.tracking_no ? ` — پیگیری: ${request.tracking_no}` : ''}`
+     const { error: txErr } = await db.rpc('wallet_charge', {
+diff --git a/app/api/orders/route.ts b/app/api/orders/route.ts
+index 3c5e18e..12fd114 100644
+--- a/app/api/orders/route.ts
++++ b/app/api/orders/route.ts
+@@ -8,6 +8,7 @@ import { hashData } from '@/lib/utils/hash'
+ import { getCustomerCreditState, creditDenyMessage } from '@/lib/club/credit'
+ import { combineDiscounts } from '@/lib/club/discount-policy'
+ import { getGradeConfig, getVerifiedCustomerGrade } from '@/lib/customers/grades'
++import { getActiveSubscriptionByPhone } from '@/lib/subscriptions/subscriptions'
+ import { loadActiveFees, feeForProduct, findActiveTable } from '@/lib/orders/takeaway'
+ import { rateLimit, tooMany } from '@/lib/rate-limit'
+ 
+@@ -291,7 +292,7 @@ if (wantsTakeaway) {
+     }
+ 
+     // نامزدِ تخفیف گرید (مشتریِ احرازشده با گرید فعال)
+-    let gradeWinnerLabel: 'MEMBERSHIP' | 'GRADE' | 'MEMBERSHIP+GRADE' | null = null
++    let gradeWinnerLabel: 'MEMBERSHIP' | 'GRADE' | 'MEMBERSHIP+GRADE' | 'SUBSCRIPTION' | 'SUBSCRIPTION+GRADE' | null = null
+     let gradePercent = 0
+     try {
+       const customerGrade = await getVerifiedCustomerGrade(phone)
+@@ -300,6 +301,21 @@ if (wantsTakeaway) {
+       console.error('[orders POST] grade lookup:', gradeErr)
+     }
+ 
++    // نامزدِ تخفیف اشتراک ماهیانه — پولی است و سهمیه نمی‌خواهد؛
++    // در موتور ترکیب، جایگزینِ سهم باشگاه می‌شود (هرکدام بیشتر)
++    let subscriptionPercent = 0
++    let subscriptionDiscount = 0
++    try {
++      const sub = await getActiveSubscriptionByPhone(phone)
++      subscriptionPercent = sub?.discountPercent ?? 0
++    } catch (subErr) {
++      console.error('[orders POST] subscription lookup:', subErr)
++    }
++
++    const paidPercent = Math.max(membershipPercent, subscriptionPercent)
++    const paidSource: 'membership' | 'subscription' =
++      subscriptionPercent > membershipPercent ? 'subscription' : 'membership'
++
+     const gradeConfig = await getGradeConfig()
+     const combine = (mPct: number) =>
+       combineDiscounts({
+@@ -310,13 +326,22 @@ if (wantsTakeaway) {
+         gradePercent,
+       })
+ 
+-    let combined = combine(membershipPercent)
++    let combined = combine(paidPercent)
+     let membershipDiscount = combined.membershipDiscount
+     let gradeDiscount = combined.gradeDiscount
+     let combinedDiscount = combined.discount
++    subscriptionDiscount =
++      paidSource === 'subscription' &&
++      (combined.winner === 'membership' || combined.winner === 'stacked')
++        ? membershipDiscount
++        : 0
+ 
+     // رزرو سهمیه‌ی عضویت فقط وقتی تخفیف باشگاه برنده شده باشد
+-    if (combined.winner === 'membership' || combined.winner === 'stacked') {
++    // (اشتراکِ برنده سهمیه نمی‌خواهد؛ ظرفیت باشگاه برای روزهای دیگر مشتری می‌ماند)
++    const needsMembershipQuota =
++      paidSource === 'membership' &&
++      (combined.winner === 'membership' || combined.winner === 'stacked')
++    if (needsMembershipQuota) {
+       if (!member || membershipDiscount <= 0) {
+         return bad('خطا در ثبت سفارش', 500)
+       }
+@@ -344,9 +369,13 @@ if (wantsTakeaway) {
+       }
+     }
+ 
+-    if (combined.winner === 'membership') gradeWinnerLabel = 'MEMBERSHIP'
+-    else if (combined.winner === 'grade') gradeWinnerLabel = 'GRADE'
+-    else if (combined.winner === 'stacked') gradeWinnerLabel = 'MEMBERSHIP+GRADE'
++    if (combined.winner === 'grade') {
++      gradeWinnerLabel = 'GRADE'
++    } else if (combined.winner === 'membership') {
++      gradeWinnerLabel = paidSource === 'subscription' ? 'SUBSCRIPTION' : 'MEMBERSHIP'
++    } else if (combined.winner === 'stacked') {
++      gradeWinnerLabel = paidSource === 'subscription' ? 'SUBSCRIPTION+GRADE' : 'MEMBERSHIP+GRADE'
++    }
+ 
+     // ---------- کوپن (فقط اگر هیچ تخفیف باشگاه/گریدی اعمال نشده) ----------
+     let couponDiscount = 0
+@@ -465,6 +494,7 @@ if (wantsTakeaway) {
+           coupon_code: gradeWinnerLabel ?? appliedCouponCode,
+           coupon_discount: totalDiscount > 0 ? totalDiscount : null,
+           grade_discount: gradeDiscount > 0 ? gradeDiscount : 0,
++          subscription_discount: subscriptionDiscount > 0 ? subscriptionDiscount : 0,
+           status: 'pending',
+           payment_status: 'unpaid',
+           payment_method: initialMethod,
+diff --git a/app/api/payment/wallet/route.ts b/app/api/payment/wallet/route.ts
+index d3a01fb..e5d2742 100644
+--- a/app/api/payment/wallet/route.ts
++++ b/app/api/payment/wallet/route.ts
+@@ -5,43 +5,48 @@ import { supabaseAdmin } from '@/lib/supabase/server'
+ import { getDeviceHash, UUID_RE } from '@/lib/orders/owner'
+ import { resolveWalletCustomer } from '@/lib/wallet/wallet'
+ import { getVerifiedCustomerGrade } from '@/lib/customers/grades'
++import { getActiveSubscriptionByPhone } from '@/lib/subscriptions/subscriptions'
+ import { paymentErrorMessage } from '@/lib/payment/methods'
+ 
+ export const dynamic = 'force-dynamic'
+ 
+-/** موجودی کیف پول + گرید نشست فعلی — برای نمایش گزینه «پرداخت با کیف پول» و پیش‌نمایش تخفیف گرید در چک‌اوت */
++/** موجودی کیف پول + گرید + اشتراک نشست فعلی — برای گزینه «پرداخت با کیف پول» و پیش‌نمایش تخفیف‌ها در چک‌اوت */
+ export async function GET() {
+   try {
+     const customer = await resolveWalletCustomer()
+     if (!customer) {
+       return NextResponse.json(
+-        { balance: null, blocked: false, grade: null },
++        { balance: null, blocked: false, grade: null, subscription: null },
+         { headers: { 'Cache-Control': 'no-store' } }
+       )
+     }
+ 
+-    const [{ data, error }, grade] = await Promise.all([
++    const [{ data, error }, grade, subscription] = await Promise.all([
+       supabaseAdmin().rpc('wallet_balance', { p_customer_id: customer.id }),
+       getVerifiedCustomerGrade(customer.phone).catch((err) => {
+         console.error('[payment/wallet][GET] grade:', err)
+         return null
+       }),
++      getActiveSubscriptionByPhone(customer.phone).catch((err) => {
++        console.error('[payment/wallet][GET] subscription:', err)
++        return null
++      }),
+     ])
+     if (error) {
+       console.error('[payment/wallet][GET] balance:', error.message)
+       return NextResponse.json(
+-        { balance: null, blocked: !!customer.wallet_blocked, grade },
++        { balance: null, blocked: !!customer.wallet_blocked, grade, subscription },
+         { headers: { 'Cache-Control': 'no-store' } }
+       )
+     }
+ 
+     return NextResponse.json(
+-      { balance: Number(data ?? 0), blocked: !!customer.wallet_blocked, grade },
++      { balance: Number(data ?? 0), blocked: !!customer.wallet_blocked, grade, subscription },
+       { headers: { 'Cache-Control': 'no-store' } }
+     )
+   } catch (err) {
+     console.error('[payment/wallet][GET]', err)
+-    return NextResponse.json({ balance: null, blocked: false, grade: null })
++    return NextResponse.json({ balance: null, blocked: false, grade: null, subscription: null })
+   }
+ }
+ 
+diff --git a/app/api/subscription/request/route.ts b/app/api/subscription/request/route.ts
+new file mode 100644
+index 0000000..bf9a02c
+--- /dev/null
++++ b/app/api/subscription/request/route.ts
+@@ -0,0 +1,149 @@
++import 'server-only'
++import { NextRequest, NextResponse } from 'next/server'
++import { rateLimit, tooMany } from '@/lib/rate-limit'
++import { supabaseAdmin } from '@/lib/supabase/server'
++import { resolveWalletCustomer } from '@/lib/wallet/wallet'
++import { getSubscriptionFlags } from '@/lib/subscriptions/subscriptions'
++import {
++  isValidTrackingNo,
++  normalizeTrackingNo,
++} from '@/lib/wallet/charge'
++import { IMAGE_SIGNED_URL_TTL, MAX_IMAGE_SIZE, detectImage } from '@/lib/upload/image'
++import { UUID_RE } from '@/lib/orders/owner'
++
++export const dynamic = 'force-dynamic'
++
++/**
++ * درخواست خرید اشتراک با کارت‌به‌کارت — POST multipart/form-data
++ * فیلدها: plan_id، tracking_no (شماره پیگیری)، file (عکس رسید)
++ * درخواست در wallet_charge_requests با purpose='subscription' و وضعیت pending می‌نشیند؛
++ * اشتراک واقعی فقط بعد از تأیید ادمین ساخته می‌شود (grant_subscription).
++ */
++export async function POST(req: NextRequest) {
++  const rl = rateLimit(req, 'subscription-req', 5, 60 * 60_000)
++  if (!rl.ok) return tooMany(rl)
++
++  try {
++    const customer = await resolveWalletCustomer()
++    if (!customer) {
++      return NextResponse.json(
++        { error: 'برای خرید اشتراک، اول با شماره موبایل وارد شو' },
++        { status: 401 }
++      )
++    }
++    if (customer.wallet_blocked) {
++      return NextResponse.json({ error: 'کیف پول شما توسط مدیر مسدود شده است' }, { status: 403 })
++    }
++    if (customer.card_charge_blocked) {
++      return NextResponse.json(
++        { error: 'پرداخت کارت‌به‌کارت برای حساب شما غیرفعال است؛ با مدیر کافه تماس بگیر' },
++        { status: 403 }
++      )
++    }
++
++    const flags = await getSubscriptionFlags()
++    if (!flags.subscriptionEnabled) {
++      return NextResponse.json({ error: 'خرید اشتراک فعلاً فعال نیست' }, { status: 403 })
++    }
++
++    const formData = await req.formData().catch(() => null)
++    const file = formData?.get('file')
++    const planIdRaw = formData?.get('plan_id')
++    const trackingRaw = formData?.get('tracking_no')
++
++    if (!(file instanceof File) || typeof planIdRaw !== 'string' || typeof trackingRaw !== 'string') {
++      return NextResponse.json({ error: 'پلن، شماره پیگیری و عکس رسید الزامی است' }, { status: 400 })
++    }
++    if (!UUID_RE.test(planIdRaw)) {
++      return NextResponse.json({ error: 'پلن نامعتبر است' }, { status: 400 })
++    }
++
++    const trackingNo = normalizeTrackingNo(trackingRaw)
++    if (!isValidTrackingNo(trackingNo)) {
++      return NextResponse.json(
++        { error: 'شماره پیگیری باید ۴ تا ۳۰ رقم باشد' },
++        { status: 400 }
++      )
++    }
++
++    if (file.size === 0 || file.size > MAX_IMAGE_SIZE) {
++      return NextResponse.json(
++        { error: 'حجم عکس رسید نباید بیشتر از ۵ مگابایت باشد' },
++        { status: 400 }
++      )
++    }
++
++    const db = supabaseAdmin()
++
++    // پلن باید فعال باشد؛ مبلغ رسید = قیمت پلن در همین لحظه
++    const { data: plan } = await db
++      .from('subscription_plans')
++      .select('id, name, price')
++      .eq('id', planIdRaw)
++      .eq('is_active', true)
++      .maybeSingle()
++    if (!plan) {
++      return NextResponse.json({ error: 'این پلن در دسترس نیست' }, { status: 400 })
++    }
++
++    // هر مشتری در هر لحظه فقط یک درخواست در انتظار تأیید دارد (شارژ یا اشتراک)
++    const { data: dup } = await db
++      .from('wallet_charge_requests')
++      .select('id')
++      .eq('customer_id', customer.id)
++      .eq('status', 'pending')
++      .maybeSingle()
++    if (dup) {
++      return NextResponse.json(
++        { error: 'شما یک درخواست در انتظار تأیید دارید' },
++        { status: 409 }
++      )
++    }
++
++    const buffer = new Uint8Array(await file.arrayBuffer())
++    const detected = detectImage(buffer)
++    if (!detected) {
++      return NextResponse.json({ error: 'فقط عکس JPG، PNG یا WebP مجاز است' }, { status: 400 })
++    }
++
++    const fileName = `sub-${customer.id}-${Date.now()}.${detected.ext}`
++    const { error: uploadError } = await db.storage
++      .from('receipts')
++      .upload(fileName, buffer, { contentType: detected.mime, upsert: false })
++    if (uploadError) {
++      console.error('[subscription/request] storage:', uploadError.message)
++      return NextResponse.json({ error: 'خطا در ذخیره‌ی رسید' }, { status: 500 })
++    }
++
++    const { data: signed, error: signError } = await db.storage
++      .from('receipts')
++      .createSignedUrl(fileName, IMAGE_SIGNED_URL_TTL)
++    if (signError || !signed) {
++      console.error('[subscription/request] sign:', signError?.message)
++      await db.storage.from('receipts').remove([fileName])
++      return NextResponse.json({ error: 'خطا در ساخت لینک رسید' }, { status: 500 })
++    }
++
++    const { error: insertError } = await db.from('wallet_charge_requests').insert({
++      customer_id: customer.id,
++      amount: Number(plan.price),
++      status: 'pending',
++      receipt_url: signed.signedUrl,
++      tracking_no: trackingNo,
++      purpose: 'subscription',
++      plan_id: plan.id,
++      plan_name: plan.name,
++      paid_at: new Date().toISOString(),
++    })
++    if (insertError) {
++      console.error('[subscription/request] insert:', insertError.message)
++      await db.storage.from('receipts').remove([fileName])
++      return NextResponse.json({ error: 'ثبت درخواست ناموفق بود' }, { status: 500 })
++    }
++
++    return NextResponse.json({ ok: true })
++  } catch (err) {
++    console.error('[subscription/request] POST', err)
++    return NextResponse.json({ error: 'خطای سرور' }, { status: 500 })
++  }
++}
+diff --git a/app/api/subscription/route.ts b/app/api/subscription/route.ts
+new file mode 100644
+index 0000000..3d94d00
+--- /dev/null
++++ b/app/api/subscription/route.ts
+@@ -0,0 +1,133 @@
++import 'server-only'
++import { NextRequest, NextResponse } from 'next/server'
++import { rateLimit, tooMany } from '@/lib/rate-limit'
++import { supabaseAdmin } from '@/lib/supabase/server'
++import { resolveWalletCustomer } from '@/lib/wallet/wallet'
++import { getSubscriptionFlags } from '@/lib/subscriptions/subscriptions'
++import { UUID_RE } from '@/lib/orders/owner'
++
++export const dynamic = 'force-dynamic'
++
++/** پلن‌های فعال + وضعیت اشتراک و درخواستِ در انتظارِ مشتری — GET */
++export async function GET() {
++  try {
++    const [flags, { data: plans }] = await Promise.all([
++      getSubscriptionFlags(),
++      supabaseAdmin()
++        .from('subscription_plans')
++        .select('id, name, price, duration_days, discount_percent, benefits, sort_order')
++        .eq('is_active', true)
++        .order('sort_order', { ascending: true })
++        .order('price', { ascending: true })
++        .limit(20),
++    ])
++
++    const customer = await resolveWalletCustomer()
++    if (!customer) {
++      return NextResponse.json(
++        { subscriptionEnabled: flags.subscriptionEnabled, plans: plans ?? [], customer: null, subscription: null, pendingRequest: null },
++        { headers: { 'Cache-Control': 'no-store' } }
++      )
++    }
++
++    const [sub, pending] = await Promise.all([
++      supabaseAdmin()
++        .from('customer_subscriptions')
++        .select('id, plan_name, discount_percent, ends_at, source')
++        .eq('customer_id', customer.id)
++        .eq('status', 'active')
++        .gt('ends_at', new Date().toISOString())
++        .order('ends_at', { ascending: false })
++        .limit(1)
++        .maybeSingle(),
++      supabaseAdmin()
++        .from('wallet_charge_requests')
++        .select('id, status, plan_name, reject_reason, created_at')
++        .eq('customer_id', customer.id)
++        .eq('purpose', 'subscription')
++        .eq('status', 'pending')
++        .order('created_at', { ascending: false })
++        .limit(1)
++        .maybeSingle(),
++    ])
++
++    return NextResponse.json(
++      {
++        subscriptionEnabled: flags.subscriptionEnabled,
++        plans: plans ?? [],
++        customer: { name: customer.name, wallet_blocked: !!customer.wallet_blocked },
++        subscription: sub.data ?? null,
++        pendingRequest: pending.data ?? null,
++      },
++      { headers: { 'Cache-Control': 'no-store' } }
++    )
++  } catch (err) {
++    console.error('[subscription][GET]', err)
++    return NextResponse.json({ error: 'خطای سرور' }, { status: 500 })
++  }
++}
++
++/**
++ * خرید اشتراک با موجودی کیف پول — POST { plan_id }
++ * کسر مبلغ + ساخت اشتراک در یک RPC اتمیک انجام می‌شود.
++ */
++export async function POST(req: NextRequest) {
++  const rl = rateLimit(req, 'subscription-buy', 5, 60_000)
++  if (!rl.ok) return tooMany(rl)
++
++  try {
++    const body = await req.json().catch(() => null)
++    const planId = typeof body?.plan_id === 'string' ? body.plan_id : ''
++    if (!UUID_RE.test(planId)) {
++      return NextResponse.json({ error: 'پلن نامعتبر است' }, { status: 400 })
++    }
++
++    const flags = await getSubscriptionFlags()
++    if (!flags.subscriptionEnabled) {
++      return NextResponse.json({ error: 'خرید اشتراک فعلاً فعال نیست' }, { status: 403 })
++    }
++
++    const customer = await resolveWalletCustomer()
++    if (!customer) {
++      return NextResponse.json(
++        { error: 'برای خرید اشتراک اول با شماره موبایل وارد شو' },
++        { status: 401 }
++      )
++    }
++    if (customer.wallet_blocked) {
++      return NextResponse.json({ error: 'کیف پول شما توسط مدیر مسدود شده است' }, { status: 403 })
++    }
++
++    const { data, error } = await supabaseAdmin().rpc('purchase_subscription_with_wallet', {
++      p_customer_id: customer.id,
++      p_plan_id: planId,
++    })
++
++    if (error) {
++      console.error('[subscription] buy rpc:', error.message)
++      const msg = error.message
++      if (msg.includes('insufficient_balance')) {
++        return NextResponse.json({ error: 'موجودی کیف پول برای این پلن کافی نیست؛ اول کیف پول را شارژ کن' }, { status: 400 })
++      }
++      if (msg.includes('already_active')) {
++        return NextResponse.json({ error: 'شما یک اشتراک فعال دارید؛ بعد از پایان می‌توانید تمدید کنید' }, { status: 409 })
++      }
++      if (msg.includes('plan_not_found')) {
++        return NextResponse.json({ error: 'این پلن در دسترس نیست' }, { status: 400 })
++      }
++      return NextResponse.json({ error: 'خطا در خرید اشتراک' }, { status: 500 })
++    }
++
++    const row = Array.isArray(data) ? data[0] : data
++    return NextResponse.json({
++      ok: true,
++      subscription: {
++        id: String(row?.subscription_id ?? ''),
++        ends_at: row?.ends_at ?? null,
++      },
++    })
++  } catch (err) {
++    console.error('[subscription][POST]', err)
++    return NextResponse.json({ error: 'خطای سرور' }, { status: 500 })
++  }
++}
+diff --git a/app/checkout/page.tsx b/app/checkout/page.tsx
+index eae2cd0..69161c4 100644
+--- a/app/checkout/page.tsx
++++ b/app/checkout/page.tsx
+@@ -39,6 +39,8 @@ function CheckoutForm() {
+   const [walletInfo, setWalletInfo] = useState<{ balance: number; blocked: boolean } | null>(null)
+   // 🏆 گرید وفاداری نشست فعلی — فقط پیش‌نمایش؛ محاسبه‌ی قطعی سمت سرور است
+   const [gradeInfo, setGradeInfo] = useState<{ name: string; discountPercent: number; color: string | null } | null>(null)
++  // ⭐ اشتراک ماهیانه نشست فعلی — فقط پیش‌نمایش
++  const [subInfo, setSubInfo] = useState<{ planName: string; discountPercent: number } | null>(null)
+ 
+   // 👛 کیف پول نشست فعلی (ثبت‌نام با دعوت/OTP) — فقط اگر شناسایی شود نمایش داده می‌شود
+   const walletAvailable = !!(walletInfo && walletInfo.balance != null && !walletInfo.blocked)
+@@ -97,6 +99,11 @@ function CheckoutForm() {
+         } else {
+           setGradeInfo(null)
+         }
++        if (data?.subscription && typeof data.subscription.discountPercent === 'number' && data.subscription.discountPercent > 0) {
++          setSubInfo({ planName: String(data.subscription.planName ?? ''), discountPercent: Number(data.subscription.discountPercent) })
++        } else {
++          setSubInfo(null)
++        }
+       })
+       .catch(() => setWalletInfo(null))
+   }, [])
+@@ -458,6 +465,12 @@ function CheckoutForm() {
+                 🏆 گرید {gradeInfo.name}: {formatPrice(gradeInfo.discountPercent)}٪ تخفیف روی اقلام مشمول — در ثبت نهایی خودکار اعمال می‌شود
+               </div>
+             )}
++            {subInfo && (
++              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', background: '#f7f1ff', border: '1px solid #8f6bc4', borderRadius: '10px', padding: '8px 12px', marginBottom: '10px', fontSize: '11.5px', color: '#4a2c73' }}>
++                <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#8f6bc4', flex: '0 0 auto' }} />
++                ⭐ اشتراک {subInfo.planName}: {formatPrice(subInfo.discountPercent)}٪ تخفیف روی اقلام مشمول — در ثبت نهایی خودکار اعمال می‌شود
++              </div>
++            )}
+             <div className="payment-methods-selector" style={{ gap: '8px' }}>
+               {availableMethods.map((m) => {
+                 const info = METHOD_INFO[m]
+diff --git a/app/my-orders/MyOrdersClient.tsx b/app/my-orders/MyOrdersClient.tsx
+index 7e87bbb..29d3c0d 100644
+--- a/app/my-orders/MyOrdersClient.tsx
++++ b/app/my-orders/MyOrdersClient.tsx
+@@ -6,13 +6,14 @@ import { useCart } from '@/lib/cart-context'
+ import { formatPersianDate } from '@/lib/format-date'
+ import { walletTxKindLabel, walletTxKindIcon, walletTxStatusLabel } from '@/lib/wallet/labels'
+ import { normalizeTrackingNo } from '@/lib/wallet/charge'
++import SubscriptionSection from './SubscriptionSection'
+ 
+ const formatPrice = (n: number) => new Intl.NumberFormat('fa-IR').format(Math.round(n))
+ 
+ type OrderItem = { product_name: string; option_name: string | null; unit_price: number; quantity: number; variant_option_id?: string | null; variant_group_id?: string | null; product_id?: string | null; image_url?: string | null }
+ type Order = { id: string; order_number: number; items: OrderItem[]; subtotal: number; original_subtotal: number | null; coupon_code: string | null; coupon_discount: number | null; status: string; created_at: string; cancelled_by: string | null; cancellation_reason_label: string | null; customer_name: string; customer_phone: string; payment_status?: string; payment_method?: string; paid_amount?: number }
+ type WalletTx = { id: string; amount: number; kind: string; status: string | null; note: string | null; order_id: string | null; created_at: string }
+-type ChargeReq = { id: string; amount: number; status: string; tracking_no: string | null; reject_reason: string | null; created_at: string }
++type ChargeReq = { id: string; amount: number; status: string; tracking_no: string | null; reject_reason: string | null; purpose?: string; plan_name?: string | null; created_at: string }
+ 
+ const STATUS_INFO: Record<string, { label: string; color: string; icon: string }> = {
+   pending: { label: 'در انتظار تأیید', color: '#9a6b3f', icon: '⏳' },
+@@ -440,6 +441,18 @@ export default function MyOrdersClient() {
+               )}
+             </div>
+           )}
++
++          {/* ⭐ اشتراک ماهیانه — چیپ اشتراک فعال + لیست پلن‌ها (خودمختار) */}
++          <SubscriptionSection
++            balance={wstatus?.customer?.balance ?? null}
++            hasCustomer={wstatus?.customer?.verification_status === 'verified' && !wstatus.customer.wallet_blocked}
++            onStatusChanged={() => {
++              fetch('/api/wallet/status', { cache: 'no-store' })
++                .then((r) => r.json())
++                .then((d) => { if (d && typeof d.walletEnabled === 'boolean') setWstatus(d) })
++                .catch(() => {})
++            }}
++          />
+         </div>
+       )}
+ 
+@@ -609,7 +622,7 @@ export default function MyOrdersClient() {
+               {(walletView.chargeRequests ?? []).filter((r) => r.status !== 'approved').slice(0, 3).map((r) => (
+                 <div key={r.id} style={{ background: r.status === 'pending' ? '#fff4d9' : '#fdecea', border: `1px solid ${r.status === 'pending' ? '#ecd9a8' : '#f5c6c0'}`, borderRadius: '10px', padding: '8px 12px', marginTop: '10px', fontSize: '11.5px', color: r.status === 'pending' ? '#8a6d3b' : '#9b3c32', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                   <span style={{ lineHeight: 1.8 }}>
+-                    {r.status === 'pending' ? '⏳' : '❌'} درخواست شارژ {formatPrice(r.amount)} تومان —{' '}
++                    {r.status === 'pending' ? '⏳' : '❌'} درخواست {r.purpose === 'subscription' ? `اشتراک${r.plan_name ? ` «${r.plan_name}»` : ''}` : 'شارژ'} {formatPrice(r.amount)} تومان —{' '}
+                     {r.status === 'pending' ? 'در انتظار تأیید مدیر' : `رد شد${r.reject_reason ? `: ${r.reject_reason}` : ''}`}
+                   </span>
+                   {r.tracking_no && <span dir="ltr" style={{ opacity: 0.7 }}>#{r.tracking_no}</span>}
+diff --git a/app/my-orders/SubscriptionSection.tsx b/app/my-orders/SubscriptionSection.tsx
+new file mode 100644
+index 0000000..514c89b
+--- /dev/null
++++ b/app/my-orders/SubscriptionSection.tsx
+@@ -0,0 +1,268 @@
++'use client'
++
++import { useCallback, useEffect, useState } from 'react'
++import { durationLabel, formatEndsAt, walletPurchaseError } from '@/lib/subscriptions/plans'
++
++/**
++ * بخش اشتراک ماهیانه در پنل مشتری:
++ * چیپ اشتراک فعال + لیست پلن‌ها با خرید کیف‌پولی یا درخواست کارت‌به‌کارت.
++ * خودمختار است — /api/subscription را خودش می‌گیرد تا MyOrdersClient سبک بماند.
++ */
++
++type Plan = {
++  id: string
++  name: string
++  price: number
++  duration_days: number
++  discount_percent: number
++  benefits: string | null
++  sort_order: number
++}
++
++type SubData = {
++  subscriptionEnabled: boolean
++  plans: Plan[]
++  customer: { name: string | null; wallet_blocked: boolean } | null
++  subscription: { id: string; plan_name: string; discount_percent: number; ends_at: string } | null
++  pendingRequest: { id: string; status: string; plan_name: string | null; reject_reason?: string | null } | null
++}
++
++const formatPrice = (n: number) => new Intl.NumberFormat('fa-IR').format(n)
++
++export default function SubscriptionSection({
++  balance,
++  hasCustomer,
++  onStatusChanged,
++}: {
++  balance: number | null
++  hasCustomer: boolean
++  onStatusChanged?: () => void
++}) {
++  const [data, setData] = useState<SubData | null>(null)
++  const [busy, setBusy] = useState<string | null>(null)
++  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
++  const [cardForm, setCardForm] = useState<string | null>(null) // plan_id در حال ثبت رسید
++  const [tracking, setTracking] = useState('')
++  const [file, setFile] = useState<File | null>(null)
++
++  const load = useCallback(() => {
++    fetch('/api/subscription', { cache: 'no-store' })
++      .then((r) => r.json())
++      .then((d: SubData) => {
++        if (d && typeof d.subscriptionEnabled === 'boolean') setData(d)
++      })
++      .catch(() => {})
++  }, [])
++
++  useEffect(() => {
++    load()
++  }, [load])
++
++  function flash(ok: boolean, text: string) {
++    setMsg({ ok, text })
++    setTimeout(() => setMsg(null), 4000)
++  }
++
++  async function buyWithWallet(plan: Plan) {
++    if (!window.confirm(`اشتراک «${plan.name}» به قیمت ${formatPrice(plan.price)} تومان از کیف پول خریداری شود؟`)) return
++    setBusy(plan.id)
++    try {
++      const res = await fetch('/api/subscription', {
++        method: 'POST',
++        headers: { 'Content-Type': 'application/json' },
++        body: JSON.stringify({ plan_id: plan.id }),
++      })
++      const json = await res.json().catch(() => null)
++      if (!res.ok) {
++        flash(false, json?.error || 'خرید ناموفق بود')
++      } else {
++        flash(true, '✅ اشتراک فعال شد؛ تخفیفش در سفارش‌های بعدی خودکار اعمال می‌شود')
++        load()
++        onStatusChanged?.()
++      }
++    } catch {
++      flash(false, 'ارتباط با سرور برقرار نشد')
++    } finally {
++      setBusy(null)
++    }
++  }
++
++  async function submitCardRequest(plan: Plan) {
++    if (!file) {
++      flash(false, 'عکس رسید را انتخاب کن')
++      return
++    }
++    setBusy(plan.id)
++    try {
++      const fd = new FormData()
++      fd.append('plan_id', plan.id)
++      fd.append('tracking_no', tracking)
++      fd.append('file', file)
++      const res = await fetch('/api/subscription/request', { method: 'POST', body: fd })
++      const json = await res.json().catch(() => null)
++      if (!res.ok) {
++        flash(false, json?.error || 'ثبت درخواست ناموفق بود')
++      } else {
++        flash(true, 'درخواست ثبت شد؛ بعد از تأیید مدیر، اشتراکت فعال می‌شود')
++        setCardForm(null)
++        setTracking('')
++        setFile(null)
++        load()
++      }
++    } catch {
++      flash(false, 'ارتباط با سرور برقرار نشد')
++    } finally {
++      setBusy(null)
++    }
++  }
++
++  if (!data) return null
++
++  const sub = data.subscription
++  // سوییچ خاموش ولی اشتراکِ فعال → فقط چیپ نشان بده؛ لیست پلن‌ها فقط با سوییچ روشن
++  if (!sub && !data.subscriptionEnabled) return null
++  if (!sub && (data.plans ?? []).length === 0) return null
++
++  return (
++    <div style={{ marginTop: '10px' }}>
++      {/* چیپ اشتراک فعال */}
++      {sub && (
++        <div style={{ background: '#f7f1ff', border: '1.5px solid #8f6bc4', borderRadius: '14px', padding: '10px 14px', display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
++          <span style={{ fontSize: '15px' }}>⭐</span>
++          <strong style={{ fontSize: '13px', color: '#4a2c73' }}>اشتراک {sub.plan_name}</strong>
++          {sub.discount_percent > 0 && (
++            <small style={{ fontSize: '11.5px', color: '#766f64' }}>
++              {formatPrice(sub.discount_percent)}٪ تخفیف روی اقلام مشمول — خودکار اعمال می‌شود
++            </small>
++          )}
++          <small style={{ fontSize: '11.5px', color: '#766f64' }}>فعال تا {formatEndsAt(sub.ends_at)}</small>
++        </div>
++      )}
++
++      {/* درخواستِ در انتظار تأیید */}
++      {data.pendingRequest && !sub && (
++        <div style={{ background: '#fffdf7', border: '1px solid #d9c48a', borderRadius: '12px', padding: '8px 12px', marginTop: '8px', fontSize: '11.5px', color: '#8a6d3b' }}>
++          ⏳ درخواست خرید اشتراک{data.pendingRequest.plan_name ? ` «${data.pendingRequest.plan_name}»` : ''} در انتظار تأیید مدیر است.
++        </div>
++      )}
++
++      {/* لیست پلن‌ها */}
++      {data.subscriptionEnabled && !sub && (data.plans ?? []).length > 0 && (
++        <div style={{ background: '#fff', border: '1px solid #e5e0da', borderRadius: '14px', padding: '12px 14px', marginTop: '8px' }}>
++          <strong style={{ fontSize: '13px', color: '#29251f' }}>⭐ اشتراک ماهیانه</strong>
++          <small style={{ display: 'block', fontSize: '11.5px', color: '#766f64', marginTop: '2px' }}>
++            با اشتراک، روی اقلام مشمول تخفیف ثابت می‌گیری — تا پایان مدت پلن.
++          </small>
++
++          {msg && (
++            <div style={{ marginTop: '8px', fontSize: '11.5px', padding: '8px 10px', borderRadius: '8px', background: msg.ok ? '#e6f6ea' : '#fdeaea', color: msg.ok ? '#176a32' : '#8f2020' }}>
++              {msg.text}
++            </div>
++          )}
++
++          {data.plans.map((p) => {
++            const walletErr = walletPurchaseError({
++              balance,
++              price: p.price,
++              hasActiveSubscription: false,
++              subscriptionEnabled: true,
++              hasCustomer,
++            })
++            const pending = data.pendingRequest
++            return (
++              <div key={p.id} style={{ padding: '10px 12px', marginTop: '8px', borderRadius: '10px', border: '1px solid #e5e0da', background: '#fbf9f5' }}>
++                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
++                  <strong style={{ fontSize: '12.5px' }}>⭐ {p.name}</strong>
++                  <small style={{ fontSize: '11px', color: '#766f64' }}>
++                    {durationLabel(p.duration_days)} · {formatPrice(p.price)} تومان
++                    {p.discount_percent > 0 && ` · ${formatPrice(p.discount_percent)}٪ تخفیف`}
++                  </small>
++                </div>
++                {p.benefits && (
++                  <small style={{ display: 'block', fontSize: '11px', color: '#766f64', marginTop: '3px' }}>{p.benefits}</small>
++                )}
++
++                {cardForm !== p.id && (
++                  <div style={{ display: 'flex', gap: '6px', marginTop: '8px', flexWrap: 'wrap' }}>
++                    <button
++                      type="button"
++                      onClick={() => buyWithWallet(p)}
++                      disabled={busy === p.id || !!walletErr || !!pending}
++                      style={{ padding: '7px 12px', borderRadius: 8, border: 'none', background: walletErr ? '#c9c2b6' : '#2d5d3e', color: '#fff', fontWeight: 700, fontSize: 11.5, cursor: walletErr || pending ? 'not-allowed' : 'pointer' }}
++                    >
++                      {busy === p.id ? '…' : '👛 خرید با کیف پول'}
++                    </button>
++                    <button
++                      type="button"
++                      onClick={() => { setCardForm(p.id); setMsg(null) }}
++                      disabled={busy === p.id || !!pending}
++                      style={{ padding: '7px 12px', borderRadius: 8, border: '1px solid #d8d0c4', background: '#fff', color: '#6b4f3a', fontSize: 11.5, cursor: pending ? 'not-allowed' : 'pointer' }}
++                    >
++                      💳 کارت‌به‌کارت
++                    </button>
++                    <button
++                      type="button"
++                      disabled
++                      title="پرداخت آنلاین به‌زودی فعال می‌شود"
++                      style={{ padding: '7px 12px', borderRadius: 8, border: '1px dashed #c9c2b6', background: '#faf8f5', color: '#9b957f', fontSize: 11.5, cursor: 'not-allowed' }}
++                    >
++                      🌐 آنلاین — به‌زودی
++                    </button>
++                  </div>
++                )}
++                {walletErr && cardForm !== p.id && (
++                  <small style={{ display: 'block', marginTop: '5px', fontSize: '10.5px', color: '#9b3c32' }}>{walletErr}</small>
++                )}
++                {pending && cardForm !== p.id && (
++                  <small style={{ display: 'block', marginTop: '5px', fontSize: '10.5px', color: '#8a6d3b' }}>
++                    درخواستِ در انتظار تأیید داری؛ تا بررسی شدن، نمی‌توانی درخواست جدید بفرستی.
++                  </small>
++                )}
++
++                {cardForm === p.id && (
++                  <div style={{ marginTop: '8px', padding: '10px', borderRadius: '8px', border: '1px solid #d8d0c4', background: '#fff' }}>
++                    <small style={{ display: 'block', fontSize: '11px', color: '#6b4f3a' }}>
++                      {formatPrice(p.price)} تومان واریز کن، بعد شماره پیگیری و عکس رسید را بفرست:
++                    </small>
++                    <input
++                      type="text"
++                      inputMode="numeric"
++                      placeholder="شماره پیگیری"
++                      value={tracking}
++                      onChange={(e) => setTracking(e.target.value)}
++                      style={{ width: '100%', boxSizing: 'border-box', marginTop: '6px', padding: '8px 10px', borderRadius: 8, border: '1px solid #d8d0c4', fontSize: 12 }}
++                    />
++                    <input
++                      type="file"
++                      accept="image/jpeg,image/png,image/webp"
++                      onChange={(e) => setFile(e.target.files?.[0] ?? null)}
++                      style={{ width: '100%', marginTop: '6px', fontSize: 11 }}
++                    />
++                    <div style={{ display: 'flex', gap: '6px', marginTop: '8px' }}>
++                      <button
++                        type="button"
++                        onClick={() => submitCardRequest(p)}
++                        disabled={busy === p.id}
++                        style={{ padding: '7px 12px', borderRadius: 8, border: 'none', background: '#2d5d3e', color: '#fff', fontWeight: 700, fontSize: 11.5, cursor: 'pointer' }}
++                      >
++                        {busy === p.id ? '…' : 'ارسال درخواست'}
++                      </button>
++                      <button
++                        type="button"
++                        onClick={() => setCardForm(null)}
++                        disabled={busy === p.id}
++                        style={{ padding: '7px 12px', borderRadius: 8, border: '1px solid #d8d0c4', background: '#fff', color: '#6b4f3a', fontSize: 11.5 }}
++                      >
++                        انصراف
++                      </button>
++                    </div>
++                  </div>
++                )}
++              </div>
++            )
++          })}
++        </div>
++      )}
++    </div>
++  )
++}
+diff --git a/app/order/[id]/page.tsx b/app/order/[id]/page.tsx
+index 7fe2bb8..35900bb 100644
+--- a/app/order/[id]/page.tsx
++++ b/app/order/[id]/page.tsx
+@@ -11,11 +11,13 @@ import { formatPersianDate } from '@/lib/format-date'
+ const formatPrice = (price: number) =>
+   new Intl.NumberFormat('fa-IR').format(Math.round(price))
+ 
+-/** برچسب ردیف تخفیف — کدهای شبه‌کوپن سرور: MEMBERSHIP / GRADE / MEMBERSHIP+GRADE */
++/** برچسب ردیف تخفیف — کدهای شبه‌کوپن سرور: MEMBERSHIP / GRADE / SUBSCRIPTION / ترکیبی */
+ function discountLabel(couponCode: string | null | undefined): string {
+   if (couponCode === 'MEMBERSHIP') return '🎉 تخفیف باشگاه:'
+   if (couponCode === 'GRADE') return '🏆 تخفیف گرید:'
+   if (couponCode === 'MEMBERSHIP+GRADE') return '🎉 تخفیف باشگاه + گرید:'
++  if (couponCode === 'SUBSCRIPTION') return '⭐ تخفیف اشتراک:'
++  if (couponCode === 'SUBSCRIPTION+GRADE') return '⭐ تخفیف اشتراک + گرید:'
+   if (couponCode) return `🎟️ تخفیف (${couponCode}):`
+   return '🎉 تخفیف:'
+ }
+diff --git a/lib/subscriptions/plans.ts b/lib/subscriptions/plans.ts
+new file mode 100644
+index 0000000..d6cf49c
+--- /dev/null
++++ b/lib/subscriptions/plans.ts
+@@ -0,0 +1,152 @@
++// lib/subscriptions/plans.ts
++
++/**
++ * منطق خالص پلن‌های اشتراک ماهیانه — نسخه‌ی client-safe.
++ * عمداً بدون import 'server-only' تا تست‌ها و کامپوننت‌های مشتری هم استفاده کنند.
++ * اعتبارسنجی سروری نهایی در actions.ts پنل ادمین و RPCها تکرار می‌شود؛
++ * این توابع برای فرم‌ها، دکمه‌ها و پیام‌های فارسی مشتری/ادمین است.
++ */
++
++export type SubscriptionPlan = {
++  id: string
++  name: string
++  price: number
++  duration_days: number
++  discount_percent: number
++  benefits: string | null
++  sort_order: number
++  is_active: boolean
++}
++
++export const PLAN_NAME_MAX = 60
++export const PLAN_BENEFITS_MAX = 300
++export const PLAN_PRICE_MAX = 100_000_000
++export const PLAN_DURATION_MAX = 3650
++
++export type PlanInput = {
++  id?: string | null
++  name: string
++  price: number
++  duration_days: number
++  discount_percent: number
++  benefits: string
++  sort_order: number
++  is_active: boolean
++}
++
++/** اعتبارسنجی فرم پلن — پیام فارسی خطا یا null یعنی سالم */
++export function planInputError(input: PlanInput): string | null {
++  const name = String(input?.name ?? '').trim()
++  if (!name) return 'نام پلن الزامی است'
++  if (name.length > PLAN_NAME_MAX) return `نام پلن حداکثر ${PLAN_NAME_MAX} نویسه است`
++
++  const price = input?.price
++  if (
++    typeof price !== 'number' ||
++    !Number.isInteger(price) ||
++    price < 0 ||
++    price > PLAN_PRICE_MAX
++  ) {
++    return 'قیمت پلن باید عدد صحیح بین ۰ تا ۱۰۰٬۰۰۰٬۰۰۰ تومان باشد'
++  }
++
++  const days = input?.duration_days
++  if (
++    typeof days !== 'number' ||
++    !Number.isInteger(days) ||
++    days < 1 ||
++    days > PLAN_DURATION_MAX
++  ) {
++    return 'مدت اشتراک باید عدد صحیح بین ۱ تا ۳۶۵۰ روز باشد'
++  }
++
++  const percent = input?.discount_percent
++  if (
++    typeof percent !== 'number' ||
++    !Number.isInteger(percent) ||
++    percent < 0 ||
++    percent > 100
++  ) {
++    return 'درصد تخفیف باید عدد صحیح بین ۰ تا ۱۰۰ باشد'
++  }
++
++  const benefits = String(input?.benefits ?? '').trim()
++  if (benefits.length > PLAN_BENEFITS_MAX) {
++    return `مزایا حداکثر ${PLAN_BENEFITS_MAX} نویسه است`
++  }
++
++  const sort = input?.sort_order
++  if (typeof sort !== 'number' || !Number.isInteger(sort) || sort < 0 || sort > 999) {
++    return 'ترتیب نمایش باید عددی بین ۰ تا ۹۹۹ باشد'
++  }
++
++  return null
++}
++
++const FA_DIGITS = '۰۱۲۳۴۵۶۷۸۹'
++
++const faNum = (n: number | string): string =>
++  String(n).replace(/\d/g, (d) => FA_DIGITS[Number(d)])
++
++/** برچسب مدت اشتراک: ۳۰ روزه / ۹۰ روزه */
++export function durationLabel(days: number): string {
++  return `${faNum(Math.max(1, Math.round(days)))} روزه`
++}
++
++export const SUBSCRIPTION_STATUS_LABELS: Record<string, string> = {
++  active: 'فعال',
++  expired: 'منقضی',
++  cancelled: 'لغوشده',
++}
++
++export function subscriptionStatusLabel(status: string): string {
++  return SUBSCRIPTION_STATUS_LABELS[status] ?? status
++}
++
++export const SUBSCRIPTION_SOURCE_LABELS: Record<string, string> = {
++  wallet: 'خرید با کیف پول',
++  card_to_card: 'خرید با تأیید رسید',
++  admin: 'اعطای ادمین',
++}
++
++export function subscriptionSourceLabel(source: string): string {
++  return SUBSCRIPTION_SOURCE_LABELS[source] ?? source
++}
++
++export type PurchaseGuardInput = {
++  balance: number | null
++  price: number
++  hasActiveSubscription: boolean
++  subscriptionEnabled: boolean
++  hasCustomer: boolean
++}
++
++/**
++ * گارد سمت مشتری برای دکمه‌ی «خرید با کیف پول» — پیام فارسی یا null یعنی مجاز.
++ * (سرور با RPC همان گارد را اتمیک تکرار می‌کند؛ این فقط برای UX است.)
++ */
++export function walletPurchaseError(input: PurchaseGuardInput): string | null {
++  if (!input.subscriptionEnabled) return 'خرید اشتراک فعلاً فعال نیست'
++  if (!input.hasCustomer) return 'برای خرید اشتراک اول با شماره موبایل وارد شو'
++  if (input.hasActiveSubscription) return 'شما یک اشتراک فعال دارید؛ بعد از پایان می‌توانید تمدید کنید'
++  if (input.price > 0 && (input.balance == null || input.balance < input.price)) {
++    return 'موجودی کیف پول برای این پلن کافی نیست؛ اول کیف پول را شارژ کن'
++  }
++  return null
++}
++
++/** فرمت تاریخ پایان اشتراک برای چیپ مشتری — مثل «۱۴۰۵/۰۹/۱۷» */
++export function formatEndsAt(iso: string | null | undefined): string {
++  if (!iso) return ''
++  const d = new Date(iso)
++  if (Number.isNaN(d.getTime())) return ''
++  try {
++    return new Intl.DateTimeFormat('fa-IR', {
++      year: 'numeric',
++      month: '2-digit',
++      day: '2-digit',
++    }).format(d)
++  } catch {
++    return d.toISOString().slice(0, 10)
++  }
++}
+diff --git a/lib/subscriptions/subscriptions.ts b/lib/subscriptions/subscriptions.ts
+new file mode 100644
+index 0000000..99e5a5b
+--- /dev/null
++++ b/lib/subscriptions/subscriptions.ts
+@@ -0,0 +1,78 @@
++import 'server-only'
++import { supabaseAdmin } from '../supabase/server' // ایمپورت نسبی: توسط vitest هم لود می‌شود
++
++// ============================================================
++// اشتراک ماهیانه — خواندن پلن‌ها و اشتراک فعال مشتری (سمت سرور)
++// ============================================================
++
++export type SubscriptionFlags = {
++  subscriptionEnabled: boolean
++}
++
++export async function getSubscriptionFlags(): Promise<SubscriptionFlags> {
++  const { data } = await supabaseAdmin()
++    .from('settings')
++    .select('subscription_enabled')
++    .eq('id', 1)
++    .single()
++
++  return { subscriptionEnabled: Boolean(data?.subscription_enabled) }
++}
++
++export type ActiveSubscription = {
++  id: string
++  planName: string
++  discountPercent: number
++  endsAt: string
++  source: string
++}
++
++function toActiveSubscription(row: any): ActiveSubscription {
++  return {
++    id: String(row.id),
++    planName: String(row.plan_name ?? ''),
++    discountPercent: Number(row.discount_percent ?? 0),
++    endsAt: String(row.ends_at ?? ''),
++    source: String(row.source ?? 'wallet'),
++  }
++}
++
++/** اشتراکِ فعال مشتری بر اساس شناسه — ردیفِ گذشته‌ی تاریخ «منقضی» شمرده می‌شود */
++export async function getActiveSubscriptionForCustomer(
++  customerId: string
++): Promise<ActiveSubscription | null> {
++  if (!customerId) return null
++
++  const { data, error } = await supabaseAdmin()
++    .from('customer_subscriptions')
++    .select('id, plan_name, discount_percent, ends_at, source')
++    .eq('customer_id', customerId)
++    .eq('status', 'active')
++    .gt('ends_at', new Date().toISOString())
++    .order('ends_at', { ascending: false })
++    .limit(1)
++    .maybeSingle()
++
++  if (error) {
++    console.error('[subscriptions] active (by id) failed:', error.message)
++    return null
++  }
++  return data ? toActiveSubscription(data) : null
++}
++
++/** اشتراکِ فعال مشتری بر اساس شماره — برای اعمال تخفیف در ثبت سفارش */
++export async function getActiveSubscriptionByPhone(
++  phone: string | null | undefined
++): Promise<ActiveSubscription | null> {
++  if (!phone) return null
++
++  const { data, error } = await supabaseAdmin()
++    .from('customers')
++    .select('id')
++    .eq('phone', phone)
++    .eq('verification_status', 'verified')
++    .maybeSingle()
++
++  if (error || !data?.id) return null
++  return getActiveSubscriptionForCustomer(String(data.id))
++}
+diff --git a/lib/wallet/wallet.ts b/lib/wallet/wallet.ts
+index 5f2e18c..c903e15 100644
+--- a/lib/wallet/wallet.ts
++++ b/lib/wallet/wallet.ts
+@@ -4,6 +4,7 @@ import { supabaseAdmin } from '../supabase/server' // ایمپورت نسبی: 
+ import { getVerifiedPhoneHash } from '../sms/otp' // ایمپورت نسبی: توسط vitest هم لود می‌شود
+ import { getDeviceHash } from '../orders/owner'
+ import { getVerifiedCustomerGrade, type ResolvedGrade } from '../customers/grades'
++import { getActiveSubscriptionForCustomer, getSubscriptionFlags, type ActiveSubscription } from '../subscriptions/subscriptions'
+ 
+ export type WalletTx = {
+   id: string
+@@ -29,6 +30,9 @@ export type CustomerChargeRequest = {
+   status: string
+   tracking_no: string | null
+   reject_reason: string | null
++  /** purpose='wallet_charge' شارژ کیف پول؛ purpose='subscription' خرید اشتراک */
++  purpose: string
++  plan_name: string | null
+   created_at: string
+ }
+ 
+@@ -192,30 +196,39 @@ export async function getWalletFlags(): Promise<WalletFlags> {
+ }
+ 
+ /** وضعیت کامل برای پنل مشتری: پرچم‌ها + مشتریِ شناسایی‌شده + موجودی */
+-/** وضعیت کامل برای پنل مشتری: پرچم‌ها + مشتریِ شناسایی‌شده + موجودی + گرید */
++/** وضعیت کامل برای پنل مشتری: پرچم‌ها + مشتریِ شناسایی‌شده + موجودی + گرید + اشتراک */
+ export type WalletStatus = WalletFlags & {
+   customer: (ResolvedWalletCustomer & { balance: number }) | null
+   grade: ResolvedGrade | null
++  subscriptionEnabled: boolean
++  subscription: ActiveSubscription | null
+ }
+ 
+ export async function getWalletStatus(): Promise<WalletStatus> {
+-  const flags = await getWalletFlags()
++  const [flags, subFlags] = await Promise.all([getWalletFlags(), getSubscriptionFlags()])
+   const customer = await resolveWalletCustomer()
++  const common = { ...flags, subscriptionEnabled: subFlags.subscriptionEnabled }
+ 
+-  if (!customer) return { ...flags, customer: null, grade: null }
++  if (!customer) {
++    return { ...common, customer: null, grade: null, subscription: null }
++  }
+ 
+-  const [{ data, error }, grade] = await Promise.all([
++  const [{ data, error }, grade, subscription] = await Promise.all([
+     supabaseAdmin().rpc('wallet_balance', { p_customer_id: customer.id }),
+     getVerifiedCustomerGrade(customer.phone).catch((err) => {
+       console.error('[wallet] grade lookup failed:', err)
+       return null
+     }),
++    getActiveSubscriptionForCustomer(customer.id).catch((err) => {
++      console.error('[wallet] subscription lookup failed:', err)
++      return null
++    }),
+   ])
+   if (error) {
+     console.error('[wallet] status balance failed:', error.message)
+-    return { ...flags, customer: { ...customer, balance: 0 }, grade }
++    return { ...common, customer: { ...customer, balance: 0 }, grade, subscription }
+   }
+-  return { ...flags, customer: { ...customer, balance: Number(data ?? 0) }, grade }
++  return { ...common, customer: { ...customer, balance: Number(data ?? 0) }, grade, subscription }
+ }
+ 
+ /** ثبت یک‌باره‌ی رویداد «فعال‌سازی کیف پول» در دفتر (idempotent) */
+@@ -289,7 +302,7 @@ export async function getCustomerChargeRequests(
+ ): Promise<CustomerChargeRequest[]> {
+   const { data, error } = await supabaseAdmin()
+     .from('wallet_charge_requests')
+-    .select('id, amount, status, tracking_no, reject_reason, created_at')
++    .select('id, amount, status, tracking_no, reject_reason, purpose, plan_name, created_at')
+     .eq('customer_id', customerId)
+     .order('created_at', { ascending: false })
+     .limit(limit)
+diff --git a/supabase/migrations/20261112_subscription_plans.sql b/supabase/migrations/20261112_subscription_plans.sql
+new file mode 100644
+index 0000000..75bf6ca
+--- /dev/null
++++ b/supabase/migrations/20261112_subscription_plans.sql
+@@ -0,0 +1,228 @@
++-- ============================================================
++-- پچ ۲۸ — فاز ۴ کیف پول: اشتراک ماهیانه
++--   • subscription_plans: پلن‌های ادمین (قیمت، مدت، درصد تخفیف، مزایا)
++--   • customer_subscriptions: اشتراک فعال مشتری (اسنپ‌شات پلن در لحظه‌ی خرید)
++--   • خرید با کیف پول: RPC اتمیک purchase_subscription_with_wallet
++--   • خرید کارت‌به‌کارت: wallet_charge_requests.purpose='subscription' → صف تأیید ادمین
++--   • orders.subscription_discount: سهم تخفیف اشتراک در سفارش (گزارش‌گیری)
++--   • settings.subscription_enabled: سوییچ سراسری نمایش/خرید
++-- اجرا در: Supabase Dashboard → SQL Editor → Run
++-- idempotent است؛ اجرای مکرر بی‌ضرر.
++-- ============================================================
++
++begin;
++
++-- ------------------------------------------------------------
++-- ۱) سوییچ سراسری + ستون گزارش اشتراک روی سفارش
++-- ------------------------------------------------------------
++alter table public.settings
++  add column if not exists subscription_enabled boolean not null default false;
++
++alter table public.orders
++  add column if not exists subscription_discount bigint not null default 0;
++
++-- ------------------------------------------------------------
++-- ۲) جدول پلن‌ها — فقط سرور (service role) دسترسی دارد
++-- ------------------------------------------------------------
++create table if not exists public.subscription_plans (
++  id uuid primary key default gen_random_uuid(),
++  name text not null check (char_length(name) between 1 and 60),
++  price bigint not null check (price >= 0),
++  duration_days integer not null check (duration_days between 1 and 3650),
++  discount_percent integer not null default 0 check (discount_percent between 0 and 100),
++  benefits text,
++  sort_order integer not null default 10 check (sort_order between 0 and 999),
++  is_active boolean not null default true,
++  created_at timestamptz not null default now()
++);
++
++-- ------------------------------------------------------------
++-- ۳) جدول اشتراک‌های مشتریان — اسنپ‌شات پلن در لحظه‌ی خرید
++--    (تغییر/حذف پلن، اشتراک‌های خریداری‌شده را تغییر نمی‌دهد)
++-- ------------------------------------------------------------
++create table if not exists public.customer_subscriptions (
++  id uuid primary key default gen_random_uuid(),
++  customer_id uuid not null references public.customers(id) on delete cascade,
++  plan_id uuid not null references public.subscription_plans(id),
++  plan_name text not null,
++  discount_percent integer not null default 0 check (discount_percent between 0 and 100),
++  price_paid bigint not null default 0 check (price_paid >= 0),
++  starts_at timestamptz not null default now(),
++  ends_at timestamptz not null,
++  status text not null default 'active' check (status in ('active', 'expired', 'cancelled')),
++  source text not null default 'wallet' check (source in ('wallet', 'card_to_card', 'admin')),
++  created_at timestamptz not null default now()
++);
++
++create index if not exists customer_subscriptions_customer_idx
++  on public.customer_subscriptions (customer_id, status);
++
++-- یک اشتراکِ فعال برای هر مشتری — در سطح دیتابیس تضمین می‌شود
++create unique index if not exists customer_subscriptions_one_active
++  on public.customer_subscriptions (customer_id)
++  where status = 'active';
++
++-- ------------------------------------------------------------
++-- ۴) RLS: خواندن/نوشتن فقط از سرور (الگوی revokeهای قبلی)
++-- ------------------------------------------------------------
++alter table public.subscription_plans enable row level security;
++alter table public.customer_subscriptions enable row level security;
++
++revoke all on public.subscription_plans from anon, authenticated;
++revoke all on public.customer_subscriptions from anon, authenticated;
++
++-- ------------------------------------------------------------
++-- ۵) درخواست خرید اشتراک با کارت‌به‌کارت در همان صف شارژ:
++--    purpose='subscription' + پلن انتخابی + اسنپ‌شات نام
++-- ------------------------------------------------------------
++alter table public.wallet_charge_requests
++  add column if not exists purpose text not null default 'wallet_charge';
++
++alter table public.wallet_charge_requests
++  add column if not exists plan_id uuid references public.subscription_plans(id) on delete set null;
++
++alter table public.wallet_charge_requests
++  add column if not exists plan_name text;
++
++-- ------------------------------------------------------------
++-- ۶) RPC خرید اشتراک با کیف پول — اتمیک و ضد دوبار‌خرید:
++--    قفل مشاوره‌ای مشتری + ایندکس یکتای «یک اشتراک فعال»
++--    پیام‌های خطا: plan_not_found / already_active / insufficient_balance
++-- ------------------------------------------------------------
++create or replace function public.purchase_subscription_with_wallet(
++  p_customer_id uuid,
++  p_plan_id uuid
++)
++returns table (subscription_id uuid, ends_at timestamptz)
++language plpgsql
++security definer
++set search_path to 'public'
++as $$
++declare
++  v_plan record;
++  v_price bigint;
++  v_balance bigint;
++  v_new_ends timestamptz;
++  v_sub_id uuid;
++begin
++  if p_customer_id is null or p_plan_id is null then
++    raise exception 'plan_not_found';
++  end if;
++
++  perform pg_advisory_xact_lock(hashtextextended(p_customer_id::text, 0));
++
++  select price, discount_percent, name, duration_days, is_active
++    into v_plan
++  from subscription_plans
++  where id = p_plan_id;
++
++  if not found or v_plan.is_active = false then
++    raise exception 'plan_not_found';
++  end if;
++
++  -- اشتراک فعالِ گذشته‌ی تاریخ، «منقضی» می‌شود (خودترمیم؛ ایندکس یکتا باز می‌شود)
++  update customer_subscriptions
++     set status = 'expired'
++   where customer_id = p_customer_id
++     and status = 'active'
++     and ends_at <= now();
++
++  if exists (
++    select 1 from customer_subscriptions
++    where customer_id = p_customer_id and status = 'active'
++  ) then
++    raise exception 'already_active';
++  end if;
++
++  v_price := v_plan.price;
++  if v_price > 0 then
++    select wallet_balance(p_customer_id) into v_balance;
++    if v_balance < v_price then
++      raise exception 'insufficient_balance';
++    end if;
++
++    insert into wallet_transactions
++      (customer_id, customer_phone, amount, kind, status, note, created_by)
++    select c.id, c.phone, -v_price, 'subscription_purchase', 'settled',
++           'خرید اشتراک «' || v_plan.name || '»', 'customer'
++    from customers c
++    where c.id = p_customer_id;
++
++    if not found then
++      raise exception 'plan_not_found';
++    end if;
++  end if;
++
++  v_new_ends := now() + (v_plan.duration_days || ' days')::interval;
++
++  insert into customer_subscriptions
++    (customer_id, plan_id, plan_name, discount_percent, price_paid, starts_at, ends_at, status, source)
++  values
++    (p_customer_id, p_plan_id, v_plan.name, v_plan.discount_percent, v_price, now(), v_new_ends, 'active', 'wallet')
++  returning id into v_sub_id;
++
++  return query select v_sub_id, v_new_ends;
++end $$;
++
++-- ------------------------------------------------------------
++-- ۷) RPC اعطای اشتراک بدون کیف پول — تأیید رسید کارت‌به‌کارت توسط ادمین
++--    (همان گارد «یک اشتراک فعال»؛ تراکنش کیف پولی ثبت نمی‌شود)
++-- ------------------------------------------------------------
++create or replace function public.grant_subscription(
++  p_customer_id uuid,
++  p_plan_id uuid,
++  p_source text default 'card_to_card'
++)
++returns table (subscription_id uuid, ends_at timestamptz)
++language plpgsql
++security definer
++set search_path to 'public'
++as $$
++declare
++  v_plan record;
++  v_new_ends timestamptz;
++  v_sub_id uuid;
++begin
++  if p_customer_id is null or p_plan_id is null then
++    raise exception 'plan_not_found';
++  end if;
++  if p_source not in ('card_to_card', 'admin') then
++    raise exception 'plan_not_found';
++  end if;
++
++  perform pg_advisory_xact_lock(hashtextextended(p_customer_id::text, 0));
++
++  select discount_percent, name, duration_days, is_active
++    into v_plan
++  from subscription_plans
++  where id = p_plan_id;
++
++  if not found or v_plan.is_active = false then
++    raise exception 'plan_not_found';
++  end if;
++
++  update customer_subscriptions
++     set status = 'expired'
++   where customer_id = p_customer_id
++     and status = 'active'
++     and ends_at <= now();
++
++  if exists (
++    select 1 from customer_subscriptions
++    where customer_id = p_customer_id and status = 'active'
++  ) then
++    raise exception 'already_active';
++  end if;
++
++  v_new_ends := now() + (v_plan.duration_days || ' days')::interval;
++
++  insert into customer_subscriptions
++    (customer_id, plan_id, plan_name, discount_percent, price_paid, starts_at, ends_at, status, source)
++  values
++    (p_customer_id, p_plan_id, v_plan.name, v_plan.discount_percent, 0, now(), v_new_ends, 'active', p_source)
++  returning id into v_sub_id;
++
++  return query select v_sub_id, v_new_ends;
++end $$;
++
++commit;
+diff --git a/tests/subscription.test.ts b/tests/subscription.test.ts
+new file mode 100644
+index 0000000..aa190e3
+--- /dev/null
++++ b/tests/subscription.test.ts
+@@ -0,0 +1,122 @@
++import { describe, it, expect } from 'vitest'
++import {
++  planInputError,
++  durationLabel,
++  subscriptionStatusLabel,
++  subscriptionSourceLabel,
++  walletPurchaseError,
++  formatEndsAt,
++} from '../lib/subscriptions/plans'
++
++const VALID_PLAN = {
++  id: null,
++  name: 'ماهانه',
++  price: 100_000,
++  duration_days: 30,
++  discount_percent: 5,
++  benefits: 'دسر هدیه',
++  sort_order: 10,
++  is_active: true,
++}
++
++describe('planInputError — اعتبارسنجی فرم پلن', () => {
++  it('پلن سالم خطا نمی‌گیرد', () => {
++    expect(planInputError(VALID_PLAN)).toBeNull()
++  })
++
++  it('نام خالی یا طولانی رد می‌شود', () => {
++    expect(planInputError({ ...VALID_PLAN, name: '' })).not.toBeNull()
++    expect(planInputError({ ...VALID_PLAN, name: 'x'.repeat(61) })).not.toBeNull()
++    expect(planInputError({ ...VALID_PLAN, name: '  ماهانه  ' })).toBeNull()
++  })
++
++  it('قیمت باید عدد صحیح غیرمنفی و زیر سقف باشد', () => {
++    expect(planInputError({ ...VALID_PLAN, price: -1 })).not.toBeNull()
++    expect(planInputError({ ...VALID_PLAN, price: 1000.5 })).not.toBeNull()
++    expect(planInputError({ ...VALID_PLAN, price: 100_000_001 })).not.toBeNull()
++    expect(planInputError({ ...VALID_PLAN, price: 0 })).toBeNull()
++    expect(planInputError({ ...VALID_PLAN, price: '100000' as unknown as number })).not.toBeNull()
++  })
++
++  it('مدت باید بین ۱ تا ۳۶۵۰ روز باشد', () => {
++    expect(planInputError({ ...VALID_PLAN, duration_days: 0 })).not.toBeNull()
++    expect(planInputError({ ...VALID_PLAN, duration_days: 3651 })).not.toBeNull()
++    expect(planInputError({ ...VALID_PLAN, duration_days: 1 })).toBeNull()
++    expect(planInputError({ ...VALID_PLAN, duration_days: 3650 })).toBeNull()
++  })
++
++  it('درصد تخفیف باید بین ۰ تا ۱۰۰ باشد', () => {
++    expect(planInputError({ ...VALID_PLAN, discount_percent: -5 })).not.toBeNull()
++    expect(planInputError({ ...VALID_PLAN, discount_percent: 101 })).not.toBeNull()
++    expect(planInputError({ ...VALID_PLAN, discount_percent: 100 })).toBeNull()
++    expect(planInputError({ ...VALID_PLAN, discount_percent: 0 })).toBeNull()
++  })
++
++  it('مزایای طولانی و ترتیب خارج از بازه رد می‌شود', () => {
++    expect(planInputError({ ...VALID_PLAN, benefits: 'x'.repeat(301) })).not.toBeNull()
++    expect(planInputError({ ...VALID_PLAN, sort_order: -1 })).not.toBeNull()
++    expect(planInputError({ ...VALID_PLAN, sort_order: 1000 })).not.toBeNull()
++    expect(planInputError({ ...VALID_PLAN, benefits: '' })).toBeNull()
++  })
++})
++
++describe('برچسب‌های فارسی', () => {
++  it('durationLabel مدت را فارسی می‌سازد', () => {
++    expect(durationLabel(30)).toBe('۳۰ روزه')
++    expect(durationLabel(7)).toBe('۷ روزه')
++    expect(durationLabel(0)).toBe('۱ روزه')
++  })
++
++  it('وضعیت و منبع اشتراک برچسب دارد', () => {
++    expect(subscriptionStatusLabel('active')).toBe('فعال')
++    expect(subscriptionStatusLabel('expired')).toBe('منقضی')
++    expect(subscriptionStatusLabel('cancelled')).toBe('لغوشده')
++    expect(subscriptionStatusLabel('unknown')).toBe('unknown')
++    expect(subscriptionSourceLabel('wallet')).toBe('خرید با کیف پول')
++    expect(subscriptionSourceLabel('card_to_card')).toBe('خرید با تأیید رسید')
++    expect(subscriptionSourceLabel('admin')).toBe('اعطای ادمین')
++  })
++})
++
++describe('walletPurchaseError — گارد دکمه‌ی خرید کیف‌پولی', () => {
++  const base = {
++    balance: 500_000,
++    price: 100_000,
++    hasActiveSubscription: false,
++    subscriptionEnabled: true,
++    hasCustomer: true,
++  }
++
++  it('خرید مجاز خطا نمی‌دهد', () => {
++    expect(walletPurchaseError(base)).toBeNull()
++  })
++
++  it('سوییچ خاموش و مهمان اول مسدود می‌شود', () => {
++    expect(walletPurchaseError({ ...base, subscriptionEnabled: false })).not.toBeNull()
++    expect(walletPurchaseError({ ...base, hasCustomer: false })).not.toBeNull()
++  })
++
++  it('اشتراک فعال اجازه‌ی خرید دوم نمی‌دهد', () => {
++    expect(walletPurchaseError({ ...base, hasActiveSubscription: true })).not.toBeNull()
++  })
++
++  it('موجودی ناکافی پیام شارژ می‌دهد؛ پلن صفر همیشه قابل خرید است', () => {
++    expect(walletPurchaseError({ ...base, balance: 99_999 })).not.toBeNull()
++    expect(walletPurchaseError({ ...base, balance: null, price: 0 })).toBeNull()
++    expect(walletPurchaseError({ ...base, balance: 100_000, price: 100_000 })).toBeNull()
++  })
++})
++
++describe('formatEndsAt — تاریخ پایان برای چیپ مشتری', () => {
++  it('تاریخ خالی/خراب رشته‌ی خالی می‌دهد', () => {
++    expect(formatEndsAt(null)).toBe('')
++    expect(formatEndsAt('')).toBe('')
++    expect(formatEndsAt('not-a-date')).toBe('')
++  })
++
++  it('تاریخ معتبر رشته‌ی فارسی غیرخالی می‌دهد', () => {
++    const out = formatEndsAt(new Date('2026-12-01T00:00:00Z').toISOString())
++    expect(out.length).toBeGreaterThan(0)
++    expect(out).toMatch(/[\u06F0-\u06F9]/)
++  })
++})
