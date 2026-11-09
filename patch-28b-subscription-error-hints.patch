@@ -1,0 +1,108 @@
+diff --git a/app/admin/settings/subscriptions/actions.ts b/app/admin/settings/subscriptions/actions.ts
+index 24a76b9..c311315 100644
+--- a/app/admin/settings/subscriptions/actions.ts
++++ b/app/admin/settings/subscriptions/actions.ts
+@@ -44,6 +44,32 @@ function toNum(v: unknown): number | null {
+   return Number.isFinite(n) ? n : null
+ }
+ 
++/**
++ * پیام فارسیِ دقیق برای خطاهای PostgREST — تا صفحه‌ی ادمین علت واقعی را نشان دهد
++ * (جدولِ نبود = مایگریشن در پروژه‌ی اشتباه یا اجرای ناقص، ستونِ نبود، متغیر محیطی)
++ */
++function dbErr(e: any, fallback: string): string {
++  const code = String(e?.code ?? '')
++  const msg = String(e?.message ?? '')
++  if (code === 'PGRST205' || /Could not find the table|schema cache/i.test(msg)) {
++    return (
++      `${fallback} — جدول در دیتابیسِ متصل به اپ پیدا نشد (${code || 'PGRST205'}): ` +
++      `فایل 20261112_subscription_plans.sql را در همان پروژه‌ی Supabase اجرا کن که NEXT_PUBLIC_SUPABASE_URL به آن اشاره می‌کند؛ ` +
++      `بعدش «NOTIFY pgrst, 'reload schema';» را یک بار بزن و صفحه را رفرش کن`
++    )
++  }
++  if (code === 'PGRST427' || /column .* does not exist/i.test(msg)) {
++    return (
++      `${fallback} — ستون مورد انتظار در دیتابیس نیست (${code || 'PGRST427'}): ` +
++      `مایگریشن ۲۸ ناقص اجرا شده؛ فایل 20261112_subscription_plans.sql را کامل و بدون خطا اجرا کن`
++    )
++  }
++  if (/Missing Supabase admin env/i.test(msg)) {
++    return `${fallback} — متغیر محیطی SUPABASE_SERVICE_ROLE_KEY تنظیم نشده (Vercel یا .env.local)`
++  }
++  return msg ? `${fallback} (${code || 'DB'}: ${msg.slice(0, 140)})` : fallback
++}
++
+ export async function listPlans(): Promise<{
+   plans?: AdminPlan[]
+   flags?: SubscriptionFlagsForm
+@@ -75,15 +101,15 @@ export async function listPlans(): Promise<{
+ 
+     if (pErr) {
+       console.error('[subscriptions] plans list:', pErr)
+-      return { error: 'خطا در خواندن پلن‌ها' }
++      return { error: dbErr(pErr, 'خطا در خواندن پلن‌ها') }
+     }
+     if (sErr) {
+       console.error('[subscriptions] settings:', sErr)
+-      return { error: 'خطا در خواندن تنظیمات اشتراک' }
++      return { error: dbErr(sErr, 'خطا در خواندن تنظیمات اشتراک') }
+     }
+     if (subErr) {
+       console.error('[subscriptions] list subs:', subErr)
+-      return { error: 'خطا در خواندن اشتراک‌ها' }
++      return { error: dbErr(subErr, 'خطا در خواندن اشتراک‌ها') }
+     }
+ 
+     return {
+@@ -137,13 +163,13 @@ export async function savePlan(input: PlanInput): Promise<{ success?: boolean; e
+       const { error } = await db.from('subscription_plans').update(row).eq('id', String(input.id))
+       if (error) {
+         console.error('[subscriptions] update:', error)
+-        return { error: 'خطا در ذخیره‌ی پلن' }
++        return { error: dbErr(error, 'خطا در ذخیره‌ی پلن') }
+       }
+     } else {
+       const { error } = await db.from('subscription_plans').insert(row)
+       if (error) {
+         console.error('[subscriptions] insert:', error)
+-        return { error: 'خطا در ساخت پلن' }
++        return { error: dbErr(error, 'خطا در ساخت پلن') }
+       }
+     }
+ 
+@@ -170,7 +196,7 @@ export async function deletePlan(id: string): Promise<{ success?: boolean; error
+ 
+     if (countErr) {
+       console.error('[subscriptions] delete count:', countErr)
+-      return { error: 'خطا در بررسی استفاده‌کنندگان پلن' }
++      return { error: dbErr(countErr, 'خطا در بررسی استفاده‌کنندگان پلن') }
+     }
+     if ((count ?? 0) > 0) {
+       return {
+@@ -186,7 +212,7 @@ export async function deletePlan(id: string): Promise<{ success?: boolean; error
+       .eq('status', 'pending')
+     if (pendErr) {
+       console.error('[subscriptions] delete pending count:', pendErr)
+-      return { error: 'خطا در بررسی درخواست‌های در انتظار' }
++      return { error: dbErr(pendErr, 'خطا در بررسی درخواست‌های در انتظار') }
+     }
+     if ((pendingCount ?? 0) > 0) {
+       return {
+@@ -197,7 +223,7 @@ export async function deletePlan(id: string): Promise<{ success?: boolean; error
+     const { error } = await db.from('subscription_plans').delete().eq('id', id)
+     if (error) {
+       console.error('[subscriptions] delete:', error)
+-      return { error: 'خطا در حذف پلن' }
++      return { error: dbErr(error, 'خطا در حذف پلن') }
+     }
+ 
+     revalidatePath('/admin/settings/subscriptions')
+@@ -222,7 +248,7 @@ export async function saveSubscriptionFlags(
+ 
+     if (error) {
+       console.error('[subscriptions] flags save:', error)
+-      return { error: 'خطا در ذخیره‌ی تنظیمات اشتراک' }
++      return { error: dbErr(error, 'خطا در ذخیره‌ی تنظیمات اشتراک') }
+     }
+ 
+     revalidatePath('/admin/settings/subscriptions')
