@@ -536,12 +536,23 @@ function CheckoutForm() {
               <strong>− {formatPrice(totalDiscount)} تومان</strong>
             </div>
           )}
-
-
           <div className="checkout-total-row final" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '10px', paddingTop: '16px' }}>
             <span style={{ fontSize: '16px', fontWeight: 800 }}>قابل پرداخت:</span>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            {totalDiscount > 0 && (
+                            {(subInfo || gradeInfo) && (
+  <div style={{ fontSize: '11.5px', color: '#766f64', textAlign: 'center', marginTop: '10px', lineHeight: 1.7 }}>
+    {subInfo && (
+      <div>⭐ تخفیف اشتراک ({formatPrice(subInfo.discountPercent)}٪) روی اقلام مشمول، در ثبت نهایی اعمال می‌شود.</div>
+    )}
+    {gradeInfo && (
+      <div>🏆 تخفیف گرید ({formatPrice(gradeInfo.discountPercent)}٪) روی اقلام مشمول، در ثبت نهایی اعمال می‌شود.</div>
+    )}
+    <div style={{ color: '#9b3c32', fontWeight: 600 }}>
+      مبلغ نهاییِ کسرشده از کیف پول، کمتر از عدد بالا خواهد بود.
+    </div>
+  </div>
+)}
+							{totalDiscount > 0 && (
                 <span style={{ textDecoration: 'line-through', color: '#aaa', fontSize: '13px', fontWeight: 'normal' }}>
                   {formatPrice(totalPrice + takeawayTotal)}
                 </span>
