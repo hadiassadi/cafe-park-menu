@@ -33,7 +33,7 @@ export async function GET() {
     const [sub, pending] = await Promise.all([
       supabaseAdmin()
         .from('customer_subscriptions')
-        .select('id, plan_name, discount_percent, ends_at, source')
+        .select('id, plan_name, discount_percent, ends_at, source, price_paid, starts_at, plan_id')
         .eq('customer_id', customer.id)
         .eq('status', 'active')
         .gt('ends_at', new Date().toISOString())
@@ -51,12 +51,29 @@ export async function GET() {
         .maybeSingle(),
     ])
 
+    // ⭐ جزئیات پلن برای مودال مشخصات اشتراک (توضیحات و مدت)
+    let planDetails: { benefits: string | null; duration_days: number | null } | null = null
+    if (sub.data?.plan_id) {
+      const { data: planRow } = await supabaseAdmin()
+        .from('subscription_plans')
+        .select('benefits, duration_days')
+        .eq('id', sub.data.plan_id)
+        .maybeSingle()
+      planDetails = planRow ?? null
+    }
+
     return NextResponse.json(
       {
         subscriptionEnabled: flags.subscriptionEnabled,
         plans: plans ?? [],
         customer: { name: customer.name, wallet_blocked: !!customer.wallet_blocked },
-        subscription: sub.data ?? null,
+        subscription: sub.data
+          ? {
+              ...sub.data,
+              benefits: planDetails?.benefits ?? null,
+              duration_days: planDetails?.duration_days ?? null,
+            }
+          : null,
         pendingRequest: pending.data ?? null,
       },
       { headers: { 'Cache-Control': 'no-store' } }

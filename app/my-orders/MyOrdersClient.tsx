@@ -1,17 +1,18 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useCart } from '@/lib/cart-context'
 import { formatPersianDate } from '@/lib/format-date'
 import { walletTxKindLabel, walletTxKindIcon, walletTxStatusLabel } from '@/lib/wallet/labels'
 import { normalizeTrackingNo } from '@/lib/wallet/charge'
+import { formatEndsAt } from '@/lib/subscriptions/plans'
 import SubscriptionSection from './SubscriptionSection'
 
 const formatPrice = (n: number) => new Intl.NumberFormat('fa-IR').format(Math.round(n))
 
-type OrderItem = { product_name: string; option_name: string | null; unit_price: number; quantity: number; variant_option_id?: string | null; variant_group_id?: string | null; product_id?: string | null; image_url?: string | null }
-type Order = { id: string; order_number: number; items: OrderItem[]; subtotal: number; original_subtotal: number | null; coupon_code: string | null; coupon_discount: number | null; status: string; created_at: string; cancelled_by: string | null; cancellation_reason_label: string | null; customer_name: string; customer_phone: string; payment_status?: string; payment_method?: string; paid_amount?: number }
+type OrderItem = { product_name: string; option_name: string | null; unit_price: number; quantity: number; option_id?: string | null; variant_option_id?: string | null; variant_group_id?: string | null; product_id?: string | null; image_url?: string | null }
+type Order = { id: string; order_number: number; items: OrderItem[]; subtotal: number; original_subtotal: number | null; coupon_code: string | null; coupon_discount: number | null; status: string; created_at: string; cancelled_by: string | null; cancellation_reason_label: string | null; customer_name: string; customer_phone: string; payment_status?: string; payment_method?: string; paid_amount?: number; customer_confirmed?: boolean }
 type WalletTx = { id: string; amount: number; kind: string; status: string | null; note: string | null; order_id: string | null; created_at: string }
 type ChargeReq = { id: string; amount: number; status: string; tracking_no: string | null; reject_reason: string | null; purpose?: string; plan_name?: string | null; created_at: string }
 
@@ -33,6 +34,37 @@ const getPaymentMethodLabel = (method: string | null | undefined) => {
   return 'نامشخص';
 };
 
+// 🔎 نرمال‌سازی متن جستجو: ارقام فارسی/عربی → لاتین، حذف نیم‌فاصله و جداکننده‌ها
+const toEnDigits = (s: string) =>
+  s
+    .replace(/[۰-۹]/g, (d) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d)))
+    .replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
+
+const normSearch = (s: string) =>
+  toEnDigits(s.toLowerCase().replace(/[\u200c\u066c\u060c]/g, ' ').replace(/,/g, ' ').replace(/\s+/g, ' ').trim())
+
+// 🔎 متن قابل‌جستجوی هر سفارش — فقط فیلدهایی که روی کارت نمایش داده می‌شوند (بدون اطلاعات حساس)
+function orderSearchHay(o: Order): string {
+  return normSearch(
+    [
+      String(o.order_number),
+      String(o.subtotal ?? ''),
+      STATUS_INFO[o.status]?.label ?? o.status,
+      formatPersianDate(o.created_at),
+      ...o.items.map((i) => `${i.product_name} ${i.option_name ?? ''}`),
+    ].join(' ')
+  )
+}
+
+// ⏱ پنجره‌ی لغو سفارش توسط مشتری — هماهنگ با صفحه‌ی جزئیات (۵ دقیقه، قبل از تأیید)
+const CANCEL_WINDOW_MS = 5 * 60 * 1000
+function isOrderCancellable(o: Order): boolean {
+  if (o.status !== 'pending' || o.customer_confirmed) return false
+  if (o.payment_status === 'paid') return false
+  if (o.payment_method === 'transfer' && o.payment_status === 'pending_review') return false
+  return Date.now() - new Date(o.created_at).getTime() < CANCEL_WINDOW_MS
+}
+
 export default function MyOrdersClient() {
   const { addItem } = useCart()
   const [orders, setOrders] = useState<Order[]>([])
@@ -42,6 +74,27 @@ export default function MyOrdersClient() {
   const [activeTab, setActiveTab] = useState<'open' | 'history' | 'debt' | 'wallet'>('open')
   const [customer, setCustomer] = useState<{ name: string; phone: string } | null>(null)
   const [toast, setToast] = useState<string | null>(null)
+
+  // 🔎 جستجو در سفارش‌ها
+  const [orderSearch, setOrderSearch] = useState('')
+
+  // 🎯 لغو سفارش از روی کارت
+  const [cancelTarget, setCancelTarget] = useState<Order | null>(null)
+  const [cancelReasons, setCancelReasons] = useState<Array<{ id: string; label: string; icon: string | null }>>([])
+  const [cancelLoadingReasons, setCancelLoadingReasons] = useState(false)
+  const [cancelReasonId, setCancelReasonId] = useState<string | null>(null)
+  const [cancelNote, setCancelNote] = useState('')
+  const [cancelBusy, setCancelBusy] = useState(false)
+  const [cancelErr, setCancelErr] = useState<string | null>(null)
+
+  // ⭐ اشتراک فعال — برای چیپ نوار چپ کارت پروفایل + مودال مشخصات
+  const [subInfo, setSubInfo] = useState<{
+    plan_name: string; discount_percent: number; ends_at: string
+    starts_at?: string | null; price_paid?: number | null; source?: string | null
+    benefits?: string | null; duration_days?: number | null
+  } | null>(null)
+  const [subEnabled, setSubEnabled] = useState(false)
+  const [showSubModal, setShowSubModal] = useState(false)
   const [showMemberModal, setShowMemberModal] = useState(false)
   const [memberName, setMemberName] = useState('')
   const [memberId, setMemberId] = useState('')
@@ -92,6 +145,16 @@ export default function MyOrdersClient() {
       .then((d) => { if (d && typeof d.walletEnabled === 'boolean') setWstatus(d) })
       .catch(() => {})
   }, [])
+
+  // ⭐ چیپ اشتراک فعال در نوار چپ کارت پروفایل
+  const refreshSub = useCallback(() => {
+    fetch('/api/subscription', { cache: 'no-store' })
+      .then((r) => r.json())
+      .then((d: any) => { setSubEnabled(!!d?.subscriptionEnabled); setSubInfo(d?.subscription ?? null) })
+      .catch(() => {})
+  }, [])
+
+  useEffect(() => { refreshSub() }, [refreshSub])
 
   // بعد از تأیید شماره، هم کیف پول و هم وضعیت تازه می‌شود
   async function refreshWalletAfterVerify() {
@@ -156,10 +219,54 @@ export default function MyOrdersClient() {
 
   function handleReorder(order: Order) {
     for (const item of order.items) {
-      addItem({ productId: item.product_id || '', productName: item.product_name, productImage: item.image_url || null, selectedGroupName: null, selectedOptionName: item.option_name, selectedOptionId: item.variant_option_id || null, unitPrice: item.unit_price, quantity: item.quantity, note: undefined })
+      addItem({ productId: item.product_id || '', productName: item.product_name, productImage: item.image_url || null, selectedGroupName: null, selectedOptionName: item.option_name, selectedOptionId: item.option_id || item.variant_option_id || null, unitPrice: item.unit_price, quantity: item.quantity, note: undefined })
     }
     setToast('✅ آیتم‌ها به سبد اضافه شدن')
     setTimeout(() => { window.location.href = '/cart' }, 800)
+  }
+
+  // 🎯 لغو سفارش از روی کارت — همان منطق صفحه‌ی جزئیات (دلیل + توضیح اختیاری)
+  function openCancel(order: Order) {
+    setCancelTarget(order)
+    setCancelReasonId(null)
+    setCancelNote('')
+    setCancelErr(null)
+    setCancelReasons([])
+    setCancelLoadingReasons(true)
+    fetch('/api/cancellation-reasons?target=customer')
+      .then((r) => r.json())
+      .then((d) => setCancelReasons(d.reasons || []))
+      .catch(() => {})
+      .finally(() => setCancelLoadingReasons(false))
+  }
+
+  async function submitCancel() {
+    if (!cancelTarget) return
+    setCancelBusy(true)
+    setCancelErr(null)
+    const target = cancelTarget
+    try {
+      const reason = cancelReasons.find((r) => r.id === cancelReasonId)
+      const res = await fetch('/api/orders/cancel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          orderId: target.id,
+          reasonId: cancelReasonId,
+          reasonLabel: reason?.label || null,
+          note: cancelNote.trim() || null,
+        }),
+      })
+      const data = await res.json().catch(() => null)
+      if (!res.ok) throw new Error(data?.error || 'خطا در لغو سفارش')
+      setOrders((prev) => prev.map((o) => (o.id === target.id ? { ...o, status: 'cancelled' } : o)))
+      setCancelTarget(null)
+      setToast('✅ سفارش لغو شد')
+    } catch (err: any) {
+      setCancelErr(err.message)
+    } finally {
+      setCancelBusy(false)
+    }
   }
 
   async function loadWallet(opts?: { more?: boolean }) {
@@ -299,6 +406,10 @@ export default function MyOrdersClient() {
     return <div className="my-orders-page"><div className="my-orders-header"><Link href="/" className="my-orders-back">← منو</Link><h1>سفارش‌های من</h1><span style={{ width: 60 }} /></div><div className="my-orders-empty">⏳ در حال بارگذاری...</div></div>
   }
 
+  // ✅ گرید و کیف پول — برای کارت پروفایل فشرده
+  const grade = wstatus?.customer?.verification_status === 'verified' ? (wstatus.grade ?? null) : null
+  const walletOk = !!(wstatus?.walletEnabled && wstatus.customer?.verification_status === 'verified' && !wstatus.customer.wallet_blocked)
+
   // ✅ محاسبه آمار برای داشبورد
   const validOrders = orders.filter(o => o.status !== 'cancelled')
   const totalSpent = validOrders.reduce((sum, o) => sum + o.subtotal, 0)
@@ -323,12 +434,16 @@ export default function MyOrdersClient() {
     return ['delivered', 'cancelled'].includes(o.status)
   })
 
+  // 🔎 اعمال جستجو روی سفارش‌های فیلترشده‌ی تب فعال
+  const searchQ = normSearch(orderSearch)
+  const searchedOrders = searchQ ? filteredOrders.filter((o) => orderSearchHay(o).includes(searchQ)) : filteredOrders
+
 
   return (
     <div className="my-orders-page">
       {/* ✅ هدر: عنوان + تب‌های بالا (فقط دسکتاپ) */}
       <div className="my-orders-header" style={{ flexDirection: 'column', alignItems: 'stretch', padding: '0', borderBottom: 'none' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 0', borderBottom: '1px solid #e3ddd2' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid #e3ddd2' }}>
           <Link href="/" className="my-orders-back" style={{ padding: '6px 12px', fontSize: '13px' }}>← منو</Link>
           <h1 style={{ margin: 0, fontSize: '18px', color: '#29251f' }}>پنل مشتری</h1>
           <span style={{ width: '60px' }} />
@@ -339,7 +454,7 @@ export default function MyOrdersClient() {
           <button
             onClick={() => setActiveTab('open')}
             style={{
-              flex: 1, padding: '13px 10px', fontSize: '13.5px', fontWeight: 'bold',
+              flex: 1, padding: '10px 8px', fontSize: '13.5px', fontWeight: 'bold',
               background: 'transparent', border: 'none',
               borderBottom: activeTab === 'open' ? '3px solid #6b4f3a' : '3px solid transparent',
               color: activeTab === 'open' ? '#6b4f3a' : '#766f64',
@@ -351,7 +466,7 @@ export default function MyOrdersClient() {
           <button
             onClick={() => setActiveTab('history')}
             style={{
-              flex: 1, padding: '13px 10px', fontSize: '13.5px', fontWeight: 'bold',
+              flex: 1, padding: '10px 8px', fontSize: '13.5px', fontWeight: 'bold',
               background: 'transparent', border: 'none',
               borderBottom: activeTab === 'history' ? '3px solid #6b4f3a' : '3px solid transparent',
               color: activeTab === 'history' ? '#6b4f3a' : '#766f64',
@@ -363,7 +478,7 @@ export default function MyOrdersClient() {
           <button
             onClick={() => setActiveTab('debt')}
             style={{
-              flex: 1, padding: '13px 10px', fontSize: '13.5px', fontWeight: 'bold',
+              flex: 1, padding: '10px 8px', fontSize: '13.5px', fontWeight: 'bold',
               background: 'transparent', border: 'none',
               borderBottom: activeTab === 'debt' ? '3px solid #9b3c32' : '3px solid transparent',
               color: activeTab === 'debt' ? '#9b3c32' : '#766f64',
@@ -375,7 +490,7 @@ export default function MyOrdersClient() {
           <button
             onClick={openWalletTab}
             style={{
-              flex: 1, padding: '13px 10px', fontSize: '13.5px', fontWeight: 'bold',
+              flex: 1, padding: '10px 8px', fontSize: '13.5px', fontWeight: 'bold',
               background: 'transparent', border: 'none',
               borderBottom: activeTab === 'wallet' ? '3px solid #2d5d3e' : '3px solid transparent',
               color: activeTab === 'wallet' ? '#2d5d3e' : '#766f64',
@@ -387,25 +502,55 @@ export default function MyOrdersClient() {
         </div>
       </div>
 
-      {/* ✅ کارت پروفایل فشرده: نام + شماره + نشان عضویت + آمار + موجودی */}
+      {/* ✅ کارت پروفایل فشرده: آواتار گرید + نام/عضویت + اشتراک/کیف‌پول در چپ + آمار */}
       {customer && (
-        <div className="panel-profile-card" style={{ marginTop: '12px' }}>
+        <div className="panel-profile-card" style={{ marginTop: '8px' }}>
           <div className="panel-profile-row">
-            <div className="panel-avatar">
-              {customer.name && customer.name !== 'کاربر' ? customer.name.trim().charAt(0) : '☕'}
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px', flexShrink: 0 }}>
+              <div className="panel-avatar" style={grade ? { background: grade.color ?? '#6b4f3a', color: '#fff' } : undefined}>
+                {customer.name && customer.name !== 'کاربر' ? customer.name.trim().charAt(0) : '☕'}
+              </div>
+              {grade && (
+                <small
+                  style={{ fontSize: '10px', fontWeight: 700, color: grade.color ?? '#6b4f3a', whiteSpace: 'nowrap' }}
+                  title={grade.discountPercent > 0 ? `تخفیف ${formatPrice(grade.discountPercent)}٪ روی اقلام مشمول — خودکار اعمال می‌شود` : undefined}
+                >
+                  🏆 {grade.name}{grade.discountPercent > 0 ? ` · ${formatPrice(grade.discountPercent)}٪` : ''}
+                </small>
+              )}
             </div>
             <div className="panel-profile-meta">
               <strong>{customer.name && customer.name !== 'کاربر' ? customer.name : 'مشتری کافه پارک'}</strong>
-              <small dir="ltr">{customer.phone}</small>
+              <small>{membership ? (membership.orgId === 'general' ? 'عضو باشگاه مشتریان' : `عضو ${membership.orgName}`) : 'مشتری عادی'}</small>
             </div>
-            {membership && (
-              <span
-                className="panel-membership-chip"
-                title={membership.orgId === 'general' ? 'عضو باشگاه مشتریان' : `عضو باشگاه ${membership.orgName}`}
-              >
-                🎓 {membership.orgId === 'general' ? 'عضو باشگاه' : membership.orgName}
-              </span>
-            )}
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '5px', flexShrink: 0, maxWidth: '46%' }}>
+              {(subEnabled || subInfo) && (
+                subInfo ? (
+                  <button
+                    type="button"
+                    className="panel-membership-chip"
+                    style={{ background: '#f7f1ff', color: '#4a2c73', borderColor: '#d9c8ee', cursor: 'pointer', fontFamily: 'inherit' }}
+                    title={`اشتراک «${subInfo.plan_name}» — فعال تا ${formatEndsAt(subInfo.ends_at)} — برای جزئیات کلیک کن`}
+                    onClick={() => setShowSubModal(true)}
+                  >
+                    ⭐ {subInfo.plan_name}{subInfo.discount_percent > 0 ? ` · ${formatPrice(subInfo.discount_percent)}٪` : ''} ⌄
+                  </button>
+                ) : (
+                  <span
+                    className="panel-membership-chip"
+                    style={{ background: '#f5f0e9', color: '#766f64', borderColor: '#e3ddd2' }}
+                    title="هنوز اشتراک فعالی نداری"
+                  >
+                    بدون اشتراک
+                  </span>
+                )
+              )}
+              {walletOk && (
+                <small style={{ fontSize: '11px', color: '#2d5d3e', fontWeight: 700, whiteSpace: 'nowrap', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis' }} title="موجودی کیف پول">
+                  👛 {formatPrice(wstatus?.customer?.balance ?? 0)} تومان
+                </small>
+              )}
+            </div>
           </div>
 
           <div className="panel-stats">
@@ -423,30 +568,13 @@ export default function MyOrdersClient() {
             </div>
           </div>
 
-          {wstatus?.walletEnabled && wstatus.customer?.verification_status === 'verified' && !wstatus.customer.wallet_blocked && (
-            <div className="panel-balance-strip">
-              👛 موجودی کیف پول: {formatPrice(wstatus.customer.balance)} تومان
-            </div>
-          )}
-
-          {/* 🏆 گرید وفاداری — فقط برای مشتریِ احرازشده با گرید فعال */}
-          {wstatus?.customer?.verification_status === 'verified' && wstatus.grade && (
-            <div style={{ background: '#fff', border: `1.5px solid ${wstatus.grade.color ?? '#6b4f3a'}`, borderRadius: '14px', padding: '10px 14px', marginTop: '10px', display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-              <span style={{ width: 12, height: 12, borderRadius: '50%', background: wstatus.grade.color ?? '#6b4f3a', flex: '0 0 auto' }} />
-              <strong style={{ fontSize: '13px', color: '#29251f' }}>🏆 گرید {wstatus.grade.name}</strong>
-              {wstatus.grade.discountPercent > 0 && (
-                <small style={{ fontSize: '11.5px', color: '#766f64' }}>
-                  {formatPrice(wstatus.grade.discountPercent)}٪ تخفیف روی اقلام مشمول — خودکار اعمال می‌شود
-                </small>
-              )}
-            </div>
-          )}
-
-          {/* ⭐ اشتراک ماهیانه — چیپ اشتراک فعال + لیست پلن‌ها (خودمختار) */}
+          {/* ⭐ اشتراک ماهیانه — لیست پلن‌ها (خودمختار)؛ چیپ اشتراک فعال بالا در نوار چپ نمایش داده می‌شود */}
           <SubscriptionSection
+            hideActiveChip
             balance={wstatus?.customer?.balance ?? null}
             hasCustomer={wstatus?.customer?.verification_status === 'verified' && !wstatus.customer.wallet_blocked}
             onStatusChanged={() => {
+              refreshSub()
               fetch('/api/wallet/status', { cache: 'no-store' })
                 .then((r) => r.json())
                 .then((d) => { if (d && typeof d.walletEnabled === 'boolean') setWstatus(d) })
@@ -468,6 +596,16 @@ export default function MyOrdersClient() {
             <small style={{ fontSize: '11px', color: '#766f64' }}>برای تخفیف‌های ویژه و خودکار، عضو شو.</small>
           </div>
         </div>
+      )}
+
+      {/* 🔎 جستجو در سفارش‌های تب فعال */}
+      {activeTab !== 'wallet' && orders.length > 0 && (
+        <input
+          value={orderSearch}
+          onChange={(e) => setOrderSearch(e.target.value)}
+          placeholder="🔎 جستجو: نام محصول، شماره سفارش، وضعیت، تاریخ..."
+          style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', borderRadius: '10px', border: '1px solid #e3ddd2', background: '#fffdf9', fontSize: '13px', fontFamily: 'inherit', marginTop: '10px', outline: 'none' }}
+        />
       )}
 
       {activeTab === 'wallet' ? (
@@ -765,13 +903,15 @@ export default function MyOrdersClient() {
             </>
           )}
         </div>
-      ) : filteredOrders.length === 0 ? (
+      ) : searchedOrders.length === 0 ? (
         <div className="my-orders-empty">
-                    {activeTab === 'open'
-            ? 'در حال حاضر هیچ سفارش بازی ندارید.'
-            : activeTab === 'debt'
-              ? '🎉 هیچ سفارش تسویه‌نشده‌ای ندارید.'
-              : 'هنوز سابقه سفارشی (تحویل شده یا لغو شده) ندارید.'}
+          {orderSearch
+            ? `🔎 چیزی برای «${orderSearch}» پیدا نشد.`
+            : activeTab === 'open'
+              ? 'در حال حاضر هیچ سفارش بازی ندارید.'
+              : activeTab === 'debt'
+                ? '🎉 هیچ سفارش تسویه‌نشده‌ای ندارید.'
+                : 'هنوز سابقه سفارشی (تحویل شده یا لغو شده) ندارید.'}
         </div>
       ) : (
         <div className="my-orders-list" style={{ marginTop: '16px' }}>
@@ -781,7 +921,7 @@ export default function MyOrdersClient() {
             </div>
           )}
 
-          {filteredOrders.map((order) => {
+          {searchedOrders.map((order) => {
             const info = STATUS_INFO[order.status] || STATUS_INFO.pending
             return (
               <div key={order.id} className="my-order-card">
@@ -858,9 +998,19 @@ export default function MyOrdersClient() {
                   </Link>
                 )}
 
-				<div className="my-orders-actions" style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
+                <div className="my-orders-actions" style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
                   <button type="button" className="my-order-btn primary" style={{ flex: 1 }} onClick={() => handleReorder(order)}>🔄 سفارش مجدد</button>
                   <Link href={`/order/${order.id}`} className="my-order-btn" style={{ flex: 1, textAlign: 'center' }}>👁️ جزئیات</Link>
+                  {isOrderCancellable(order) && (
+                    <button
+                      type="button"
+                      className="my-order-btn"
+                      style={{ flex: 1, textAlign: 'center', background: '#fdf3f2', borderColor: '#e8c0ba', color: '#9b3c32' }}
+                      onClick={() => openCancel(order)}
+                    >
+                      ❌ لغو
+                    </button>
+                  )}
                 </div>
               </div>
             )
@@ -908,6 +1058,116 @@ export default function MyOrdersClient() {
       </nav>
 
       {toast && <div className="toast">{toast}</div>}
+
+      {/* 🎯 مودال لغو سفارش از کارت */}
+      {cancelTarget && (
+        <div className="modal-overlay" onClick={() => !cancelBusy && setCancelTarget(null)}>
+          <div className="modal-container modal-md" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div className="modal-header-content">
+                <h2>لغو سفارش</h2>
+                <p>سفارش #{formatPrice(cancelTarget.order_number)} — چرا می‌خوای لغو کنی؟</p>
+              </div>
+              <button type="button" className="modal-close-btn" onClick={() => setCancelTarget(null)} disabled={cancelBusy}>✕</button>
+            </div>
+            <div className="modal-body">
+              {cancelLoadingReasons ? (
+                <p style={{ textAlign: 'center', fontSize: '13px', color: '#766f64' }}>⏳ در حال بارگذاری دلایل...</p>
+              ) : cancelReasons.length === 0 ? (
+                <p style={{ textAlign: 'center', fontSize: '13px', color: '#766f64' }}>دلیلی برای نمایش وجود ندارد. می‌تونی بدون دلیل لغو کنی.</p>
+              ) : (
+                <div className="cancel-reasons-list">
+                  {cancelReasons.map((reason) => (
+                    <button
+                      key={reason.id}
+                      type="button"
+                      className={`cancel-reason-item ${cancelReasonId === reason.id ? 'selected' : ''}`}
+                      onClick={() => setCancelReasonId(reason.id)}
+                      disabled={cancelBusy}
+                    >
+                      <span className="cancel-reason-icon">{reason.icon || '📝'}</span>
+                      <span className="cancel-reason-label">{reason.label}</span>
+                      {cancelReasonId === reason.id && <span className="cancel-reason-check">✓</span>}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <div className="cancel-note-field">
+                <label>توضیحات بیشتر (اختیاری)</label>
+                <textarea value={cancelNote} onChange={(e) => setCancelNote(e.target.value)} placeholder="اگه دوست داری بیشتر توضیح بده..." rows={3} disabled={cancelBusy} />
+              </div>
+              <div style={{ marginTop: '10px', fontSize: '12px', color: '#9b3c32', background: '#fdf3f2', border: '1px solid #f2d5c5', borderRadius: '8px', padding: '10px', textAlign: 'center' }}>
+                ⚠️ بعد از لغو، سفارش از سیستم حذف می‌شه و قابل بازگشت نیست.
+              </div>
+              {cancelErr && <div className="checkout-error" style={{ marginTop: '10px' }}>❌ {cancelErr}</div>}
+            </div>
+            <div className="modal-footer">
+              <button type="button" className="btn" onClick={() => setCancelTarget(null)} disabled={cancelBusy}>انصراف</button>
+              <button type="button" className="btn" style={{ background: '#9b3c32', color: '#fff', border: 0 }} onClick={submitCancel} disabled={cancelBusy}>
+                {cancelBusy ? '...' : '❌ لغو سفارش'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ⭐ مودال مشخصات اشتراک فعال — از چیپ نوار چپ باز می‌شود */}
+      {showSubModal && subInfo && (
+        <div className="modal-overlay" onClick={() => setShowSubModal(false)}>
+          <div className="modal-container modal-md" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div className="modal-header-content">
+                <h2>⭐ اشتراک {subInfo.plan_name}</h2>
+                <p>مشخصات اشتراک فعال شما</p>
+              </div>
+              <button type="button" className="modal-close-btn" onClick={() => setShowSubModal(false)}>✕</button>
+            </div>
+            <div className="modal-body">
+              <div style={{ display: 'grid', gap: '8px', fontSize: '13px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', background: '#fbf9f5', borderRadius: '8px', padding: '10px 12px' }}>
+                  <span style={{ color: '#766f64' }}>درصد تخفیف</span>
+                  <strong style={{ color: '#4a2c73' }}>{formatPrice(subInfo.discount_percent)}٪ روی اقلام مشمول</strong>
+                </div>
+                {subInfo.price_paid != null && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', background: '#fbf9f5', borderRadius: '8px', padding: '10px 12px' }}>
+                    <span style={{ color: '#766f64' }}>مبلغ پرداخت‌شده</span>
+                    <strong style={{ color: '#29251f' }}>{formatPrice(subInfo.price_paid)} تومان</strong>
+                  </div>
+                )}
+                {subInfo.duration_days != null && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', background: '#fbf9f5', borderRadius: '8px', padding: '10px 12px' }}>
+                    <span style={{ color: '#766f64' }}>مدت اشتراک</span>
+                    <strong style={{ color: '#29251f' }}>{formatPrice(subInfo.duration_days)} روزه</strong>
+                  </div>
+                )}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', background: '#fbf9f5', borderRadius: '8px', padding: '10px 12px' }}>
+                  <span style={{ color: '#766f64' }}>تاریخ شروع</span>
+                  <strong style={{ color: '#29251f' }}>{subInfo.starts_at ? formatPersianDate(subInfo.starts_at) : '—'}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', background: '#fbf9f5', borderRadius: '8px', padding: '10px 12px' }}>
+                  <span style={{ color: '#766f64' }}>تاریخ پایان</span>
+                  <strong style={{ color: '#29251f' }}>{formatPersianDate(subInfo.ends_at)}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', background: '#fbf9f5', borderRadius: '8px', padding: '10px 12px' }}>
+                  <span style={{ color: '#766f64' }}>روش پرداخت</span>
+                  <strong style={{ color: '#29251f' }}>
+                    {subInfo.source === 'wallet' ? '👛 خرید با کیف پول' : subInfo.source === 'admin' ? '🎁 اعطای توسط مدیر کافه' : '—'}
+                  </strong>
+                </div>
+              </div>
+              {subInfo.benefits && (
+                <div style={{ marginTop: '10px', background: '#f7f1ff', border: '1px solid #d9c8ee', borderRadius: '10px', padding: '12px', fontSize: '12.5px', color: '#4a2c73', lineHeight: 1.9 }}>
+                  <strong style={{ display: 'block', marginBottom: '4px' }}>✨ توضیحات و مزایای اشتراک:</strong>
+                  <div style={{ whiteSpace: 'pre-line' }}>{subInfo.benefits}</div>
+                </div>
+              )}
+              <small style={{ display: 'block', marginTop: '10px', fontSize: '11px', color: '#766f64', textAlign: 'center' }}>
+                تخفیف اشتراک روی اقلام مشمول، در ثبت نهایی سفارش خودکار اعمال می‌شود.
+              </small>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showMemberModal && (
         <div className="modal-overlay" onClick={() => !registerLoading && setShowMemberModal(false)}>

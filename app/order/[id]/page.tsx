@@ -314,7 +314,7 @@ export default function OrderPage({
             productImage: item.image_url || null,
             selectedGroupName: null,
             selectedOptionName: item.option_name,
-            selectedOptionId: item.variant_option_id || null,
+            selectedOptionId: (item as any).option_id || item.variant_option_id || null,
             unitPrice: item.unit_price,
             quantity: item.quantity,
             note: undefined,

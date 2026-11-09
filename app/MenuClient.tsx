@@ -526,7 +526,7 @@ export default function MenuClient({
                 </button>
               )}
               <Link href="/my-orders" className="share-btn hero-my-orders-btn">
-                👤 سفارش‌های من
+                👤 حساب من
               </Link>
             </div>
           </div>

@@ -33,10 +33,12 @@ export default function SubscriptionSection({
   balance,
   hasCustomer,
   onStatusChanged,
+  hideActiveChip,
 }: {
   balance: number | null
   hasCustomer: boolean
   onStatusChanged?: () => void
+  hideActiveChip?: boolean
 }) {
   const [data, setData] = useState<SubData | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
@@ -125,8 +127,8 @@ export default function SubscriptionSection({
 
   return (
     <div style={{ marginTop: '10px' }}>
-      {/* چیپ اشتراک فعال */}
-      {sub && (
+      {/* چیپ اشتراک فعال — در حالت فشرده، پنل والد خودش چیپ را در نوار چپ نشان می‌دهد */}
+      {sub && !hideActiveChip && (
         <div style={{ background: '#f7f1ff', border: '1.5px solid #8f6bc4', borderRadius: '14px', padding: '10px 14px', display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
           <span style={{ fontSize: '15px' }}>⭐</span>
           <strong style={{ fontSize: '13px', color: '#4a2c73' }}>اشتراک {sub.plan_name}</strong>
