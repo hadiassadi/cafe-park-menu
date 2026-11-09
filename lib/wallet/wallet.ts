@@ -4,6 +4,7 @@ import { supabaseAdmin } from '../supabase/server' // ایمپورت نسبی: �
 import { getVerifiedPhoneHash } from '../sms/otp' // ایمپورت نسبی: توسط vitest هم لود می‌شود
 import { getDeviceHash } from '../orders/owner'
 import { getVerifiedCustomerGrade, type ResolvedGrade } from '../customers/grades'
+import { getActiveSubscriptionForCustomer, getSubscriptionFlags, type ActiveSubscription } from '../subscriptions/subscriptions'
 
 export type WalletTx = {
   id: string
@@ -29,6 +30,9 @@ export type CustomerChargeRequest = {
   status: string
   tracking_no: string | null
   reject_reason: string | null
+  /** purpose='wallet_charge' شارژ کیف پول؛ purpose='subscription' خرید اشتراک */
+  purpose: string
+  plan_name: string | null
   created_at: string
 }
 
@@ -192,30 +196,39 @@ export async function getWalletFlags(): Promise<WalletFlags> {
 }
 
 /** وضعیت کامل برای پنل مشتری: پرچم‌ها + مشتریِ شناسایی‌شده + موجودی */
-/** وضعیت کامل برای پنل مشتری: پرچم‌ها + مشتریِ شناسایی‌شده + موجودی + گرید */
+/** وضعیت کامل برای پنل مشتری: پرچم‌ها + مشتریِ شناسایی‌شده + موجودی + گرید + اشتراک */
 export type WalletStatus = WalletFlags & {
   customer: (ResolvedWalletCustomer & { balance: number }) | null
   grade: ResolvedGrade | null
+  subscriptionEnabled: boolean
+  subscription: ActiveSubscription | null
 }
 
 export async function getWalletStatus(): Promise<WalletStatus> {
-  const flags = await getWalletFlags()
+  const [flags, subFlags] = await Promise.all([getWalletFlags(), getSubscriptionFlags()])
   const customer = await resolveWalletCustomer()
+  const common = { ...flags, subscriptionEnabled: subFlags.subscriptionEnabled }
 
-  if (!customer) return { ...flags, customer: null, grade: null }
+  if (!customer) {
+    return { ...common, customer: null, grade: null, subscription: null }
+  }
 
-  const [{ data, error }, grade] = await Promise.all([
+  const [{ data, error }, grade, subscription] = await Promise.all([
     supabaseAdmin().rpc('wallet_balance', { p_customer_id: customer.id }),
     getVerifiedCustomerGrade(customer.phone).catch((err) => {
       console.error('[wallet] grade lookup failed:', err)
       return null
     }),
+    getActiveSubscriptionForCustomer(customer.id).catch((err) => {
+      console.error('[wallet] subscription lookup failed:', err)
+      return null
+    }),
   ])
   if (error) {
     console.error('[wallet] status balance failed:', error.message)
-    return { ...flags, customer: { ...customer, balance: 0 }, grade }
+    return { ...common, customer: { ...customer, balance: 0 }, grade, subscription }
   }
-  return { ...flags, customer: { ...customer, balance: Number(data ?? 0) }, grade }
+  return { ...common, customer: { ...customer, balance: Number(data ?? 0) }, grade, subscription }
 }
 
 /** ثبت یک‌باره‌ی رویداد «فعال‌سازی کیف پول» در دفتر (idempotent) */
@@ -289,7 +302,7 @@ export async function getCustomerChargeRequests(
 ): Promise<CustomerChargeRequest[]> {
   const { data, error } = await supabaseAdmin()
     .from('wallet_charge_requests')
-    .select('id, amount, status, tracking_no, reject_reason, created_at')
+    .select('id, amount, status, tracking_no, reject_reason, purpose, plan_name, created_at')
     .eq('customer_id', customerId)
     .order('created_at', { ascending: false })
     .limit(limit)

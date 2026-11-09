@@ -11,11 +11,13 @@ import { formatPersianDate } from '@/lib/format-date'
 const formatPrice = (price: number) =>
   new Intl.NumberFormat('fa-IR').format(Math.round(price))
 
-/** برچسب ردیف تخفیف — کدهای شبه‌کوپن سرور: MEMBERSHIP / GRADE / MEMBERSHIP+GRADE */
+/** برچسب ردیف تخفیف — کدهای شبه‌کوپن سرور: MEMBERSHIP / GRADE / SUBSCRIPTION / ترکیبی */
 function discountLabel(couponCode: string | null | undefined): string {
   if (couponCode === 'MEMBERSHIP') return '🎉 تخفیف باشگاه:'
   if (couponCode === 'GRADE') return '🏆 تخفیف گرید:'
   if (couponCode === 'MEMBERSHIP+GRADE') return '🎉 تخفیف باشگاه + گرید:'
+  if (couponCode === 'SUBSCRIPTION') return '⭐ تخفیف اشتراک:'
+  if (couponCode === 'SUBSCRIPTION+GRADE') return '⭐ تخفیف اشتراک + گرید:'
   if (couponCode) return `🎟️ تخفیف (${couponCode}):`
   return '🎉 تخفیف:'
 }

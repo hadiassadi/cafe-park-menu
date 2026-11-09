@@ -8,6 +8,7 @@ import { hashData } from '@/lib/utils/hash'
 import { getCustomerCreditState, creditDenyMessage } from '@/lib/club/credit'
 import { combineDiscounts } from '@/lib/club/discount-policy'
 import { getGradeConfig, getVerifiedCustomerGrade } from '@/lib/customers/grades'
+import { getActiveSubscriptionByPhone } from '@/lib/subscriptions/subscriptions'
 import { loadActiveFees, feeForProduct, findActiveTable } from '@/lib/orders/takeaway'
 import { rateLimit, tooMany } from '@/lib/rate-limit'
 
@@ -291,7 +292,7 @@ if (wantsTakeaway) {
     }
 
     // نامزدِ تخفیف گرید (مشتریِ احرازشده با گرید فعال)
-    let gradeWinnerLabel: 'MEMBERSHIP' | 'GRADE' | 'MEMBERSHIP+GRADE' | null = null
+    let gradeWinnerLabel: 'MEMBERSHIP' | 'GRADE' | 'MEMBERSHIP+GRADE' | 'SUBSCRIPTION' | 'SUBSCRIPTION+GRADE' | null = null
     let gradePercent = 0
     try {
       const customerGrade = await getVerifiedCustomerGrade(phone)
@@ -299,6 +300,21 @@ if (wantsTakeaway) {
     } catch (gradeErr) {
       console.error('[orders POST] grade lookup:', gradeErr)
     }
+
+    // نامزدِ تخفیف اشتراک ماهیانه — پولی است و سهمیه نمی‌خواهد؛
+    // در موتور ترکیب، جایگزینِ سهم باشگاه می‌شود (هرکدام بیشتر)
+    let subscriptionPercent = 0
+    let subscriptionDiscount = 0
+    try {
+      const sub = await getActiveSubscriptionByPhone(phone)
+      subscriptionPercent = sub?.discountPercent ?? 0
+    } catch (subErr) {
+      console.error('[orders POST] subscription lookup:', subErr)
+    }
+
+    const paidPercent = Math.max(membershipPercent, subscriptionPercent)
+    const paidSource: 'membership' | 'subscription' =
+      subscriptionPercent > membershipPercent ? 'subscription' : 'membership'
 
     const gradeConfig = await getGradeConfig()
     const combine = (mPct: number) =>
@@ -310,13 +326,22 @@ if (wantsTakeaway) {
         gradePercent,
       })
 
-    let combined = combine(membershipPercent)
+    let combined = combine(paidPercent)
     let membershipDiscount = combined.membershipDiscount
     let gradeDiscount = combined.gradeDiscount
     let combinedDiscount = combined.discount
+    subscriptionDiscount =
+      paidSource === 'subscription' &&
+      (combined.winner === 'membership' || combined.winner === 'stacked')
+        ? membershipDiscount
+        : 0
 
     // رزرو سهمیه‌ی عضویت فقط وقتی تخفیف باشگاه برنده شده باشد
-    if (combined.winner === 'membership' || combined.winner === 'stacked') {
+    // (اشتراکِ برنده سهمیه نمی‌خواهد؛ ظرفیت باشگاه برای روزهای دیگر مشتری می‌ماند)
+    const needsMembershipQuota =
+      paidSource === 'membership' &&
+      (combined.winner === 'membership' || combined.winner === 'stacked')
+    if (needsMembershipQuota) {
       if (!member || membershipDiscount <= 0) {
         return bad('خطا در ثبت سفارش', 500)
       }
@@ -344,9 +369,13 @@ if (wantsTakeaway) {
       }
     }
 
-    if (combined.winner === 'membership') gradeWinnerLabel = 'MEMBERSHIP'
-    else if (combined.winner === 'grade') gradeWinnerLabel = 'GRADE'
-    else if (combined.winner === 'stacked') gradeWinnerLabel = 'MEMBERSHIP+GRADE'
+    if (combined.winner === 'grade') {
+      gradeWinnerLabel = 'GRADE'
+    } else if (combined.winner === 'membership') {
+      gradeWinnerLabel = paidSource === 'subscription' ? 'SUBSCRIPTION' : 'MEMBERSHIP'
+    } else if (combined.winner === 'stacked') {
+      gradeWinnerLabel = paidSource === 'subscription' ? 'SUBSCRIPTION+GRADE' : 'MEMBERSHIP+GRADE'
+    }
 
     // ---------- کوپن (فقط اگر هیچ تخفیف باشگاه/گریدی اعمال نشده) ----------
     let couponDiscount = 0
@@ -465,6 +494,7 @@ if (wantsTakeaway) {
           coupon_code: gradeWinnerLabel ?? appliedCouponCode,
           coupon_discount: totalDiscount > 0 ? totalDiscount : null,
           grade_discount: gradeDiscount > 0 ? gradeDiscount : 0,
+          subscription_discount: subscriptionDiscount > 0 ? subscriptionDiscount : 0,
           status: 'pending',
           payment_status: 'unpaid',
           payment_method: initialMethod,

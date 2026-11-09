@@ -6,13 +6,14 @@ import { useCart } from '@/lib/cart-context'
 import { formatPersianDate } from '@/lib/format-date'
 import { walletTxKindLabel, walletTxKindIcon, walletTxStatusLabel } from '@/lib/wallet/labels'
 import { normalizeTrackingNo } from '@/lib/wallet/charge'
+import SubscriptionSection from './SubscriptionSection'
 
 const formatPrice = (n: number) => new Intl.NumberFormat('fa-IR').format(Math.round(n))
 
 type OrderItem = { product_name: string; option_name: string | null; unit_price: number; quantity: number; variant_option_id?: string | null; variant_group_id?: string | null; product_id?: string | null; image_url?: string | null }
 type Order = { id: string; order_number: number; items: OrderItem[]; subtotal: number; original_subtotal: number | null; coupon_code: string | null; coupon_discount: number | null; status: string; created_at: string; cancelled_by: string | null; cancellation_reason_label: string | null; customer_name: string; customer_phone: string; payment_status?: string; payment_method?: string; paid_amount?: number }
 type WalletTx = { id: string; amount: number; kind: string; status: string | null; note: string | null; order_id: string | null; created_at: string }
-type ChargeReq = { id: string; amount: number; status: string; tracking_no: string | null; reject_reason: string | null; created_at: string }
+type ChargeReq = { id: string; amount: number; status: string; tracking_no: string | null; reject_reason: string | null; purpose?: string; plan_name?: string | null; created_at: string }
 
 const STATUS_INFO: Record<string, { label: string; color: string; icon: string }> = {
   pending: { label: 'در انتظار تأیید', color: '#9a6b3f', icon: '⏳' },
@@ -440,6 +441,18 @@ export default function MyOrdersClient() {
               )}
             </div>
           )}
+
+          {/* ⭐ اشتراک ماهیانه — چیپ اشتراک فعال + لیست پلن‌ها (خودمختار) */}
+          <SubscriptionSection
+            balance={wstatus?.customer?.balance ?? null}
+            hasCustomer={wstatus?.customer?.verification_status === 'verified' && !wstatus.customer.wallet_blocked}
+            onStatusChanged={() => {
+              fetch('/api/wallet/status', { cache: 'no-store' })
+                .then((r) => r.json())
+                .then((d) => { if (d && typeof d.walletEnabled === 'boolean') setWstatus(d) })
+                .catch(() => {})
+            }}
+          />
         </div>
       )}
 
@@ -609,7 +622,7 @@ export default function MyOrdersClient() {
               {(walletView.chargeRequests ?? []).filter((r) => r.status !== 'approved').slice(0, 3).map((r) => (
                 <div key={r.id} style={{ background: r.status === 'pending' ? '#fff4d9' : '#fdecea', border: `1px solid ${r.status === 'pending' ? '#ecd9a8' : '#f5c6c0'}`, borderRadius: '10px', padding: '8px 12px', marginTop: '10px', fontSize: '11.5px', color: r.status === 'pending' ? '#8a6d3b' : '#9b3c32', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                   <span style={{ lineHeight: 1.8 }}>
-                    {r.status === 'pending' ? '⏳' : '❌'} درخواست شارژ {formatPrice(r.amount)} تومان —{' '}
+                    {r.status === 'pending' ? '⏳' : '❌'} درخواست {r.purpose === 'subscription' ? `اشتراک${r.plan_name ? ` «${r.plan_name}»` : ''}` : 'شارژ'} {formatPrice(r.amount)} تومان —{' '}
                     {r.status === 'pending' ? 'در انتظار تأیید مدیر' : `رد شد${r.reject_reason ? `: ${r.reject_reason}` : ''}`}
                   </span>
                   {r.tracking_no && <span dir="ltr" style={{ opacity: 0.7 }}>#{r.tracking_no}</span>}

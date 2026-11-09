@@ -5,43 +5,48 @@ import { supabaseAdmin } from '@/lib/supabase/server'
 import { getDeviceHash, UUID_RE } from '@/lib/orders/owner'
 import { resolveWalletCustomer } from '@/lib/wallet/wallet'
 import { getVerifiedCustomerGrade } from '@/lib/customers/grades'
+import { getActiveSubscriptionByPhone } from '@/lib/subscriptions/subscriptions'
 import { paymentErrorMessage } from '@/lib/payment/methods'
 
 export const dynamic = 'force-dynamic'
 
-/** موجودی کیف پول + گرید نشست فعلی — برای نمایش گزینه «پرداخت با کیف پول» و پیش‌نمایش تخفیف گرید در چک‌اوت */
+/** موجودی کیف پول + گرید + اشتراک نشست فعلی — برای گزینه «پرداخت با کیف پول» و پیش‌نمایش تخفیف‌ها در چک‌اوت */
 export async function GET() {
   try {
     const customer = await resolveWalletCustomer()
     if (!customer) {
       return NextResponse.json(
-        { balance: null, blocked: false, grade: null },
+        { balance: null, blocked: false, grade: null, subscription: null },
         { headers: { 'Cache-Control': 'no-store' } }
       )
     }
 
-    const [{ data, error }, grade] = await Promise.all([
+    const [{ data, error }, grade, subscription] = await Promise.all([
       supabaseAdmin().rpc('wallet_balance', { p_customer_id: customer.id }),
       getVerifiedCustomerGrade(customer.phone).catch((err) => {
         console.error('[payment/wallet][GET] grade:', err)
+        return null
+      }),
+      getActiveSubscriptionByPhone(customer.phone).catch((err) => {
+        console.error('[payment/wallet][GET] subscription:', err)
         return null
       }),
     ])
     if (error) {
       console.error('[payment/wallet][GET] balance:', error.message)
       return NextResponse.json(
-        { balance: null, blocked: !!customer.wallet_blocked, grade },
+        { balance: null, blocked: !!customer.wallet_blocked, grade, subscription },
         { headers: { 'Cache-Control': 'no-store' } }
       )
     }
 
     return NextResponse.json(
-      { balance: Number(data ?? 0), blocked: !!customer.wallet_blocked, grade },
+      { balance: Number(data ?? 0), blocked: !!customer.wallet_blocked, grade, subscription },
       { headers: { 'Cache-Control': 'no-store' } }
     )
   } catch (err) {
     console.error('[payment/wallet][GET]', err)
-    return NextResponse.json({ balance: null, blocked: false, grade: null })
+    return NextResponse.json({ balance: null, blocked: false, grade: null, subscription: null })
   }
 }
 
