@@ -87,9 +87,14 @@ export default function MyOrdersClient() {
   const [cancelBusy, setCancelBusy] = useState(false)
   const [cancelErr, setCancelErr] = useState<string | null>(null)
 
-  // ⭐ اشتراک فعال — برای چیپ نوار چپ کارت پروفایل
-  const [subInfo, setSubInfo] = useState<{ plan_name: string; discount_percent: number; ends_at: string } | null>(null)
+  // ⭐ اشتراک فعال — برای چیپ نوار چپ کارت پروفایل + مودال مشخصات
+  const [subInfo, setSubInfo] = useState<{
+    plan_name: string; discount_percent: number; ends_at: string
+    starts_at?: string | null; price_paid?: number | null; source?: string | null
+    benefits?: string | null; duration_days?: number | null
+  } | null>(null)
   const [subEnabled, setSubEnabled] = useState(false)
+  const [showSubModal, setShowSubModal] = useState(false)
   const [showMemberModal, setShowMemberModal] = useState(false)
   const [memberName, setMemberName] = useState('')
   const [memberId, setMemberId] = useState('')
@@ -521,13 +526,15 @@ export default function MyOrdersClient() {
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '5px', flexShrink: 0, maxWidth: '46%' }}>
               {(subEnabled || subInfo) && (
                 subInfo ? (
-                  <span
+                  <button
+                    type="button"
                     className="panel-membership-chip"
-                    style={{ background: '#f7f1ff', color: '#4a2c73', borderColor: '#d9c8ee' }}
-                    title={`اشتراک «${subInfo.plan_name}» — فعال تا ${formatEndsAt(subInfo.ends_at)}`}
+                    style={{ background: '#f7f1ff', color: '#4a2c73', borderColor: '#d9c8ee', cursor: 'pointer', fontFamily: 'inherit' }}
+                    title={`اشتراک «${subInfo.plan_name}» — فعال تا ${formatEndsAt(subInfo.ends_at)} — برای جزئیات کلیک کن`}
+                    onClick={() => setShowSubModal(true)}
                   >
-                    ⭐ {subInfo.plan_name}{subInfo.discount_percent > 0 ? ` · ${formatPrice(subInfo.discount_percent)}٪` : ''}
-                  </span>
+                    ⭐ {subInfo.plan_name}{subInfo.discount_percent > 0 ? ` · ${formatPrice(subInfo.discount_percent)}٪` : ''} ⌄
+                  </button>
                 ) : (
                   <span
                     className="panel-membership-chip"
@@ -1099,6 +1106,64 @@ export default function MyOrdersClient() {
               <button type="button" className="btn" style={{ background: '#9b3c32', color: '#fff', border: 0 }} onClick={submitCancel} disabled={cancelBusy}>
                 {cancelBusy ? '...' : '❌ لغو سفارش'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ⭐ مودال مشخصات اشتراک فعال — از چیپ نوار چپ باز می‌شود */}
+      {showSubModal && subInfo && (
+        <div className="modal-overlay" onClick={() => setShowSubModal(false)}>
+          <div className="modal-container modal-md" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div className="modal-header-content">
+                <h2>⭐ اشتراک {subInfo.plan_name}</h2>
+                <p>مشخصات اشتراک فعال شما</p>
+              </div>
+              <button type="button" className="modal-close-btn" onClick={() => setShowSubModal(false)}>✕</button>
+            </div>
+            <div className="modal-body">
+              <div style={{ display: 'grid', gap: '8px', fontSize: '13px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', background: '#fbf9f5', borderRadius: '8px', padding: '10px 12px' }}>
+                  <span style={{ color: '#766f64' }}>درصد تخفیف</span>
+                  <strong style={{ color: '#4a2c73' }}>{formatPrice(subInfo.discount_percent)}٪ روی اقلام مشمول</strong>
+                </div>
+                {subInfo.price_paid != null && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', background: '#fbf9f5', borderRadius: '8px', padding: '10px 12px' }}>
+                    <span style={{ color: '#766f64' }}>مبلغ پرداخت‌شده</span>
+                    <strong style={{ color: '#29251f' }}>{formatPrice(subInfo.price_paid)} تومان</strong>
+                  </div>
+                )}
+                {subInfo.duration_days != null && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', background: '#fbf9f5', borderRadius: '8px', padding: '10px 12px' }}>
+                    <span style={{ color: '#766f64' }}>مدت اشتراک</span>
+                    <strong style={{ color: '#29251f' }}>{formatPrice(subInfo.duration_days)} روزه</strong>
+                  </div>
+                )}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', background: '#fbf9f5', borderRadius: '8px', padding: '10px 12px' }}>
+                  <span style={{ color: '#766f64' }}>تاریخ شروع</span>
+                  <strong style={{ color: '#29251f' }}>{subInfo.starts_at ? formatPersianDate(subInfo.starts_at) : '—'}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', background: '#fbf9f5', borderRadius: '8px', padding: '10px 12px' }}>
+                  <span style={{ color: '#766f64' }}>تاریخ پایان</span>
+                  <strong style={{ color: '#29251f' }}>{formatPersianDate(subInfo.ends_at)}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', background: '#fbf9f5', borderRadius: '8px', padding: '10px 12px' }}>
+                  <span style={{ color: '#766f64' }}>روش پرداخت</span>
+                  <strong style={{ color: '#29251f' }}>
+                    {subInfo.source === 'wallet' ? '👛 خرید با کیف پول' : subInfo.source === 'admin' ? '🎁 اعطای توسط مدیر کافه' : '—'}
+                  </strong>
+                </div>
+              </div>
+              {subInfo.benefits && (
+                <div style={{ marginTop: '10px', background: '#f7f1ff', border: '1px solid #d9c8ee', borderRadius: '10px', padding: '12px', fontSize: '12.5px', color: '#4a2c73', lineHeight: 1.9 }}>
+                  <strong style={{ display: 'block', marginBottom: '4px' }}>✨ توضیحات و مزایای اشتراک:</strong>
+                  <div style={{ whiteSpace: 'pre-line' }}>{subInfo.benefits}</div>
+                </div>
+              )}
+              <small style={{ display: 'block', marginTop: '10px', fontSize: '11px', color: '#766f64', textAlign: 'center' }}>
+                تخفیف اشتراک روی اقلام مشمول، در ثبت نهایی سفارش خودکار اعمال می‌شود.
+              </small>
             </div>
           </div>
         </div>
