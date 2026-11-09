@@ -10,7 +10,7 @@ import SubscriptionSection from './SubscriptionSection'
 
 const formatPrice = (n: number) => new Intl.NumberFormat('fa-IR').format(Math.round(n))
 
-type OrderItem = { product_name: string; option_name: string | null; unit_price: number; quantity: number; variant_option_id?: string | null; variant_group_id?: string | null; product_id?: string | null; image_url?: string | null }
+type OrderItem = { product_name: string; option_name: string | null; unit_price: number; quantity: number; option_id?: string | null; variant_option_id?: string | null; variant_group_id?: string | null; product_id?: string | null; image_url?: string | null }
 type Order = { id: string; order_number: number; items: OrderItem[]; subtotal: number; original_subtotal: number | null; coupon_code: string | null; coupon_discount: number | null; status: string; created_at: string; cancelled_by: string | null; cancellation_reason_label: string | null; customer_name: string; customer_phone: string; payment_status?: string; payment_method?: string; paid_amount?: number }
 type WalletTx = { id: string; amount: number; kind: string; status: string | null; note: string | null; order_id: string | null; created_at: string }
 type ChargeReq = { id: string; amount: number; status: string; tracking_no: string | null; reject_reason: string | null; purpose?: string; plan_name?: string | null; created_at: string }
@@ -156,7 +156,7 @@ export default function MyOrdersClient() {
 
   function handleReorder(order: Order) {
     for (const item of order.items) {
-      addItem({ productId: item.product_id || '', productName: item.product_name, productImage: item.image_url || null, selectedGroupName: null, selectedOptionName: item.option_name, selectedOptionId: item.variant_option_id || null, unitPrice: item.unit_price, quantity: item.quantity, note: undefined })
+      addItem({ productId: item.product_id || '', productName: item.product_name, productImage: item.image_url || null, selectedGroupName: null, selectedOptionName: item.option_name, selectedOptionId: item.option_id || item.variant_option_id || null, unitPrice: item.unit_price, quantity: item.quantity, note: undefined })
     }
     setToast('✅ آیتم‌ها به سبد اضافه شدن')
     setTimeout(() => { window.location.href = '/cart' }, 800)
