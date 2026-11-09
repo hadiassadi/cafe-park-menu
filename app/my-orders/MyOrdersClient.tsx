@@ -16,6 +16,19 @@ type Order = { id: string; order_number: number; items: OrderItem[]; subtotal: n
 type WalletTx = { id: string; amount: number; kind: string; status: string | null; note: string | null; order_id: string | null; created_at: string }
 type ChargeReq = { id: string; amount: number; status: string; tracking_no: string | null; reject_reason: string | null; purpose?: string; plan_name?: string | null; created_at: string }
 
+// 🎯 منبع تخفیف فعال — از /api/customer/active-discount (آینه‌ی موتور ثبت سفارش)
+type ActiveDiscountInfo = {
+  source: 'org' | 'subscription' | 'grade' | 'stacked-org' | 'stacked-sub'
+  label: string
+  percent: number
+  color: string | null
+  orgName: string | null
+  orgRemainingToday: number | null
+  orgTotalRemaining: number | null
+  planName: string | null
+  gradeName: string | null
+}
+
 const STATUS_INFO: Record<string, { label: string; color: string; icon: string }> = {
   pending: { label: 'در انتظار تأیید', color: '#9a6b3f', icon: '⏳' },
   confirmed: { label: 'تأیید شده', color: '#4a7c9b', icon: '✓' },
@@ -95,6 +108,10 @@ export default function MyOrdersClient() {
   } | null>(null)
   const [subEnabled, setSubEnabled] = useState(false)
   const [showSubModal, setShowSubModal] = useState(false)
+
+  // 🎯 تخفیف فعال مشتری (سازمانی/اشتراک/گرید) — برای شفافیت در پنل
+  const [activeDiscount, setActiveDiscount] = useState<ActiveDiscountInfo | null>(null)
+  const [orgNote, setOrgNote] = useState<string | null>(null)
   const [showMemberModal, setShowMemberModal] = useState(false)
   const [memberName, setMemberName] = useState('')
   const [memberId, setMemberId] = useState('')
@@ -156,9 +173,20 @@ export default function MyOrdersClient() {
 
   useEffect(() => { refreshSub() }, [refreshSub])
 
+  // 🎯 نشانگر تخفیف فعال — بعد از احراز/خرید اشتراک هم تازه می‌شود
+  const refreshActiveDiscount = useCallback(() => {
+    fetch('/api/customer/active-discount', { cache: 'no-store' })
+      .then((r) => r.json())
+      .then((d: any) => { setActiveDiscount(d?.active ?? null); setOrgNote(d?.orgNote ?? null) })
+      .catch(() => {})
+  }, [])
+
+  useEffect(() => { refreshActiveDiscount() }, [refreshActiveDiscount])
+
   // بعد از تأیید شماره، هم کیف پول و هم وضعیت تازه می‌شود
   async function refreshWalletAfterVerify() {
     await loadWallet()
+    refreshActiveDiscount()
     fetch('/api/wallet/status', { cache: 'no-store' })
       .then((r) => r.json())
       .then((d) => { if (d && typeof d.walletEnabled === 'boolean') setWstatus(d) })
@@ -510,12 +538,20 @@ export default function MyOrdersClient() {
               <div className="panel-avatar" style={grade ? { background: grade.color ?? '#6b4f3a', color: '#fff' } : undefined}>
                 {customer.name && customer.name !== 'کاربر' ? customer.name.trim().charAt(0) : '☕'}
               </div>
-              {grade && (
+              {grade && !(activeDiscount && (activeDiscount.source === 'org' || activeDiscount.source === 'subscription' || activeDiscount.source === 'stacked-org')) && (
                 <small
                   style={{ fontSize: '10px', fontWeight: 700, color: grade.color ?? '#6b4f3a', whiteSpace: 'nowrap' }}
                   title={grade.discountPercent > 0 ? `تخفیف ${formatPrice(grade.discountPercent)}٪ روی اقلام مشمول — خودکار اعمال می‌شود` : undefined}
                 >
                   🏆 {grade.name}{grade.discountPercent > 0 ? ` · ${formatPrice(grade.discountPercent)}٪` : ''}
+                </small>
+              )}
+              {activeDiscount && (activeDiscount.source === 'org' || activeDiscount.source === 'stacked-org') && (
+                <small
+                  style={{ fontSize: '10px', fontWeight: 700, color: activeDiscount.color ?? '#4a7c9b', whiteSpace: 'nowrap' }}
+                  title={`تخفیف سازمانی «${activeDiscount.orgName ?? ''}» فعال است — ${formatPrice(activeDiscount.percent)}٪ روی اقلام مشمول`}
+                >
+                  🏢 {formatPrice(activeDiscount.percent)}٪
                 </small>
               )}
             </div>
@@ -568,6 +604,29 @@ export default function MyOrdersClient() {
             </div>
           </div>
 
+          {/* 🎯 تخفیف فعال — همان تصمیمی که سرور هنگام ثبت سفارش می‌گیرد */}
+          {activeDiscount && (
+            <div
+              style={{ background: '#fff', border: `1.5px dashed ${activeDiscount.color ?? '#6b4f3a'}`, borderRadius: '10px', padding: '8px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', lineHeight: 1.8 }}
+              title="این همان تخفیفی است که هنگام ثبت سفارش به‌طور خودکار اعمال می‌شود"
+            >
+              <strong style={{ fontSize: '11.5px', color: '#766f64' }}>تخفیف فعال شما:</strong>
+              <span style={{ fontWeight: 700, color: activeDiscount.color ?? '#6b4f3a' }}>
+                {activeDiscount.label} · {formatPrice(activeDiscount.percent)}٪
+              </span>
+              {(activeDiscount.source === 'org' || activeDiscount.source === 'stacked-org') && activeDiscount.orgRemainingToday != null && (
+                <small style={{ fontSize: '11px', color: '#766f64' }}>
+                  · سهمیه امروز: {formatPrice(activeDiscount.orgRemainingToday)} سفارش
+                </small>
+              )}
+            </div>
+          )}
+          {orgNote && activeDiscount?.source !== 'org' && activeDiscount?.source !== 'stacked-org' && (
+            <div style={{ background: '#fbf9f5', border: '1px dashed #d8d0c4', borderRadius: '10px', padding: '8px 12px', fontSize: '11.5px', color: '#766f64', textAlign: 'center' }}>
+              🏢 {orgNote}
+            </div>
+          )}
+
           {/* ⭐ اشتراک ماهیانه — لیست پلن‌ها (خودمختار)؛ چیپ اشتراک فعال بالا در نوار چپ نمایش داده می‌شود */}
           <SubscriptionSection
             hideActiveChip
@@ -575,6 +634,7 @@ export default function MyOrdersClient() {
             hasCustomer={wstatus?.customer?.verification_status === 'verified' && !wstatus.customer.wallet_blocked}
             onStatusChanged={() => {
               refreshSub()
+              refreshActiveDiscount()
               fetch('/api/wallet/status', { cache: 'no-store' })
                 .then((r) => r.json())
                 .then((d) => { if (d && typeof d.walletEnabled === 'boolean') setWstatus(d) })
