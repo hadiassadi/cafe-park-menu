@@ -155,6 +155,8 @@ export default function OrderPage({
           setError(data.error || 'سفارش پیدا نشد')
         } else {
           setOrder(data.order as Order)
+          // 🎯 پچ ۳۹b: در پرداخت جزئی، انتخاب روش تسویهٔ باقی‌مانده مستقیم باز شود
+          if ((data.order as Order)?.payment_status === 'partial') setShowChangeMethod(true)
         }
       } catch {
         setError('خطا در ارتباط با سرور')
@@ -763,7 +765,7 @@ export default function OrderPage({
                     : isFailed
                       ? 'پرداخت قبلی ناموفق بود. می‌تونی دوباره امتحان کنی یا روش دیگه‌ای انتخاب کنی.'
                       : isPartial
-                        ? 'بخشی از مبلغ سفارش پرداخت شده؛ باقی‌مانده رو الان از درگاه بپرداز.'
+                        ? 'بخشی از مبلغ سفارش از کیف پولت پرداخت شده؛ روش تسویهٔ باقی‌مانده رو انتخاب کن.'
                         : 'برای نهایی شدن سفارش، لطفاً پرداخت رو انجام بده.'}
               </p>
 

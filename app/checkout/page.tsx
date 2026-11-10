@@ -290,9 +290,9 @@ function CheckoutForm() {
     if (paymentSettings.payment_online_enabled && !belowMin) availableMethods.push('online')
     if (paymentSettings.payment_cash_enabled || paymentSettings.payment_card_enabled) availableMethods.push('cash')
     if (paymentSettings.payment_transfer_enabled) availableMethods.push('transfer')
-    // کیف پول تا وقتی نشست شناسایی‌شده وجود دارد نمایش داده می‌شود؛
-    // اگر موجودی کافی نباشد غیرفعال است — برای خرج کردن بخش موجودی، تیک کیف پول بالای کارت روش پرداخت است (پچ ۳۹).
-    if (paymentSettings.payment_wallet_enabled && walletAvailable) availableMethods.push('wallet')
+    // کیف پول فقط وقتی موجودی کل مبلغ را پوشاند در لیست روش‌ها می‌آید (پچ ۳۹b)؛
+    // برای خرج کردن بخشی از موجودی، تیک کیف پول بالای همین کارت است.
+    if (paymentSettings.payment_wallet_enabled && walletAvailable && !walletShort) availableMethods.push('wallet')
   }
   if (availableMethods.length === 0) availableMethods.push('cash')
   if (!availableMethods.includes(paymentMethod)) setPaymentMethod(availableMethods[0])
@@ -497,31 +497,25 @@ function CheckoutForm() {
               {availableMethods.map((m) => {
                 const info = METHOD_INFO[m]
                 const isSelected = paymentMethod === m;
-                const isWalletShort = m === 'wallet' && walletShort
-                const hint = isWalletShort
-                  ? `موجودی: ${formatPrice(walletBalance as number)} تومان — کافی نیست`
-                  : info.hint
                 return (
                   <button
                     key={m}
                     type="button"
                     className={`payment-method-option ${isSelected ? 'selected' : ''}`}
                     onClick={() => setPaymentMethod(m)}
-                    disabled={saving || isWalletShort}
+                    disabled={saving}
                     style={{
                       padding: '12px',
                       minHeight: 'auto',
                       border: isSelected ? '2px solid #6b4f3a' : '1px solid #e3ddd2',
                       background: isSelected ? '#f5f0e9' : '#fffdf9',
                       transition: 'all 0.2s ease',
-                      opacity: isWalletShort ? 0.55 : 1,
-                      cursor: isWalletShort ? 'default' : 'pointer'
                     }}
                   >
                     <div className="payment-method-option-icon" style={{ width: '32px', height: '32px', fontSize: '18px', background: '#fff' }}>{info.icon}</div>
                     <div className="payment-method-option-info">
                       <strong style={{ fontSize: '13px', color: isSelected ? '#6b4f3a' : '#29251f' }}>{info.title}</strong>
-                      <small style={{ fontSize: '10px', color: isSelected ? '#766f64' : '#9a9287' }}>{hint}</small>
+                      <small style={{ fontSize: '10px', color: isSelected ? '#766f64' : '#9a9287' }}>{info.hint}</small>
                     </div>
                     {isSelected && <span className="payment-method-option-check" style={{ background: '#6b4f3a', color: '#fff' }}>✓</span>}
                   </button>
