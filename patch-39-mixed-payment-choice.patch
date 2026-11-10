@@ -1,0 +1,526 @@
+diff --git a/app/api/payment/set-method/route.ts b/app/api/payment/set-method/route.ts
+index 180ebc8..9b66b88 100644
+--- a/app/api/payment/set-method/route.ts
++++ b/app/api/payment/set-method/route.ts
+@@ -9,6 +9,8 @@ const ALLOWED_METHODS = ['cash', 'card', 'transfer', 'online'] as const
+ type Method = (typeof ALLOWED_METHODS)[number]
+ 
+ const ACTIVE_STATUSES = ['pending', 'confirmed', 'preparing', 'ready']
++// پرداخت جزئی (پچ ۳۸): بخشی از کیف پول کسر شده؛ فقط «روشِ تسویهٔ باقی‌مانده» عوض می‌شود
++const CHANGEABLE_PAYMENT_STATUSES = ['unpaid', 'pending_review', 'failed', 'partial']
+ 
+ export async function POST(req: NextRequest) {
+   try {
+@@ -28,21 +30,53 @@ export async function POST(req: NextRequest) {
+       return NextResponse.json({ error: 'سفارش پیدا نشد' }, { status: 404 })
+     }
+ 
+-        const updates = {
+-      payment_method: method,
+-      payment_status: 'unpaid',
++    const db = supabaseAdmin()
++
++    const { data: order, error: readErr } = await db
++      .from('orders')
++      .select('id, status, payment_status, deleted_at, payment_receipt_url, payment_note')
++      .eq('id', orderId)
++      .eq('device_id_hash', deviceHash)
++      .maybeSingle()
++
++    if (readErr) {
++      console.error('[payment/set-method] read:', readErr.message)
++      return NextResponse.json({ error: 'خطای سرور' }, { status: 500 })
++    }
++    if (!order || order.deleted_at) {
++      return NextResponse.json(
++        { error: 'تغییر روش پرداخت ممکن نیست. اگر رسید فرستاده‌اید، منتظر تأیید مدیر بمانید.' },
++        { status: 404 }
++      )
++    }
++    if (!ACTIVE_STATUSES.includes(order.status)) {
++      return NextResponse.json({ error: 'این سفارش دیگر قابل تغییر نیست' }, { status: 400 })
++    }
++    if (order.payment_receipt_url || order.payment_note) {
++      return NextResponse.json(
++        { error: 'تغییر روش پرداخت ممکن نیست. اگر رسید فرستاده‌اید، منتظر تأیید مدیر بمانید.' },
++        { status: 400 }
++      )
++    }
++    if (!CHANGEABLE_PAYMENT_STATUSES.includes(order.payment_status || 'unpaid')) {
++      return NextResponse.json(
++        { error: 'این سفارش تسویه شده است؛ تغییر روش پرداخت ممکن نیست' },
++        { status: 400 }
++      )
+     }
+ 
++    // در وضعیت partial، پرداخت‌های تأییدشده (بخش کیف پول) دست نمی‌خورند؛
++    // فقط روشِ تسویهٔ باقی‌مانده عوض می‌شود و وضعیت partial می‌ماند.
++    const updates =
++      order.payment_status === 'partial'
++        ? { payment_method: method }
++        : { payment_method: method, payment_status: 'unpaid' }
+ 
+-    const { data, error } = await supabaseAdmin()
++    const { data, error } = await db
+       .from('orders')
+       .update(updates)
+       .eq('id', orderId)
+       .eq('device_id_hash', deviceHash)
+-      .in('payment_status', ['unpaid', 'pending_review', 'failed'])
+-      .is('payment_receipt_url', null)
+-      .is('payment_note', null)
+-      .in('status', ACTIVE_STATUSES)
+       .is('deleted_at', null)
+       .select('id')
+ 
+diff --git a/app/checkout/page.tsx b/app/checkout/page.tsx
+index b185b82..1acc6ca 100644
+--- a/app/checkout/page.tsx
++++ b/app/checkout/page.tsx
+@@ -39,6 +39,8 @@ function CheckoutForm() {
+   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash')
+   const [settingsLoading, setSettingsLoading] = useState(true)
+   const [walletInfo, setWalletInfo] = useState<{ balance: number; blocked: boolean } | null>(null)
++  // 🎯 پچ ۳۹: تیک اختیاری «استفاده از موجودی کیف پول» — مشتری حق انتخاب دارد که خرجش کند یا نه
++  const [useWalletPart, setUseWalletPart] = useState(true)
+   // 🏆→🎯 قبلاً گرید و اشتراک جدا نشان داده می‌شدند؛ از پچ ۳۷ فقط تصمیم نهایی موتور نمایش داده می‌شود
+   const [activeEngine, setActiveEngine] = useState<EngineDiscount | null>(null)
+ 
+@@ -58,11 +60,11 @@ function CheckoutForm() {
+   const allTakeaway = items.length > 0 && items.every((i) => i.takeaway)
+   // اگر موجودی کیف پول برای کل سفارش کافی نباشد، گزینه کیف پول نمایش داده می‌شود ولی غیرفعال است
+   const walletShort = walletAvailable && walletBalance != null && walletBalance < finalTotal
+-  // 🎯 پرداخت ترکیبی (پچ ۳۸): موجودی کل مبلغ را نمی‌پوشاند ولی درگاه فعال است →
+-  // بخش موجودی از کیف پول پرداخت می‌شود و باقی‌مانده از درگاه
+-  const onlineEnabledForMixed = !!(paymentSettings?.payment_enabled && paymentSettings.payment_online_enabled && finalTotal >= (paymentSettings.payment_min_online_amount || 0))
+-  const mixedEligible = walletShort && onlineEnabledForMixed
+-  const mixedGatewayPart = mixedEligible && walletBalance != null ? finalTotal - walletBalance : 0
++  // 🎯 پچ ۳۹: استفاده از موجودی کیف پول اختیاری (تیک) و مستقل از روش پرداخت —
++  // بخش موجودی کسر می‌شود و باقی‌مانده به هر روشی که کاربر انتخاب کند تسویه می‌شود
++  const walletPartUsable = walletShort && walletBalance != null && walletBalance > 0
++  const walletPart = walletPartUsable && useWalletPart ? Math.min(walletBalance as number, finalTotal) : 0
++  const remainderAfterWallet = finalTotal - walletPart
+ 
+   useEffect(() => {
+     fetch('/api/customer/me', { cache: 'no-store' })
+@@ -216,8 +218,7 @@ function CheckoutForm() {
+           customer_name: name.trim(),
+           customer_phone: cleanPhone,
+           table_number: allTakeaway ? null : (tableNumber ? Number(tableNumber) : null),
+-          // در پرداخت ترکیبی روشِ پایانی سفارش «درگاه» است (کیف پول فقط بخشی را می‌پوشاند)
+-          payment_method: paymentMethod === 'wallet' && mixedEligible ? 'online' : paymentMethod,
++          payment_method: paymentMethod,
+           note: note.trim() || null,
+           items: items.map((item) => ({ product_id: item.productId, product_name: item.productName, option_id: item.selectedOptionId, option_name: item.selectedOptionName, group_name: item.selectedGroupName, unit_price: item.unitPrice, quantity: item.quantity, takeaway: item.takeaway === true })),
+           subtotal: finalTotal,
+@@ -234,6 +235,18 @@ function CheckoutForm() {
+       try { sessionStorage.setItem(`cafe-park-order-success-${orderId}`, '1') } catch {}
+       setSubmitted(true); clearCart()
+ 
++      // 🎯 اگر تیک «استفاده از موجودی کیف پول» زده باشد، اول بخش موجودی کسر می‌شود؛
++      // اگر کسر ناموفق بود، کل مبلغ به روش انتخابی تسویه می‌شود
++      if (walletPart > 0) {
++        try {
++          await fetch('/api/payment/wallet', {
++            method: 'POST',
++            headers: { 'Content-Type': 'application/json' },
++            body: JSON.stringify({ orderId, amount: walletPart }),
++          })
++        } catch {}
++      }
++
+       if (paymentMethod === 'online') {
+         const payRes = await fetch('/api/payment/request', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ orderId }) })
+         const payData = await payRes.json()
+@@ -247,43 +260,7 @@ function CheckoutForm() {
+       }
+ 
+       if (paymentMethod === 'wallet') {
+-        // 🎯 پرداخت ترکیبی (پچ ۳۸): اول بخش موجودی از کیف پول، بعد باقی‌مانده از درگاه
+-        if (mixedEligible && walletBalance != null) {
+-          let walletPaid = false
+-          try {
+-            const wRes = await fetch('/api/payment/wallet', {
+-              method: 'POST',
+-              headers: { 'Content-Type': 'application/json' },
+-              body: JSON.stringify({ orderId, amount: walletBalance }),
+-            })
+-            walletPaid = wRes.ok
+-          } catch {
+-            walletPaid = false
+-          }
+-          if (walletPaid) {
+-            // درگاه بدون amount = کل باقی‌مانده‌ی واقعی سمت سرور (مستقل از اختلاف احتمالی محاسبه)
+-            const payRes = await fetch('/api/payment/request', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ orderId }) })
+-            const payData = await payRes.json()
+-            if (payRes.ok && payData.paymentUrl) {
+-              window.location.href = payData.paymentUrl
+-              return
+-            }
+-            try { sessionStorage.setItem(`cafe-park-order-success-${orderId}`, '1') } catch {}
+-            window.location.href = `/order/${orderId}?payment_error=${encodeURIComponent(payData.error || 'پرداخت درگاه ناموفق بود؛ باقی‌مانده را از صفحه سفارش بپرداز')}`
+-            return
+-          }
+-          // کیف پول ناموفق بود → کل مبلغ از درگاه
+-          const payRes = await fetch('/api/payment/request', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ orderId }) })
+-          const payData = await payRes.json()
+-          if (!payRes.ok || !payData.paymentUrl) {
+-            try { sessionStorage.setItem(`cafe-park-order-success-${orderId}`, '1') } catch {}
+-            window.location.href = `/order/${orderId}?payment_error=${encodeURIComponent(payData.error || 'خطا')}`
+-            return
+-          }
+-          window.location.href = payData.paymentUrl
+-          return
+-        }
+-
++        // گزینه کیف پول فقط وقتی موجودی کل مبلغ را پوشاند فعال است؛ کسر کامل باقی‌مانده
+         const payRes = await fetch('/api/payment/wallet', {
+           method: 'POST',
+           headers: { 'Content-Type': 'application/json' },
+@@ -314,7 +291,7 @@ function CheckoutForm() {
+     if (paymentSettings.payment_cash_enabled || paymentSettings.payment_card_enabled) availableMethods.push('cash')
+     if (paymentSettings.payment_transfer_enabled) availableMethods.push('transfer')
+     // کیف پول تا وقتی نشست شناسایی‌شده وجود دارد نمایش داده می‌شود؛
+-    // اگر موجودی کافی نباشد یا غیرفعال است (وقتی درگاه هم خاموش است) یا حالت ترکیبی دارد (پچ ۳۸).
++    // اگر موجودی کافی نباشد غیرفعال است — برای خرج کردن بخش موجودی، تیک کیف پول بالای کارت روش پرداخت است (پچ ۳۹).
+     if (paymentSettings.payment_wallet_enabled && walletAvailable) availableMethods.push('wallet')
+   }
+   if (availableMethods.length === 0) availableMethods.push('cash')
+@@ -498,16 +475,32 @@ function CheckoutForm() {
+         {!settingsLoading && (
+           <div className="checkout-card">
+             <div className="checkout-card-title">💳 روش پرداخت</div>
++            {walletPartUsable && (
++              <div className="checkout-mixed-note">
++                <label className="checkout-mixed-toggle">
++                  <input
++                    type="checkbox"
++                    checked={useWalletPart}
++                    onChange={(e) => setUseWalletPart(e.target.checked)}
++                    disabled={saving}
++                  />
++                  <span>👛 استفاده از موجودی کیف پول ({formatPrice(walletBalance as number)} تومان)</span>
++                </label>
++                <small>
++                  {useWalletPart
++                    ? `با ثبت سفارش، ${formatPrice(walletPart)} تومان از کیف پولت برداشت می‌شود و مابقی (${formatPrice(remainderAfterWallet)} تومان) را به روش انتخابی زیر تسویه می‌کنی.`
++                    : 'اگر تیک را بزنی، بخش موجودی از کیف پولت برداشت می‌شود و مابقی را به روش دلخواهت تسویه می‌کنی.'}
++                </small>
++              </div>
++            )}
+             <div className="payment-methods-selector" style={{ gap: '8px' }}>
+               {availableMethods.map((m) => {
+                 const info = METHOD_INFO[m]
+                 const isSelected = paymentMethod === m;
+-                const isWalletShort = m === 'wallet' && walletShort && !mixedEligible
+-                const hint = m === 'wallet' && mixedEligible
+-                  ? `ترکیبی: ${formatPrice(walletBalance as number)} از کیف پول + ${formatPrice(mixedGatewayPart)} از درگاه`
+-                  : isWalletShort
+-                    ? `موجودی: ${formatPrice(walletBalance as number)} تومان — کافی نیست`
+-                    : info.hint
++                const isWalletShort = m === 'wallet' && walletShort
++                const hint = isWalletShort
++                  ? `موجودی: ${formatPrice(walletBalance as number)} تومان — کافی نیست`
++                  : info.hint
+                 return (
+                   <button
+                     key={m}
+diff --git a/app/globals.css b/app/globals.css
+index 8d2fb86..2362726 100644
+--- a/app/globals.css
++++ b/app/globals.css
+@@ -15028,3 +15028,9 @@ a.cat {
+ .checkout-bottom-total strong{font-size:18px;font-weight:800;color:#6b4f3a;white-space:nowrap}
+ .checkout-bottom-total strong small{font-size:11px;color:#766f64;font-weight:400}
+ .checkout-bottom-bar .checkout-btn{flex:1;max-width:320px}
++
++/* پچ ۳۹ — تیک اختیاری «استفاده از موجودی کیف پول» در ثبت سفارش */
++.checkout-mixed-note{background:#e5f0e6;border:1px solid #b9d4bc;border-radius:12px;padding:10px 14px;display:flex;flex-direction:column;gap:6px;text-align:center}
++.checkout-mixed-toggle{display:flex;align-items:center;justify-content:center;gap:8px;font-size:13px;font-weight:700;color:#2d5d3e;cursor:pointer;user-select:none}
++.checkout-mixed-toggle input[type="checkbox"]{width:17px;height:17px;accent-color:#2d5d3e;cursor:pointer;flex:0 0 auto}
++.checkout-mixed-note small{color:#477052;font-size:11.5px;line-height:1.8}
+diff --git a/app/order/[id]/page.tsx b/app/order/[id]/page.tsx
+index 3edb7e2..73e74f2 100644
+--- a/app/order/[id]/page.tsx
++++ b/app/order/[id]/page.tsx
+@@ -460,19 +460,20 @@ export default function OrderPage({
+   const isWallet = order.payment_method === 'wallet'
+ 
+   const needsOnlinePayment = isOnline && (isUnpaid || isFailed || isPartial)
+-  const needsTransferReceipt = isTransfer && (isUnpaid || isPendingReview || isFailed)
++  const needsTransferReceipt = isTransfer && (isUnpaid || isPendingReview || isFailed || isPartial)
+   const needsWalletPayment = isWallet && (isUnpaid || isFailed || isPartial)
+ 
+   // ✅ رسید (عکس یا متن) ارسال شده و منتظر تعیین‌تکلیف مدیر هستیم
+   const receiptSubmitted =
+     isTransfer && isPendingReview && !!(order.payment_receipt_url || order.payment_note)
+ 
+-  // ✅ پرداخت با کیف پول: فعال در تنظیمات + نشست OTP + موجودی کافی + رسیدی در انتظار نباشد
+-  const walletPayable =
++  // 👛 نشست کیف پول شناسایی‌شده (پچ ۳۹): گزینه کیف پول حتی وقتی موجودی کل مبلغ را
++  // نمی‌پوشاند هم نمایش داده می‌شود؛ سرور باقی‌مانده را بررسی می‌کند و در صورت
++  // ناکافی بودن پیام روشن برمی‌گرداند
++  const walletSessionAvailable =
+     paymentSettings?.payment_enabled === true &&
+     paymentSettings?.payment_wallet_enabled === true &&
+     walletBalance != null &&
+-    walletBalance >= order.subtotal &&
+     !receiptSubmitted
+ 
+   // ✅ سفارش تحویل‌شده و تسویه‌نشده (بدهی)
+@@ -495,7 +496,7 @@ export default function OrderPage({
+     !isPaid &&
+     order.status !== 'delivered' &&
+     paymentSettings?.payment_enabled === true &&
+-    (needsOnlinePayment || needsTransferReceipt || isFailed || needsWalletPayment)
++    (needsOnlinePayment || needsTransferReceipt || isFailed || needsWalletPayment || isPartial)
+ 
+   const shouldShowBanner = !bannerDismissed && !isCancelled && (isPaid || isCash || isCard)
+ 
+@@ -713,17 +714,17 @@ export default function OrderPage({
+ 
+           {showChangeMethod && !receiptSubmitted ? (
+             <>
+-              <p className="order-payment-section-desc">روش پرداخت جدید رو انتخاب کن:</p>
++              <p className="order-payment-section-desc">{isPartial ? 'روش تسویهٔ باقی‌مانده رو انتخاب کن:' : 'روش پرداخت جدید رو انتخاب کن:'}</p>
+ 
+               {paymentError && (
+                 <div className="checkout-error" style={{ marginBottom: '12px' }}>❌ {paymentError}</div>
+               )}
+ 
+               <div className="order-payment-methods">
+-                {walletPayable && (
++                {walletSessionAvailable && (
+                   <button type="button" className="order-payment-method-btn" onClick={() => { setShowChangeMethod(false); handlePayWallet() }} disabled={paying}>
+                     <span className="order-payment-method-icon">👛</span>
+-                    <div><strong>کیف پول</strong><small>موجودی: {formatPrice(walletBalance ?? 0)} تومان</small></div>
++                    <div><strong>{isPartial ? 'باقی‌مانده با کیف پول' : 'کیف پول'}</strong><small>موجودی: {formatPrice(walletBalance ?? 0)} تومان</small></div>
+                   </button>
+                 )}
+                 {paymentSettings?.payment_online_enabled && (
+@@ -756,7 +757,9 @@ export default function OrderPage({
+                 {receiptSubmitted
+                   ? '🏦 رسید شما دریافت شد. پس از بررسی مدیر، وضعیت پرداخت به‌روزرسانی می‌شود.'
+                   : needsTransferReceipt
+-                    ? `🏦 برای تکمیل سفارش، لطفاً مبلغ ${formatPrice(order.subtotal)} تومان رو واریز کن و رسید رو توی صفحه سفارش آپلود کن.`
++                    ? isPartial
++                      ? '🏦 بخش کیف‌پولی پرداخت شده؛ لطفاً باقی‌مانده رو واریز کن و رسید رو توی همین صفحه آپلود کن.'
++                      : `🏦 برای تکمیل سفارش، لطفاً مبلغ ${formatPrice(order.subtotal)} تومان رو واریز کن و رسید رو توی صفحه سفارش آپلود کن.`
+                     : isFailed
+                       ? 'پرداخت قبلی ناموفق بود. می‌تونی دوباره امتحان کنی یا روش دیگه‌ای انتخاب کنی.'
+                       : isPartial
+@@ -802,11 +805,13 @@ export default function OrderPage({
+                     {paying ? '...' : isPartial ? '💳 پرداخت باقی‌مانده از درگاه' : `💳 پرداخت آنلاین ${formatPrice(order.subtotal)} تومان`}
+                   </button>
+                 )}
+-                {walletPayable && (
++                {walletSessionAvailable && (
+                   <button type="button" className="order-payment-btn primary" onClick={handlePayWallet} disabled={paying}>
+                     {paying
+                       ? '...'
+-                      : `👛 پرداخت با کیف پول (${formatPrice(walletBalance ?? 0)} تومان موجودی)`}
++                      : isPartial
++                        ? `👛 پرداخت باقی‌مانده با کیف پول (${formatPrice(walletBalance ?? 0)} تومان موجودی)`
++                        : `👛 پرداخت با کیف پول (${formatPrice(walletBalance ?? 0)} تومان موجودی)`}
+                   </button>
+                 )}
+                 <button
+diff --git a/patch-39-mixed-payment-choice-RELEASE.md b/patch-39-mixed-payment-choice-RELEASE.md
+new file mode 100644
+index 0000000..5da5b20
+--- /dev/null
++++ b/patch-39-mixed-payment-choice-RELEASE.md
+@@ -0,0 +1,42 @@
++# پچ ۳۹ — حق انتخاب مشتری در پرداخت ترکیبی + رفع دو باگ تغییر روش و لغو سفارش
++
++## مشکلات گزارش‌شده در تست پچ ۳۸
++1. در «تغییر روش پرداخت» گزینه کیف پول نبود
++2. پرداخت ترکیبی اجباری بود: باقی‌مانده فقط از درگاه گرفته می‌شد (نقدی/کارت‌خوان/کارت‌به‌کارت حذف بودند)
++3. ❌ باگ: بعد از پرداخت جزئی، تغییر روش پرداخت خطای «تغییر روش پرداخت ممکن نیست...» می‌داد
++4. ❌ باگ: لغو سفارشِ دارای پرداخت جزئی کیف‌پولی خطای «سفارش پرداخت‌شده یا دارای رسید را فقط کافه می‌تواند لغو کند» می‌داد
++
++## راه‌حل‌ها
++- **Migration** (`20261111_wallet_cancel_refund.sql`): `cancel_order_atomic` — اگر همه‌ی پرداخت‌های تأییدشده سفارش از نوع کیف پول باشند، لغو توسط مشتری مجاز است و مبلغ **خودکار و آنی به کیف پول خودش برمی‌گردد** (`refund_method = 'wallet'`، رکورد `order_refunds` با source `wallet_auto`). اگر هر پرداخت غیرکیف‌پولی تأیید شده باشد، رفتار قبلی (فقط کافه) حفظ می‌شود.
++- **`/api/payment/set-method`**: وضعیت `partial` به وضعیت‌های قابل تغییر اضافه شد. در partial فقط `payment_method` عوض می‌شود (پرداخت‌های تأییدشده و وضعیت partial دست نمی‌خورند) — یعنی «روش تسویهٔ باقی‌مانده» قابل تغییر است.
++- **Checkout**: پرداخت ترکیبی از «اجباریِ فقط-درگاه» به «اختیاری با حق انتخاب کامل» تبدیل شد:
++  - تیک «👛 استفاده از موجودی کیف پول (X تومان)» بالای کارت روش پرداخت (پیش‌فرض: روشن) — فقط وقتی موجودی از مبلغ سفارش کمتر باشد
++  - با تیک: X تومان از کیف پول کسر می‌شود و **مابقی به هر روشی که کاربر انتخاب کند** تسویه می‌شود (درگاه، پرداخت در محل، کارت‌خوان، کارت‌به‌کارت)
++  - بدون تیک: کل مبلغ به روش انتخابی (کیف پول دست‌نخورده می‌ماند)
++  - روش «کیف پول» مثل قبل فقط وقتی موجودی کل مبلغ را پوشاند فعال است
++- **صفحه سفارش**:
++  - گزینه کیف پول در منوی «تغییر روش پرداخت» حالا همیشه (وقتی نشست کیف پول شناسایی شده) نمایش داده می‌شود — با برچسب «باقی‌مانده با کیف پول» در حالت partial؛ سرور در صورت ناکافی بودن موجودی پیام روشن برمی‌گرداند
++  - دکمه «👛 پرداخت باقی‌مانده با کیف پول» در بخش پرداخت هم برای partial فعال شد
++  - آپلود رسید کارت‌به‌کارت برای باقی‌مانده در حالت partial فعال شد + بخش پرداخت برای هر سفارش partial نمایش داده می‌شود (حتی اگر روش نقدی باشد تا کاربر بتواند روش را عوض کند)
++
++## ترتیب اعمال
++1. **اول** migration در Supabase SQL Editor: `supabase/migrations/20261111_wallet_cancel_refund.sql`
++2. سپس:
++```powershell
++git checkout main && git pull
++git checkout -b fix/patch-39-mixed-payment-choice
++git apply --ignore-whitespace patch-39-mixed-payment-choice.patch
++npx tsc --noEmit
++git add -A
++git commit -m "feat(payment): optional wallet part with any settlement method + partial method change + wallet auto-refund on cancel (patch 39)"
++git push -u origin fix/patch-39-mixed-payment-choice
++```
++3. Pull Request به main
++
++## تست
++1. موجودی کمتر از مبلغ سفارش: تیک کیف پول دیده شود؛ با برداشتن تیک، کل مبلغ به روش انتخابی
++2. تیک + روش «پرداخت در محل»: سفارش ثبت، بخش کیف پول کسر، صفحه سفارش «پرداخت جزئی» + امکان تغییر روش تسویهٔ باقی‌مانده (بدون خطا)
++3. تیک + روش درگاه: مثل قبل کیف پول + درگاه
++4. تغییر روش در صفحه سفارش: گزینه کیف پول حتی با موجودی کمتر دیده شود؛ انتخابش یا باقی‌مانده را می‌پردازد یا پیام «موجودی کافی نیست» می‌دهد
++5. لغو سفارش partial (تا ۵ دقیقه): موفق + مبلغ بخش کیف‌پولی به کیف پول برگردد (در پنل، تراکنش «بازگشت وجه»)
++6. سفارش با پرداخت نقدی/درگاه تأییدشده: لغو توسط مشتری مثل قبل رد شود («فقط کافه»)
+diff --git a/supabase/migrations/20261111_wallet_cancel_refund.sql b/supabase/migrations/20261111_wallet_cancel_refund.sql
+new file mode 100644
+index 0000000..db29388
+--- /dev/null
++++ b/supabase/migrations/20261111_wallet_cancel_refund.sql
+@@ -0,0 +1,145 @@
++-- ============================================================
++-- پچ ۳۹ — لغو سفارشِ با پرداخت جزئی کیف‌پولی: بازگشت خودکار به کیف پول
++-- اجرا در: Supabase Dashboard → SQL Editor → Run
++-- idempotent است؛ اجرای مکرر بی‌ضرر.
++-- پیش‌نیاز: 20261111_wallet_partial_pay.sql (پچ ۳۸)
++-- ============================================================
++-- مشکل: مشتری بعد از پرداخت ترکیبی (بخش کیف پول کسر شده ولی سفارش هنوز pending)
++-- نمی‌توانست سفارش را لغو کند («سفارش پرداخت‌شده... فقط کافه»).
++-- راه‌حل: اگر همه‌ی پرداخت‌های تأییدشده‌ی سفارش از نوع «wallet» باشند، لغو توسط
++-- مشتری مجاز است و مبلغ به‌صورت خودکار و آنی به کیف پول خودش برمی‌گردد.
++-- اگر هر پرداخت غیرکیف‌پولی (نقدی/درگاه/...) تأیید شده باشد، رفتار قبلی حفظ می‌شود.
++
++begin;
++
++create or replace function public.cancel_order_atomic(
++  p_order_id uuid,
++  p_cancelled_by text,
++  p_device_hash text default null::text,
++  p_reason_id uuid default null::uuid,
++  p_reason_label text default null::text,
++  p_note text default null::text,
++  p_refund_method text default null::text
++)
++returns jsonb
++language plpgsql
++security definer
++set search_path to 'public'
++as $function$
++declare
++  o                 record;
++  v_paid            bigint;
++  v_nonwallet_paid  bigint;
++  v_review          int;
++  v_refunded        bigint := 0;
++  v_refund_method   text;
++  v_customer_id     uuid;
++begin
++  if p_cancelled_by not in ('customer','admin') then
++    raise exception 'invalid_actor';
++  end if;
++
++  select id, order_number, status, deleted_at, created_at, customer_confirmed,
++         payment_status, payment_receipt_url, payment_note, device_id_hash, customer_phone
++    into o
++    from orders
++   where id = p_order_id
++   for update;
++
++  if not found or o.deleted_at is not null then
++    raise exception 'order_not_found';
++  end if;
++  if p_cancelled_by = 'customer'
++     and (p_device_hash is null or o.device_id_hash is distinct from p_device_hash) then
++    raise exception 'order_not_found';
++  end if;
++  if o.status in ('cancelled','canceled') then raise exception 'already_cancelled'; end if;
++  if o.status = 'delivered' then raise exception 'order_delivered'; end if;
++
++  select coalesce(sum(amount) filter (where status = 'confirmed'), 0),
++         coalesce(sum(amount) filter (where status = 'confirmed' and method <> 'wallet'), 0),
++         count(*) filter (where status = 'pending_review')
++    into v_paid, v_nonwallet_paid, v_review
++    from order_payments
++   where order_id = p_order_id;
++
++  if v_review > 0 then raise exception 'pending_receipts'; end if;
++
++  if p_cancelled_by = 'customer' then
++    if o.status <> 'pending' or o.customer_confirmed then raise exception 'not_cancellable'; end if;
++    -- پرداخت غیرکیف‌پولی (نقدی/درگاه/...) یا سفارش کاملاً تسویه‌شده: فقط کافه
++    -- (پرداخت جزئیِ فقط-کیف‌پولی مجاز است؛ پول خودکار به کیف پول برمی‌گردد)
++    if v_nonwallet_paid > 0 or o.payment_status = 'paid'
++       or o.payment_receipt_url is not null or o.payment_note is not null then
++      raise exception 'paid_or_receipt';
++    end if;
++    if now() - o.created_at > interval '5 minutes' then raise exception 'window_expired'; end if;
++  end if;
++
++  -- روش بازپرداخت: برای لغوی مشتری که فقط پرداخت کیف‌پولی دارد، خودکار «کیف پول»
++  v_refund_method := p_refund_method;
++  if p_cancelled_by = 'customer' and v_paid > 0 and v_nonwallet_paid = 0 then
++    v_refund_method := 'wallet';
++  end if;
++
++  -- بازپرداخت پول دریافت‌شده
++  if v_paid > 0 then
++    if v_refund_method is null or v_refund_method not in ('cash','wallet','gateway_manual') then
++      raise exception 'refund_method_required';
++    end if;
++
++    if v_refund_method = 'wallet' then
++      select c.id into v_customer_id
++        from customers c
++       where c.phone = o.customer_phone
++       limit 1;
++      if v_customer_id is null then
++        raise exception 'wallet_customer_not_found';
++      end if;
++      -- شارژ «بازگشت وجه» بلافاصله در کیف پول مشتری می‌نشیند
++      perform public.wallet_charge(
++        v_customer_id,
++        v_paid,
++        'refund',
++        'بازپرداخت لغو سفارش #' || o.order_number::text,
++        p_order_id
++      );
++    end if;
++
++    insert into order_refunds
++      (order_id, order_number, customer_phone, amount, method, note,
++       status, source, completed_at)
++    values
++      (o.id, o.order_number, o.customer_phone, v_paid, v_refund_method, p_note,
++       case when v_refund_method = 'wallet' then 'completed' else 'pending_manual' end,
++       case when v_refund_method = 'wallet' then 'wallet_auto' else 'admin_cancel' end,
++       case when v_refund_method = 'wallet' then now() else null end);
++
++    v_refunded := v_paid;
++  end if;
++
++  update orders
++     set status = 'cancelled',
++         cancelled_by = p_cancelled_by,
++         cancelled_at = now(),
++         cancellation_reason_id = p_reason_id,
++         cancellation_reason_label = left(p_reason_label, 100),
++         cancellation_note = left(p_note, 500)
++   where id = p_order_id;
++  -- کوپن را تریگر orders_sync_coupon_usage برمی‌گرداند
++
++  delete from redemption_logs where order_id = p_order_id;
++
++  return jsonb_build_object('refunded', v_refunded, 'refund_method', v_refund_method);
++end;
++$function$;
++
++commit;
++
++-- [تایید] تابع باید با همان امضای قبلی باشد (بدون overload جدید):
++select p.oid::regprocedure::text as fn
++from pg_proc p
++join pg_namespace n on n.oid = p.pronamespace
++where n.nspname = 'public'
++  and p.proname = 'cancel_order_atomic'
++order by 1;

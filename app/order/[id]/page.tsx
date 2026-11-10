@@ -460,19 +460,20 @@ export default function OrderPage({
   const isWallet = order.payment_method === 'wallet'
 
   const needsOnlinePayment = isOnline && (isUnpaid || isFailed || isPartial)
-  const needsTransferReceipt = isTransfer && (isUnpaid || isPendingReview || isFailed)
+  const needsTransferReceipt = isTransfer && (isUnpaid || isPendingReview || isFailed || isPartial)
   const needsWalletPayment = isWallet && (isUnpaid || isFailed || isPartial)
 
   // ✅ رسید (عکس یا متن) ارسال شده و منتظر تعیین‌تکلیف مدیر هستیم
   const receiptSubmitted =
     isTransfer && isPendingReview && !!(order.payment_receipt_url || order.payment_note)
 
-  // ✅ پرداخت با کیف پول: فعال در تنظیمات + نشست OTP + موجودی کافی + رسیدی در انتظار نباشد
-  const walletPayable =
+  // 👛 نشست کیف پول شناسایی‌شده (پچ ۳۹): گزینه کیف پول حتی وقتی موجودی کل مبلغ را
+  // نمی‌پوشاند هم نمایش داده می‌شود؛ سرور باقی‌مانده را بررسی می‌کند و در صورت
+  // ناکافی بودن پیام روشن برمی‌گرداند
+  const walletSessionAvailable =
     paymentSettings?.payment_enabled === true &&
     paymentSettings?.payment_wallet_enabled === true &&
     walletBalance != null &&
-    walletBalance >= order.subtotal &&
     !receiptSubmitted
 
   // ✅ سفارش تحویل‌شده و تسویه‌نشده (بدهی)
@@ -495,7 +496,7 @@ export default function OrderPage({
     !isPaid &&
     order.status !== 'delivered' &&
     paymentSettings?.payment_enabled === true &&
-    (needsOnlinePayment || needsTransferReceipt || isFailed || needsWalletPayment)
+    (needsOnlinePayment || needsTransferReceipt || isFailed || needsWalletPayment || isPartial)
 
   const shouldShowBanner = !bannerDismissed && !isCancelled && (isPaid || isCash || isCard)
 
@@ -713,17 +714,17 @@ export default function OrderPage({
 
           {showChangeMethod && !receiptSubmitted ? (
             <>
-              <p className="order-payment-section-desc">روش پرداخت جدید رو انتخاب کن:</p>
+              <p className="order-payment-section-desc">{isPartial ? 'روش تسویهٔ باقی‌مانده رو انتخاب کن:' : 'روش پرداخت جدید رو انتخاب کن:'}</p>
 
               {paymentError && (
                 <div className="checkout-error" style={{ marginBottom: '12px' }}>❌ {paymentError}</div>
               )}
 
               <div className="order-payment-methods">
-                {walletPayable && (
+                {walletSessionAvailable && (
                   <button type="button" className="order-payment-method-btn" onClick={() => { setShowChangeMethod(false); handlePayWallet() }} disabled={paying}>
                     <span className="order-payment-method-icon">👛</span>
-                    <div><strong>کیف پول</strong><small>موجودی: {formatPrice(walletBalance ?? 0)} تومان</small></div>
+                    <div><strong>{isPartial ? 'باقی‌مانده با کیف پول' : 'کیف پول'}</strong><small>موجودی: {formatPrice(walletBalance ?? 0)} تومان</small></div>
                   </button>
                 )}
                 {paymentSettings?.payment_online_enabled && (
@@ -756,7 +757,9 @@ export default function OrderPage({
                 {receiptSubmitted
                   ? '🏦 رسید شما دریافت شد. پس از بررسی مدیر، وضعیت پرداخت به‌روزرسانی می‌شود.'
                   : needsTransferReceipt
-                    ? `🏦 برای تکمیل سفارش، لطفاً مبلغ ${formatPrice(order.subtotal)} تومان رو واریز کن و رسید رو توی صفحه سفارش آپلود کن.`
+                    ? isPartial
+                      ? '🏦 بخش کیف‌پولی پرداخت شده؛ لطفاً باقی‌مانده رو واریز کن و رسید رو توی همین صفحه آپلود کن.'
+                      : `🏦 برای تکمیل سفارش، لطفاً مبلغ ${formatPrice(order.subtotal)} تومان رو واریز کن و رسید رو توی صفحه سفارش آپلود کن.`
                     : isFailed
                       ? 'پرداخت قبلی ناموفق بود. می‌تونی دوباره امتحان کنی یا روش دیگه‌ای انتخاب کنی.'
                       : isPartial
@@ -802,11 +805,13 @@ export default function OrderPage({
                     {paying ? '...' : isPartial ? '💳 پرداخت باقی‌مانده از درگاه' : `💳 پرداخت آنلاین ${formatPrice(order.subtotal)} تومان`}
                   </button>
                 )}
-                {walletPayable && (
+                {walletSessionAvailable && (
                   <button type="button" className="order-payment-btn primary" onClick={handlePayWallet} disabled={paying}>
                     {paying
                       ? '...'
-                      : `👛 پرداخت با کیف پول (${formatPrice(walletBalance ?? 0)} تومان موجودی)`}
+                      : isPartial
+                        ? `👛 پرداخت باقی‌مانده با کیف پول (${formatPrice(walletBalance ?? 0)} تومان موجودی)`
+                        : `👛 پرداخت با کیف پول (${formatPrice(walletBalance ?? 0)} تومان موجودی)`}
                   </button>
                 )}
                 <button
