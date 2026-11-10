@@ -14978,3 +14978,37 @@ a.cat {
 .wb-actions{display:flex;gap:10px}
 .wb-btn{flex:1;border:1.5px solid #e4d8c8;background:#fff;color:#4a3a2a;border-radius:12px;padding:11px 8px;font-size:13.5px;font-weight:700;cursor:pointer;font-family:inherit}
 .wb-btn.primary{background:#6f4e37;border-color:#6f4e37;color:#fff}
+
+/* ============================================================
+   پچ ۳۶ — یکدست‌سازی پنل مشتری با زبان طراحی ثبت سفارش
+   (همان توکن‌ها: کارت #fffdf9، حاشیه #e3ddd2، شعاع ۱۴، قهوه‌ای #6b4f3a)
+   ============================================================ */
+.panel-header-stack{flex-direction:column;align-items:stretch;padding:0;border-bottom:none;gap:0}
+.my-orders-header-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 0;border-bottom:1px solid #e3ddd2}
+.my-orders-header-row h1{margin:0;font-size:20px;font-weight:800;color:#29251f;flex:1;text-align:center}
+.panel-tab{flex:1;padding:10px 6px;font-size:13px;font-weight:700;background:transparent;border:none;border-bottom:3px solid transparent;color:#766f64;cursor:pointer;transition:all .2s ease;font-family:inherit;white-space:nowrap}
+.panel-tab.active-brown{color:#6b4f3a;border-bottom-color:#6b4f3a}
+.panel-tab.active-red{color:#9b3c32;border-bottom-color:#9b3c32}
+.panel-tab.active-green{color:#2d5d3e;border-bottom-color:#2d5d3e}
+.panel-tab.active-purple{color:#4a2c73;border-bottom-color:#8f6bc4}
+.panel-search{width:100%;box-sizing:border-box;padding:9px 12px;border-radius:10px;border:1px solid #e3ddd2;background:#fffdf9;font-size:13px;font-family:inherit;outline:none}
+.panel-search:focus{border-color:#9a6b3f}
+.panel-card{background:#fffdf9;border:1px solid #e3ddd2;border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:12px}
+.panel-card--warn{background:#fdf6e3;border:1.5px solid #d99f59}
+.panel-card--danger{background:#fdecea;border:1px solid #f5c6c0;text-align:center}
+.panel-banner{border-radius:12px;padding:12px 14px;font-size:13px;line-height:1.8;text-align:center}
+.panel-banner.danger{background:#fde8e6;border:1px solid #e8b8b2;color:#9b3c32;font-weight:700}
+.panel-banner.success{background:#e5f0e6;border:1px solid #b9dcc4;color:#2d5d3e;font-weight:700}
+.panel-banner.warn{background:#fdf6e3;border:1.5px solid #d99f59;color:#8a5a24}
+.panel-banner.neutral{background:#fbf9f5;border:1px dashed #d8d0c4;color:#766f64}
+.panel-input{width:100%;box-sizing:border-box;padding:10px 12px;border-radius:10px;border:1px solid #e3ddd2;background:#fff;font-size:13.5px;font-family:inherit;outline:none}
+.panel-input:focus{border-color:#9a6b3f}
+.panel-btn{padding:11px 14px;border-radius:10px;border:none;background:#6b4f3a;color:#fff;font-size:13px;font-weight:700;cursor:pointer;text-align:center;font-family:inherit;transition:opacity .2s ease;white-space:nowrap}
+.panel-btn:disabled{opacity:.55;cursor:default}
+.panel-btn.green{background:#2d5d3e}
+.panel-btn.ghost{background:#fff;color:#6b4f3a;border:1.5px solid #6b4f3a}
+.panel-btn.soft{background:#fff;color:#6b4f3a;border:1px solid #d8d0c4}
+.panel-link-btn{background:none;border:none;color:#9a6b3f;font-size:11px;margin-top:10px;cursor:pointer;padding:0;font-family:inherit}
+.panel-invite{background:linear-gradient(135deg,#fdf6e3 0%,#fef8e8 100%);border:1.5px solid #d99f59;border-radius:14px;padding:12px 14px;display:flex;align-items:center;gap:12px;cursor:pointer}
+.panel-wallet-hero{background:linear-gradient(135deg,#e5f0e6 0%,#f2f8f2 100%);border:1.5px solid #477052;border-radius:14px;padding:14px;text-align:center}
+.panel-tx-row{background:#fff;border:1px solid #ebe6de;border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:12px}

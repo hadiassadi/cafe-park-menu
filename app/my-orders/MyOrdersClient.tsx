@@ -84,7 +84,7 @@ export default function MyOrdersClient() {
   const [loading, setLoading] = useState(true)
   
   // ✅ تب‌های اصلی (سفارش‌های باز / تاریخچه)
-  const [activeTab, setActiveTab] = useState<'open' | 'history' | 'debt' | 'wallet'>('open')
+  const [activeTab, setActiveTab] = useState<'open' | 'history' | 'debt' | 'wallet' | 'sub'>('open')
   const [customer, setCustomer] = useState<{ name: string; phone: string } | null>(null)
   const [toast, setToast] = useState<string | null>(null)
 
@@ -182,6 +182,16 @@ export default function MyOrdersClient() {
   }, [])
 
   useEffect(() => { refreshActiveDiscount() }, [refreshActiveDiscount])
+
+  // ✅ تازه‌سازی هماهنگ اشتراک + تخفیف + کیف پول — بعد از هر تغییر وضعیت (خرید/لغو/تأیید)
+  const refreshPanelStatus = useCallback(() => {
+    refreshSub()
+    refreshActiveDiscount()
+    fetch('/api/wallet/status', { cache: 'no-store' })
+      .then((r) => r.json())
+      .then((d) => { if (d && typeof d.walletEnabled === 'boolean') setWstatus(d) })
+      .catch(() => {})
+  }, [refreshSub, refreshActiveDiscount])
 
   // بعد از تأیید شماره، هم کیف پول و هم وضعیت تازه می‌شود
   async function refreshWalletAfterVerify() {
@@ -445,7 +455,7 @@ export default function MyOrdersClient() {
   }
 
   if (loading) {
-    return <div className="my-orders-page"><div className="my-orders-header"><Link href="/" className="my-orders-back">← منو</Link><h1>سفارش‌های من</h1><span style={{ width: 60 }} /></div><div className="my-orders-empty">⏳ در حال بارگذاری...</div></div>
+    return <div className="my-orders-page"><div className="my-orders-header"><Link href="/" className="my-orders-back">← منو</Link><h1>پنل مشتری</h1><span style={{ width: 60 }} /></div><div className="my-orders-empty">⏳ در حال بارگذاری...</div></div>
   }
 
   // ✅ گرید و کیف پول — برای کارت پروفایل فشرده
@@ -483,70 +493,37 @@ export default function MyOrdersClient() {
 
   return (
     <div className="my-orders-page">
-      {/* ✅ هدر: عنوان + تب‌های بالا (فقط دسکتاپ) */}
-      <div className="my-orders-header" style={{ flexDirection: 'column', alignItems: 'stretch', padding: '0', borderBottom: 'none' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid #e3ddd2' }}>
-          <Link href="/" className="my-orders-back" style={{ padding: '6px 12px', fontSize: '13px' }}>← منو</Link>
-          <h1 style={{ margin: 0, fontSize: '18px', color: '#29251f' }}>پنل مشتری</h1>
-          <span style={{ width: '60px' }} />
+      {/* ✅ هدر: بازگشت + عنوان — همان زبان طراحی ثبت سفارش */}
+      <div className="my-orders-header panel-header-stack">
+        <div className="my-orders-header-row">
+          <Link href="/" className="my-orders-back">← منو</Link>
+          <h1>پنل مشتری</h1>
+          <span style={{ width: 60 }} />
         </div>
 
         {/* تب‌های بالایی — در موبایل نوار پایین جایگزینشان می‌کند */}
         <div className="panel-top-tabs">
-          <button
-            onClick={() => setActiveTab('open')}
-            style={{
-              flex: 1, padding: '10px 8px', fontSize: '13.5px', fontWeight: 'bold',
-              background: 'transparent', border: 'none',
-              borderBottom: activeTab === 'open' ? '3px solid #6b4f3a' : '3px solid transparent',
-              color: activeTab === 'open' ? '#6b4f3a' : '#766f64',
-              cursor: 'pointer', transition: 'all 0.2s ease', fontFamily: 'inherit'
-            }}
-          >
+          <button type="button" onClick={() => setActiveTab('open')} className={`panel-tab${activeTab === 'open' ? ' active-brown' : ''}`}>
             🛍️ سفارش‌های باز
           </button>
-          <button
-            onClick={() => setActiveTab('history')}
-            style={{
-              flex: 1, padding: '10px 8px', fontSize: '13.5px', fontWeight: 'bold',
-              background: 'transparent', border: 'none',
-              borderBottom: activeTab === 'history' ? '3px solid #6b4f3a' : '3px solid transparent',
-              color: activeTab === 'history' ? '#6b4f3a' : '#766f64',
-              cursor: 'pointer', transition: 'all 0.2s ease', fontFamily: 'inherit'
-            }}
-          >
+          <button type="button" onClick={() => setActiveTab('history')} className={`panel-tab${activeTab === 'history' ? ' active-brown' : ''}`}>
             📜 تاریخچه
           </button>
-          <button
-            onClick={() => setActiveTab('debt')}
-            style={{
-              flex: 1, padding: '10px 8px', fontSize: '13.5px', fontWeight: 'bold',
-              background: 'transparent', border: 'none',
-              borderBottom: activeTab === 'debt' ? '3px solid #9b3c32' : '3px solid transparent',
-              color: activeTab === 'debt' ? '#9b3c32' : '#766f64',
-              cursor: 'pointer', transition: 'all 0.2s ease', fontFamily: 'inherit'
-            }}
-          >
+          <button type="button" onClick={() => setActiveTab('debt')} className={`panel-tab${activeTab === 'debt' ? ' active-red' : ''}`}>
             💸 بدهی‌ها{debtOrders.length > 0 ? ` (${debtOrders.length.toLocaleString('fa-IR')})` : ''}
           </button>
-          <button
-            onClick={openWalletTab}
-            style={{
-              flex: 1, padding: '10px 8px', fontSize: '13.5px', fontWeight: 'bold',
-              background: 'transparent', border: 'none',
-              borderBottom: activeTab === 'wallet' ? '3px solid #2d5d3e' : '3px solid transparent',
-              color: activeTab === 'wallet' ? '#2d5d3e' : '#766f64',
-              cursor: 'pointer', transition: 'all 0.2s ease', fontFamily: 'inherit'
-            }}
-          >
+          <button type="button" onClick={openWalletTab} className={`panel-tab${activeTab === 'wallet' ? ' active-green' : ''}`}>
             👛 کیف پول
+          </button>
+          <button type="button" onClick={() => setActiveTab('sub')} className={`panel-tab${activeTab === 'sub' ? ' active-purple' : ''}`}>
+            ⭐ اشتراک
           </button>
         </div>
       </div>
 
       {/* ✅ کارت پروفایل فشرده: آواتار گرید + نام/عضویت + اشتراک/کیف‌پول در چپ + آمار */}
       {customer && (
-        <div className="panel-profile-card" style={{ marginTop: '8px' }}>
+        <div className="panel-profile-card">
           <div className="panel-profile-row">
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px', flexShrink: 0 }}>
               <div className="panel-avatar" style={grade ? { background: grade.color ?? '#6b4f3a', color: '#fff' } : undefined}>
@@ -641,20 +618,7 @@ export default function MyOrdersClient() {
             </div>
           )}
 
-          {/* ⭐ اشتراک ماهیانه — لیست پلن‌ها (خودمختار)؛ چیپ اشتراک فعال بالا در نوار چپ نمایش داده می‌شود */}
-          <SubscriptionSection
-            hideActiveChip
-            balance={wstatus?.customer?.balance ?? null}
-            hasCustomer={wstatus?.customer?.verification_status === 'verified' && !wstatus.customer.wallet_blocked}
-            onStatusChanged={() => {
-              refreshSub()
-              refreshActiveDiscount()
-              fetch('/api/wallet/status', { cache: 'no-store' })
-                .then((r) => r.json())
-                .then((d) => { if (d && typeof d.walletEnabled === 'boolean') setWstatus(d) })
-                .catch(() => {})
-            }}
-          />
+          {/* ⭐ اشتراک ماهیانه به تب مستقل «اشتراک» منتقل شد (پچ ۳۶) — کارت پروفایل فقط چک‌آپ می‌ماند */}
         </div>
       )}
 
@@ -662,7 +626,7 @@ export default function MyOrdersClient() {
       {!membership && (!wstatus?.customer?.verification_status || wstatus.customer.verification_status !== 'verified') && (
         <div
           onClick={() => setShowMemberModal(true)}
-          style={{ background: 'linear-gradient(135deg, #fdf6e3 0%, #fef8e8 100%)', border: '1.5px solid #d99f59', borderRadius: '14px', padding: '12px 14px', display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }}
+          className="panel-invite"
         >
           <div style={{ fontSize: '24px' }}>🎓</div>
           <div>
@@ -678,7 +642,7 @@ export default function MyOrdersClient() {
           value={orderSearch}
           onChange={(e) => setOrderSearch(e.target.value)}
           placeholder="🔎 جستجو: نام محصول، شماره سفارش، وضعیت، تاریخ..."
-          style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', borderRadius: '10px', border: '1px solid #e3ddd2', background: '#fffdf9', fontSize: '13px', fontFamily: 'inherit', marginTop: '10px', outline: 'none' }}
+          className="panel-search"
         />
       )}
 
@@ -691,7 +655,7 @@ export default function MyOrdersClient() {
           {walletState === 'login' && (
             <>
               {/* کارت تأیید شماره — کوتاه، بدون توضیح اضافه */}
-              <div style={{ background: '#fdf6e3', border: '1.5px solid #d99f59', borderRadius: '14px', padding: '14px', marginTop: '12px' }}>
+              <div className="panel-card panel-card--warn">
                 <strong style={{ display: 'block', fontSize: '14px', color: '#8a5a24', textAlign: 'center' }}>
                   🔒 برای دیدن کیف پول، شماره‌ات را تأیید کن
                 </strong>
@@ -700,12 +664,7 @@ export default function MyOrdersClient() {
                   {wstatus?.smsConfigured ? (
                     <button
                       onClick={() => { setShowOtpForm(true); if (wstatus?.customer?.phone) setOtpPhone(wstatus.customer.phone) }}
-                      style={{
-                        padding: '11px 14px', borderRadius: '10px', border: 'none',
-                        background: '#6b4f3a',
-                        color: '#fff', fontSize: '13px', fontWeight: 'bold',
-                        cursor: 'pointer', textAlign: 'center', fontFamily: 'inherit',
-                      }}
+                      className="panel-btn"
                     >
                       🔐 تأیید با کد پیامکی
                     </button>
@@ -723,11 +682,7 @@ export default function MyOrdersClient() {
                     <button
                       onClick={requestActivation}
                       disabled={reqState === 'busy'}
-                      style={{
-                        padding: '11px 14px', borderRadius: '10px', border: '1.5px solid #6b4f3a',
-                        background: '#fff', color: '#6b4f3a', fontSize: '13px', fontWeight: 'bold',
-                        cursor: reqState === 'busy' ? 'default' : 'pointer', textAlign: 'center', opacity: reqState === 'busy' ? 0.6 : 1, fontFamily: 'inherit',
-                      }}
+                      className="panel-btn ghost"
                     >
                       {reqState === 'busy' ? '⏳ در حال ثبت...' : '🤝 درخواست احراز حضوری از مدیر'}
                     </button>
@@ -737,7 +692,7 @@ export default function MyOrdersClient() {
               </div>
 
               {showOtpForm && (
-              <div style={{ background: '#fff', border: '1px solid #e3ddd2', borderRadius: '14px', padding: '18px', marginTop: '12px' }}>
+              <div className="panel-card">
                 <strong style={{ display: 'block', textAlign: 'center', fontSize: '14px', color: '#29251f' }}>
                   تأیید شماره موبایل با کد پیامکی
                 </strong>
@@ -755,7 +710,7 @@ export default function MyOrdersClient() {
                     <button
                       onClick={sendOtp}
                       disabled={otpBusy || otpPhone.trim().length < 10}
-                      style={{ padding: '10px 16px', borderRadius: '10px', border: 'none', background: '#6b4f3a', color: '#fff', fontSize: '13px', fontWeight: 'bold', cursor: otpBusy || otpPhone.trim().length < 10 ? 'default' : 'pointer', whiteSpace: 'nowrap', opacity: otpBusy || otpPhone.trim().length < 10 ? 0.6 : 1 }}
+                      className="panel-btn"
                     >
                       {otpBusy ? '⏳' : 'ارسال کد'}
                     </button>
@@ -775,14 +730,14 @@ export default function MyOrdersClient() {
                       <button
                         onClick={verifyOtp}
                         disabled={otpBusy || otpCode.length !== 6}
-                        style={{ padding: '10px 16px', borderRadius: '10px', border: 'none', background: '#2d5d3e', color: '#fff', fontSize: '13px', fontWeight: 'bold', cursor: otpBusy || otpCode.length !== 6 ? 'default' : 'pointer', whiteSpace: 'nowrap', opacity: otpBusy || otpCode.length !== 6 ? 0.6 : 1 }}
+                        className="panel-btn green"
                       >
                         {otpBusy ? '⏳' : 'تأیید'}
                       </button>
                     </div>
                     <button
                       onClick={() => { setOtpStep('phone'); setOtpCode(''); setOtpInfo(null); setOtpError(null) }}
-                      style={{ background: 'none', border: 'none', color: '#9a6b3f', fontSize: '11px', marginTop: '10px', cursor: 'pointer', padding: 0 }}
+                      className="panel-link-btn"
                     >
                       ← تغییر شماره / ارسال مجدد کد
                     </button>
@@ -797,7 +752,7 @@ export default function MyOrdersClient() {
           )}
 
           {walletState === 'blocked' && (
-            <div style={{ background: '#fdecea', border: '1px solid #f5c6c0', borderRadius: '14px', padding: '18px', marginTop: '16px', textAlign: 'center' }}>
+            <div className="panel-card panel-card--danger">
               <div style={{ fontSize: '28px' }}>⛔</div>
               <strong style={{ display: 'block', fontSize: '14px', color: '#9b3c32', marginTop: '6px' }}>
                 کیف پول شما توسط مدیر مسدود شده است
@@ -819,7 +774,7 @@ export default function MyOrdersClient() {
 
           {walletState === 'ready' && walletView && (
             <>
-              <div style={{ background: 'linear-gradient(135deg, #e5f0e6 0%, #f2f8f2 100%)', border: '1.5px solid #477052', borderRadius: '14px', padding: '14px', textAlign: 'center', marginTop: '12px' }}>
+              <div className="panel-wallet-hero">
                 <div style={{ fontSize: '26px' }}>👛</div>
                 <div style={{ fontSize: '12px', color: '#3d6b48', marginTop: '2px' }}>موجودی کیف پول</div>
                 <strong style={{ fontSize: '23px', color: '#2d5d3e' }}>
@@ -843,7 +798,7 @@ export default function MyOrdersClient() {
 
               {/* 🏦 شارژ کارت‌به‌کارت — فقط وقتی ادمین روشنش کرده و مشتری مسدود نباشد */}
               {wstatus?.cardChargeEnabled && wstatus.customer && !wstatus.customer.card_charge_blocked && wstatus.cardInfo && (
-                <div style={{ background: '#fff', border: '1.5px solid #e3ddd2', borderRadius: '14px', padding: '14px', marginTop: '12px' }}>
+                <div className="panel-card">
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <strong style={{ fontSize: '13.5px', color: '#29251f' }}>🏦 شارژ کارت‌به‌کارت</strong>
                     <button onClick={() => setShowChargeForm(!showChargeForm)} style={{ background: 'none', border: 'none', color: '#9a6b3f', fontSize: '12px', cursor: 'pointer', fontFamily: 'inherit' }}>
@@ -880,7 +835,7 @@ export default function MyOrdersClient() {
                           onChange={(e) => setChargeAmount(e.target.value)}
                           placeholder={`مبلغ (حداقل ${formatPrice(wstatus.chargeMin ?? 50000)})`}
                           inputMode="numeric"
-                          style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: '10px', border: '1px solid #e3ddd2', fontSize: '13px' }}
+                          className="panel-input"
                         />
                         <input
                           dir="ltr"
@@ -888,7 +843,7 @@ export default function MyOrdersClient() {
                           onChange={(e) => setChargeTracking(e.target.value)}
                           placeholder="شماره پیگیری"
                           inputMode="numeric"
-                          style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: '10px', border: '1px solid #e3ddd2', fontSize: '13px' }}
+                          className="panel-input"
                         />
                       </div>
                       <label style={{ display: 'block', fontSize: '12px', color: '#766f64' }}>
@@ -904,12 +859,7 @@ export default function MyOrdersClient() {
                       <button
                         onClick={submitCharge}
                         disabled={chargeBusy}
-                        style={{
-                          padding: '11px 14px', borderRadius: '10px', border: 'none',
-                          background: chargeBusy ? '#999' : '#2d5d3e',
-                          color: '#fff', fontSize: '13px', fontWeight: 'bold',
-                          cursor: chargeBusy ? 'default' : 'pointer', fontFamily: 'inherit',
-                        }}
+                        className="panel-btn green"
                       >
                         {chargeBusy ? '⏳ در حال ارسال...' : '📩 ارسال درخواست شارژ'}
                       </button>
@@ -933,7 +883,7 @@ export default function MyOrdersClient() {
                   {walletView.transactions.map((tx) => {
                     const credit = tx.amount >= 0
                     return (
-                      <div key={tx.id} style={{ background: '#fff', border: '1px solid #ebe6de', borderRadius: '12px', padding: '12px 14px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <div key={tx.id} className="panel-tx-row">
                         <div style={{ fontSize: '22px' }}>{walletTxKindIcon(tx.kind)}</div>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontSize: '13px', fontWeight: 'bold', color: '#29251f' }}>
@@ -962,12 +912,7 @@ export default function MyOrdersClient() {
                     <button
                       onClick={() => loadWallet({ more: true })}
                       disabled={moreBusy}
-                      style={{
-                        marginTop: '4px', width: '100%', padding: '10px', borderRadius: '10px',
-                        border: '1px solid #e3ddd2', background: '#fff', color: '#6b4f3a',
-                        fontSize: '13px', fontWeight: 'bold',
-                        cursor: moreBusy ? 'default' : 'pointer', fontFamily: 'inherit',
-                      }}
+                      className="panel-btn soft"
                     >
                       {moreBusy ? '⏳' : '⬇️ نمایش تراکنش‌های قدیمی‌تر'}
                     </button>
@@ -977,6 +922,17 @@ export default function MyOrdersClient() {
             </>
           )}
         </div>
+      ) : activeTab === 'sub' ? (
+        customer ? (
+          <SubscriptionSection
+            hideActiveChip
+            balance={wstatus?.customer?.balance ?? null}
+            hasCustomer={wstatus?.customer?.verification_status === 'verified' && !wstatus.customer.wallet_blocked}
+            onStatusChanged={refreshPanelStatus}
+          />
+        ) : (
+          <div className="my-orders-empty">🔒 برای دیدن اشتراک‌ها، اول شماره‌ات را تأیید کن.</div>
+        )
       ) : searchedOrders.length === 0 ? (
         <div className="my-orders-empty">
           {orderSearch
@@ -988,9 +944,9 @@ export default function MyOrdersClient() {
                 : 'هنوز سابقه سفارشی (تحویل شده یا لغو شده) ندارید.'}
         </div>
       ) : (
-        <div className="my-orders-list" style={{ marginTop: '16px' }}>
+        <div className="my-orders-list">
 		          {activeTab === 'debt' && (
-            <div style={{ background: '#fde8e6', border: '1px solid #e8b8b2', color: '#9b3c32', borderRadius: '12px', padding: '12px 14px', fontSize: '13px', fontWeight: 700, textAlign: 'center' }}>
+            <div className="panel-banner danger">
               مجموع مبلغ تسویه‌نشده: {formatPrice(debtTotal)} تومان
             </div>
           )}
@@ -1120,6 +1076,14 @@ export default function MyOrdersClient() {
           {debtOrders.length > 0 && (
             <span className="panel-nav-badge">{debtOrders.length.toLocaleString('fa-IR')}</span>
           )}
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('sub')}
+          style={activeTab === 'sub' ? { color: '#4a2c73', boxShadow: 'inset 0 3px 0 #8f6bc4' } : undefined}
+        >
+          <span className="panel-nav-icon">⭐</span>
+          اشتراک
         </button>
         <button
           type="button"
