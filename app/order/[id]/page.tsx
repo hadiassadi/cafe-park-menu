@@ -92,6 +92,7 @@ const PAYMENT_STATUS_LABELS: Record<string, string> = {
   unpaid: 'پرداخت نشده',
   pending_review: 'در انتظار تأیید',
   failed: 'ناموفق',
+  partial: 'پرداخت جزئی',
 }
 
 export default function OrderPage({
@@ -449,6 +450,8 @@ export default function OrderPage({
   const isPendingReview = order.payment_status === 'pending_review'
   const isUnpaid = order.payment_status === 'unpaid' || !order.payment_status
   const isFailed = order.payment_status === 'failed'
+  // 🎯 پرداخت ترکیبی (پچ ۳۸): بخشی پرداخت شده، باقی‌مانده باید تسویه شود
+  const isPartial = order.payment_status === 'partial'
 
   const isCash = order.payment_method === 'cash'
   const isCard = order.payment_method === 'card'
@@ -456,9 +459,9 @@ export default function OrderPage({
   const isTransfer = order.payment_method === 'transfer'
   const isWallet = order.payment_method === 'wallet'
 
-  const needsOnlinePayment = isOnline && (isUnpaid || isFailed)
+  const needsOnlinePayment = isOnline && (isUnpaid || isFailed || isPartial)
   const needsTransferReceipt = isTransfer && (isUnpaid || isPendingReview || isFailed)
-  const needsWalletPayment = isWallet && (isUnpaid || isFailed)
+  const needsWalletPayment = isWallet && (isUnpaid || isFailed || isPartial)
 
   // ✅ رسید (عکس یا متن) ارسال شده و منتظر تعیین‌تکلیف مدیر هستیم
   const receiptSubmitted =
@@ -527,6 +530,9 @@ export default function OrderPage({
   } else if (isFailed) {
     badgeType = 'failed'
     badgeText = '❌ پرداخت ناموفق'
+  } else if (isPartial) {
+    badgeType = 'pending'
+    badgeText = '🧩 پرداخت جزئی — باقی‌مانده پرداخت نشده'
   } else if (isCash || isCard) {
     badgeType = 'in-place'
     badgeText = '💵 پرداخت در محل (نقدی / کارت‌خوان)'
@@ -637,7 +643,9 @@ export default function OrderPage({
         <div className="order-payment-section">
           <div className="order-payment-section-title">💸 این سفارش هنوز تسویه نشده است</div>
           <p className="order-payment-section-desc">
-            مبلغ {formatPrice(order.subtotal)} تومان باقی مانده است.
+            {isPartial
+              ? 'بخشی از مبلغ پرداخت شده و باقی‌مانده دارد.'
+              : `مبلغ ${formatPrice(order.subtotal)} تومان باقی مانده است.`}
                         {debtReceiptSent || isPendingReview
               ? ' رسید شما در انتظار تأیید مدیر است.'
               : canPayDebtOnline
@@ -656,7 +664,7 @@ export default function OrderPage({
               onClick={handlePayOnline}
               disabled={paying}
             >
-              {paying ? '...' : `💳 پرداخت آنلاین ${formatPrice(order.subtotal)} تومان`}
+              {paying ? '...' : isPartial ? '💳 پرداخت باقی‌مانده از درگاه' : `💳 پرداخت آنلاین ${formatPrice(order.subtotal)} تومان`}
             </button>
           )}
 
@@ -751,7 +759,9 @@ export default function OrderPage({
                     ? `🏦 برای تکمیل سفارش، لطفاً مبلغ ${formatPrice(order.subtotal)} تومان رو واریز کن و رسید رو توی صفحه سفارش آپلود کن.`
                     : isFailed
                       ? 'پرداخت قبلی ناموفق بود. می‌تونی دوباره امتحان کنی یا روش دیگه‌ای انتخاب کنی.'
-                      : 'برای نهایی شدن سفارش، لطفاً پرداخت رو انجام بده.'}
+                      : isPartial
+                        ? 'بخشی از مبلغ سفارش پرداخت شده؛ باقی‌مانده رو الان از درگاه بپرداز.'
+                        : 'برای نهایی شدن سفارش، لطفاً پرداخت رو انجام بده.'}
               </p>
 
               {paymentError && (
@@ -789,7 +799,7 @@ export default function OrderPage({
               <div className="order-payment-actions" style={{ marginTop: '12px' }}>
                 {needsOnlinePayment && paymentSettings?.payment_online_enabled && (
                   <button type="button" className="order-payment-btn primary" onClick={handlePayOnline} disabled={paying}>
-                    {paying ? '...' : `💳 پرداخت آنلاین ${formatPrice(order.subtotal)} تومان`}
+                    {paying ? '...' : isPartial ? '💳 پرداخت باقی‌مانده از درگاه' : `💳 پرداخت آنلاین ${formatPrice(order.subtotal)} تومان`}
                   </button>
                 )}
                 {walletPayable && (

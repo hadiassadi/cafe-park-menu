@@ -1,0 +1,427 @@
+diff --git a/app/api/payment/wallet/route.ts b/app/api/payment/wallet/route.ts
+index e5d2742..cb8d9f6 100644
+--- a/app/api/payment/wallet/route.ts
++++ b/app/api/payment/wallet/route.ts
+@@ -50,7 +50,7 @@ export async function GET() {
+   }
+ }
+ 
+-/** پرداخت باقی‌مانده سفارش از کیف پول مشتری */
++/** پرداخت سفارش از کیف پول مشتری — بدون amount: کل باقی‌مانده؛ با amount: پرداخت جزئی (ترکیبی) */
+ export async function POST(req: NextRequest) {
+   try {
+     const body = await req.json().catch(() => null)
+@@ -60,6 +60,15 @@ export async function POST(req: NextRequest) {
+       return NextResponse.json({ error: 'اطلاعات نامعتبر است' }, { status: 400 })
+     }
+ 
++    // مبلغ اختیاری برای پرداخت ترکیبی (پچ ۳۸): بخش موجودی از کیف پول، باقی از درگاه
++    let amount: number | null = null
++    if (body?.amount !== undefined && body?.amount !== null) {
++      if (!Number.isInteger(body.amount) || body.amount <= 0) {
++        return NextResponse.json({ error: 'مبلغ نامعتبر است' }, { status: 400 })
++      }
++      amount = body.amount
++    }
++
+     // مشتری: نشست تأییدشده (OTP/دعوت) یا دستگاهِ مشتریِ احرازشده توسط ادمین
+     const customer = await resolveWalletCustomer()
+     if (!customer) {
+@@ -107,6 +116,7 @@ export async function POST(req: NextRequest) {
+     const { data: result, error } = await db.rpc('pay_order_with_wallet', {
+       p_order_id: orderId,
+       p_device_hash: deviceHash,
++      ...(amount !== null ? { p_amount: amount } : {}),
+     })
+ 
+     if (error) {
+@@ -121,6 +131,7 @@ export async function POST(req: NextRequest) {
+       success: true,
+       paid: Number(result?.paid ?? 0),
+       balance: Number(result?.balance ?? 0),
++      remaining: result?.remaining != null ? Number(result.remaining) : null,
+     })
+   } catch (err) {
+     console.error('[payment/wallet]', err)
+diff --git a/app/checkout/page.tsx b/app/checkout/page.tsx
+index 0414bf3..b185b82 100644
+--- a/app/checkout/page.tsx
++++ b/app/checkout/page.tsx
+@@ -58,6 +58,11 @@ function CheckoutForm() {
+   const allTakeaway = items.length > 0 && items.every((i) => i.takeaway)
+   // اگر موجودی کیف پول برای کل سفارش کافی نباشد، گزینه کیف پول نمایش داده می‌شود ولی غیرفعال است
+   const walletShort = walletAvailable && walletBalance != null && walletBalance < finalTotal
++  // 🎯 پرداخت ترکیبی (پچ ۳۸): موجودی کل مبلغ را نمی‌پوشاند ولی درگاه فعال است →
++  // بخش موجودی از کیف پول پرداخت می‌شود و باقی‌مانده از درگاه
++  const onlineEnabledForMixed = !!(paymentSettings?.payment_enabled && paymentSettings.payment_online_enabled && finalTotal >= (paymentSettings.payment_min_online_amount || 0))
++  const mixedEligible = walletShort && onlineEnabledForMixed
++  const mixedGatewayPart = mixedEligible && walletBalance != null ? finalTotal - walletBalance : 0
+ 
+   useEffect(() => {
+     fetch('/api/customer/me', { cache: 'no-store' })
+@@ -211,7 +216,8 @@ function CheckoutForm() {
+           customer_name: name.trim(),
+           customer_phone: cleanPhone,
+           table_number: allTakeaway ? null : (tableNumber ? Number(tableNumber) : null),
+-          payment_method: paymentMethod,
++          // در پرداخت ترکیبی روشِ پایانی سفارش «درگاه» است (کیف پول فقط بخشی را می‌پوشاند)
++          payment_method: paymentMethod === 'wallet' && mixedEligible ? 'online' : paymentMethod,
+           note: note.trim() || null,
+           items: items.map((item) => ({ product_id: item.productId, product_name: item.productName, option_id: item.selectedOptionId, option_name: item.selectedOptionName, group_name: item.selectedGroupName, unit_price: item.unitPrice, quantity: item.quantity, takeaway: item.takeaway === true })),
+           subtotal: finalTotal,
+@@ -241,6 +247,43 @@ function CheckoutForm() {
+       }
+ 
+       if (paymentMethod === 'wallet') {
++        // 🎯 پرداخت ترکیبی (پچ ۳۸): اول بخش موجودی از کیف پول، بعد باقی‌مانده از درگاه
++        if (mixedEligible && walletBalance != null) {
++          let walletPaid = false
++          try {
++            const wRes = await fetch('/api/payment/wallet', {
++              method: 'POST',
++              headers: { 'Content-Type': 'application/json' },
++              body: JSON.stringify({ orderId, amount: walletBalance }),
++            })
++            walletPaid = wRes.ok
++          } catch {
++            walletPaid = false
++          }
++          if (walletPaid) {
++            // درگاه بدون amount = کل باقی‌مانده‌ی واقعی سمت سرور (مستقل از اختلاف احتمالی محاسبه)
++            const payRes = await fetch('/api/payment/request', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ orderId }) })
++            const payData = await payRes.json()
++            if (payRes.ok && payData.paymentUrl) {
++              window.location.href = payData.paymentUrl
++              return
++            }
++            try { sessionStorage.setItem(`cafe-park-order-success-${orderId}`, '1') } catch {}
++            window.location.href = `/order/${orderId}?payment_error=${encodeURIComponent(payData.error || 'پرداخت درگاه ناموفق بود؛ باقی‌مانده را از صفحه سفارش بپرداز')}`
++            return
++          }
++          // کیف پول ناموفق بود → کل مبلغ از درگاه
++          const payRes = await fetch('/api/payment/request', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ orderId }) })
++          const payData = await payRes.json()
++          if (!payRes.ok || !payData.paymentUrl) {
++            try { sessionStorage.setItem(`cafe-park-order-success-${orderId}`, '1') } catch {}
++            window.location.href = `/order/${orderId}?payment_error=${encodeURIComponent(payData.error || 'خطا')}`
++            return
++          }
++          window.location.href = payData.paymentUrl
++          return
++        }
++
+         const payRes = await fetch('/api/payment/wallet', {
+           method: 'POST',
+           headers: { 'Content-Type': 'application/json' },
+@@ -271,7 +314,7 @@ function CheckoutForm() {
+     if (paymentSettings.payment_cash_enabled || paymentSettings.payment_card_enabled) availableMethods.push('cash')
+     if (paymentSettings.payment_transfer_enabled) availableMethods.push('transfer')
+     // کیف پول تا وقتی نشست شناسایی‌شده وجود دارد نمایش داده می‌شود؛
+-    // اگر موجودی کافی نباشد غیرفعال می‌شود (نه اینکه کلاً پنهان باشد).
++    // اگر موجودی کافی نباشد یا غیرفعال است (وقتی درگاه هم خاموش است) یا حالت ترکیبی دارد (پچ ۳۸).
+     if (paymentSettings.payment_wallet_enabled && walletAvailable) availableMethods.push('wallet')
+   }
+   if (availableMethods.length === 0) availableMethods.push('cash')
+@@ -459,10 +502,12 @@ function CheckoutForm() {
+               {availableMethods.map((m) => {
+                 const info = METHOD_INFO[m]
+                 const isSelected = paymentMethod === m;
+-                const isWalletShort = m === 'wallet' && walletShort
+-                const hint = isWalletShort
+-                  ? `موجودی: ${formatPrice(walletBalance as number)} تومان — کافی نیست`
+-                  : info.hint
++                const isWalletShort = m === 'wallet' && walletShort && !mixedEligible
++                const hint = m === 'wallet' && mixedEligible
++                  ? `ترکیبی: ${formatPrice(walletBalance as number)} از کیف پول + ${formatPrice(mixedGatewayPart)} از درگاه`
++                  : isWalletShort
++                    ? `موجودی: ${formatPrice(walletBalance as number)} تومان — کافی نیست`
++                    : info.hint
+                 return (
+                   <button
+                     key={m}
+diff --git a/app/order/[id]/page.tsx b/app/order/[id]/page.tsx
+index 56fef02..3edb7e2 100644
+--- a/app/order/[id]/page.tsx
++++ b/app/order/[id]/page.tsx
+@@ -92,6 +92,7 @@ const PAYMENT_STATUS_LABELS: Record<string, string> = {
+   unpaid: 'پرداخت نشده',
+   pending_review: 'در انتظار تأیید',
+   failed: 'ناموفق',
++  partial: 'پرداخت جزئی',
+ }
+ 
+ export default function OrderPage({
+@@ -449,6 +450,8 @@ export default function OrderPage({
+   const isPendingReview = order.payment_status === 'pending_review'
+   const isUnpaid = order.payment_status === 'unpaid' || !order.payment_status
+   const isFailed = order.payment_status === 'failed'
++  // 🎯 پرداخت ترکیبی (پچ ۳۸): بخشی پرداخت شده، باقی‌مانده باید تسویه شود
++  const isPartial = order.payment_status === 'partial'
+ 
+   const isCash = order.payment_method === 'cash'
+   const isCard = order.payment_method === 'card'
+@@ -456,9 +459,9 @@ export default function OrderPage({
+   const isTransfer = order.payment_method === 'transfer'
+   const isWallet = order.payment_method === 'wallet'
+ 
+-  const needsOnlinePayment = isOnline && (isUnpaid || isFailed)
++  const needsOnlinePayment = isOnline && (isUnpaid || isFailed || isPartial)
+   const needsTransferReceipt = isTransfer && (isUnpaid || isPendingReview || isFailed)
+-  const needsWalletPayment = isWallet && (isUnpaid || isFailed)
++  const needsWalletPayment = isWallet && (isUnpaid || isFailed || isPartial)
+ 
+   // ✅ رسید (عکس یا متن) ارسال شده و منتظر تعیین‌تکلیف مدیر هستیم
+   const receiptSubmitted =
+@@ -527,6 +530,9 @@ export default function OrderPage({
+   } else if (isFailed) {
+     badgeType = 'failed'
+     badgeText = '❌ پرداخت ناموفق'
++  } else if (isPartial) {
++    badgeType = 'pending'
++    badgeText = '🧩 پرداخت جزئی — باقی‌مانده پرداخت نشده'
+   } else if (isCash || isCard) {
+     badgeType = 'in-place'
+     badgeText = '💵 پرداخت در محل (نقدی / کارت‌خوان)'
+@@ -637,7 +643,9 @@ export default function OrderPage({
+         <div className="order-payment-section">
+           <div className="order-payment-section-title">💸 این سفارش هنوز تسویه نشده است</div>
+           <p className="order-payment-section-desc">
+-            مبلغ {formatPrice(order.subtotal)} تومان باقی مانده است.
++            {isPartial
++              ? 'بخشی از مبلغ پرداخت شده و باقی‌مانده دارد.'
++              : `مبلغ ${formatPrice(order.subtotal)} تومان باقی مانده است.`}
+                         {debtReceiptSent || isPendingReview
+               ? ' رسید شما در انتظار تأیید مدیر است.'
+               : canPayDebtOnline
+@@ -656,7 +664,7 @@ export default function OrderPage({
+               onClick={handlePayOnline}
+               disabled={paying}
+             >
+-              {paying ? '...' : `💳 پرداخت آنلاین ${formatPrice(order.subtotal)} تومان`}
++              {paying ? '...' : isPartial ? '💳 پرداخت باقی‌مانده از درگاه' : `💳 پرداخت آنلاین ${formatPrice(order.subtotal)} تومان`}
+             </button>
+           )}
+ 
+@@ -751,7 +759,9 @@ export default function OrderPage({
+                     ? `🏦 برای تکمیل سفارش، لطفاً مبلغ ${formatPrice(order.subtotal)} تومان رو واریز کن و رسید رو توی صفحه سفارش آپلود کن.`
+                     : isFailed
+                       ? 'پرداخت قبلی ناموفق بود. می‌تونی دوباره امتحان کنی یا روش دیگه‌ای انتخاب کنی.'
+-                      : 'برای نهایی شدن سفارش، لطفاً پرداخت رو انجام بده.'}
++                      : isPartial
++                        ? 'بخشی از مبلغ سفارش پرداخت شده؛ باقی‌مانده رو الان از درگاه بپرداز.'
++                        : 'برای نهایی شدن سفارش، لطفاً پرداخت رو انجام بده.'}
+               </p>
+ 
+               {paymentError && (
+@@ -789,7 +799,7 @@ export default function OrderPage({
+               <div className="order-payment-actions" style={{ marginTop: '12px' }}>
+                 {needsOnlinePayment && paymentSettings?.payment_online_enabled && (
+                   <button type="button" className="order-payment-btn primary" onClick={handlePayOnline} disabled={paying}>
+-                    {paying ? '...' : `💳 پرداخت آنلاین ${formatPrice(order.subtotal)} تومان`}
++                    {paying ? '...' : isPartial ? '💳 پرداخت باقی‌مانده از درگاه' : `💳 پرداخت آنلاین ${formatPrice(order.subtotal)} تومان`}
+                   </button>
+                 )}
+                 {walletPayable && (
+diff --git a/patch-38-mixed-payment-RELEASE.md b/patch-38-mixed-payment-RELEASE.md
+new file mode 100644
+index 0000000..6bf39fe
+--- /dev/null
++++ b/patch-38-mixed-payment-RELEASE.md
+@@ -0,0 +1,38 @@
++# پچ ۳۸ — پرداخت ترکیبی: بخشی از کیف پول + باقی‌مانده از درگاه
++
++## تغییرات
++- **Migration** (`20261111_wallet_partial_pay.sql`):
++  - `pay_order_with_wallet(p_order_id, p_device_hash, p_amount default null)` — پارامتر اختیاری مبلغ:
++    - `p_amount = null` → رفتار قبلی: کل باقی‌مانده پرداخت و سفارش تأیید می‌شود (بدون تغییر)
++    - `p_amount = N` → فقط N تومان از کیف پول برداشت و به‌عنوان ردیف `confirmed` در `order_payments` ثبت می‌شود؛ سفارش باز می‌ماند (`payment_status = partial`) تا باقی‌مانده با درگاه تسویه شود
++    - `N > باقی‌مانده` → خطای `amount_exceeds_remaining` (برداشت اضافه ممنوع)
++  - خروجی جدید: `remaining` (باقی‌مانده بعد از پرداخت)
++- **`/api/payment/wallet` POST**: پذیرش `amount` اختیاری (integer مثبت) و پاس‌دادن به RPC + برگرداندن `remaining`
++- **Checkout** (`app/checkout/page.tsx`):
++  - وقتی موجودی کیف پول < مبلغ نهایی **و** درگاه آنلاین فعال است، گزینه کیف پول دیگر غیرفعال نمی‌شود؛ حالت «ترکیبی» می‌شود با راهنما: «ترکیبی: X از کیف پول + Y از درگاه»
++  - در submit: اول بخش موجودی از کیف پول (`amount = موجودی`)، بعد درگاه **بدون amount** (کل باقی‌مانده واقعی سمت سرور — مصون از اختلاف احتمالی محاسبه کلاینت/سرور)
++  - اگر کیف پول ناموفق بود → کل مبلغ از درگاه؛ اگر درگاه بعد از پرداخت کیف پولی ناموفق بود → هدایت به صفحه سفارش برای پرداخت باقی‌مانده
++  - `payment_method` سفارش در حالت ترکیبی = `online` (روش پایانی)
++- **صفحه سفارش** (`app/order/[id]/page.tsx`): وضعیت `partial` پشتیبانی شد — برچسب «پرداخت جزئی»، badge «🧩 پرداخت جزئی»، دکمه «💳 پرداخت باقی‌مانده از درگاه» (سرور خودش باقی‌مانده را حساب می‌کند) و متن بخش بدهی
++- دیتابیس فقط function عوض می‌شود؛ اسکیمای جدیدی ندارد و backward-compatible است.
++
++## اعمال
++1. **اول** migration را در Supabase SQL Editor اجرا کن: `supabase/migrations/20261111_wallet_partial_pay.sql`
++2. سپس:
++```powershell
++git checkout main && git pull
++git checkout -b fix/patch-38-mixed-payment
++git apply --ignore-whitespace patch-38-mixed-payment.patch
++npx tsc --noEmit
++git add -A
++git commit -m "feat(payment): mixed wallet+gateway payment — partial wallet spend, checkout split flow, partial status UI (patch 38)"
++git push -u origin fix/patch-38-mixed-payment
++```
++3. Pull Request به main
++
++## تست
++- کیف پول با موجودی کمتر از مبلغ سفارش + درگاه روشن: گزینه کیف پول «ترکیبی: X از کیف پول + Y از درگاه» و قابل انتخاب باشد
++- ثبت سفارش ترکیبی: بخش کیف پول کسر شود، ریدایرکت به درگاه برای باقی‌مانده؛ بعد از پرداخت، وضعیت سفارش «پرداخت شده» و دو ردیف در `order_payments`
++- انصراف در درگاه: سفارش با وضعیت «پرداخت جزئی» بماند؛ صفحه سفارش badge جزئی + دکمه «پرداخت باقی‌مانده از درگاه» را نشان دهد
++- کیف پول با موجودی کافی: رفتار قبلی (پرداخت کامل + تأیید سفارش) دست‌نخورده
++- درگاه خاموش + موجودی ناکافی: گزینه کیف پول غیرفعال با «موجودی کافی نیست» (مثل قبل)
+diff --git a/supabase/migrations/20261111_wallet_partial_pay.sql b/supabase/migrations/20261111_wallet_partial_pay.sql
+new file mode 100644
+index 0000000..3b2613c
+--- /dev/null
++++ b/supabase/migrations/20261111_wallet_partial_pay.sql
+@@ -0,0 +1,153 @@
++-- ============================================================
++-- پچ ۳۸ — پرداخت ترکیبی: بخشی از سفارش از کیف پول، باقی‌مانده از درگاه
++-- اجرا در: Supabase Dashboard → SQL Editor → Run
++-- idempotent است؛ اجرای مکرر بی‌ضرر.
++-- پیش‌نیاز: 20261108_wallet_v2_pay_refund.sql (نسخه‌ی فعلی pay_order_with_wallet)
++-- ============================================================
++
++begin;
++
++-- pay_order_with_wallet با پارامتر اختیاری p_amount:
++--   * p_amount = null  → پرداخت «کل باقی‌مانده» (رفتار قبلی، بدون تغییر)
++--   * p_amount = N     → پرداخت «بخشی» به اندازه‌ی N از کیف پول؛ سفارش باز می‌ماند
++--                        تا باقی‌مانده با درگاه/روش دیگر تسویه شود (وضعیت payment_status = partial)
++-- توجه: create or replace واقعی است — overload جدیدی ساخته نمی‌شود.
++create or replace function public.pay_order_with_wallet(
++  p_order_id uuid,
++  p_device_hash text,
++  p_amount bigint default null
++)
++returns jsonb
++language plpgsql
++security definer
++set search_path to 'public'
++as $function$
++declare
++  o             record;
++  v_paid        bigint;
++  v_remaining   bigint;
++  v_spend       bigint;
++  v_full_pay    boolean;
++  v_customer_id uuid;
++  v_balance     bigint;
++begin
++  if p_device_hash is null then
++    raise exception 'order_not_found';
++  end if;
++
++  select *
++    into o
++    from orders
++   where id = p_order_id
++     and device_id_hash = p_device_hash
++   for update;
++
++  if not found or o.deleted_at is not null then
++    raise exception 'order_not_found';
++  end if;
++  if o.status in ('cancelled','canceled') then
++    raise exception 'order_closed';
++  end if;
++
++  -- رسید در انتظار بررسی نباشد (همان قاعده‌ی تغییر روش پرداخت)
++  if exists (
++    select 1 from order_payments
++    where order_id = p_order_id and status = 'pending_review'
++  ) then
++    raise exception 'pending_receipts';
++  end if;
++
++  -- مشتریِ کیف پول = مشتریِ همان شماره‌ی سفارش
++  select c.id into v_customer_id
++    from customers c
++   where c.phone = o.customer_phone
++   limit 1;
++  if v_customer_id is null then
++    raise exception 'wallet_customer_not_found';
++  end if;
++
++  select coalesce(sum(amount), 0) into v_paid
++    from order_payments
++   where order_id = p_order_id and status = 'confirmed';
++
++  v_remaining := o.subtotal - v_paid;
++  if v_remaining <= 0 then
++    raise exception 'nothing_to_pay';
++  end if;
++
++  -- مبلغ جزئی اختیاری (پرداخت ترکیبی)
++  if p_amount is null then
++    v_spend := v_remaining;
++  else
++    if p_amount <= 0 then
++      raise exception 'invalid_amount';
++    end if;
++    if p_amount > v_remaining then
++      raise exception 'amount_exceeds_remaining';
++    end if;
++    v_spend := p_amount;
++  end if;
++  v_full_pay := (v_spend = v_remaining);
++
++  -- برداشت اتمیک از کیف پول (موجودی ناکافی → false)
++  if not public.wallet_try_spend(
++    v_customer_id,
++    v_spend,
++    p_order_id,
++    case when v_full_pay
++      then 'خرج سفارش #' || o.order_number::text
++      else 'پرداخت ترکیبی سفارش #' || o.order_number::text || ' (بخش کیف پول)'
++    end
++  ) then
++    raise exception 'insufficient_wallet_balance';
++  end if;
++
++  insert into order_payments
++    (order_id, method, amount, status, confirmed_at, created_by, note)
++  values
++    (p_order_id, 'wallet', v_spend, 'confirmed', now(), 'customer',
++     case when v_full_pay
++       then 'پرداخت با کیف پول'
++       else 'پرداخت ترکیبی — بخش کیف پول'
++     end);
++
++  if v_full_pay then
++    -- پرداخت کامل: همان رفتار قبلی — سفارش تأیید می‌شود
++    update orders
++       set payment_method = 'wallet',
++           payment_verified_at = now(),
++           status = case when o.status = 'pending' then 'confirmed' else o.status end,
++           confirmed_at = case when o.status = 'pending' then now() else o.confirmed_at end
++     where id = p_order_id;
++  end if;
++  -- پرداخت جزئی: وضعیت/روش سفارش دست نمی‌خورد تا باقی‌مانده با درگاه تسویه شود
++
++  perform public.recalc_order_payment(p_order_id);
++
++  -- تضمین وضعیت «partial»: بخشی تأیید شده ولی هنوز باقی‌مانده دارد
++  update orders o2
++     set payment_status = 'partial'
++   where o2.id = p_order_id
++     and (select coalesce(sum(op.amount), 0) from order_payments op
++           where op.order_id = o2.id and op.status = 'confirmed') > 0
++     and (select coalesce(sum(op.amount), 0) from order_payments op
++           where op.order_id = o2.id and op.status = 'confirmed') < o2.subtotal;
++
++  select public.wallet_balance(v_customer_id) into v_balance;
++  return jsonb_build_object(
++    'paid', v_spend,
++    'balance', v_balance,
++    'remaining', v_remaining - v_spend
++  );
++end;
++$function$;
++
++commit;
++
++-- [تایید] تابع باید با همان نام و یک امضا (سه آرگومان با پیش‌فرض) باشد:
++select p.oid::regprocedure::text as fn
++from pg_proc p
++join pg_namespace n on n.oid = p.pronamespace
++where n.nspname = 'public'
++  and p.proname = 'pay_order_with_wallet'
++order by 1;
