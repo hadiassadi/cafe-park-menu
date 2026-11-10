@@ -50,7 +50,7 @@ export async function GET() {
   }
 }
 
-/** پرداخت باقی‌مانده سفارش از کیف پول مشتری */
+/** پرداخت سفارش از کیف پول مشتری — بدون amount: کل باقی‌مانده؛ با amount: پرداخت جزئی (ترکیبی) */
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => null)
@@ -58,6 +58,15 @@ export async function POST(req: NextRequest) {
 
     if (typeof orderId !== 'string' || !UUID_RE.test(orderId)) {
       return NextResponse.json({ error: 'اطلاعات نامعتبر است' }, { status: 400 })
+    }
+
+    // مبلغ اختیاری برای پرداخت ترکیبی (پچ ۳۸): بخش موجودی از کیف پول، باقی از درگاه
+    let amount: number | null = null
+    if (body?.amount !== undefined && body?.amount !== null) {
+      if (!Number.isInteger(body.amount) || body.amount <= 0) {
+        return NextResponse.json({ error: 'مبلغ نامعتبر است' }, { status: 400 })
+      }
+      amount = body.amount
     }
 
     // مشتری: نشست تأییدشده (OTP/دعوت) یا دستگاهِ مشتریِ احرازشده توسط ادمین
@@ -107,6 +116,7 @@ export async function POST(req: NextRequest) {
     const { data: result, error } = await db.rpc('pay_order_with_wallet', {
       p_order_id: orderId,
       p_device_hash: deviceHash,
+      ...(amount !== null ? { p_amount: amount } : {}),
     })
 
     if (error) {
@@ -121,6 +131,7 @@ export async function POST(req: NextRequest) {
       success: true,
       paid: Number(result?.paid ?? 0),
       balance: Number(result?.balance ?? 0),
+      remaining: result?.remaining != null ? Number(result.remaining) : null,
     })
   } catch (err) {
     console.error('[payment/wallet]', err)
