@@ -115,6 +115,11 @@ export type Settings = {
   show_product_images?: boolean | null
   show_product_size?: boolean | null
   show_footer?: boolean | null
+  // ✅ پیام‌های سیستم (پچ ۳۵)
+  welcome_enabled?: boolean | null
+  welcome_title?: string | null
+  welcome_body?: string | null
+  welcome_image_url?: string | null
   hero_bg_mode?: string | null
   hero_bg_image_url?: string | null
   hero_overlay?: number | null

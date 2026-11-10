@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useCart } from '@/lib/cart-context'
 import { formatPersianDate } from '@/lib/format-date'
@@ -252,6 +252,20 @@ export default function MyOrdersClient() {
     setToast('✅ آیتم‌ها به سبد اضافه شدن')
     setTimeout(() => { window.location.href = '/cart' }, 800)
   }
+
+  // 🔁 لینک «سفارش مجدد» مودال خوش‌آمد: /my-orders?reorder=<id> (پچ ۳۵)
+  const reorderAppliedRef = useRef(false)
+  useEffect(() => {
+    if (loading || reorderAppliedRef.current) return
+    const id = new URLSearchParams(window.location.search).get('reorder')
+    if (!id) return
+    const target = orders.find((o) => o.id === id)
+    if (!target) return
+    reorderAppliedRef.current = true
+    try { window.history.replaceState(null, '', '/my-orders') } catch {}
+    handleReorder(target)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, orders])
 
   // 🎯 لغو سفارش از روی کارت — همان منطق صفحه‌ی جزئیات (دلیل + توضیح اختیاری)
   function openCancel(order: Order) {

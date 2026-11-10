@@ -58,6 +58,9 @@ const TEXT_FIELDS = [
   'eitaa_id',
   'bale_id',
   'rubika_id',
+  // ✅ پیام‌های سیستم (پچ ۳۵)
+  'welcome_title',
+  'welcome_body',
 ]
 
 // آدرس‌ها: خالی یا فقط http/https
@@ -67,6 +70,8 @@ const URL_FIELDS = [
   'og_image_url',
   'hero_bg_image_url',
   'bg_image_url',
+  // ✅ پیام‌های سیستم (پچ ۳۵) — تصویر/گیف سفیر برند
+  'welcome_image_url',
 ]
 
 const BOOL_FIELDS = [
@@ -105,6 +110,8 @@ const BOOL_FIELDS = [
   // ✅ امنیت (جدید)
   'admin_allow_delete_orders',
   'admin_allow_delete_customers',
+  // ✅ پیام‌های سیستم (پچ ۳۵)
+  'welcome_enabled',
 ]
 
 // مقدارهای مجاز برای فیلدهای انتخابی

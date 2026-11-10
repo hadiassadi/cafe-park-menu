@@ -6,6 +6,7 @@ import Image from 'next/image'
 import { DEFAULT_THEME } from '@/lib/menu-types'
 import type { MenuData, Quote, Settings } from '@/lib/menu-types'
 import ProductDetailModal from './components/ProductDetailModal'
+import WelcomeBack from './components/WelcomeBack'
 import type { Product } from '@/lib/menu-types'
 import { useCart } from '@/lib/cart-context'
 import ServiceWorkerRegister from './components/ServiceWorkerRegister'
@@ -528,6 +529,7 @@ export default function MenuClient({
               <Link href="/my-orders" className="share-btn hero-my-orders-btn">
                 👤 حساب من
               </Link>
+              <WelcomeBack settings={settings} />
             </div>
           </div>
         </header>

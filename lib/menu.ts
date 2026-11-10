@@ -52,6 +52,11 @@ const SETTINGS_COLUMNS = [
   'hours_in_footer',
   'floating_enabled',
   'floating_side',
+  // ✅ پیام‌های سیستم (پچ ۳۵)
+  'welcome_enabled',
+  'welcome_title',
+  'welcome_body',
+  'welcome_image_url',
 ].join(',')
 
 function createDb() {

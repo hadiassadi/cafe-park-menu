@@ -35,6 +35,10 @@ type TextKey =
   | 'eitaa_id'
   | 'bale_id'
   | 'rubika_id'
+  // ✅ پیام‌های سیستم (پچ ۳۵)
+  | 'welcome_title'
+  | 'welcome_body'
+  | 'welcome_image_url'
 
 type BoolKey =
   | 'og_enabled'
@@ -70,6 +74,8 @@ type BoolKey =
   // ✅ جدید
   | 'admin_allow_delete_orders'
   | 'admin_allow_delete_customers'
+  // ✅ پیام‌های سیستم (پچ ۳۵)
+  | 'welcome_enabled'
 
 type Settings = Record<TextKey, string> &
   Record<BoolKey, boolean> & {
@@ -91,6 +97,7 @@ type SectionKey =
   | 'display'
   | 'share'
   | 'security' // ✅ جدید
+  | 'messages' // ✅ پیام‌های سیستم (پچ ۳۵)
 
 const TEXT_KEYS: TextKey[] = [
   'cafe_name', 'tagline', 'logo_url', 'hero_title', 'hero_subtitle',
@@ -99,6 +106,7 @@ const TEXT_KEYS: TextKey[] = [
   'hero_bg_image_url', 'bg_image_url',
   'card_number', 'card_holder', 'bank_name', 'sheba_number', 'payment_note',
   'cafe_phone', 'eitaa_id', 'bale_id', 'rubika_id',
+  'welcome_title', 'welcome_body', 'welcome_image_url',
 ]
 
 const BOOL_DEFAULTS: Record<BoolKey, boolean> = {
@@ -117,6 +125,8 @@ const BOOL_DEFAULTS: Record<BoolKey, boolean> = {
   // ✅ جدید: پیش‌فرض روشن
   admin_allow_delete_orders: true,
   admin_allow_delete_customers: true,
+  // ✅ پیام‌های سیستم (پچ ۳۵)
+  welcome_enabled: true,
 }
 
 const BOOL_KEYS = Object.keys(BOOL_DEFAULTS) as BoolKey[]
@@ -449,6 +459,8 @@ const SECTIONS: Array<{ key: SectionKey; icon: string; title: string; desc: stri
   { key: 'share', icon: '🔗', title: 'پیش‌نمایش لینک', desc: 'ظاهر لینک در پیام‌رسان‌ها' },
   // ✅ جدید
   { key: 'security', icon: '🔒', title: 'امنیت و دسترسی', desc: 'کنترل عملیات حساس پنل' },
+  // ✅ پیام‌های سیستم (پچ ۳۵)
+  { key: 'messages', icon: '✉️', title: 'پیام‌های سیستم', desc: 'پیام خوش‌آمد و اعلان‌های مشتری' },
 ]
 
 const DISPLAY_TOGGLES: Array<{ key: BoolKey; title: string; hint: string }> = [
@@ -513,6 +525,11 @@ function previewOf(key: SectionKey, f: Settings): string {
         f.admin_allow_delete_orders ? 'حذف سفارش: فعال' : 'حذف سفارش: غیرفعال',
         f.admin_allow_delete_customers ? 'حذف مشتری: فعال' : 'حذف مشتری: غیرفعال',
       ].join(' · ')
+    // ✅ پیام‌های سیستم (پچ ۳۵)
+    case 'messages':
+      return f.welcome_enabled
+        ? `خوش‌آمد: ${f.welcome_title || 'درود بر شما'}`
+        : 'غیرفعال'
   }
 }
 
@@ -906,6 +923,33 @@ export default function SettingsPage() {
                 onChange={(v) => setBool('admin_allow_delete_customers', v)}
                 label={draft.admin_allow_delete_customers ? 'فعال' : 'غیرفعال'}
               />
+            </div>
+          </>
+        )
+      // ✅ پیام‌های سیستم (پچ ۳۵)
+      case 'messages':
+        return (
+          <>
+            <p className="legend">
+              لحن مرجع پیام‌های سیستم: ایرانی اصیل و گرم. در متن پیام، {'{name}'} با نام کوچک مشتری جایگزین می‌شود.
+            </p>
+            <div className="toggle-row" style={{ marginBottom: 14 }}>
+              <div><strong>پیام خوش‌آمد در منو</strong><small>چیپ هویت + مودال خوش‌آمد برای مشتری شناخته‌شده</small></div>
+              <Switch checked={draft.welcome_enabled} onChange={(v) => setBool('welcome_enabled', v)}
+                label={draft.welcome_enabled ? 'روشن' : 'خاموش'} />
+            </div>
+            <div className={draft.welcome_enabled ? '' : 'is-off-group'}>
+              {text('welcome_title', 'عنوان پیام', { placeholder: 'درود بر شما' })}
+              {text('welcome_body', 'متن پیام', {
+                rows: 3,
+                placeholder: 'درود بر شما، {name} عزیز! خوش آمدید — خوشحالیم که دوباره مهمان کافه پارک هستیم.',
+                hint: '{name} = نام کوچک مشتری. خالی بماند → متن پیش‌فرض نمایش داده می‌شود.',
+              })}
+              {text('welcome_image_url', 'تصویر/گیف سفیر برند (اختیاری)', {
+                ltr: true,
+                placeholder: 'https://.../ambassador.gif',
+                hint: 'آدرس مستقیم عکس یا گیف؛ خالی = بدون تصویر.',
+              })}
             </div>
           </>
         )
