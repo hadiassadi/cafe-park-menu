@@ -10,6 +10,8 @@ const toLatinDigits = (s: string) => s.replace(/[۰-۹]/g, (d) => String(d.charC
 
 type PaymentMethod = 'online' | 'cash' | 'card' | 'transfer' | 'wallet'
 type PaymentSettings = { payment_enabled: boolean; payment_online_enabled: boolean; payment_cash_enabled: boolean; payment_card_enabled: boolean; payment_transfer_enabled: boolean; payment_wallet_enabled: boolean; payment_min_online_amount: number; payment_transfer_bank_name: string | null; payment_transfer_account_number: string | null; payment_transfer_card_number: string | null; payment_transfer_account_holder: string | null; payment_transfer_requires_review: boolean }
+// 🎯 تخفیف فعال موتور تخفیف — آینه‌ی تصمیم سرور (بدون محاسبه‌ی مبلغ سمت کلاینت)
+type EngineDiscount = { source: 'org' | 'subscription' | 'grade' | 'stacked-org' | 'stacked-sub'; label: string; percent: number; color: string | null; orgName: string | null; planName: string | null; gradeName: string | null }
 
 function CheckoutForm() {
   const router = useRouter()
@@ -37,10 +39,8 @@ function CheckoutForm() {
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash')
   const [settingsLoading, setSettingsLoading] = useState(true)
   const [walletInfo, setWalletInfo] = useState<{ balance: number; blocked: boolean } | null>(null)
-  // 🏆 گرید وفاداری نشست فعلی — فقط پیش‌نمایش؛ محاسبه‌ی قطعی سمت سرور است
-  const [gradeInfo, setGradeInfo] = useState<{ name: string; discountPercent: number; color: string | null } | null>(null)
-  // ⭐ اشتراک ماهیانه نشست فعلی — فقط پیش‌نمایش
-  const [subInfo, setSubInfo] = useState<{ planName: string; discountPercent: number } | null>(null)
+  // 🏆→🎯 قبلاً گرید و اشتراک جدا نشان داده می‌شدند؛ از پچ ۳۷ فقط تصمیم نهایی موتور نمایش داده می‌شود
+  const [activeEngine, setActiveEngine] = useState<EngineDiscount | null>(null)
 
   // 👛 کیف پول نشست فعلی (ثبت‌نام با دعوت/OTP) — فقط اگر شناسایی شود نمایش داده می‌شود
   const walletAvailable = !!(walletInfo && walletInfo.balance != null && !walletInfo.blocked)
@@ -94,18 +94,16 @@ function CheckoutForm() {
             ? { balance: data.balance, blocked: false }
             : null
         )
-        if (data?.grade && typeof data.grade.discountPercent === 'number' && data.grade.discountPercent > 0) {
-          setGradeInfo({ name: String(data.grade.name ?? ''), discountPercent: Number(data.grade.discountPercent), color: data.grade.color ?? null })
-        } else {
-          setGradeInfo(null)
-        }
-        if (data?.subscription && typeof data.subscription.discountPercent === 'number' && data.subscription.discountPercent > 0) {
-          setSubInfo({ planName: String(data.subscription.planName ?? ''), discountPercent: Number(data.subscription.discountPercent) })
-        } else {
-          setSubInfo(null)
-        }
       })
       .catch(() => setWalletInfo(null))
+  }, [])
+
+  // 🎯 تخفیف فعال — همان تصمیمی که /api/orders هنگام ثبت سفارش می‌گیرد (سازمان×اشتراک → برنده، سپس گرید)
+  useEffect(() => {
+    fetch('/api/customer/active-discount', { cache: 'no-store' })
+      .then((res) => res.json())
+      .then((data) => setActiveEngine(data?.active ?? null))
+      .catch(() => setActiveEngine(null))
   }, [])
 
   useEffect(() => {
@@ -295,31 +293,29 @@ function CheckoutForm() {
         <span style={{ width: 80 }} />
       </header>
 
-      <form onSubmit={handleSubmit} className="checkout-form">
+      <form onSubmit={handleSubmit} className="checkout-form" id="checkout-form">
         
-        {customerInfo && (
-          <div style={{ padding: '16px', borderRadius: '12px', background: '#fffdf9', border: '1px solid #d99f59', marginBottom: '16px', textAlign: 'center' }}>
-            <strong style={{ fontSize: '16px', color: '#6b4f3a', display: 'block', marginBottom: '4px' }}>خوش اومدی، {customerInfo.name} عزیز! 🌟</strong>
-            {customerInfo.phone && (
-              <small style={{ color: '#766f64', fontSize: '13px' }}>
-                شماره تماس شما: <span dir="ltr">{customerInfo.phone}</span>
-              </small>
-            )}
-            {walletAvailable && (
-              <small style={{ display: 'block', color: '#2d5d3e', fontSize: '13px', fontWeight: 700, marginTop: '6px' }}>
-                👛 موجودی کیف پول: {formatPrice(walletBalance as number)} تومان
-              </small>
+        {/* 👋 پیام عمومی ثبت سفارش + چیپ کیف پول — بدون تکرار نام و شماره تماس (پچ ۳۷) */}
+        <div className="checkout-welcome">
+          <strong>در حال ثبت سفارش جدید هستی 👋</strong>
+          {walletAvailable && (
+            <small className="checkout-wallet-chip">👛 موجودی کیف پول: {formatPrice(walletBalance as number)} تومان</small>
+          )}
+        </div>
+
+        {/* 🎯 تک‌بنر تخفیف — همان تصمیم موتور تخفیف سرور، با مبلغ وقتی دقیق قابل محاسبه است */}
+        {activeEngine && (
+          <div className="checkout-discount-banner" style={{ borderColor: activeEngine.color ?? '#6b4f3a', color: activeEngine.color ?? '#6b4f3a' }}>
+            <strong>🎉 {activeEngine.label} — {formatPrice(activeEngine.percent)}٪ روی اقلام مشمول</strong>
+            {(activeEngine.source === 'org' || activeEngine.source === 'stacked-org') && membershipDiscount > 0 ? (
+              <small>تخفیف این سفارش: {formatPrice(membershipDiscount)} تومان — در ثبت نهایی خودکار اعمال می‌شود</small>
+            ) : (
+              <small>مبلغ دقیق روی اقلام مشمول، در ثبت نهایی خودکار محاسبه و اعمال می‌شود.</small>
             )}
           </div>
         )}
-
-        {isOrgMember && (
-          <div style={{ padding: '12px', borderRadius: '10px', background: (membershipInfo?.discount || 0) > 0 ? '#e5f0e6' : '#fde8e6', color: (membershipInfo?.discount || 0) > 0 ? '#2d5d3e' : '#9b3c32', fontSize: '13px', fontWeight: 700, marginBottom: '16px', textAlign: 'center' }}>
-            {(membershipInfo?.discount || 0) > 0 
-              ? `🎉 کاربر گرامی، سفارش شما به عنوان عضو ${membershipInfo?.orgName} شامل تخفیف ویژه است.`
-              : `⚠️ ${membershipInfo?.message || 'سقف تخفیف شما پر شده است.'}`
-            }
-          </div>
+        {!activeEngine && isOrgMember && (
+          <div className="checkout-warn-banner">⚠️ {membershipInfo?.message || 'سقف تخفیف شما پر شده است.'}</div>
         )}
 
                 <div className="checkout-card">
@@ -459,18 +455,6 @@ function CheckoutForm() {
         {!settingsLoading && (
           <div className="checkout-card">
             <div className="checkout-card-title">💳 روش پرداخت</div>
-            {gradeInfo && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', background: '#fdf6e3', border: `1px solid ${gradeInfo.color ?? '#d99f59'}`, borderRadius: '10px', padding: '8px 12px', marginBottom: '10px', fontSize: '11.5px', color: '#6b4f3a' }}>
-                <span style={{ width: 10, height: 10, borderRadius: '50%', background: gradeInfo.color ?? '#6b4f3a', flex: '0 0 auto' }} />
-                🏆 گرید {gradeInfo.name}: {formatPrice(gradeInfo.discountPercent)}٪ تخفیف روی اقلام مشمول — در ثبت نهایی خودکار اعمال می‌شود
-              </div>
-            )}
-            {subInfo && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', background: '#f7f1ff', border: '1px solid #8f6bc4', borderRadius: '10px', padding: '8px 12px', marginBottom: '10px', fontSize: '11.5px', color: '#4a2c73' }}>
-                <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#8f6bc4', flex: '0 0 auto' }} />
-                ⭐ اشتراک {subInfo.planName}: {formatPrice(subInfo.discountPercent)}٪ تخفیف روی اقلام مشمول — در ثبت نهایی خودکار اعمال می‌شود
-              </div>
-            )}
             <div className="payment-methods-selector" style={{ gap: '8px' }}>
               {availableMethods.map((m) => {
                 const info = METHOD_INFO[m]
@@ -524,35 +508,30 @@ function CheckoutForm() {
             </div>
           )}
 
-          {/* ✅ ردیف تخفیف با عنوان داینامیک */}
+          {/* ✅ ردیف تخفیف — فقط تخفیف‌هایی که مبلغشان همینجا دقیق مشخص است */}
 
                     {totalDiscount > 0 && (
             <div className="checkout-total-row discount" style={{ borderBottom: 'none', padding: '8px 0' }}>
               <span style={{ fontWeight: 'bold' }}>
                 {isOrgMember
-                  ? 'تخفیف باشگاه:'
+                  ? (activeEngine ? `${activeEngine.label}:` : 'تخفیف باشگاه:')
                   : `تخفیف کد تخفیف (${appliedCoupon?.code || ''}):`}
               </span>
               <strong>− {formatPrice(totalDiscount)} تومان</strong>
             </div>
           )}
+
+          {/* تخفیف اشتراک/گرید: مبلغ دقیق فقط سمت سرور روی اقلام مشمول محاسبه می‌شود */}
+          {activeEngine && activeEngine.source !== 'org' && activeEngine.source !== 'stacked-org' && (
+            <div className="checkout-engine-note">
+              ⏳ {activeEngine.label} ({formatPrice(activeEngine.percent)}٪) روی اقلام مشمول، در ثبت نهایی خودکار اعمال می‌شود.
+            </div>
+          )}
+
           <div className="checkout-total-row final" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '10px', paddingTop: '16px' }}>
             <span style={{ fontSize: '16px', fontWeight: 800 }}>قابل پرداخت:</span>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            {(subInfo || gradeInfo) && (
-  <div style={{ fontSize: '11.5px', color: '#766f64', textAlign: 'center', marginTop: '10px', lineHeight: 1.7 }}>
-    {subInfo && (
-      <div>⭐ تخفیف اشتراک ({formatPrice(subInfo.discountPercent)}٪) روی اقلام مشمول، در ثبت نهایی اعمال می‌شود.</div>
-    )}
-    {gradeInfo && (
-      <div>🏆 تخفیف گرید ({formatPrice(gradeInfo.discountPercent)}٪) روی اقلام مشمول، در ثبت نهایی اعمال می‌شود.</div>
-    )}
-    <div style={{ color: '#9b3c32', fontWeight: 600 }}>
-      مبلغ نهاییِ کسرشده از کیف پول، کمتر از عدد بالا خواهد بود.
-    </div>
-  </div>
-)}
-							{totalDiscount > 0 && (
+              {totalDiscount > 0 && (
                 <span style={{ textDecoration: 'line-through', color: '#aaa', fontSize: '13px', fontWeight: 'normal' }}>
                   {formatPrice(totalPrice + takeawayTotal)}
                 </span>
@@ -565,11 +544,18 @@ function CheckoutForm() {
         </div>
 
         {error && <div className="checkout-error">❌ {error}</div>}
-        
-        <button type="submit" className="checkout-btn" disabled={saving}>
+      </form>
+
+      {/* ✅ نوار پایینی چسبان — قابل پرداخت + دکمه ثبت، همیشه در دسترس */}
+      <div className="checkout-bottom-bar">
+        <div className="checkout-bottom-total">
+          <span>قابل پرداخت</span>
+          <strong>{formatPrice(finalTotal)} <small>تومان</small></strong>
+        </div>
+        <button type="submit" form="checkout-form" className="checkout-btn" disabled={saving}>
           {saving ? 'در حال پردازش...' : paymentMethod === 'online' ? `💳 پرداخت ${formatPrice(finalTotal)} تومان` : '✅ ثبت سفارش'}
         </button>
-      </form>
+      </div>
     </div>
   )
 }
