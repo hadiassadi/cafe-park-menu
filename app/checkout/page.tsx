@@ -39,6 +39,8 @@ function CheckoutForm() {
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash')
   const [settingsLoading, setSettingsLoading] = useState(true)
   const [walletInfo, setWalletInfo] = useState<{ balance: number; blocked: boolean } | null>(null)
+  // 🎯 پچ ۳۹: تیک اختیاری «استفاده از موجودی کیف پول» — مشتری حق انتخاب دارد که خرجش کند یا نه
+  const [useWalletPart, setUseWalletPart] = useState(true)
   // 🏆→🎯 قبلاً گرید و اشتراک جدا نشان داده می‌شدند؛ از پچ ۳۷ فقط تصمیم نهایی موتور نمایش داده می‌شود
   const [activeEngine, setActiveEngine] = useState<EngineDiscount | null>(null)
 
@@ -58,11 +60,11 @@ function CheckoutForm() {
   const allTakeaway = items.length > 0 && items.every((i) => i.takeaway)
   // اگر موجودی کیف پول برای کل سفارش کافی نباشد، گزینه کیف پول نمایش داده می‌شود ولی غیرفعال است
   const walletShort = walletAvailable && walletBalance != null && walletBalance < finalTotal
-  // 🎯 پرداخت ترکیبی (پچ ۳۸): موجودی کل مبلغ را نمی‌پوشاند ولی درگاه فعال است →
-  // بخش موجودی از کیف پول پرداخت می‌شود و باقی‌مانده از درگاه
-  const onlineEnabledForMixed = !!(paymentSettings?.payment_enabled && paymentSettings.payment_online_enabled && finalTotal >= (paymentSettings.payment_min_online_amount || 0))
-  const mixedEligible = walletShort && onlineEnabledForMixed
-  const mixedGatewayPart = mixedEligible && walletBalance != null ? finalTotal - walletBalance : 0
+  // 🎯 پچ ۳۹: استفاده از موجودی کیف پول اختیاری (تیک) و مستقل از روش پرداخت —
+  // بخش موجودی کسر می‌شود و باقی‌مانده به هر روشی که کاربر انتخاب کند تسویه می‌شود
+  const walletPartUsable = walletShort && walletBalance != null && walletBalance > 0
+  const walletPart = walletPartUsable && useWalletPart ? Math.min(walletBalance as number, finalTotal) : 0
+  const remainderAfterWallet = finalTotal - walletPart
 
   useEffect(() => {
     fetch('/api/customer/me', { cache: 'no-store' })
@@ -216,8 +218,7 @@ function CheckoutForm() {
           customer_name: name.trim(),
           customer_phone: cleanPhone,
           table_number: allTakeaway ? null : (tableNumber ? Number(tableNumber) : null),
-          // در پرداخت ترکیبی روشِ پایانی سفارش «درگاه» است (کیف پول فقط بخشی را می‌پوشاند)
-          payment_method: paymentMethod === 'wallet' && mixedEligible ? 'online' : paymentMethod,
+          payment_method: paymentMethod,
           note: note.trim() || null,
           items: items.map((item) => ({ product_id: item.productId, product_name: item.productName, option_id: item.selectedOptionId, option_name: item.selectedOptionName, group_name: item.selectedGroupName, unit_price: item.unitPrice, quantity: item.quantity, takeaway: item.takeaway === true })),
           subtotal: finalTotal,
@@ -234,6 +235,18 @@ function CheckoutForm() {
       try { sessionStorage.setItem(`cafe-park-order-success-${orderId}`, '1') } catch {}
       setSubmitted(true); clearCart()
 
+      // 🎯 اگر تیک «استفاده از موجودی کیف پول» زده باشد، اول بخش موجودی کسر می‌شود؛
+      // اگر کسر ناموفق بود، کل مبلغ به روش انتخابی تسویه می‌شود
+      if (walletPart > 0) {
+        try {
+          await fetch('/api/payment/wallet', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ orderId, amount: walletPart }),
+          })
+        } catch {}
+      }
+
       if (paymentMethod === 'online') {
         const payRes = await fetch('/api/payment/request', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ orderId }) })
         const payData = await payRes.json()
@@ -247,43 +260,7 @@ function CheckoutForm() {
       }
 
       if (paymentMethod === 'wallet') {
-        // 🎯 پرداخت ترکیبی (پچ ۳۸): اول بخش موجودی از کیف پول، بعد باقی‌مانده از درگاه
-        if (mixedEligible && walletBalance != null) {
-          let walletPaid = false
-          try {
-            const wRes = await fetch('/api/payment/wallet', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ orderId, amount: walletBalance }),
-            })
-            walletPaid = wRes.ok
-          } catch {
-            walletPaid = false
-          }
-          if (walletPaid) {
-            // درگاه بدون amount = کل باقی‌مانده‌ی واقعی سمت سرور (مستقل از اختلاف احتمالی محاسبه)
-            const payRes = await fetch('/api/payment/request', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ orderId }) })
-            const payData = await payRes.json()
-            if (payRes.ok && payData.paymentUrl) {
-              window.location.href = payData.paymentUrl
-              return
-            }
-            try { sessionStorage.setItem(`cafe-park-order-success-${orderId}`, '1') } catch {}
-            window.location.href = `/order/${orderId}?payment_error=${encodeURIComponent(payData.error || 'پرداخت درگاه ناموفق بود؛ باقی‌مانده را از صفحه سفارش بپرداز')}`
-            return
-          }
-          // کیف پول ناموفق بود → کل مبلغ از درگاه
-          const payRes = await fetch('/api/payment/request', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ orderId }) })
-          const payData = await payRes.json()
-          if (!payRes.ok || !payData.paymentUrl) {
-            try { sessionStorage.setItem(`cafe-park-order-success-${orderId}`, '1') } catch {}
-            window.location.href = `/order/${orderId}?payment_error=${encodeURIComponent(payData.error || 'خطا')}`
-            return
-          }
-          window.location.href = payData.paymentUrl
-          return
-        }
-
+        // گزینه کیف پول فقط وقتی موجودی کل مبلغ را پوشاند فعال است؛ کسر کامل باقی‌مانده
         const payRes = await fetch('/api/payment/wallet', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -314,7 +291,7 @@ function CheckoutForm() {
     if (paymentSettings.payment_cash_enabled || paymentSettings.payment_card_enabled) availableMethods.push('cash')
     if (paymentSettings.payment_transfer_enabled) availableMethods.push('transfer')
     // کیف پول تا وقتی نشست شناسایی‌شده وجود دارد نمایش داده می‌شود؛
-    // اگر موجودی کافی نباشد یا غیرفعال است (وقتی درگاه هم خاموش است) یا حالت ترکیبی دارد (پچ ۳۸).
+    // اگر موجودی کافی نباشد غیرفعال است — برای خرج کردن بخش موجودی، تیک کیف پول بالای کارت روش پرداخت است (پچ ۳۹).
     if (paymentSettings.payment_wallet_enabled && walletAvailable) availableMethods.push('wallet')
   }
   if (availableMethods.length === 0) availableMethods.push('cash')
@@ -498,16 +475,32 @@ function CheckoutForm() {
         {!settingsLoading && (
           <div className="checkout-card">
             <div className="checkout-card-title">💳 روش پرداخت</div>
+            {walletPartUsable && (
+              <div className="checkout-mixed-note">
+                <label className="checkout-mixed-toggle">
+                  <input
+                    type="checkbox"
+                    checked={useWalletPart}
+                    onChange={(e) => setUseWalletPart(e.target.checked)}
+                    disabled={saving}
+                  />
+                  <span>👛 استفاده از موجودی کیف پول ({formatPrice(walletBalance as number)} تومان)</span>
+                </label>
+                <small>
+                  {useWalletPart
+                    ? `با ثبت سفارش، ${formatPrice(walletPart)} تومان از کیف پولت برداشت می‌شود و مابقی (${formatPrice(remainderAfterWallet)} تومان) را به روش انتخابی زیر تسویه می‌کنی.`
+                    : 'اگر تیک را بزنی، بخش موجودی از کیف پولت برداشت می‌شود و مابقی را به روش دلخواهت تسویه می‌کنی.'}
+                </small>
+              </div>
+            )}
             <div className="payment-methods-selector" style={{ gap: '8px' }}>
               {availableMethods.map((m) => {
                 const info = METHOD_INFO[m]
                 const isSelected = paymentMethod === m;
-                const isWalletShort = m === 'wallet' && walletShort && !mixedEligible
-                const hint = m === 'wallet' && mixedEligible
-                  ? `ترکیبی: ${formatPrice(walletBalance as number)} از کیف پول + ${formatPrice(mixedGatewayPart)} از درگاه`
-                  : isWalletShort
-                    ? `موجودی: ${formatPrice(walletBalance as number)} تومان — کافی نیست`
-                    : info.hint
+                const isWalletShort = m === 'wallet' && walletShort
+                const hint = isWalletShort
+                  ? `موجودی: ${formatPrice(walletBalance as number)} تومان — کافی نیست`
+                  : info.hint
                 return (
                   <button
                     key={m}
