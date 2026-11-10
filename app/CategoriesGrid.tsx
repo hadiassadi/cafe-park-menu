@@ -5,6 +5,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { DEFAULT_THEME } from '@/lib/menu-types'
 import type { MenuData, Quote, Settings } from '@/lib/menu-types'
+import WelcomeBack from './components/WelcomeBack'
 
 const formatPrice = (price: number) =>
   new Intl.NumberFormat('fa-IR').format(price)
@@ -419,6 +420,7 @@ export default function CategoriesGrid({ initial }: { initial: MenuData }) {
               <Link href="/my-orders" className="share-btn hero-my-orders-btn">
                 👤 سفارش‌های من
               </Link>
+              <WelcomeBack settings={settings} />
             </div>
           </div>
         </header>
