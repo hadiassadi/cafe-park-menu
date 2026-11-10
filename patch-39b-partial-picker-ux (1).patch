@@ -1,0 +1,122 @@
+diff --git a/app/checkout/page.tsx b/app/checkout/page.tsx
+index 1acc6ca..a0b9107 100644
+--- a/app/checkout/page.tsx
++++ b/app/checkout/page.tsx
+@@ -290,9 +290,9 @@ function CheckoutForm() {
+     if (paymentSettings.payment_online_enabled && !belowMin) availableMethods.push('online')
+     if (paymentSettings.payment_cash_enabled || paymentSettings.payment_card_enabled) availableMethods.push('cash')
+     if (paymentSettings.payment_transfer_enabled) availableMethods.push('transfer')
+-    // کیف پول تا وقتی نشست شناسایی‌شده وجود دارد نمایش داده می‌شود؛
+-    // اگر موجودی کافی نباشد غیرفعال است — برای خرج کردن بخش موجودی، تیک کیف پول بالای کارت روش پرداخت است (پچ ۳۹).
+-    if (paymentSettings.payment_wallet_enabled && walletAvailable) availableMethods.push('wallet')
++    // کیف پول فقط وقتی موجودی کل مبلغ را پوشاند در لیست روش‌ها می‌آید (پچ ۳۹b)؛
++    // برای خرج کردن بخشی از موجودی، تیک کیف پول بالای همین کارت است.
++    if (paymentSettings.payment_wallet_enabled && walletAvailable && !walletShort) availableMethods.push('wallet')
+   }
+   if (availableMethods.length === 0) availableMethods.push('cash')
+   if (!availableMethods.includes(paymentMethod)) setPaymentMethod(availableMethods[0])
+@@ -493,35 +493,37 @@ function CheckoutForm() {
+                 </small>
+               </div>
+             )}
++            {walletAvailable && walletBalance != null && walletBalance > 0 && !walletShort && (
++              <div className="checkout-mixed-note">
++                <span className="checkout-mixed-toggle" style={{ justifyContent: 'center' }}>
++                  👛 موجودی کیف پولت ({formatPrice(walletBalance)} تومان) برای این سفارش کافیه
++                </span>
++                <small>اگه بخوای از کیف پول پرداخت کنی، گزینه «کیف پول» رو از لیست زیر انتخاب کن؛ تا اون موقع هیچ پولی از کیف پولت برداشت نمی‌شه.</small>
++              </div>
++            )}
+             <div className="payment-methods-selector" style={{ gap: '8px' }}>
+               {availableMethods.map((m) => {
+                 const info = METHOD_INFO[m]
+                 const isSelected = paymentMethod === m;
+-                const isWalletShort = m === 'wallet' && walletShort
+-                const hint = isWalletShort
+-                  ? `موجودی: ${formatPrice(walletBalance as number)} تومان — کافی نیست`
+-                  : info.hint
+                 return (
+                   <button
+                     key={m}
+                     type="button"
+                     className={`payment-method-option ${isSelected ? 'selected' : ''}`}
+                     onClick={() => setPaymentMethod(m)}
+-                    disabled={saving || isWalletShort}
++                    disabled={saving}
+                     style={{
+                       padding: '12px',
+                       minHeight: 'auto',
+                       border: isSelected ? '2px solid #6b4f3a' : '1px solid #e3ddd2',
+                       background: isSelected ? '#f5f0e9' : '#fffdf9',
+                       transition: 'all 0.2s ease',
+-                      opacity: isWalletShort ? 0.55 : 1,
+-                      cursor: isWalletShort ? 'default' : 'pointer'
+                     }}
+                   >
+                     <div className="payment-method-option-icon" style={{ width: '32px', height: '32px', fontSize: '18px', background: '#fff' }}>{info.icon}</div>
+                     <div className="payment-method-option-info">
+                       <strong style={{ fontSize: '13px', color: isSelected ? '#6b4f3a' : '#29251f' }}>{info.title}</strong>
+-                      <small style={{ fontSize: '10px', color: isSelected ? '#766f64' : '#9a9287' }}>{hint}</small>
++                      <small style={{ fontSize: '10px', color: isSelected ? '#766f64' : '#9a9287' }}>{info.hint}</small>
+                     </div>
+                     {isSelected && <span className="payment-method-option-check" style={{ background: '#6b4f3a', color: '#fff' }}>✓</span>}
+                   </button>
+diff --git a/app/order/[id]/page.tsx b/app/order/[id]/page.tsx
+index 73e74f2..fa908aa 100644
+--- a/app/order/[id]/page.tsx
++++ b/app/order/[id]/page.tsx
+@@ -155,6 +155,8 @@ export default function OrderPage({
+           setError(data.error || 'سفارش پیدا نشد')
+         } else {
+           setOrder(data.order as Order)
++          // 🎯 پچ ۳۹b: در پرداخت جزئی، انتخاب روش تسویهٔ باقی‌مانده مستقیم باز شود
++          if ((data.order as Order)?.payment_status === 'partial') setShowChangeMethod(true)
+         }
+       } catch {
+         setError('خطا در ارتباط با سرور')
+@@ -763,7 +765,7 @@ export default function OrderPage({
+                     : isFailed
+                       ? 'پرداخت قبلی ناموفق بود. می‌تونی دوباره امتحان کنی یا روش دیگه‌ای انتخاب کنی.'
+                       : isPartial
+-                        ? 'بخشی از مبلغ سفارش پرداخت شده؛ باقی‌مانده رو الان از درگاه بپرداز.'
++                        ? 'بخشی از مبلغ سفارش از کیف پولت پرداخت شده؛ روش تسویهٔ باقی‌مانده رو انتخاب کن.'
+                         : 'برای نهایی شدن سفارش، لطفاً پرداخت رو انجام بده.'}
+               </p>
+ 
+diff --git a/patch-39b-partial-picker-ux-RELEASE.md b/patch-39b-partial-picker-ux-RELEASE.md
+new file mode 100644
+index 0000000..641af0c
+--- /dev/null
++++ b/patch-39b-partial-picker-ux-RELEASE.md
+@@ -0,0 +1,31 @@
++# پچ ۳۹b — اصلاحات UX پرداخت ترکیبی و سفارش جزئی (نسخه به‌روز)
++
++## تغییرات
++1. **صفحه سفارش — سفارش partial**: مستقیم با لیست «انتخاب روش تسویهٔ باقی‌مانده» باز می‌شود (درگاه، کیف پول، پرداخت در محل، کارت‌به‌کارت) و متن راهنما هم درست شد: «بخشی از مبلغ سفارش از کیف پولت پرداخت شده؛ روش تسویهٔ باقی‌مانده رو انتخاب کن.»
++2. **Checkout — گزینه کیف پول در لیست روش‌ها**: فقط وقتی موجودی **کل مبلغ** را پوشاند نمایش داده می‌شود (فعال). وقتی موجودی کمتر است، از لیست حذف شده — جای آن تیک بالای کارت است. گزینه خاکستریِ غیرفعالِ قبلی کاملاً حذف شد.
++3. **Checkout — کادر اطلاع موجودی کافی (جدید)**: وقتی موجودی کیف پول کل مبلغ را پوشاند، کادر سبز نشان داده می‌شود: «👛 موجودی کیف پولت (X تومان) برای این سفارش کافیه — اگه بخوای از کیف پول پرداخت کنی، گزینه کیف پول رو از لیست زیر انتخاب کن؛ تا اون موقع هیچ پولی از کیف پولت برداشت نمی‌شه.» — تا نبودِ تیک در این حالت با گیج شدن اشتباه گرفته نشود.
++
++## رفتار نهایی (خلاصه)
++| حالت | چی دیده می‌شود |
++|---|---|
++| موجودی < مبلغ سفارش | تیک «استفاده از موجودی کیف پول» + لیست روش‌ها (بدون کیف پول) — باقی‌مانده به هر روشی |
++| موجودی ≥ مبلغ سفارش | کادر سبز «موجودی کافیه» + لیست روش‌ها با گزینه کیف پولِ فعال — تا انتخاب نشود چیزی کسر نمی‌شود |
++| سفارش partial (صفحه سفارش) | مستقیم لیست انتخاب روش تسویهٔ باقی‌مانده |
++
++## ترتیب اعمال
++پچ ۳۹ باید قبلاً merge شده باشد (PR #70). سپس:
++```powershell
++git checkout main && git pull
++git checkout -b fix/patch-39b-partial-picker-ux
++git apply --ignore-whitespace patch-39b-partial-picker-ux.patch
++npx tsc --noEmit
++git add -A
++git commit -m "fix(ui): partial method picker + wallet method visibility + sufficient-balance info note (patch 39b)"
++git push -u origin fix/patch-39b-partial-picker-ux
++```
++
++## تست
++1. سفارش partial (مثل #۱۱۷) → صفحه سفارش مستقیم لیست انتخاب روش تسویهٔ باقی‌مانده را نشان دهد
++2. موجودی کمتر از مبلغ (مثل سفارش ۳۳۶,۰۰۰ با موجودی ۳۲۳,۵۰۰) → تیک سبز + بدون گزینه کیف پول در لیست
++3. موجودی بیشتر از مبلغ (مثل سفارش ۲۴۵,۰۰۰ با موجودی ۳۲۳,۵۰۰) → کادر سبز «موجودی کافیه» + گزینه کیف پول فعال در لیست
++4. انتخاب کیف پول با موجودی کافی → کل مبلغ از کیف پول، بدون درگاه

@@ -1,0 +1,149 @@
+diff --git a/app/checkout/page.tsx b/app/checkout/page.tsx
+index 7f6eae0..7d611b6 100644
+--- a/app/checkout/page.tsx
++++ b/app/checkout/page.tsx
+@@ -493,7 +493,8 @@ function CheckoutForm() {
+                 </small>
+               </div>
+             )}
+-            <div className="payment-methods-selector" style={{ gap: '8px' }}>
++            {/* 🎯 پچ ۳۹c: انتخابگر فشرده (چیپ) — بدون کارت‌های بلند و بدون مودال اضافه */}
++            <div className="payment-methods-selector" style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
+               {availableMethods.map((m) => {
+                 const info = METHOD_INFO[m]
+                 const isSelected = paymentMethod === m;
+@@ -501,27 +502,19 @@ function CheckoutForm() {
+                   <button
+                     key={m}
+                     type="button"
+-                    className={`payment-method-option ${isSelected ? 'selected' : ''}`}
++                    className={`payment-method-chip ${isSelected ? 'selected' : ''}`}
+                     onClick={() => setPaymentMethod(m)}
+                     disabled={saving}
+-                    style={{
+-                      padding: '12px',
+-                      minHeight: 'auto',
+-                      border: isSelected ? '2px solid #6b4f3a' : '1px solid #e3ddd2',
+-                      background: isSelected ? '#f5f0e9' : '#fffdf9',
+-                      transition: 'all 0.2s ease',
+-                    }}
++                    title={info.hint}
+                   >
+-                    <div className="payment-method-option-icon" style={{ width: '32px', height: '32px', fontSize: '18px', background: '#fff' }}>{info.icon}</div>
+-                    <div className="payment-method-option-info">
+-                      <strong style={{ fontSize: '13px', color: isSelected ? '#6b4f3a' : '#29251f' }}>{info.title}</strong>
+-                      <small style={{ fontSize: '10px', color: isSelected ? '#766f64' : '#9a9287' }}>{info.hint}</small>
+-                    </div>
+-                    {isSelected && <span className="payment-method-option-check" style={{ background: '#6b4f3a', color: '#fff' }}>✓</span>}
++                    <span className="payment-method-chip-icon">{info.icon}</span>
++                    <span>{info.title}</span>
++                    {isSelected && <span className="payment-method-chip-check">✓</span>}
+                   </button>
+                 )
+               })}
+             </div>
++            <small className="payment-method-current-hint">{METHOD_INFO[paymentMethod].hint}</small>
+           </div>
+         )}
+ 
+@@ -553,6 +546,14 @@ function CheckoutForm() {
+             </div>
+           )}
+ 
++          {/* 🎯 پچ ۳۹c: ردیف برداشت کیف پول — شرح شفاف پرداخت */}
++          {walletPart > 0 && (
++            <div className="checkout-total-row" style={{ borderBottom: 'none', padding: '8px 0' }}>
++              <span>👛 برداشت از کیف پول:</span>
++              <strong>− {formatPrice(walletPart)} تومان</strong>
++            </div>
++          )}
++
+           {/* تخفیف اشتراک/گرید: مبلغ دقیق فقط سمت سرور روی اقلام مشمول محاسبه می‌شود */}
+           {activeEngine && activeEngine.source !== 'org' && activeEngine.source !== 'stacked-org' && (
+             <div className="checkout-engine-note">
+@@ -561,7 +562,7 @@ function CheckoutForm() {
+           )}
+ 
+           <div className="checkout-total-row final" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '10px', paddingTop: '16px' }}>
+-            <span style={{ fontSize: '16px', fontWeight: 800 }}>قابل پرداخت:</span>
++            <span style={{ fontSize: '16px', fontWeight: 800 }}>{walletPart > 0 ? 'مبلغ مانده (قابل پرداخت):' : 'قابل پرداخت:'}</span>
+             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+               {totalDiscount > 0 && (
+                 <span style={{ textDecoration: 'line-through', color: '#aaa', fontSize: '13px', fontWeight: 'normal' }}>
+@@ -569,7 +570,7 @@ function CheckoutForm() {
+                 </span>
+               )}
+               <strong style={{ fontSize: '22px', color: '#6b4f3a' }}>
+-                {formatPrice(finalTotal)} <small>تومان</small>
++                {formatPrice(remainderAfterWallet)} <small>تومان</small>
+               </strong>
+             </div>
+           </div>
+@@ -578,14 +579,14 @@ function CheckoutForm() {
+         {error && <div className="checkout-error">❌ {error}</div>}
+       </form>
+ 
+-      {/* ✅ نوار پایینی چسبان — قابل پرداخت + دکمه ثبت، همیشه در دسترس */}
++      {/* ✅ نوار پایینی چسبان — مبلغ مانده (بعد از برداشت کیف پول) + دکمه ثبت */}
+       <div className="checkout-bottom-bar">
+         <div className="checkout-bottom-total">
+-          <span>قابل پرداخت</span>
+-          <strong>{formatPrice(finalTotal)} <small>تومان</small></strong>
++          <span>{walletPart > 0 ? 'مبلغ مانده' : 'قابل پرداخت'}</span>
++          <strong>{formatPrice(remainderAfterWallet)} <small>تومان</small></strong>
+         </div>
+         <button type="submit" form="checkout-form" className="checkout-btn" disabled={saving}>
+-          {saving ? 'در حال پردازش...' : paymentMethod === 'online' ? `💳 پرداخت ${formatPrice(finalTotal)} تومان` : '✅ ثبت سفارش'}
++          {saving ? 'در حال پردازش...' : paymentMethod === 'online' ? `💳 پرداخت ${formatPrice(remainderAfterWallet)} تومان` : '✅ ثبت سفارش'}
+         </button>
+       </div>
+     </div>
+diff --git a/app/globals.css b/app/globals.css
+index 2362726..16d8693 100644
+--- a/app/globals.css
++++ b/app/globals.css
+@@ -15034,3 +15034,11 @@ a.cat {
+ .checkout-mixed-toggle{display:flex;align-items:center;justify-content:center;gap:8px;font-size:13px;font-weight:700;color:#2d5d3e;cursor:pointer;user-select:none}
+ .checkout-mixed-toggle input[type="checkbox"]{width:17px;height:17px;accent-color:#2d5d3e;cursor:pointer;flex:0 0 auto}
+ .checkout-mixed-note small{color:#477052;font-size:11.5px;line-height:1.8}
++
++/* پچ ۳۹c — انتخابگر فشرده روش پرداخت (چیپ به‌جای کارت‌های بلند) */
++.payment-method-chip{display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:999px;border:1.5px solid #e3ddd2;background:#fffdf9;font-size:12.5px;font-weight:700;color:#29251f;transition:all .2s ease;cursor:pointer;font-family:inherit;line-height:1.6}
++.payment-method-chip.selected{border-color:#6b4f3a;background:#f5f0e9;color:#6b4f3a}
++.payment-method-chip:disabled{opacity:.6;cursor:default}
++.payment-method-chip-icon{font-size:16px;line-height:1}
++.payment-method-chip-check{font-size:10px;background:#6b4f3a;color:#fff;border-radius:999px;width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto}
++.payment-method-current-hint{display:block;margin-top:8px;font-size:11px;color:#9a9287;text-align:center}
+diff --git a/patch-39c-checkout-summary-ux-RELEASE.md b/patch-39c-checkout-summary-ux-RELEASE.md
+new file mode 100644
+index 0000000..bfd07d2
+--- /dev/null
++++ b/patch-39c-checkout-summary-ux-RELEASE.md
+@@ -0,0 +1,27 @@
++# پچ ۳۹c — شرح شفاف پرداخت + انتخابگر فشرده روش پرداخت
++
++## تغییرات
++1. **خلاصه نهایی شفاف شد**: ردیف جدید «👛 برداشت از کیف پول: −X تومان» (وقتی تیک موجودی زده باشد) و ردیف آخر به «مبلغ مانده (قابل پرداخت)» تغییر کرد — یعنی مشتری دقیقاً می‌بیند: جمع اقلام → تخفیف → برداشت کیف پول → **مبلغ مانده**
++2. **نوار پایینی چسبان**: برچسب و مبلغ از «قابل پرداخت» به «مبلغ مانده» (finalTotal − برداشت کیف پول) تغییر کرد؛ دکمه پرداخت آنلاین هم مبلغ مانده را نشان می‌دهد
++3. **انتخابگر روش پرداخت فشرده شد**: کارت‌های بلند (~۷۰ پیکسلی) به چیپ‌های افقی فشرده (آیکون + نام + تیک انتخاب) تبدیل شدند + یک خط راهنمای کوچک زیر چیپ‌ها (مثلاً «واریز + آپلود رسید» برای روش انتخابی)
++
++## چرا مودال نه؟ (پاسخ به پیشنهاد)
++مودال دو ضعف دارد: (۱) یک ضربه اضافه برای هر تغییر روش، (۲) کادر سبز تیک کیف پول و شرح مبلغ مانده باید همزمان با روش انتخابی دیده شوند — در مودال این ارتباط قطع می‌شود. چیپ فشرده هر دو را حل می‌کند: یک‌ضربه‌ای است، ارتفاع کارت‌ها ~۷۵٪ کم شد و همه‌چیز در یک نما می‌ماند.
++
++## ترتیب اعمال
++پچ ۳۹b باید قبلاً merge شده باشد (PR #71). سپس:
++```powershell
++git checkout main && git pull
++git checkout -b fix/patch-39c-checkout-summary-ux
++git apply --ignore-whitespace patch-39c-checkout-summary-ux.patch
++npx tsc --noEmit
++git add -A
++git commit -m "feat(ui): transparent payment breakdown with wallet line + remaining amount + compact method chips (patch 39c)"
++git push -u origin fix/patch-39c-checkout-summary-ux
++```
++
++## تست
++1. موجودی کمتر از مبلغ + تیک زده → خلاصه نهایی: جمع اقلام، تخفیف، «برداشت از کیف پول»، «مبلغ مانده (قابل پرداخت)» — نوار پایین هم مبلغ مانده
++2. تیک را بردار → ردیف کیف پول حذف و «قابل پرداخت» به مبلغ کامل برگردد
++3. روش‌های پرداخت → چیپ‌های فشرده در یک یا دو ردیف؛ خط راهنما زیرشان با تغییر روش عوض شود
++4. روش درگاه + تیک → دکمه «💳 پرداخت [مبلغ مانده] تومان»

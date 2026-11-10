@@ -15034,3 +15034,11 @@ a.cat {
 .checkout-mixed-toggle{display:flex;align-items:center;justify-content:center;gap:8px;font-size:13px;font-weight:700;color:#2d5d3e;cursor:pointer;user-select:none}
 .checkout-mixed-toggle input[type="checkbox"]{width:17px;height:17px;accent-color:#2d5d3e;cursor:pointer;flex:0 0 auto}
 .checkout-mixed-note small{color:#477052;font-size:11.5px;line-height:1.8}
+
+/* پچ ۳۹c — انتخابگر فشرده روش پرداخت (چیپ به‌جای کارت‌های بلند) */
+.payment-method-chip{display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:999px;border:1.5px solid #e3ddd2;background:#fffdf9;font-size:12.5px;font-weight:700;color:#29251f;transition:all .2s ease;cursor:pointer;font-family:inherit;line-height:1.6}
+.payment-method-chip.selected{border-color:#6b4f3a;background:#f5f0e9;color:#6b4f3a}
+.payment-method-chip:disabled{opacity:.6;cursor:default}
+.payment-method-chip-icon{font-size:16px;line-height:1}
+.payment-method-chip-check{font-size:10px;background:#6b4f3a;color:#fff;border-radius:999px;width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto}
+.payment-method-current-hint{display:block;margin-top:8px;font-size:11px;color:#9a9287;text-align:center}

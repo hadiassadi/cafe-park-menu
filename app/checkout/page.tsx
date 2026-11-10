@@ -493,7 +493,8 @@ function CheckoutForm() {
                 </small>
               </div>
             )}
-            <div className="payment-methods-selector" style={{ gap: '8px' }}>
+            {/* 🎯 پچ ۳۹c: انتخابگر فشرده (چیپ) — بدون کارت‌های بلند و بدون مودال اضافه */}
+            <div className="payment-methods-selector" style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
               {availableMethods.map((m) => {
                 const info = METHOD_INFO[m]
                 const isSelected = paymentMethod === m;
@@ -501,27 +502,19 @@ function CheckoutForm() {
                   <button
                     key={m}
                     type="button"
-                    className={`payment-method-option ${isSelected ? 'selected' : ''}`}
+                    className={`payment-method-chip ${isSelected ? 'selected' : ''}`}
                     onClick={() => setPaymentMethod(m)}
                     disabled={saving}
-                    style={{
-                      padding: '12px',
-                      minHeight: 'auto',
-                      border: isSelected ? '2px solid #6b4f3a' : '1px solid #e3ddd2',
-                      background: isSelected ? '#f5f0e9' : '#fffdf9',
-                      transition: 'all 0.2s ease',
-                    }}
+                    title={info.hint}
                   >
-                    <div className="payment-method-option-icon" style={{ width: '32px', height: '32px', fontSize: '18px', background: '#fff' }}>{info.icon}</div>
-                    <div className="payment-method-option-info">
-                      <strong style={{ fontSize: '13px', color: isSelected ? '#6b4f3a' : '#29251f' }}>{info.title}</strong>
-                      <small style={{ fontSize: '10px', color: isSelected ? '#766f64' : '#9a9287' }}>{info.hint}</small>
-                    </div>
-                    {isSelected && <span className="payment-method-option-check" style={{ background: '#6b4f3a', color: '#fff' }}>✓</span>}
+                    <span className="payment-method-chip-icon">{info.icon}</span>
+                    <span>{info.title}</span>
+                    {isSelected && <span className="payment-method-chip-check">✓</span>}
                   </button>
                 )
               })}
             </div>
+            <small className="payment-method-current-hint">{METHOD_INFO[paymentMethod].hint}</small>
           </div>
         )}
 
@@ -553,6 +546,14 @@ function CheckoutForm() {
             </div>
           )}
 
+          {/* 🎯 پچ ۳۹c: ردیف برداشت کیف پول — شرح شفاف پرداخت */}
+          {walletPart > 0 && (
+            <div className="checkout-total-row" style={{ borderBottom: 'none', padding: '8px 0' }}>
+              <span>👛 برداشت از کیف پول:</span>
+              <strong>− {formatPrice(walletPart)} تومان</strong>
+            </div>
+          )}
+
           {/* تخفیف اشتراک/گرید: مبلغ دقیق فقط سمت سرور روی اقلام مشمول محاسبه می‌شود */}
           {activeEngine && activeEngine.source !== 'org' && activeEngine.source !== 'stacked-org' && (
             <div className="checkout-engine-note">
@@ -561,7 +562,7 @@ function CheckoutForm() {
           )}
 
           <div className="checkout-total-row final" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '10px', paddingTop: '16px' }}>
-            <span style={{ fontSize: '16px', fontWeight: 800 }}>قابل پرداخت:</span>
+            <span style={{ fontSize: '16px', fontWeight: 800 }}>{walletPart > 0 ? 'مبلغ مانده (قابل پرداخت):' : 'قابل پرداخت:'}</span>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               {totalDiscount > 0 && (
                 <span style={{ textDecoration: 'line-through', color: '#aaa', fontSize: '13px', fontWeight: 'normal' }}>
@@ -569,7 +570,7 @@ function CheckoutForm() {
                 </span>
               )}
               <strong style={{ fontSize: '22px', color: '#6b4f3a' }}>
-                {formatPrice(finalTotal)} <small>تومان</small>
+                {formatPrice(remainderAfterWallet)} <small>تومان</small>
               </strong>
             </div>
           </div>
@@ -578,14 +579,14 @@ function CheckoutForm() {
         {error && <div className="checkout-error">❌ {error}</div>}
       </form>
 
-      {/* ✅ نوار پایینی چسبان — قابل پرداخت + دکمه ثبت، همیشه در دسترس */}
+      {/* ✅ نوار پایینی چسبان — مبلغ مانده (بعد از برداشت کیف پول) + دکمه ثبت */}
       <div className="checkout-bottom-bar">
         <div className="checkout-bottom-total">
-          <span>قابل پرداخت</span>
-          <strong>{formatPrice(finalTotal)} <small>تومان</small></strong>
+          <span>{walletPart > 0 ? 'مبلغ مانده' : 'قابل پرداخت'}</span>
+          <strong>{formatPrice(remainderAfterWallet)} <small>تومان</small></strong>
         </div>
         <button type="submit" form="checkout-form" className="checkout-btn" disabled={saving}>
-          {saving ? 'در حال پردازش...' : paymentMethod === 'online' ? `💳 پرداخت ${formatPrice(finalTotal)} تومان` : '✅ ثبت سفارش'}
+          {saving ? 'در حال پردازش...' : paymentMethod === 'online' ? `💳 پرداخت ${formatPrice(remainderAfterWallet)} تومان` : '✅ ثبت سفارش'}
         </button>
       </div>
     </div>
