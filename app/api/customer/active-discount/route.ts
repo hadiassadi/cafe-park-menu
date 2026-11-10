@@ -1,4 +1,5 @@
 import 'server-only'
+import { createHash } from 'crypto'
 import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { supabaseAdmin } from '@/lib/supabase/server'
@@ -10,6 +11,15 @@ import { hashData } from '@/lib/utils/hash'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
+
+function normalizePhone(v: unknown): string {
+  return String(v ?? '')
+    .replace(/[۰-۹]/g, (d) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d)))
+    .replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
+    .replace(/\D/g, '')
+    .replace(/^98/, '0')
+    .replace(/^9(\d{9})$/, '0$1')
+}
 
 type ActiveDiscountInfo = {
   source: 'org' | 'subscription' | 'grade' | 'stacked-org' | 'stacked-sub'
@@ -34,17 +44,37 @@ export async function GET() {
     const cookieStore = await cookies()
     const deviceToken = cookieStore.get('cafe_device_token')?.value
 
-    // عضو سازمان — همان مسیر /api/orders (عضویت به دستگاه گره خورده است)
+    // مشتری نشست — برای fallback شماره و نامزد گرید/اشتراک
+    const customer = await resolveWalletCustomer()
+
+    // عضو سازمان — هم‌سو با /api/membership/calculate و /api/customer/me:
+    // اول دستگاه (هر دو نسخه‌ی هش: HMAC جدید و sha256 قدیمی)، اگر نبود شمارهٔ
+    // تأییدشدهٔ نشست — عضو نباید برای تخفیف به یک دستگاه قفل شود
+    const ORG_MEMBER_SELECT =
+      'id, organizations(name, discount_percent, max_daily_orders, max_total_orders, expires_at)'
     let member: any | undefined
     if (deviceToken) {
-      const deviceIdHash = hashData(deviceToken)
+      const deviceIdHashNew = hashData(deviceToken)
+      const deviceIdHashOld = createHash('sha256').update(deviceToken).digest('hex')
       const { data } = await supabaseAdmin()
         .from('organization_members')
-        .select('id, organizations(name, discount_percent, max_daily_orders, max_total_orders, expires_at)')
-        .eq('device_id_hash', deviceIdHash)
+        .select(ORG_MEMBER_SELECT)
+        .in('device_id_hash', [deviceIdHashNew, deviceIdHashOld])
         .eq('is_registered', true)
         .maybeSingle()
       member = data
+    }
+    if (!member && customer?.phone && customer.verification_status === 'verified') {
+      const p = normalizePhone(customer.phone)
+      if (/^09\d{9}$/.test(p)) {
+        const { data } = await supabaseAdmin()
+          .from('organization_members')
+          .select(ORG_MEMBER_SELECT)
+          .eq('phone_hash', hashData(p))
+          .eq('is_registered', true)
+          .maybeSingle()
+        member = data
+      }
     }
 
     // نامزد سازمان: قرارداد معتبر + تخفیف مثبت + سهمیه‌ی باقی‌مانده (شمارش redemption، روز تهران)
@@ -83,7 +113,6 @@ export async function GET() {
     let gradeColor: string | null = null
     let subPercent = 0
     let subPlanName: string | null = null
-    const customer = await resolveWalletCustomer()
     if (customer?.phone && customer.verification_status === 'verified') {
       const g = await getVerifiedCustomerGrade(customer.phone).catch(() => null)
       gradePercent = g?.discountPercent ?? 0

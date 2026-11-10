@@ -266,14 +266,40 @@ if (wantsTakeaway) {
 
 
     // ---------- تخفیف باشگاه × گرید (سیاست مدیر) ----------
-    const { data: member } = await db
-      .from('organization_members')
-      .select(
-        'id, organizations(name, discount_percent, max_daily_orders, max_total_orders, expires_at)'
-      )
-      .eq('device_id_hash', deviceIdHash)
-      .eq('is_registered', true)
-      .maybeSingle()
+    // عضو سازمان — هم‌سو با /api/membership/calculate و /api/customer/me:
+    // اول دستگاه (هر دو نسخه‌ی هش: HMAC جدید و sha256 قدیمی)، اگر پیدا نشد
+    // شمارهٔ سفارش فقط وقتی که به مشتری احرازشده تعلق دارد — عضو نباید برای
+    // تخفیف به یک دستگاه قفل شود
+    const ORG_MEMBER_SELECT =
+      'id, organizations(name, discount_percent, max_daily_orders, max_total_orders, expires_at)'
+    const deviceIdHashOld = crypto.createHash('sha256').update(deviceToken).digest('hex')
+    let member: any | undefined
+    {
+      const { data } = await db
+        .from('organization_members')
+        .select(ORG_MEMBER_SELECT)
+        .in('device_id_hash', [deviceIdHash, deviceIdHashOld])
+        .eq('is_registered', true)
+        .maybeSingle()
+      member = data
+    }
+    if (!member) {
+      const { data: verifiedCust } = await db
+        .from('customers')
+        .select('id')
+        .eq('phone', phone)
+        .eq('verification_status', 'verified')
+        .maybeSingle()
+      if (verifiedCust) {
+        const { data } = await db
+          .from('organization_members')
+          .select(ORG_MEMBER_SELECT)
+          .eq('phone_hash', hashData(phone))
+          .eq('is_registered', true)
+          .maybeSingle()
+        member = data
+      }
+    }
 
     let membershipRedemptionId: string | null = null
 
