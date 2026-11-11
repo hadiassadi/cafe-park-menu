@@ -1,0 +1,383 @@
+diff --git a/app/admin/layout.tsx b/app/admin/layout.tsx
+index 746e043..50a2ed6 100644
+--- a/app/admin/layout.tsx
++++ b/app/admin/layout.tsx
+@@ -9,6 +9,67 @@ import NewOrderAlert from './components/NewOrderAlert'
+ import { useOrderNotifications } from '@/lib/use-order-notifications'
+ import { useDocumentTitle } from '@/lib/use-document-title'
+ 
++// 🎯 پچ ۴۱ — منوی یکپارچه: یک منبع واحد برای سایدبار دسکتاپ و drawer موبایل
++// ۲۲ آیتم قبلاً فهرست تختِ شلوغ بود؛ حالا ۶ گروه منطقی با برچسب — دسترسی به همه بخش‌ها از یک ساختار واحد
++const MENU_GROUPS = [
++  {
++    key: 'ops',
++    label: 'عملیات روزانه',
++    items: [
++      { href: '/admin', label: 'داشبورد', icon: '🏠' },
++      { href: '/admin/orders', label: 'سفارش‌ها', icon: '🛒' },
++      { href: '/admin/orders/new', label: 'ثبت سفارش حضوری', icon: '➕' },
++      { href: '/admin/customers', label: 'مشتریان', icon: '👥' },
++    ],
++  },
++  {
++    key: 'catalog',
++    label: 'کاتالوگ و منو',
++    items: [
++      { href: '/admin/products', label: 'محصولات', icon: '☕' },
++      { href: '/admin/categories', label: 'دسته‌ها', icon: '📂' },
++      { href: '/admin/tables', label: 'میزها', icon: '🪑' },
++      { href: '/admin/themes', label: 'تم‌ها', icon: '🎨' },
++      { href: '/admin/quotes', label: 'جملات', icon: '💬' },
++    ],
++  },
++  {
++    key: 'loyalty',
++    label: 'باشگاه و وفاداری',
++    items: [
++      { href: '/admin/memberships', label: 'باشگاه مشتریان', icon: '🎓' },
++      { href: '/admin/settings/grades', label: 'گرید مشتریان', icon: '🏆' },
++      { href: '/admin/settings/subscriptions', label: 'اشتراک ماهیانه', icon: '⭐' },
++      { href: '/admin/coupons', label: 'کد تخفیف', icon: '🎟️' },
++      { href: '/admin/settings/club', label: 'قوانین اعتبار', icon: '🛡️' },
++    ],
++  },
++  {
++    key: 'wallet',
++    label: 'کیف پول',
++    items: [{ href: '/admin/wallet', label: 'کیف پول مشتریان', icon: '👛' }],
++  },
++  {
++    key: 'reports',
++    label: 'گزارش‌ها',
++    items: [
++      { href: '/admin/reports/sales', label: 'گزارش فروش', icon: '💰' },
++      { href: '/admin/cancellations', label: 'آمار لغوها', icon: '📊' },
++      { href: '/admin/cancellation-reasons', label: 'دلایل لغو', icon: '🚫' },
++    ],
++  },
++  {
++    key: 'system',
++    label: 'سیستم',
++    items: [
++      { href: '/admin/settings', label: 'تنظیمات', icon: '⚙️' },
++      { href: '/admin/settings/payment', label: 'تنظیمات پرداخت', icon: '💳' },
++      { href: '/admin/settings/sms', label: 'تنظیمات پیامک', icon: '📱' },
++      { href: '/admin/backup', label: 'پشتیبان‌گیری', icon: '💾' },
++    ],
++  },
++] as const
++
+ export default function AdminLayout({
+   children,
+ }: {
+@@ -79,72 +140,55 @@ export default function AdminLayout({
+       return
+     }
+ 
+-    const checkUser = async () => {
+-      const supabase = supabaseBrowser()
+-      const { data } = await supabase.auth.getUser()
+-
+-      if (!data.user) {
+-        router.replace('/admin/login')
+-        return
+-      }
+-
+-      try {
+-        if (
+-          'Notification' in window &&
+-          Notification.permission === 'default'
+-        ) {
+-          setTimeout(() => {
+-            Notification.requestPermission().catch(() => {})
+-          }, 3000)
++    // 🎯 پچ ۴۱: احراز هویت فقط یک‌بار در mount — قبلاً در هر تغییر مسیر
++    // getUser() به سرور auth درخواست شبکه می‌زد و هر ناوبری را کند می‌کرد.
++    const supabase = supabaseBrowser()
++    let mounted = true
++
++    supabase.auth
++      .getUser()
++      .then(({ data }) => {
++        if (!mounted) return
++        if (!data.user) {
++          router.replace('/admin/login')
++          return
+         }
+-      } catch {}
++        setChecking(false)
++
++        try {
++          if ('Notification' in window && Notification.permission === 'default') {
++            setTimeout(() => {
++              Notification.requestPermission().catch(() => {})
++            }, 3000)
++          }
++        } catch {}
++      })
++      .catch(() => {
++        if (mounted) router.replace('/admin/login')
++      })
++
++    // خروج در تب دیگر → این تب هم به لاگین برود
++    const { data: sub } = supabase.auth.onAuthStateChange((event) => {
++      if (event === 'SIGNED_OUT') router.replace('/admin/login')
++    })
+ 
+-      setChecking(false)
++    return () => {
++      mounted = false
++      sub.subscription.unsubscribe()
+     }
+-
+-    checkUser()
+     // eslint-disable-next-line react-hooks/exhaustive-deps
+-  }, [pathname])
++  }, [])
+ 
+   if (pathname === '/admin/login') {
+     return <main>{children}</main>
+   }
+ 
+-  if (checking) {
+-    return <div style={{ padding: 24 }}>در حال بررسی...</div>
+-  }
+-
+   const handleLogout = async () => {
+     const supabase = supabaseBrowser()
+     await supabase.auth.signOut()
+     router.replace('/admin/login')
+   }
+ 
+-  const menuItems = [
+-    { href: '/admin', label: 'داشبورد', icon: '🏠' },
+-	{ href: '/admin/memberships', label: 'باشگاه مشتریان', icon: '🎓' },
+-    { href: '/admin/orders', label: 'سفارش‌ها', icon: '🛒' },
+-    { href: '/admin/orders/new', label: 'ثبت سفارش حضوری', icon: '➕' },
+-    { href: '/admin/customers', label: 'مشتریان', icon: '👥' },
+-    { href: '/admin/products', label: 'محصولات', icon: '☕' },
+-    { href: '/admin/categories', label: 'دسته‌ها', icon: '📂' },
+-    { href: '/admin/tables', label: 'میزها', icon: '🪑' },
+-    { href: '/admin/themes', label: 'تم‌ها', icon: '🎨' },
+-    { href: '/admin/quotes', label: 'جملات', icon: '💬' },
+-    { href: '/admin/coupons', label: 'کد تخفیف', icon: '🎟️' },
+-    { href: '/admin/cancellation-reasons', label: 'دلایل لغو', icon: '🚫' },
+-    { href: '/admin/cancellations', label: 'آمار لغوها', icon: '📊' },
+-    { href: '/admin/reports/sales', label: 'گزارش فروش', icon: '💰' },
+-    { href: '/admin/backup', label: 'پشتیبان‌گیری', icon: '💾' },
+-	{ href: '/admin/settings/payment', label: 'تنظیمات پرداخت', icon: '💳' },
+-	{ href: '/admin/settings/sms', label: 'تنظیمات پیامک', icon: '📱' },
+-	{ href: '/admin/wallet', label: 'کیف پول مشتریان', icon: '👛' },
+-	{ href: '/admin/settings/club', label: 'قوانین اعتبار', icon: '🛡️' },
+-	{ href: '/admin/settings/grades', label: 'گرید مشتریان', icon: '🏆' },
+-	{ href: '/admin/settings/subscriptions', label: 'اشتراک ماهیانه', icon: '⭐' },
+-    { href: '/admin/settings', label: 'تنظیمات', icon: '⚙️' },
+-  ]
+-
+   const isActive = (href: string) => {
+     if (href === '/admin') return pathname === '/admin'
+     if (href === '/admin/orders') {
+@@ -156,6 +200,8 @@ export default function AdminLayout({
+     return pathname.startsWith(href)
+   }
+ 
++  // 🎯 پچ ۴۱: شل همیشه رندر می‌شود — در حالت checking فقط محتوا اسکلتون است
++  // (قبلاً صفحه لخت «در حال بررسی...» کل پنل از جمله سایدبار را می‌بست)
+   return (
+     <div className="admin-shell">
+       {/* ═══════════ هدر موبایل (فقط < 768px) ═══════════ */}
+@@ -186,30 +232,35 @@ export default function AdminLayout({
+         </div>
+ 
+         <nav className="admin-nav">
+-          {menuItems.map((item) => {
+-            const isOrders = item.href === '/admin/orders'
+-            const hasBadge = isOrders && pendingCount > 0
++          {MENU_GROUPS.map((group) => (
++            <div key={group.key} className="admin-nav-group">
++              <div className="admin-nav-group-label">{group.label}</div>
++              {group.items.map((item) => {
++                const isOrders = item.href === '/admin/orders'
++                const hasBadge = isOrders && pendingCount > 0
+ 
+-            return (
+-              <Link
+-                key={item.href}
+-                href={item.href}
+-                className={`admin-nav-item ${
+-                  isActive(item.href) ? 'active' : ''
+-                }`}
+-              >
+-                <span className="admin-nav-icon">{item.icon}</span>
+-                <span>{item.label}</span>
+-                {hasBadge && (
+-                  <span
+-                    className={`admin-nav-badge ${flash ? 'flash' : ''}`}
++                return (
++                  <Link
++                    key={item.href}
++                    href={item.href}
++                    className={`admin-nav-item ${
++                      isActive(item.href) ? 'active' : ''
++                    }`}
+                   >
+-                    {pendingCount.toLocaleString('fa-IR')}
+-                  </span>
+-                )}
+-              </Link>
+-            )
+-          })}
++                    <span className="admin-nav-icon">{item.icon}</span>
++                    <span>{item.label}</span>
++                    {hasBadge && (
++                      <span
++                        className={`admin-nav-badge ${flash ? 'flash' : ''}`}
++                      >
++                        {pendingCount.toLocaleString('fa-IR')}
++                      </span>
++                    )}
++                  </Link>
++                )
++              })}
++            </div>
++          ))}
+         </nav>
+ 
+         <div className="admin-sidebar-footer">
+@@ -232,8 +283,18 @@ export default function AdminLayout({
+         </div>
+       </aside>
+ 
+-      {/* ═══════════ محتوای اصلی ═══════════ */}
+-      <main className="admin-main">{children}</main>
++      {/* ═══════════ محتوای اصلی — در checking اسکلتون به‌جای صفحه لخت ═══════════ */}
++      <main className="admin-main">
++        {checking ? (
++          <div aria-busy="true">
++            <div className="skel-card admin-skel-bar" />
++            <div className="skel-card" />
++            <div className="skel-card" />
++          </div>
++        ) : (
++          children
++        )}
++      </main>
+ 
+       {/* ═══════════ Drawer موبایل ═══════════ */}
+       {drawerOpen && (
+@@ -260,29 +321,34 @@ export default function AdminLayout({
+             </div>
+ 
+             <nav className="admin-drawer-nav">
+-              {menuItems.map((item) => {
+-                const isOrders = item.href === '/admin/orders'
+-                const hasBadge = isOrders && pendingCount > 0
+-
+-                return (
+-                  <Link
+-                    key={item.href}
+-                    href={item.href}
+-                    className={`admin-drawer-item ${
+-                      isActive(item.href) ? 'active' : ''
+-                    }`}
+-                    onClick={() => setDrawerOpen(false)}
+-                  >
+-                    <span className="admin-drawer-icon">{item.icon}</span>
+-                    <span className="admin-drawer-label">{item.label}</span>
+-                    {hasBadge && (
+-                      <span className="admin-drawer-badge">
+-                        {pendingCount.toLocaleString('fa-IR')}
+-                      </span>
+-                    )}
+-                  </Link>
+-                )
+-              })}
++              {MENU_GROUPS.map((group) => (
++                <div key={group.key} className="admin-drawer-group">
++                  <div className="admin-drawer-group-label">{group.label}</div>
++                  {group.items.map((item) => {
++                    const isOrders = item.href === '/admin/orders'
++                    const hasBadge = isOrders && pendingCount > 0
++
++                    return (
++                      <Link
++                        key={item.href}
++                        href={item.href}
++                        className={`admin-drawer-item ${
++                          isActive(item.href) ? 'active' : ''
++                        }`}
++                        onClick={() => setDrawerOpen(false)}
++                      >
++                        <span className="admin-drawer-icon">{item.icon}</span>
++                        <span className="admin-drawer-label">{item.label}</span>
++                        {hasBadge && (
++                          <span className="admin-drawer-badge">
++                            {pendingCount.toLocaleString('fa-IR')}
++                          </span>
++                        )}
++                      </Link>
++                    )
++                  })}
++                </div>
++              ))}
+             </nav>
+ 
+             <div className="admin-drawer-footer">
+@@ -318,4 +384,4 @@ export default function AdminLayout({
+       />
+     </div>
+   )
+-}
+\ No newline at end of file
++}
+diff --git a/app/globals.css b/app/globals.css
+index ddaba30..0417074 100644
+--- a/app/globals.css
++++ b/app/globals.css
+@@ -15048,3 +15048,12 @@ a.cat {
+ .skel-card--profile{height:130px}
+ @keyframes skel-shimmer{to{background-position:-200% 0}}
+ @media (prefers-reduced-motion: reduce){.skel-card{animation:none}}
++
++/* پچ ۴۱ — منوی گروهی پنل ادمین + اسکلتون شل */
++.admin-nav-group-label{font-size:10px;font-weight:800;color:#9a9287;letter-spacing:.3px;padding:16px 14px 6px;text-align:right;user-select:none}
++.admin-nav-group:first-child .admin-nav-group-label{padding-top:2px}
++.admin-shell.dark-mode .admin-nav-group-label{color:#7a746a}
++.admin-drawer-group-label{font-size:10px;font-weight:800;color:#9a9287;letter-spacing:.3px;padding:14px 16px 4px;text-align:right;user-select:none}
++.admin-drawer-group:first-child .admin-drawer-group-label{padding-top:4px}
++.admin-skel-bar{height:38px}
++.admin-main > [aria-busy='true']{padding:6px 0}
+diff --git a/patch-41-admin-shell-nav-ux-RELEASE.md b/patch-41-admin-shell-nav-ux-RELEASE.md
+new file mode 100644
+index 0000000..e097ccc
+--- /dev/null
++++ b/patch-41-admin-shell-nav-ux-RELEASE.md
+@@ -0,0 +1,28 @@
++# پچ ۴۱ — پنل ادمین: سرعت لود + منوی گروهی یکپارچه + شل همیشه حاضر
++
++## تغییرات
++1. **سرعت لود — احراز هویت فقط یک‌بار**: قبلاً `getUser()` به‌ازای هر تغییر مسیر به سرور Supabase Auth درخواست شبکه می‌زد (useEffect وابسته به pathname). حالا فقط در mount یک‌بار چک می‌شود + listener‌ روی `onAuthStateChange` (خروج در تب دیگر → این تب هم به لاگین می‌رود). درخواست اجازه Notification هم از هر ناوبری به یک‌بار کاهش یافت.
++2. **حذف «حالت لودِ» لخت**: قبلاً در ورود مستقیم به هر صفحه ادمین، کل پنل به یک div لخت «در حال بررسی...» تبدیل می‌شد. حالا شل (سایدبار + هدر) بلافاصله رندر می‌شود و فقط ناحیه محتوا اسکلتون شیمر نشان می‌دهد (`aria-busy`).
++3. **منوی گروهی یکپارچه**: ۲۲ آیتم تختِ شلوغ → ۶ گروه با برچسب: عملیات روزانه (۴)، کاتالوگ و منو (۵)، باشگاه و وفاداری (۵)، کیف پول (۱)، گزارش‌ها (۳)، سیستم (۴). یک منبع واحد `MENU_GROUPS` برای سایدبار دسکتاپ **و** drawer موبایل — دیگر دو ساختار موازی نیست.
++4. **امنیت — ممیزی شد، بدون تغییر لازم**: هر ۲۰ route در `app/api/admin/**` گارد `guardAdmin`/`assertAdmin`/`requireAdmin` دارند (شامل ۴ route کیف پول که از `guardAdmin` استفاده می‌کنند). rate-limit هم فعال است. پس این پچ فقط UI است؛ سطح امنیت تغییر نکرده و خراب هم نشده.
++5. **جمع‌وجور**: همبرگر فقط در موبایل (<768px) باقی است (CSS قبلاً درست بود)؛ در دسکتاپ هیچ stub لود و هیچ آیتم تکراری نیست.
++
++## ترتیب اعمال
++پچ ۴۰ باید قبلاً merge شده باشد (PR #73). بدون migration:
++```powershell
++git checkout main && git pull
++git checkout -b fix/patch-41-admin-shell-nav-ux
++git apply --ignore-whitespace patch-41-admin-shell-nav-ux.patch
++npx tsc --noEmit
++git add -A
++git commit -m "perf(ui): admin auth-once + shell-first loading + grouped unified menu (patch 41)"
++git push -u origin fix/patch-41-admin-shell-nav-ux
++```
++
++## تست
++1. ورود مستقیم به `/admin/orders` (F5): سایدبار فوری حاضر؛ محتوا اسکلتون کوتاه؛ صفحه لخت «در حال بررسی» دیده نشود
++2. جابه‌جایی بین ۴-۵ صفحه ادمین: در Network tab دیگر درخواست auth در هر ناوبری نباشد
++3. دسکتاپ: منو در ۶ گروه مرتب؛ بج سفارش‌های باز روی «سفارش‌ها» کار کند
++4. موبایل: drawer همان گروه‌ها را نشان دهد؛ ESC و قفل اسکرول مثل قبل
++5. خروج از یک تب → تب دیگر به لاگین هدایت شود
++6. تم تاریک: برچسب گروه‌ها خوانا بماند
