@@ -9,6 +9,67 @@ import NewOrderAlert from './components/NewOrderAlert'
 import { useOrderNotifications } from '@/lib/use-order-notifications'
 import { useDocumentTitle } from '@/lib/use-document-title'
 
+// 🎯 پچ ۴۱ — منوی یکپارچه: یک منبع واحد برای سایدبار دسکتاپ و drawer موبایل
+// ۲۲ آیتم قبلاً فهرست تختِ شلوغ بود؛ حالا ۶ گروه منطقی با برچسب — دسترسی به همه بخش‌ها از یک ساختار واحد
+const MENU_GROUPS = [
+  {
+    key: 'ops',
+    label: 'عملیات روزانه',
+    items: [
+      { href: '/admin', label: 'داشبورد', icon: '🏠' },
+      { href: '/admin/orders', label: 'سفارش‌ها', icon: '🛒' },
+      { href: '/admin/orders/new', label: 'ثبت سفارش حضوری', icon: '➕' },
+      { href: '/admin/customers', label: 'مشتریان', icon: '👥' },
+    ],
+  },
+  {
+    key: 'catalog',
+    label: 'کاتالوگ و منو',
+    items: [
+      { href: '/admin/products', label: 'محصولات', icon: '☕' },
+      { href: '/admin/categories', label: 'دسته‌ها', icon: '📂' },
+      { href: '/admin/tables', label: 'میزها', icon: '🪑' },
+      { href: '/admin/themes', label: 'تم‌ها', icon: '🎨' },
+      { href: '/admin/quotes', label: 'جملات', icon: '💬' },
+    ],
+  },
+  {
+    key: 'loyalty',
+    label: 'باشگاه و وفاداری',
+    items: [
+      { href: '/admin/memberships', label: 'باشگاه مشتریان', icon: '🎓' },
+      { href: '/admin/settings/grades', label: 'گرید مشتریان', icon: '🏆' },
+      { href: '/admin/settings/subscriptions', label: 'اشتراک ماهیانه', icon: '⭐' },
+      { href: '/admin/coupons', label: 'کد تخفیف', icon: '🎟️' },
+      { href: '/admin/settings/club', label: 'قوانین اعتبار', icon: '🛡️' },
+    ],
+  },
+  {
+    key: 'wallet',
+    label: 'کیف پول',
+    items: [{ href: '/admin/wallet', label: 'کیف پول مشتریان', icon: '👛' }],
+  },
+  {
+    key: 'reports',
+    label: 'گزارش‌ها',
+    items: [
+      { href: '/admin/reports/sales', label: 'گزارش فروش', icon: '💰' },
+      { href: '/admin/cancellations', label: 'آمار لغوها', icon: '📊' },
+      { href: '/admin/cancellation-reasons', label: 'دلایل لغو', icon: '🚫' },
+    ],
+  },
+  {
+    key: 'system',
+    label: 'سیستم',
+    items: [
+      { href: '/admin/settings', label: 'تنظیمات', icon: '⚙️' },
+      { href: '/admin/settings/payment', label: 'تنظیمات پرداخت', icon: '💳' },
+      { href: '/admin/settings/sms', label: 'تنظیمات پیامک', icon: '📱' },
+      { href: '/admin/backup', label: 'پشتیبان‌گیری', icon: '💾' },
+    ],
+  },
+] as const
+
 export default function AdminLayout({
   children,
 }: {
@@ -79,39 +140,47 @@ export default function AdminLayout({
       return
     }
 
-    const checkUser = async () => {
-      const supabase = supabaseBrowser()
-      const { data } = await supabase.auth.getUser()
+    // 🎯 پچ ۴۱: احراز هویت فقط یک‌بار در mount — قبلاً در هر تغییر مسیر
+    // getUser() به سرور auth درخواست شبکه می‌زد و هر ناوبری را کند می‌کرد.
+    const supabase = supabaseBrowser()
+    let mounted = true
 
-      if (!data.user) {
-        router.replace('/admin/login')
-        return
-      }
-
-      try {
-        if (
-          'Notification' in window &&
-          Notification.permission === 'default'
-        ) {
-          setTimeout(() => {
-            Notification.requestPermission().catch(() => {})
-          }, 3000)
+    supabase.auth
+      .getUser()
+      .then(({ data }) => {
+        if (!mounted) return
+        if (!data.user) {
+          router.replace('/admin/login')
+          return
         }
-      } catch {}
+        setChecking(false)
 
-      setChecking(false)
+        try {
+          if ('Notification' in window && Notification.permission === 'default') {
+            setTimeout(() => {
+              Notification.requestPermission().catch(() => {})
+            }, 3000)
+          }
+        } catch {}
+      })
+      .catch(() => {
+        if (mounted) router.replace('/admin/login')
+      })
+
+    // خروج در تب دیگر → این تب هم به لاگین برود
+    const { data: sub } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_OUT') router.replace('/admin/login')
+    })
+
+    return () => {
+      mounted = false
+      sub.subscription.unsubscribe()
     }
-
-    checkUser()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pathname])
+  }, [])
 
   if (pathname === '/admin/login') {
     return <main>{children}</main>
-  }
-
-  if (checking) {
-    return <div style={{ padding: 24 }}>در حال بررسی...</div>
   }
 
   const handleLogout = async () => {
@@ -119,31 +188,6 @@ export default function AdminLayout({
     await supabase.auth.signOut()
     router.replace('/admin/login')
   }
-
-  const menuItems = [
-    { href: '/admin', label: 'داشبورد', icon: '🏠' },
-	{ href: '/admin/memberships', label: 'باشگاه مشتریان', icon: '🎓' },
-    { href: '/admin/orders', label: 'سفارش‌ها', icon: '🛒' },
-    { href: '/admin/orders/new', label: 'ثبت سفارش حضوری', icon: '➕' },
-    { href: '/admin/customers', label: 'مشتریان', icon: '👥' },
-    { href: '/admin/products', label: 'محصولات', icon: '☕' },
-    { href: '/admin/categories', label: 'دسته‌ها', icon: '📂' },
-    { href: '/admin/tables', label: 'میزها', icon: '🪑' },
-    { href: '/admin/themes', label: 'تم‌ها', icon: '🎨' },
-    { href: '/admin/quotes', label: 'جملات', icon: '💬' },
-    { href: '/admin/coupons', label: 'کد تخفیف', icon: '🎟️' },
-    { href: '/admin/cancellation-reasons', label: 'دلایل لغو', icon: '🚫' },
-    { href: '/admin/cancellations', label: 'آمار لغوها', icon: '📊' },
-    { href: '/admin/reports/sales', label: 'گزارش فروش', icon: '💰' },
-    { href: '/admin/backup', label: 'پشتیبان‌گیری', icon: '💾' },
-	{ href: '/admin/settings/payment', label: 'تنظیمات پرداخت', icon: '💳' },
-	{ href: '/admin/settings/sms', label: 'تنظیمات پیامک', icon: '📱' },
-	{ href: '/admin/wallet', label: 'کیف پول مشتریان', icon: '👛' },
-	{ href: '/admin/settings/club', label: 'قوانین اعتبار', icon: '🛡️' },
-	{ href: '/admin/settings/grades', label: 'گرید مشتریان', icon: '🏆' },
-	{ href: '/admin/settings/subscriptions', label: 'اشتراک ماهیانه', icon: '⭐' },
-    { href: '/admin/settings', label: 'تنظیمات', icon: '⚙️' },
-  ]
 
   const isActive = (href: string) => {
     if (href === '/admin') return pathname === '/admin'
@@ -156,6 +200,8 @@ export default function AdminLayout({
     return pathname.startsWith(href)
   }
 
+  // 🎯 پچ ۴۱: شل همیشه رندر می‌شود — در حالت checking فقط محتوا اسکلتون است
+  // (قبلاً صفحه لخت «در حال بررسی...» کل پنل از جمله سایدبار را می‌بست)
   return (
     <div className="admin-shell">
       {/* ═══════════ هدر موبایل (فقط < 768px) ═══════════ */}
@@ -186,30 +232,35 @@ export default function AdminLayout({
         </div>
 
         <nav className="admin-nav">
-          {menuItems.map((item) => {
-            const isOrders = item.href === '/admin/orders'
-            const hasBadge = isOrders && pendingCount > 0
+          {MENU_GROUPS.map((group) => (
+            <div key={group.key} className="admin-nav-group">
+              <div className="admin-nav-group-label">{group.label}</div>
+              {group.items.map((item) => {
+                const isOrders = item.href === '/admin/orders'
+                const hasBadge = isOrders && pendingCount > 0
 
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`admin-nav-item ${
-                  isActive(item.href) ? 'active' : ''
-                }`}
-              >
-                <span className="admin-nav-icon">{item.icon}</span>
-                <span>{item.label}</span>
-                {hasBadge && (
-                  <span
-                    className={`admin-nav-badge ${flash ? 'flash' : ''}`}
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={`admin-nav-item ${
+                      isActive(item.href) ? 'active' : ''
+                    }`}
                   >
-                    {pendingCount.toLocaleString('fa-IR')}
-                  </span>
-                )}
-              </Link>
-            )
-          })}
+                    <span className="admin-nav-icon">{item.icon}</span>
+                    <span>{item.label}</span>
+                    {hasBadge && (
+                      <span
+                        className={`admin-nav-badge ${flash ? 'flash' : ''}`}
+                      >
+                        {pendingCount.toLocaleString('fa-IR')}
+                      </span>
+                    )}
+                  </Link>
+                )
+              })}
+            </div>
+          ))}
         </nav>
 
         <div className="admin-sidebar-footer">
@@ -232,8 +283,18 @@ export default function AdminLayout({
         </div>
       </aside>
 
-      {/* ═══════════ محتوای اصلی ═══════════ */}
-      <main className="admin-main">{children}</main>
+      {/* ═══════════ محتوای اصلی — در checking اسکلتون به‌جای صفحه لخت ═══════════ */}
+      <main className="admin-main">
+        {checking ? (
+          <div aria-busy="true">
+            <div className="skel-card admin-skel-bar" />
+            <div className="skel-card" />
+            <div className="skel-card" />
+          </div>
+        ) : (
+          children
+        )}
+      </main>
 
       {/* ═══════════ Drawer موبایل ═══════════ */}
       {drawerOpen && (
@@ -260,29 +321,34 @@ export default function AdminLayout({
             </div>
 
             <nav className="admin-drawer-nav">
-              {menuItems.map((item) => {
-                const isOrders = item.href === '/admin/orders'
-                const hasBadge = isOrders && pendingCount > 0
+              {MENU_GROUPS.map((group) => (
+                <div key={group.key} className="admin-drawer-group">
+                  <div className="admin-drawer-group-label">{group.label}</div>
+                  {group.items.map((item) => {
+                    const isOrders = item.href === '/admin/orders'
+                    const hasBadge = isOrders && pendingCount > 0
 
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className={`admin-drawer-item ${
-                      isActive(item.href) ? 'active' : ''
-                    }`}
-                    onClick={() => setDrawerOpen(false)}
-                  >
-                    <span className="admin-drawer-icon">{item.icon}</span>
-                    <span className="admin-drawer-label">{item.label}</span>
-                    {hasBadge && (
-                      <span className="admin-drawer-badge">
-                        {pendingCount.toLocaleString('fa-IR')}
-                      </span>
-                    )}
-                  </Link>
-                )
-              })}
+                    return (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        className={`admin-drawer-item ${
+                          isActive(item.href) ? 'active' : ''
+                        }`}
+                        onClick={() => setDrawerOpen(false)}
+                      >
+                        <span className="admin-drawer-icon">{item.icon}</span>
+                        <span className="admin-drawer-label">{item.label}</span>
+                        {hasBadge && (
+                          <span className="admin-drawer-badge">
+                            {pendingCount.toLocaleString('fa-IR')}
+                          </span>
+                        )}
+                      </Link>
+                    )
+                  })}
+                </div>
+              ))}
             </nav>
 
             <div className="admin-drawer-footer">

@@ -15048,3 +15048,12 @@ a.cat {
 .skel-card--profile{height:130px}
 @keyframes skel-shimmer{to{background-position:-200% 0}}
 @media (prefers-reduced-motion: reduce){.skel-card{animation:none}}
+
+/* پچ ۴۱ — منوی گروهی پنل ادمین + اسکلتون شل */
+.admin-nav-group-label{font-size:10px;font-weight:800;color:#9a9287;letter-spacing:.3px;padding:16px 14px 6px;text-align:right;user-select:none}
+.admin-nav-group:first-child .admin-nav-group-label{padding-top:2px}
+.admin-shell.dark-mode .admin-nav-group-label{color:#7a746a}
+.admin-drawer-group-label{font-size:10px;font-weight:800;color:#9a9287;letter-spacing:.3px;padding:14px 16px 4px;text-align:right;user-select:none}
+.admin-drawer-group:first-child .admin-drawer-group-label{padding-top:4px}
+.admin-skel-bar{height:38px}
+.admin-main > [aria-busy='true']{padding:6px 0}
