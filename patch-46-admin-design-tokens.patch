@@ -1,0 +1,408 @@
+diff --git a/app/globals.css b/app/globals.css
+index 11ce023..7ec0382 100644
+--- a/app/globals.css
++++ b/app/globals.css
+@@ -642,9 +642,38 @@ footer {
+    ======================================== */
+ 
+ .admin-shell {
++  /* 🎯 پچ ۴۶: توکن‌های تم ادمین — مقدار پیش‌فرض هر توکن = رنگ فعلی (تغییر بصری صفر).
++     اتصال به دیتابیس و ویرایشگر در پچ ۵۱ */
++  --admin-bg: #f7f3eb;
++  --admin-surface: #fffdf9;
++  --admin-surface-2: #f5f0e9;
++  --admin-border: #e3ddd2;
++  --admin-text: #4a443d;
++  --admin-text-muted: #766f64;
++  --admin-primary: #6b4f3a;
++  --admin-primary-fg: #ffffff;
++  --admin-hover: #f5f0e9;
++  --admin-danger: #dc2626;
++  --admin-danger-strong: #9b3c32;
++  --admin-danger-soft: #fde8e6;
++  --admin-success: #477052;
++  --admin-success-soft: #e5f0e6;
++  --admin-warning: #d99f59;
++  --admin-radius: 16px;
++  --admin-radius-sm: 10px;
++  --admin-shadow: 0 1px 4px rgba(41, 37, 31, 0.08);
++  --admin-font-body: 'Vazirmatn', Tahoma, Arial, sans-serif;
++  --admin-font-heading: 'Vazirmatn', Tahoma, Arial, sans-serif;
++  --admin-space-1: 4px;
++  --admin-space-2: 8px;
++  --admin-space-3: 12px;
++  --admin-space-4: 16px;
++  --admin-space-5: 20px;
++  --admin-space-6: 24px;
++
+   display: flex;
+   min-height: 100vh;
+-  background: #f7f3eb;
++  background: var(--admin-bg);
+   direction: rtl;
+   overflow-x: hidden;
+   width: 100%;
+@@ -654,8 +683,8 @@ footer {
+ .admin-sidebar {
+   width: 240px;
+   flex-shrink: 0;
+-  background: #fffdf9;
+-  border-left: 1px solid #e3ddd2;
++  background: var(--admin-surface);
++  border-left: 1px solid var(--admin-border);
+   display: flex;
+   flex-direction: column;
+   position: sticky;
+@@ -664,25 +693,25 @@ footer {
+ }
+ 
+ .admin-sidebar-header {
+-  padding: 20px 18px;
+-  border-bottom: 1px solid #e3ddd2;
++  padding: var(--admin-space-4) var(--admin-space-4);
++  border-bottom: 1px solid var(--admin-border);
+ }
+ 
+ .admin-logo {
+   font-size: 18px;
+   font-weight: 800;
+-  color: #6b4f3a;
++  color: var(--admin-primary);
+ }
+ 
+ .admin-logo-sub {
+   font-size: 11px;
+-  color: #766f64;
++  color: var(--admin-text-muted);
+   margin-top: 4px;
+ }
+ 
+ .admin-nav {
+   flex: 1;
+-  padding: 12px 10px;
++  padding: var(--admin-space-3) var(--admin-space-2);
+   display: flex;
+   flex-direction: column;
+   gap: 4px;
+@@ -693,9 +722,9 @@ footer {
+   display: flex;
+   align-items: center;
+   gap: 10px;
+-  padding: 10px 12px;
+-  border-radius: 10px;
+-  color: #4a443d;
++  padding: var(--admin-space-2) var(--admin-space-3);
++  border-radius: var(--admin-radius-sm);
++  color: var(--admin-text);
+   font-size: 13px;
+   font-weight: 600;
+   text-decoration: none;
+@@ -709,12 +738,12 @@ footer {
+ }
+ 
+ .admin-nav-item:hover {
+-  background: #f5f0e9;
+-  color: #6b4f3a;
++  background: var(--admin-hover);
++  color: var(--admin-primary);
+ }
+ 
+ .admin-nav-item.active {
+-  background: #6b4f3a;
++  background: var(--admin-primary);
+   color: #ffffff;
+ }
+ 
+@@ -724,17 +753,17 @@ footer {
+ }
+ 
+ .admin-sidebar-footer {
+-  padding: 12px 10px;
+-  border-top: 1px solid #e3ddd2;
++  padding: var(--admin-space-3) var(--admin-space-2);
++  border-top: 1px solid var(--admin-border);
+ }
+ 
+ .admin-logout-btn {
+   display: flex;
+   align-items: center;
+   gap: 10px;
+-  padding: 10px 12px;
+-  border-radius: 10px;
+-  color: #9b3c32;
++  padding: var(--admin-space-2) var(--admin-space-3);
++  border-radius: var(--admin-radius-sm);
++  color: var(--admin-danger-strong);
+   font-size: 13px;
+   font-weight: 600;
+   border: 0;
+@@ -747,14 +776,14 @@ footer {
+ }
+ 
+ .admin-logout-btn:hover {
+-  background: #fde8e6;
++  background: var(--admin-danger-soft);
+ }
+ 
+ /* محتوا */
+ .admin-main {
+   flex: 1;
+   min-width: 0;
+-  padding: 24px 28px;
++  padding: var(--admin-space-5) var(--admin-space-6);
+   overflow-x: hidden;
+ }
+ 
+@@ -781,7 +810,7 @@ footer {
+ 
+ .admin-main .admin-subtitle {
+   margin: 8px 0 0;
+-  color: #766f64;
++  color: var(--admin-text-muted);
+   font-size: 13px;
+ }
+ 
+@@ -796,11 +825,11 @@ footer {
+ }
+ 
+ .admin-card {
+-  background: #fffdf9;
+-  border: 1px solid #e3ddd2;
+-  border-radius: 16px;
+-  padding: 20px;
+-  margin-bottom: 24px;
++  background: var(--admin-surface);
++  border: 1px solid var(--admin-border);
++  border-radius: var(--admin-radius);
++  padding: var(--admin-space-4);
++  margin-bottom: var(--admin-space-5);
+ }
+ 
+ .card-title {
+@@ -927,8 +956,8 @@ footer {
+ 
+ .admin-error {
+   padding: 12px 16px;
+-  background: #fde8e6;
+-  color: #9b3c32;
++  background: var(--admin-danger-soft);
++  color: var(--admin-danger-strong);
+   border-radius: 10px;
+   font-size: 13px;
+   font-weight: 600;
+@@ -980,8 +1009,8 @@ footer {
+     bottom: 0;
+     left: 0;
+     right: 0;
+-    background: #fffdf9;
+-    border-top: 1px solid #e3ddd2;
++    background: var(--admin-surface);
++    border-top: 1px solid var(--admin-border);
+     z-index: 100;
+     padding: 6px 4px calc(6px + env(safe-area-inset-bottom));
+     box-shadow: 0 -4px 20px rgba(41, 37, 31, 0.08);
+@@ -995,7 +1024,7 @@ footer {
+     gap: 2px;
+     padding: 6px 2px;
+     border-radius: 10px;
+-    color: #766f64;
++    color: var(--admin-text-muted);
+     text-decoration: none;
+     min-width: 0;
+     transition: all 0.15s ease;
+@@ -1016,8 +1045,8 @@ footer {
+   }
+ 
+   .admin-mobile-item.active {
+-    color: #6b4f3a;
+-    background: #f5f0e9;
++    color: var(--admin-primary);
++    background: var(--admin-hover);
+   }
+ 
+   .form-grid,
+@@ -7377,6 +7406,14 @@ body {
+   --admin-text-muted: #9a9287;
+   --admin-primary: #a88264;
+   --admin-hover: #2d2924;
++  /* 🎯 پچ ۴۶: توکن‌های اضافه برای حالت شبانه (radius/shadow/font/space از .admin-shell به ارث می‌رسد) */
++  --admin-primary-fg: #ffffff;
++  --admin-danger: #dc2626;
++  --admin-danger-strong: #d97a6c;
++  --admin-danger-soft: rgba(217, 122, 108, 0.15);
++  --admin-success: #8cc79a;
++  --admin-success-soft: #2d5d3e;
++  --admin-warning: #d99f59;
+ 
+   background: var(--admin-bg);
+   color: var(--admin-text);
+@@ -7410,7 +7447,7 @@ body {
+ }
+ 
+ .admin-shell.dark-mode .admin-nav-item.active {
+-  background: #6b4f3a;
++  background: var(--admin-primary);
+   color: #fff;
+ }
+ 
+@@ -8023,7 +8060,7 @@ body {
+   justify-content: center;
+   padding: 0 8px;
+   border-radius: 999px;
+-  background: #dc2626;
++  background: var(--admin-danger);
+   color: #fff;
+   font-size: 11px;
+   font-weight: 800;
+@@ -8066,7 +8103,7 @@ body {
+   justify-content: center;
+   padding: 0 5px;
+   border-radius: 999px;
+-  background: #dc2626;
++  background: var(--admin-danger);
+   color: #fff;
+   font-size: 9px;
+   font-weight: 800;
+@@ -11608,8 +11645,8 @@ body {
+ }
+ 
+ .admin-shell.dark-mode .filter-chip.cancel-chip.chip-danger.active {
+-  background: #9b3c32;
+-  border-color: #9b3c32;
++  background: var(--admin-danger-strong);
++  border-color: var(--admin-danger-strong);
+   color: #fff;
+ }
+ 
+@@ -11685,9 +11722,9 @@ body {
+     width: 44px;
+     height: 44px;
+     padding: 0;
+-    border: 1px solid #e3ddd2;
++    border: 1px solid var(--admin-border);
+     border-radius: 50%;
+-    background: #fffdf9;
++    background: var(--admin-surface);
+     color: #29251f;
+     font-size: 20px;
+     font-family: inherit;
+@@ -11742,8 +11779,8 @@ body {
+     z-index: 90;
+     height: 56px;
+     padding: 0 14px;
+-    background: #fffdf9;
+-    border-bottom: 1px solid #e3ddd2;
++    background: var(--admin-surface);
++    border-bottom: 1px solid var(--admin-border);
+     box-shadow: 0 2px 8px rgba(41, 37, 31, 0.06);
+   }
+ 
+@@ -11751,7 +11788,7 @@ body {
+     flex: 1;
+     font-size: 16px;
+     font-weight: 800;
+-    color: #6b4f3a;
++    color: var(--admin-primary);
+     text-align: center;
+     padding-inline-end: 32px; /* تعادل با دکمه */
+   }
+@@ -11775,7 +11812,7 @@ body {
+   }
+ 
+   .admin-mobile-menu-btn:active {
+-    background: #f5f0e9;
++    background: var(--admin-hover);
+   }
+ 
+   .admin-mobile-menu-btn span {
+@@ -11801,7 +11838,7 @@ body {
+     height: 24px;
+     padding: 0 7px;
+     border-radius: 999px;
+-    background: #dc2626;
++    background: var(--admin-danger);
+     color: #fff;
+     font-size: 11px;
+     font-weight: 800;
+diff --git a/patch-46-admin-design-tokens-RELEASE.md b/patch-46-admin-design-tokens-RELEASE.md
+new file mode 100644
+index 0000000..0ad30f9
+--- /dev/null
++++ b/patch-46-admin-design-tokens-RELEASE.md
+@@ -0,0 +1,76 @@
++# پچ ۴۶ — توکن‌های تم ادمین (لایه ۱ + لایه ۲: شِل) — بدون تغییر رنگ
++
++پیش‌نیاز: پچ ۴۵ مرج شده باشد (PR #78). بدون migration.
++
++## این پچ چه می‌سازد؟
++زیربنای شخصی‌سازی کامل پنل (رنگ/فونت/فاصله/انحنا) به‌صورت **متغیرهای CSS استاندارد**.
++از این به بعد هر تغییر تم = عوض کردن چند متغیر، نه صدها hex پراکنده.
++
++## تغییرات
++
++### ۱) بلوک توکن‌ها روی `.admin-shell` (۲۶ توکن)
++نام‌گذاری از قرارداد موجود `--admin-*` (که دارک‌مود از قبل داشت) ادامه یافت — نه سیستم موازی.
++**مقدار پیش‌فرض هر توکن = دقیقاً همان رنگ فعلی → تغییر بصری صفر:**
++
++| گروه | توکن‌ها |
++|---|---|
++| سطوح | `--admin-bg / -surface / -surface-2` |
++| متن | `--admin-text / -text-muted` |
++| برند | `--admin-primary / -primary-fg` |
++| وضعیت | `--admin-danger / -danger-strong / -danger-soft / -success / -success-soft / -warning` |
++| فرم | `--admin-radius / -radius-sm / -shadow` |
++| فونت | `--admin-font-body / -font-heading` (فعلاً Vazirmatn) |
++| فاصله | `--admin-space-1…6` (4/8/12/16/20/24px) |
++
++### ۲) `.admin-shell.dark-mode`
++۶ توکن رنگِ جدید برای حالت شبانه اضافه شد (danger-strong = `#d97a6c` مطابق دکمهٔ خروج فعلی دارک).
++قوانین صریح دارک‌مود دست‌نخورده ماند → **حالت شبانه هیچ تغییری نمی‌کند**. توکن‌های غیررنگی از
++`.admin-shell` به ارث می‌رسند.
++
++### ۳) مهاجرت hex → var (۳۵ مورد، فقط سلکتورهای `.admin`)
++با اسکریپت (`scripts/migrate_admin_tokens_46.py`) با سه گارد: فقط سلکتورهای ادمین،
++هرگز تعریف متغیرها، هرگز داخل keyframes. hexهای باقی‌مانده در فایل متعلق به سایت مشتری‌اند
++(`.card-title`، `.btn`، `.dashboard`، …) — مهاجرت‌شان طبق برنامهٔ ماژول‌به‌ماژول در پچ‌های آینده.
++
++### ۴) فشرده‌سازی ظریف فاصله‌های شِل (تنها تغییر عمدیِ قابل دیدن)
++| عنصر | قبل | بعد |
++|---|---|---|
++| هدر سایدبار | 20×18 | 16×16 |
++| ناوبری | 12×10 | 12×8 |
++| آیتم منو / خروج | 10×12 | 8×12 |
++| فوتر سایدبار | 12×10 | 12×8 |
++| محتوای اصلی | 24×28 | 20×24 |
++| کارت (padding / فاصله) | 20 / 24 | 16 / 20 |
++
++radius شِل هم توکن شد (کارت 16→`--admin-radius`، منو/خروج 10→`--admin-radius-sm` — هم‌ارزش).
++
++## خارج از دامنه این پچ (تصمیم re-scope)
++- **migration دیتابیس** (ستون `tokens` + فیلد `scope` روی `themes`) → پچ ۵۱، همراه ویرایشگر تم که
++  مصرف‌کنندهٔ آن است — مایگریشن بی‌مصرف الان فقط ریسک است
++- فونت آپلودی، پریست‌ها، توکن‌سازی سایت مشتری → پچ ۵۱
++
++## دروازه‌ها
++- verifier CSS: توازن 2278 جفت آکولاد، گارد دسکتاپ سالم، بدون var(var(…) جدید → ALL SAFE
++- `tsc --noEmit` ✓ — `next build` تولیدی با mock ✓ — apply-check + تایپ پس از اعمال ✓
++
++## اعمال (PowerShell)
++```powershell
++git checkout main && git pull
++git checkout -b fix/patch-46-admin-design-tokens
++git apply --ignore-whitespace --verbose patch-46-admin-design-tokens.patch
++# صحت اعمال — انتظار دقیق:
++(Select-String -Path "app\globals.css" -Pattern "--admin-radius-sm").Count   # 3  (تعریف + منو + خروج)
++(Select-String -Path "app\globals.css" -Pattern "--admin-space-5").Count     # 3  (تعریف + main + کارت)
++(Select-String -Path "app\globals.css" -Pattern "--admin-surface:").Count    # 2  (light + dark تعریف)
++git add -A
++git commit -m "refactor(admin): patch 46 - design tokens foundation + shell chrome migration"
++git push -u origin fix/patch-46-admin-design-tokens
++```
++سپس PR و merge: `https://github.com/hadiassadi/cafe-park-menu/compare/main...fix/patch-46-admin-design-tokens`
++
++## تست بعد از merge
++1. `git checkout main` ← `git pull` ← ری‌استارت dev ← `Ctrl+F5`
++2. **رنگ‌ها هیچ تغییری نکرده‌اند** (light و dark هر دو مثل قبل)
++3. سایدبار/کارت‌ها کمی جمع‌وجورتر شده‌اند (فشرده‌سازی عمدی فاصله‌ها)
++4. drawer موبایل و منوی تاشو مثل قبل سالم
++5. اگر رنگ یا چیدمانی خراب شده: اسکرین‌شات + خروجی سه دستور Select-String بالا
