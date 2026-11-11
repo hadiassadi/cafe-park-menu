@@ -1,0 +1,436 @@
+diff --git a/app/api/customer/me/route.ts b/app/api/customer/me/route.ts
+index 102a5f2..bde837a 100644
+--- a/app/api/customer/me/route.ts
++++ b/app/api/customer/me/route.ts
+@@ -1,13 +1,25 @@
+ import { NextResponse } from 'next/server'
+-import { createClient } from '@supabase/supabase-js'
++import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+ import { cookies } from 'next/headers'
+ import { hashData } from '@/lib/utils/hash'
+ import { getVerifiedPhoneHash } from '@/lib/sms/otp'
++import { identityGet, identitySet, IDENTITY_TTL } from '@/lib/identity-cache'
+ import crypto from 'crypto'
+ import 'server-only'
+ 
+ export const dynamic = 'force-dynamic'
+ 
++// 🎯 پچ ۴۰ — کلاینت ادمین یک‌بار ساخته می‌شود (به‌جای هر درخواست)
++let _db: SupabaseClient | null = null
++function db(): SupabaseClient {
++  if (_db) return _db
++  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
++  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
++  if (!url || !key) throw new Error('Missing Supabase admin env')
++  _db = createClient(url, key, { auth: { persistSession: false } })
++  return _db
++}
++
+ export async function GET() {
+   try {
+     const cookieStore = await cookies()
+@@ -17,11 +29,7 @@ export async function GET() {
+     const deviceIdHashNew = hashData(deviceToken)
+     const deviceIdHashOld = crypto.createHash('sha256').update(deviceToken).digest('hex')
+ 
+-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+-    const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+-    if (!url || !key) throw new Error('Missing Supabase admin env')
+-    
+-    const db = createClient(url, key, { auth: { persistSession: false } })
++    const conn = db()
+ 
+     let customer: { name: string; phone: string } | null = null
+ 
+@@ -29,28 +37,48 @@ export async function GET() {
+     // مشتریِ تازه‌ثبت‌نام‌شده هنوز سفارشی ندارد و با دستگاه پیدا نمی‌شود.
+     const verifiedHash = await getVerifiedPhoneHash()
+     if (verifiedHash) {
+-      const { data: verifiedCustomer } = await db
+-        .from('customers')
+-        .select('phone, name')
+-        .eq('phone_hash', verifiedHash)
+-        .eq('verification_status', 'verified')
+-        .maybeSingle()
+-      if (verifiedCustomer) {
+-        customer = { name: verifiedCustomer.name || 'کاربر', phone: verifiedCustomer.phone }
++      // 🎯 پچ ۴۰: کش هویت نشست تأییدشده (TTL ۵ دقیقه) — فقط نام/شماره
++      const cached = identityGet<{ name: string; phone: string } | null>(`vid:${verifiedHash}`)
++      if (cached !== null) {
++        customer = cached
++      } else {
++        const { data: verifiedCustomer } = await conn
++          .from('customers')
++          .select('phone, name')
++          .eq('phone_hash', verifiedHash)
++          .eq('verification_status', 'verified')
++          .maybeSingle()
++        customer = verifiedCustomer
++          ? { name: verifiedCustomer.name || 'کاربر', phone: verifiedCustomer.phone }
++          : null
++        identitySet(`vid:${verifiedHash}`, customer, IDENTITY_TTL.verifiedSession)
+       }
+     }
+ 
+-    // ۱. اطلاعات مشتری از آخرین سفارش
++    // ۱. اطلاعات مشتری از آخرین سفارش — با کش هویت دستگاه (مثبت ۲ دقیقه / منفی ۲۰ ثانیه)
+     if (!customer) {
+-      const { data: orderData } = await db
+-        .from('orders')
+-        .select('customer_name, customer_phone')
+-        .in('device_id_hash', [deviceIdHashOld, deviceIdHashNew])
+-        .order('created_at', { ascending: false })
+-        .limit(1)
+-        .maybeSingle()
++      const cacheKey = `dev:${deviceIdHashNew}`
++      const cachedDev = identityGet<{ name: string; phone: string } | null>(cacheKey)
++      if (cachedDev !== null) {
++        customer = cachedDev
++      } else {
++        const { data: orderData } = await conn
++          .from('orders')
++          .select('customer_name, customer_phone')
++          .in('device_id_hash', [deviceIdHashOld, deviceIdHashNew])
++          .order('created_at', { ascending: false })
++          .limit(1)
++          .maybeSingle()
+ 
+-      if (orderData) customer = { name: orderData.customer_name, phone: orderData.customer_phone }
++        customer = orderData
++          ? { name: orderData.customer_name, phone: orderData.customer_phone }
++          : null
++        identitySet(
++          cacheKey,
++          customer,
++          customer ? IDENTITY_TTL.deviceIdentity : IDENTITY_TTL.deviceIdentityNegative
++        )
++      }
+     }
+ 
+     // ۲. چک کردن عضویت (اول با شماره تلفن، بعد با دستگاه)
+@@ -63,7 +91,7 @@ export async function GET() {
+       const phoneHash = hashData(customer.phone)
+       
+       // چک کردن عضویت سازمانی با شماره تلفن
+-      const { data: m } = await db
++      const { data: m } = await conn
+         .from('organization_members')
+         .select('organization_id, metadata')
+         .eq('phone_hash', phoneHash)
+@@ -72,7 +100,7 @@ export async function GET() {
+       memberData = m
+ 
+       // چک کردن عضویت عادی با شماره تلفن
+-      const { data: gm } = await db
++      const { data: gm } = await conn
+         .from('customers')
+         .select('phone, name')
+         .eq('phone', customer.phone)
+@@ -82,7 +110,7 @@ export async function GET() {
+     
+     // اگر با شماره تلفن پیدا نشد، با شناسه دستگاه می‌گردیم
+     if (!memberData && !generalMember) {
+-      const { data: m } = await db
++      const { data: m } = await conn
+         .from('organization_members')
+         .select('organization_id, metadata')
+         .in('device_id_hash', [deviceIdHashOld, deviceIdHashNew])
+@@ -90,7 +118,7 @@ export async function GET() {
+         .maybeSingle()
+       memberData = m
+ 
+-      const { data: gm } = await db
++      const { data: gm } = await conn
+         .from('customers')
+         .select('phone, name')
+         .in('device_id_hash', [deviceIdHashOld, deviceIdHashNew])
+@@ -99,8 +127,15 @@ export async function GET() {
+     }
+ 
+     if (memberData && memberData.organization_id) {
+-      const { data: orgData } = await db.from('organizations').select('name').eq('id', memberData.organization_id).single()
+-      if (orgData) membership = { orgId: memberData.organization_id, orgName: orgData.name }
++      // 🎯 پچ ۴۰: نام سازمان با کش (TTL ۵ دقیقه) — نام سازمان به‌ندرت عوض می‌شود
++      const orgKey = `org:${memberData.organization_id}`
++      let orgName = identityGet<string>(orgKey)
++      if (orgName === null) {
++        const { data: orgData } = await conn.from('organizations').select('name').eq('id', memberData.organization_id).single()
++        orgName = orgData?.name ?? ''
++        if (orgName) identitySet(orgKey, orgName, IDENTITY_TTL.orgName)
++      }
++      if (orgName) membership = { orgId: memberData.organization_id, orgName }
+       if (!customer && memberData.metadata?._display_name) {
+         customer = { name: memberData.metadata._display_name, phone: memberData.metadata._phone || '' }
+       }
+diff --git a/app/globals.css b/app/globals.css
+index 16d8693..ddaba30 100644
+--- a/app/globals.css
++++ b/app/globals.css
+@@ -15042,3 +15042,9 @@ a.cat {
+ .payment-method-chip-icon{font-size:16px;line-height:1}
+ .payment-method-chip-check{font-size:10px;background:#6b4f3a;color:#fff;border-radius:999px;width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto}
+ .payment-method-current-hint{display:block;margin-top:8px;font-size:11px;color:#9a9287;text-align:center}
++
++/* پچ ۴۰ — لودر پویا: اسکلتون شیمر پنل مشتری */
++.skel-card{height:90px;border-radius:14px;background:linear-gradient(90deg,#efe9df 25%,#f7f3ec 50%,#efe9df 75%);background-size:200% 100%;animation:skel-shimmer 1.2s linear infinite;border:1px solid #e3ddd2;margin-bottom:12px}
++.skel-card--profile{height:130px}
++@keyframes skel-shimmer{to{background-position:-200% 0}}
++@media (prefers-reduced-motion: reduce){.skel-card{animation:none}}
+diff --git a/app/my-orders/MyOrdersClient.tsx b/app/my-orders/MyOrdersClient.tsx
+index f5eccaa..5427fa2 100644
+--- a/app/my-orders/MyOrdersClient.tsx
++++ b/app/my-orders/MyOrdersClient.tsx
+@@ -81,7 +81,9 @@ function isOrderCancellable(o: Order): boolean {
+ export default function MyOrdersClient() {
+   const { addItem } = useCart()
+   const [orders, setOrders] = useState<Order[]>([])
+-  const [loading, setLoading] = useState(true)
++  // 🎯 پچ ۴۰: لودر پویا — هر بخش هر وقت داده‌اش رسید رندر می‌شود (به‌جای قفل کل صفحه)
++  const [meLoaded, setMeLoaded] = useState(false)
++  const [ordersLoaded, setOrdersLoaded] = useState(false)
+   
+   // ✅ تب‌های اصلی (سفارش‌های باز / تاریخچه)
+   const [activeTab, setActiveTab] = useState<'open' | 'history' | 'debt' | 'wallet' | 'sub'>('open')
+@@ -156,13 +158,16 @@ export default function MyOrdersClient() {
+   const [chargeBusy, setChargeBusy] = useState(false)
+   const [chargeMsg, setChargeMsg] = useState<{ ok: boolean; text: string } | null>(null)
+ 
+-  useEffect(() => {
++  // 🎯 پچ ۴۰: یک تابع مشترک تازه‌سازی وضعیت کیف پول (قبلاً ۳ کپی تکراری بود)
++  const refreshWstatus = useCallback(() => {
+     fetch('/api/wallet/status', { cache: 'no-store' })
+       .then((r) => r.json())
+       .then((d) => { if (d && typeof d.walletEnabled === 'boolean') setWstatus(d) })
+       .catch(() => {})
+   }, [])
+ 
++  useEffect(() => { refreshWstatus() }, [refreshWstatus])
++
+   // ⭐ چیپ اشتراک فعال در نوار چپ کارت پروفایل
+   const refreshSub = useCallback(() => {
+     fetch('/api/subscription', { cache: 'no-store' })
+@@ -187,20 +192,14 @@ export default function MyOrdersClient() {
+   const refreshPanelStatus = useCallback(() => {
+     refreshSub()
+     refreshActiveDiscount()
+-    fetch('/api/wallet/status', { cache: 'no-store' })
+-      .then((r) => r.json())
+-      .then((d) => { if (d && typeof d.walletEnabled === 'boolean') setWstatus(d) })
+-      .catch(() => {})
+-  }, [refreshSub, refreshActiveDiscount])
++    refreshWstatus()
++  }, [refreshSub, refreshActiveDiscount, refreshWstatus])
+ 
+   // بعد از تأیید شماره، هم کیف پول و هم وضعیت تازه می‌شود
+   async function refreshWalletAfterVerify() {
+     await loadWallet()
+     refreshActiveDiscount()
+-    fetch('/api/wallet/status', { cache: 'no-store' })
+-      .then((r) => r.json())
+-      .then((d) => { if (d && typeof d.walletEnabled === 'boolean') setWstatus(d) })
+-      .catch(() => {})
++    refreshWstatus()
+   }
+ 
+   async function requestActivation() {
+@@ -227,24 +226,22 @@ export default function MyOrdersClient() {
+ 
+   useEffect(() => {
+     async function loadData() {
+-      try {
+-        const meRes = await fetch('/api/customer/me', { cache: 'no-store' })
+-        const meData = await meRes.json()
+-        if (meData.customer) setCustomer(meData.customer)
+-        if (meData.membership) setMembership(meData.membership)
+-
+-        const ordersRes = await fetch('/api/customer/orders', { cache: 'no-store' })
+-        const ordersData = await ordersRes.json()
+-        if (ordersData.orders) setOrders(ordersData.orders)
+-
+-        const orgsRes = await fetch('/api/membership/organizations', { cache: 'no-store' })
+-        const orgsData = await orgsRes.json()
+-        if (orgsData.organizations) setOrganizations(orgsData.organizations)
+-
+-        const rulesRes = await fetch('/api/membership/rules', { cache: 'no-store' })
+-        const rulesData = await rulesRes.json()
+-        if (rulesData.general) setRules({ general: rulesData.general, org: rulesData.org })
+-      } catch {} finally { setLoading(false) }
++      // 🎯 پچ ۴۰: موازی‌کاری — هر ۴ درخواست همزمان (قبلاً پشت‌سرهم بود)
++      const [me, ords, orgs, rules] = await Promise.allSettled([
++        fetch('/api/customer/me', { cache: 'no-store' }).then((r) => r.json()),
++        fetch('/api/customer/orders', { cache: 'no-store' }).then((r) => r.json()),
++        fetch('/api/membership/organizations', { cache: 'no-store' }).then((r) => r.json()),
++        fetch('/api/membership/rules', { cache: 'no-store' }).then((r) => r.json()),
++      ])
++      if (me.status === 'fulfilled') {
++        if (me.value?.customer) setCustomer(me.value.customer)
++        if (me.value?.membership) setMembership(me.value.membership)
++      }
++      setMeLoaded(true)
++      if (ords.status === 'fulfilled' && ords.value?.orders) setOrders(ords.value.orders)
++      setOrdersLoaded(true)
++      if (orgs.status === 'fulfilled' && orgs.value?.organizations) setOrganizations(orgs.value.organizations)
++      if (rules.status === 'fulfilled' && rules.value?.general) setRules({ general: rules.value.general, org: rules.value.org })
+     }
+     loadData()
+   }, [])
+@@ -266,7 +263,7 @@ export default function MyOrdersClient() {
+   // 🔁 لینک «سفارش مجدد» مودال خوش‌آمد: /my-orders?reorder=<id> (پچ ۳۵)
+   const reorderAppliedRef = useRef(false)
+   useEffect(() => {
+-    if (loading || reorderAppliedRef.current) return
++    if (!ordersLoaded || reorderAppliedRef.current) return
+     const id = new URLSearchParams(window.location.search).get('reorder')
+     if (!id) return
+     const target = orders.find((o) => o.id === id)
+@@ -275,7 +272,7 @@ export default function MyOrdersClient() {
+     try { window.history.replaceState(null, '', '/my-orders') } catch {}
+     handleReorder(target)
+     // eslint-disable-next-line react-hooks/exhaustive-deps
+-  }, [loading, orders])
++  }, [ordersLoaded, orders])
+ 
+   // 🎯 لغو سفارش از روی کارت — همان منطق صفحه‌ی جزئیات (دلیل + توضیح اختیاری)
+   function openCancel(order: Order) {
+@@ -454,8 +451,17 @@ export default function MyOrdersClient() {
+     } catch (err: any) { setRegisterMsg({ type: 'error', text: err.message }) } finally { setRegisterLoading(false) }
+   }
+ 
+-  if (loading) {
+-    return <div className="my-orders-page"><div className="my-orders-header"><Link href="/" className="my-orders-back">← منو</Link><h1>پنل مشتری</h1><span style={{ width: 60 }} /></div><div className="my-orders-empty">⏳ در حال بارگذاری...</div></div>
++  if (!meLoaded) {
++    // 🎯 پچ ۴۰: لودر پویا — اسکلتون شیمر به‌جای متن «در حال بارگذاری»
++    return (
++      <div className="my-orders-page">
++        <div className="my-orders-header"><Link href="/" className="my-orders-back">← منو</Link><h1>پنل مشتری</h1><span style={{ width: 60 }} /></div>
++        <div className="skel-card skel-card--profile" />
++        <div className="skel-card" style={{ height: 74 }} />
++        <div className="skel-card" style={{ height: 74 }} />
++        <div className="skel-card" style={{ height: 74 }} />
++      </div>
++    )
+   }
+ 
+   // ✅ گرید و کیف پول — برای کارت پروفایل فشرده
+@@ -582,15 +588,15 @@ export default function MyOrdersClient() {
+ 
+           <div className="panel-stats">
+             <div className="panel-stat">
+-              <strong>{orders.length.toLocaleString('fa-IR')}</strong>
++              <strong>{ordersLoaded ? orders.length.toLocaleString('fa-IR') : '⋯'}</strong>
+               <small>سفارش</small>
+             </div>
+             <div className="panel-stat">
+-              <strong>{formatPrice(totalSpent)} <span className="panel-unit">تومان</span></strong>
++              <strong>{ordersLoaded ? <>{formatPrice(totalSpent)} <span className="panel-unit">تومان</span></> : '⋯'}</strong>
+               <small>مجموع خرید</small>
+             </div>
+             <div className="panel-stat">
+-              <strong style={{ color: '#9b3c32' }}>{formatPrice(totalDiscount)} <span className="panel-unit">تومان</span></strong>
++              <strong style={{ color: '#9b3c32' }}>{ordersLoaded ? <>{formatPrice(totalDiscount)} <span className="panel-unit">تومان</span></> : '⋯'}</strong>
+               <small>تخفیف</small>
+             </div>
+           </div>
+@@ -933,6 +939,13 @@ export default function MyOrdersClient() {
+         ) : (
+           <div className="my-orders-empty">🔒 برای دیدن اشتراک‌ها، اول شماره‌ات را تأیید کن.</div>
+         )
++      ) : !ordersLoaded ? (
++        // 🎯 پچ ۴۰: اسکلتون کارت‌های سفارش تا رسیدن لیست
++        <div className="my-orders-list">
++          <div className="skel-card" style={{ height: 92 }} />
++          <div className="skel-card" style={{ height: 92 }} />
++          <div className="skel-card" style={{ height: 92 }} />
++        </div>
+       ) : searchedOrders.length === 0 ? (
+         <div className="my-orders-empty">
+           {orderSearch
+diff --git a/lib/identity-cache.ts b/lib/identity-cache.ts
+new file mode 100644
+index 0000000..56d6904
+--- /dev/null
++++ b/lib/identity-cache.ts
+@@ -0,0 +1,39 @@
++import 'server-only'
++
++// 🎯 پچ ۴۰ — کش درون‌حافظه‌ای «هویت» (فقط اطلاعات هویتی: نام/شماره/شناسه)
++// هیچ مبلغ، موجودی، تخفیف یا وضعیت پرداختی اینجا کش نمی‌شود — آن‌ها همیشه زنده از DB می‌آیند.
++// TTL کوتاه + سقف تعداد ورودی (FIFO) تا حافظه رشد نکند و کهنگی محدود بماند.
++
++type Entry = { value: unknown; exp: number }
++
++const STORE = new Map<string, Entry>()
++const MAX_ENTRIES = 300
++
++export function identityGet<T>(key: string): T | null {
++  const e = STORE.get(key)
++  if (!e) return null
++  if (e.exp < Date.now()) {
++    STORE.delete(key)
++    return null
++  }
++  return e.value as T
++}
++
++export function identitySet(key: string, value: unknown, ttlMs: number): void {
++  if (STORE.size >= MAX_ENTRIES) {
++    const oldest = STORE.keys().next().value
++    if (oldest !== undefined) STORE.delete(oldest)
++  }
++  STORE.set(key, { value, exp: Date.now() + ttlMs })
++}
++
++export const IDENTITY_TTL = {
++  /** نشست شماره تأییدشده (OTP/دعوت) → هویت مشتری */
++  verifiedSession: 5 * 60_000,
++  /** هش دستگاه → هویتِ آخرین سفارش (مثبت) */
++  deviceIdentity: 2 * 60_000,
++  /** هش دستگاه → «هیچ سفارشی نیست» (منفی، کوتاه تا سفارش اول سریع دیده شود) */
++  deviceIdentityNegative: 20_000,
++  /** شناسه سازمان → نام سازمان */
++  orgName: 5 * 60_000,
++} as const
+diff --git a/patch-40-identity-cache-dynamic-loader-RELEASE.md b/patch-40-identity-cache-dynamic-loader-RELEASE.md
+new file mode 100644
+index 0000000..d8fb6c4
+--- /dev/null
++++ b/patch-40-identity-cache-dynamic-loader-RELEASE.md
+@@ -0,0 +1,38 @@
++# پچ ۴۰ — کش هویت + لودر پویا (کارایی)
++
++## بخش ۱ — کش هویت (سرور)
++- **فایل جدید `lib/identity-cache.ts`**: کش درون‌حافظه‌ای با TTL و سقف ۳۰۰ ورودی (FIFO). فقط اطلاعات «هویتی» کش می‌شود (نام/شماره/شناسه) — هیچ مبلغ، موجودی یا تخفیفی کش نمی‌شود.
++- **`/api/customer/me`** (داغ‌ترین مسیر — از همه صفحات صدا زده می‌شود):
++  - کلاینت ادمین حالا **یک‌بار در سطح ماژول** ساخته می‌شود (قبلاً در هر درخواست `createClient` جدید بود)
++  - نشست شماره تأییدشده → هویت: کش ۵ دقیقه
++  - هش دستگاه → هویت آخرین سفارش: کش مثبت ۲ دقیقه، کش منفی فقط ۲۰ ثانیه (تا سفارش اولِ مشتری تازه سریع دیده شود)
++  - نام سازمان: کش ۵ دقیقه
++  - عضویت و بقیه کوئری‌ها همچنان زنده از DB
++- نتیجه: در مرورهای تکراری، ۲ کوئری هویتی از هر فراخوانی حذف می‌شود و ساخت کلاینت هم حذف می‌شود.
++
++## بخش ۲ — لودر پویا (پنل مشتری `my-orders`)
++- **فراخوانی‌های موازی**: ۴ درخواست (me / orders / organizations / rules) قبلاً پشت‌سرهم بود؛ حالا `Promise.allSettled` همزمان — زمان انتظار کل ≈ کندترین درخواست به‌جای مجموع‌شان
++- **رندر تدریجی**: به‌جای قفل کل صفحه با «⏳ در حال بارگذاری...»:
++  - صفحه با اسکلتون شیمر باز می‌شود؛ هر بخش هر وقت داده‌اش رسید رندر می‌شود
++  - آمار پروفایل تا رسیدن سفارش‌ها «⋯» نشان می‌دهد
++  - لیست سفارش‌ها تا رسیدن، اسکلتون کارت نشان می‌دهد
++- **حذف سه‌بار fetch تکراری**: `/api/wallet/status` قبلاً در ۳ جای کد صدا زده می‌شد؛ حالا یک `refreshWstatus` مشترک است
++
++## ترتیب اعمال
++پچ ۳۹c باید قبلاً merge شده باشد (PR #72). بدون migration:
++```powershell
++git checkout main && git pull
++git checkout -b fix/patch-40-identity-cache-dynamic-loader
++git apply --ignore-whitespace patch-40-identity-cache-dynamic-loader.patch
++npx tsc --noEmit
++git add -A
++git commit -m "perf: module-level admin client + identity TTL cache + parallel panel loading with skeletons (patch 40)"
++git push -u origin fix/patch-40-identity-cache-dynamic-loader
++```
++
++## تست
++1. پنل مشتری: صفحه فوری با اسکلتون باز شود؛ کارت‌ها و آمار تدریجی پر شوند
++2. مرور چندباره صفحه اصلی/پنل: بدون خطای هویت؛ نام و شماره درست نمایش داده شود
++3. بعد از ثبت اولین سفارشِ یک دستگاه تازه، حداکثر تا ~۲۰ ثانیه بعد هویت در پنل ظاهر شود (کش منفی کوتاه)
++4. تب کیف پول: موجودی درست؛ بعد از تأیید OTP و شارژ، اعداد تازه شوند
++5. تغییر نام سازمان در پنل مدیر: حداکثر ۵ دقیقه بعد در پنل مشتری به‌روز شود

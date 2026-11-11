@@ -81,7 +81,9 @@ function isOrderCancellable(o: Order): boolean {
 export default function MyOrdersClient() {
   const { addItem } = useCart()
   const [orders, setOrders] = useState<Order[]>([])
-  const [loading, setLoading] = useState(true)
+  // 🎯 پچ ۴۰: لودر پویا — هر بخش هر وقت داده‌اش رسید رندر می‌شود (به‌جای قفل کل صفحه)
+  const [meLoaded, setMeLoaded] = useState(false)
+  const [ordersLoaded, setOrdersLoaded] = useState(false)
   
   // ✅ تب‌های اصلی (سفارش‌های باز / تاریخچه)
   const [activeTab, setActiveTab] = useState<'open' | 'history' | 'debt' | 'wallet' | 'sub'>('open')
@@ -156,12 +158,15 @@ export default function MyOrdersClient() {
   const [chargeBusy, setChargeBusy] = useState(false)
   const [chargeMsg, setChargeMsg] = useState<{ ok: boolean; text: string } | null>(null)
 
-  useEffect(() => {
+  // 🎯 پچ ۴۰: یک تابع مشترک تازه‌سازی وضعیت کیف پول (قبلاً ۳ کپی تکراری بود)
+  const refreshWstatus = useCallback(() => {
     fetch('/api/wallet/status', { cache: 'no-store' })
       .then((r) => r.json())
       .then((d) => { if (d && typeof d.walletEnabled === 'boolean') setWstatus(d) })
       .catch(() => {})
   }, [])
+
+  useEffect(() => { refreshWstatus() }, [refreshWstatus])
 
   // ⭐ چیپ اشتراک فعال در نوار چپ کارت پروفایل
   const refreshSub = useCallback(() => {
@@ -187,20 +192,14 @@ export default function MyOrdersClient() {
   const refreshPanelStatus = useCallback(() => {
     refreshSub()
     refreshActiveDiscount()
-    fetch('/api/wallet/status', { cache: 'no-store' })
-      .then((r) => r.json())
-      .then((d) => { if (d && typeof d.walletEnabled === 'boolean') setWstatus(d) })
-      .catch(() => {})
-  }, [refreshSub, refreshActiveDiscount])
+    refreshWstatus()
+  }, [refreshSub, refreshActiveDiscount, refreshWstatus])
 
   // بعد از تأیید شماره، هم کیف پول و هم وضعیت تازه می‌شود
   async function refreshWalletAfterVerify() {
     await loadWallet()
     refreshActiveDiscount()
-    fetch('/api/wallet/status', { cache: 'no-store' })
-      .then((r) => r.json())
-      .then((d) => { if (d && typeof d.walletEnabled === 'boolean') setWstatus(d) })
-      .catch(() => {})
+    refreshWstatus()
   }
 
   async function requestActivation() {
@@ -227,24 +226,22 @@ export default function MyOrdersClient() {
 
   useEffect(() => {
     async function loadData() {
-      try {
-        const meRes = await fetch('/api/customer/me', { cache: 'no-store' })
-        const meData = await meRes.json()
-        if (meData.customer) setCustomer(meData.customer)
-        if (meData.membership) setMembership(meData.membership)
-
-        const ordersRes = await fetch('/api/customer/orders', { cache: 'no-store' })
-        const ordersData = await ordersRes.json()
-        if (ordersData.orders) setOrders(ordersData.orders)
-
-        const orgsRes = await fetch('/api/membership/organizations', { cache: 'no-store' })
-        const orgsData = await orgsRes.json()
-        if (orgsData.organizations) setOrganizations(orgsData.organizations)
-
-        const rulesRes = await fetch('/api/membership/rules', { cache: 'no-store' })
-        const rulesData = await rulesRes.json()
-        if (rulesData.general) setRules({ general: rulesData.general, org: rulesData.org })
-      } catch {} finally { setLoading(false) }
+      // 🎯 پچ ۴۰: موازی‌کاری — هر ۴ درخواست همزمان (قبلاً پشت‌سرهم بود)
+      const [me, ords, orgs, rules] = await Promise.allSettled([
+        fetch('/api/customer/me', { cache: 'no-store' }).then((r) => r.json()),
+        fetch('/api/customer/orders', { cache: 'no-store' }).then((r) => r.json()),
+        fetch('/api/membership/organizations', { cache: 'no-store' }).then((r) => r.json()),
+        fetch('/api/membership/rules', { cache: 'no-store' }).then((r) => r.json()),
+      ])
+      if (me.status === 'fulfilled') {
+        if (me.value?.customer) setCustomer(me.value.customer)
+        if (me.value?.membership) setMembership(me.value.membership)
+      }
+      setMeLoaded(true)
+      if (ords.status === 'fulfilled' && ords.value?.orders) setOrders(ords.value.orders)
+      setOrdersLoaded(true)
+      if (orgs.status === 'fulfilled' && orgs.value?.organizations) setOrganizations(orgs.value.organizations)
+      if (rules.status === 'fulfilled' && rules.value?.general) setRules({ general: rules.value.general, org: rules.value.org })
     }
     loadData()
   }, [])
@@ -266,7 +263,7 @@ export default function MyOrdersClient() {
   // 🔁 لینک «سفارش مجدد» مودال خوش‌آمد: /my-orders?reorder=<id> (پچ ۳۵)
   const reorderAppliedRef = useRef(false)
   useEffect(() => {
-    if (loading || reorderAppliedRef.current) return
+    if (!ordersLoaded || reorderAppliedRef.current) return
     const id = new URLSearchParams(window.location.search).get('reorder')
     if (!id) return
     const target = orders.find((o) => o.id === id)
@@ -275,7 +272,7 @@ export default function MyOrdersClient() {
     try { window.history.replaceState(null, '', '/my-orders') } catch {}
     handleReorder(target)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, orders])
+  }, [ordersLoaded, orders])
 
   // 🎯 لغو سفارش از روی کارت — همان منطق صفحه‌ی جزئیات (دلیل + توضیح اختیاری)
   function openCancel(order: Order) {
@@ -454,8 +451,17 @@ export default function MyOrdersClient() {
     } catch (err: any) { setRegisterMsg({ type: 'error', text: err.message }) } finally { setRegisterLoading(false) }
   }
 
-  if (loading) {
-    return <div className="my-orders-page"><div className="my-orders-header"><Link href="/" className="my-orders-back">← منو</Link><h1>پنل مشتری</h1><span style={{ width: 60 }} /></div><div className="my-orders-empty">⏳ در حال بارگذاری...</div></div>
+  if (!meLoaded) {
+    // 🎯 پچ ۴۰: لودر پویا — اسکلتون شیمر به‌جای متن «در حال بارگذاری»
+    return (
+      <div className="my-orders-page">
+        <div className="my-orders-header"><Link href="/" className="my-orders-back">← منو</Link><h1>پنل مشتری</h1><span style={{ width: 60 }} /></div>
+        <div className="skel-card skel-card--profile" />
+        <div className="skel-card" style={{ height: 74 }} />
+        <div className="skel-card" style={{ height: 74 }} />
+        <div className="skel-card" style={{ height: 74 }} />
+      </div>
+    )
   }
 
   // ✅ گرید و کیف پول — برای کارت پروفایل فشرده
@@ -582,15 +588,15 @@ export default function MyOrdersClient() {
 
           <div className="panel-stats">
             <div className="panel-stat">
-              <strong>{orders.length.toLocaleString('fa-IR')}</strong>
+              <strong>{ordersLoaded ? orders.length.toLocaleString('fa-IR') : '⋯'}</strong>
               <small>سفارش</small>
             </div>
             <div className="panel-stat">
-              <strong>{formatPrice(totalSpent)} <span className="panel-unit">تومان</span></strong>
+              <strong>{ordersLoaded ? <>{formatPrice(totalSpent)} <span className="panel-unit">تومان</span></> : '⋯'}</strong>
               <small>مجموع خرید</small>
             </div>
             <div className="panel-stat">
-              <strong style={{ color: '#9b3c32' }}>{formatPrice(totalDiscount)} <span className="panel-unit">تومان</span></strong>
+              <strong style={{ color: '#9b3c32' }}>{ordersLoaded ? <>{formatPrice(totalDiscount)} <span className="panel-unit">تومان</span></> : '⋯'}</strong>
               <small>تخفیف</small>
             </div>
           </div>
@@ -933,6 +939,13 @@ export default function MyOrdersClient() {
         ) : (
           <div className="my-orders-empty">🔒 برای دیدن اشتراک‌ها، اول شماره‌ات را تأیید کن.</div>
         )
+      ) : !ordersLoaded ? (
+        // 🎯 پچ ۴۰: اسکلتون کارت‌های سفارش تا رسیدن لیست
+        <div className="my-orders-list">
+          <div className="skel-card" style={{ height: 92 }} />
+          <div className="skel-card" style={{ height: 92 }} />
+          <div className="skel-card" style={{ height: 92 }} />
+        </div>
       ) : searchedOrders.length === 0 ? (
         <div className="my-orders-empty">
           {orderSearch

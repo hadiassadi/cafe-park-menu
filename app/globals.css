@@ -15042,3 +15042,9 @@ a.cat {
 .payment-method-chip-icon{font-size:16px;line-height:1}
 .payment-method-chip-check{font-size:10px;background:#6b4f3a;color:#fff;border-radius:999px;width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto}
 .payment-method-current-hint{display:block;margin-top:8px;font-size:11px;color:#9a9287;text-align:center}
+
+/* پچ ۴۰ — لودر پویا: اسکلتون شیمر پنل مشتری */
+.skel-card{height:90px;border-radius:14px;background:linear-gradient(90deg,#efe9df 25%,#f7f3ec 50%,#efe9df 75%);background-size:200% 100%;animation:skel-shimmer 1.2s linear infinite;border:1px solid #e3ddd2;margin-bottom:12px}
+.skel-card--profile{height:130px}
+@keyframes skel-shimmer{to{background-position:-200% 0}}
+@media (prefers-reduced-motion: reduce){.skel-card{animation:none}}

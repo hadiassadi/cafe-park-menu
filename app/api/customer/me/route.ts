@@ -1,12 +1,24 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 import { hashData } from '@/lib/utils/hash'
 import { getVerifiedPhoneHash } from '@/lib/sms/otp'
+import { identityGet, identitySet, IDENTITY_TTL } from '@/lib/identity-cache'
 import crypto from 'crypto'
 import 'server-only'
 
 export const dynamic = 'force-dynamic'
+
+// 🎯 پچ ۴۰ — کلاینت ادمین یک‌بار ساخته می‌شود (به‌جای هر درخواست)
+let _db: SupabaseClient | null = null
+function db(): SupabaseClient {
+  if (_db) return _db
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!url || !key) throw new Error('Missing Supabase admin env')
+  _db = createClient(url, key, { auth: { persistSession: false } })
+  return _db
+}
 
 export async function GET() {
   try {
@@ -17,11 +29,7 @@ export async function GET() {
     const deviceIdHashNew = hashData(deviceToken)
     const deviceIdHashOld = crypto.createHash('sha256').update(deviceToken).digest('hex')
 
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const key = process.env.SUPABASE_SERVICE_ROLE_KEY
-    if (!url || !key) throw new Error('Missing Supabase admin env')
-    
-    const db = createClient(url, key, { auth: { persistSession: false } })
+    const conn = db()
 
     let customer: { name: string; phone: string } | null = null
 
@@ -29,28 +37,48 @@ export async function GET() {
     // مشتریِ تازه‌ثبت‌نام‌شده هنوز سفارشی ندارد و با دستگاه پیدا نمی‌شود.
     const verifiedHash = await getVerifiedPhoneHash()
     if (verifiedHash) {
-      const { data: verifiedCustomer } = await db
-        .from('customers')
-        .select('phone, name')
-        .eq('phone_hash', verifiedHash)
-        .eq('verification_status', 'verified')
-        .maybeSingle()
-      if (verifiedCustomer) {
-        customer = { name: verifiedCustomer.name || 'کاربر', phone: verifiedCustomer.phone }
+      // 🎯 پچ ۴۰: کش هویت نشست تأییدشده (TTL ۵ دقیقه) — فقط نام/شماره
+      const cached = identityGet<{ name: string; phone: string } | null>(`vid:${verifiedHash}`)
+      if (cached !== null) {
+        customer = cached
+      } else {
+        const { data: verifiedCustomer } = await conn
+          .from('customers')
+          .select('phone, name')
+          .eq('phone_hash', verifiedHash)
+          .eq('verification_status', 'verified')
+          .maybeSingle()
+        customer = verifiedCustomer
+          ? { name: verifiedCustomer.name || 'کاربر', phone: verifiedCustomer.phone }
+          : null
+        identitySet(`vid:${verifiedHash}`, customer, IDENTITY_TTL.verifiedSession)
       }
     }
 
-    // ۱. اطلاعات مشتری از آخرین سفارش
+    // ۱. اطلاعات مشتری از آخرین سفارش — با کش هویت دستگاه (مثبت ۲ دقیقه / منفی ۲۰ ثانیه)
     if (!customer) {
-      const { data: orderData } = await db
-        .from('orders')
-        .select('customer_name, customer_phone')
-        .in('device_id_hash', [deviceIdHashOld, deviceIdHashNew])
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle()
+      const cacheKey = `dev:${deviceIdHashNew}`
+      const cachedDev = identityGet<{ name: string; phone: string } | null>(cacheKey)
+      if (cachedDev !== null) {
+        customer = cachedDev
+      } else {
+        const { data: orderData } = await conn
+          .from('orders')
+          .select('customer_name, customer_phone')
+          .in('device_id_hash', [deviceIdHashOld, deviceIdHashNew])
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
 
-      if (orderData) customer = { name: orderData.customer_name, phone: orderData.customer_phone }
+        customer = orderData
+          ? { name: orderData.customer_name, phone: orderData.customer_phone }
+          : null
+        identitySet(
+          cacheKey,
+          customer,
+          customer ? IDENTITY_TTL.deviceIdentity : IDENTITY_TTL.deviceIdentityNegative
+        )
+      }
     }
 
     // ۲. چک کردن عضویت (اول با شماره تلفن، بعد با دستگاه)
@@ -63,7 +91,7 @@ export async function GET() {
       const phoneHash = hashData(customer.phone)
       
       // چک کردن عضویت سازمانی با شماره تلفن
-      const { data: m } = await db
+      const { data: m } = await conn
         .from('organization_members')
         .select('organization_id, metadata')
         .eq('phone_hash', phoneHash)
@@ -72,7 +100,7 @@ export async function GET() {
       memberData = m
 
       // چک کردن عضویت عادی با شماره تلفن
-      const { data: gm } = await db
+      const { data: gm } = await conn
         .from('customers')
         .select('phone, name')
         .eq('phone', customer.phone)
@@ -82,7 +110,7 @@ export async function GET() {
     
     // اگر با شماره تلفن پیدا نشد، با شناسه دستگاه می‌گردیم
     if (!memberData && !generalMember) {
-      const { data: m } = await db
+      const { data: m } = await conn
         .from('organization_members')
         .select('organization_id, metadata')
         .in('device_id_hash', [deviceIdHashOld, deviceIdHashNew])
@@ -90,7 +118,7 @@ export async function GET() {
         .maybeSingle()
       memberData = m
 
-      const { data: gm } = await db
+      const { data: gm } = await conn
         .from('customers')
         .select('phone, name')
         .in('device_id_hash', [deviceIdHashOld, deviceIdHashNew])
@@ -99,8 +127,15 @@ export async function GET() {
     }
 
     if (memberData && memberData.organization_id) {
-      const { data: orgData } = await db.from('organizations').select('name').eq('id', memberData.organization_id).single()
-      if (orgData) membership = { orgId: memberData.organization_id, orgName: orgData.name }
+      // 🎯 پچ ۴۰: نام سازمان با کش (TTL ۵ دقیقه) — نام سازمان به‌ندرت عوض می‌شود
+      const orgKey = `org:${memberData.organization_id}`
+      let orgName = identityGet<string>(orgKey)
+      if (orgName === null) {
+        const { data: orgData } = await conn.from('organizations').select('name').eq('id', memberData.organization_id).single()
+        orgName = orgData?.name ?? ''
+        if (orgName) identitySet(orgKey, orgName, IDENTITY_TTL.orgName)
+      }
+      if (orgName) membership = { orgId: memberData.organization_id, orgName }
       if (!customer && memberData.metadata?._display_name) {
         customer = { name: memberData.metadata._display_name, phone: memberData.metadata._phone || '' }
       }
