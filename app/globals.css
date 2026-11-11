@@ -11730,6 +11730,7 @@ body {
 /* ═══════════════════════════════════════
    موبایل < 768px
    ═══════════════════════════════════════ */
+@media (max-width: 768px) { /* پچ ۴۳: این wrapper جا افتاده بود — علت نمایش همبرگر در دسکتاپ */
   .admin-mobile-header {
     display: flex;
     align-items: center;
@@ -12037,6 +12038,10 @@ body {
 /* ═══════════════════════════════════════
    Dark Mode
    ═══════════════════════════════════════ */
+}
+/* (پچ ۴۳) بستن media query موبایل — قوانین دارک‌مود عناصر موبایل سراسری‌اند؛
+   روی دسکتاپ display:none آن‌ها را بی‌اثر می‌کند */
+
 .admin-shell.dark-mode .admin-mobile-header {
   background: var(--admin-surface);
   border-bottom-color: var(--admin-border);
@@ -15049,11 +15054,29 @@ a.cat {
 @keyframes skel-shimmer{to{background-position:-200% 0}}
 @media (prefers-reduced-motion: reduce){.skel-card{animation:none}}
 
-/* پچ ۴۱ — منوی گروهی پنل ادمین + اسکلتون شل */
-.admin-nav-group-label{font-size:10px;font-weight:800;color:#9a9287;letter-spacing:.3px;padding:16px 14px 6px;text-align:right;user-select:none}
+/* پچ ۴۳ — گروه‌های تاشوی منوی ادمین (جایگزین استایل برچسب پچ ۴۱؛ فشرده‌تر) */
+.admin-nav-group-label{display:flex;align-items:center;justify-content:space-between;gap:6px;width:100%;background:none;border:0;cursor:pointer;font-size:10px;font-weight:800;color:#9a9287;letter-spacing:.3px;padding:8px 14px 6px;text-align:right;font-family:inherit;user-select:none}
 .admin-nav-group:first-child .admin-nav-group-label{padding-top:2px}
+.admin-nav-group-label:hover{color:#6b4f3a}
+.admin-nav-group-chevron{font-size:9px;line-height:1;color:currentColor;transition:transform .15s ease}
+.admin-nav-group.collapsed .admin-nav-group-chevron{transform:rotate(-90deg)}
+.admin-nav-group.collapsed .admin-nav-group-items{display:none}
 .admin-shell.dark-mode .admin-nav-group-label{color:#7a746a}
-.admin-drawer-group-label{font-size:10px;font-weight:800;color:#9a9287;letter-spacing:.3px;padding:14px 16px 4px;text-align:right;user-select:none}
+.admin-shell.dark-mode .admin-nav-group-label:hover{color:#c9bfae}
+.admin-drawer-group-label{display:flex;align-items:center;justify-content:space-between;gap:6px;width:100%;background:none;border:0;cursor:pointer;font-size:10px;font-weight:800;color:#9a9287;letter-spacing:.3px;padding:10px 16px 4px;text-align:right;font-family:inherit;user-select:none}
 .admin-drawer-group:first-child .admin-drawer-group-label{padding-top:4px}
+.admin-drawer-group-chevron{font-size:9px;line-height:1;transition:transform .15s ease}
+.admin-drawer-group.collapsed .admin-drawer-group-chevron{transform:rotate(-90deg)}
+.admin-drawer-group.collapsed .admin-drawer-group-items{display:none}
 .admin-skel-bar{height:38px}
 .admin-main > [aria-busy='true']{padding:6px 0}
+
+/* پچ ۴۳ — محافظ دسکتاپ: هدر موبایل و drawer در ≥769px همیشه مخفی باشند
+   حتی اگر روزی wrapperهای media در mergeها گم شوند (این بلوک آخر فایل است و بر همه می‌چربد) */
+@media (min-width: 769px) {
+  .admin-mobile-header,
+  .admin-drawer-overlay,
+  .admin-drawer {
+    display: none;
+  }
+}

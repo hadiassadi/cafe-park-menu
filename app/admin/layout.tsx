@@ -70,6 +70,9 @@ const MENU_GROUPS = [
   },
 ] as const
 
+// 🎯 پچ ۴۲: کلید ذخیره وضعیت گروه‌های تاشو
+const NAV_GROUPS_KEY = 'cafe-park-admin-nav-groups'
+
 export default function AdminLayout({
   children,
 }: {
@@ -79,6 +82,8 @@ export default function AdminLayout({
   const router = useRouter()
   const [checking, setChecking] = useState(true)
   const [drawerOpen, setDrawerOpen] = useState(false)
+  // 🎯 پچ ۴۲: گروه‌های تاشو — undefined/open باز، false بسته؛ پس از mount از localStorage بازیابی می‌شود
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({})
   const isLoginPage = pathname === '/admin/login'
 
   const {
@@ -93,6 +98,49 @@ export default function AdminLayout({
   // ✅ بستن drawer در تغییر مسیر
   useEffect(() => {
     setDrawerOpen(false)
+  }, [pathname])
+
+  // 🎯 پچ ۴۲: وضعیت فعال بودن لینک — از effects پایین هم استفاده می‌شود
+  const isActive = (href: string) => {
+    if (href === '/admin') return pathname === '/admin'
+    if (href === '/admin/orders') {
+      return (
+        pathname.startsWith('/admin/orders') &&
+        !pathname.startsWith('/admin/orders/new')
+      )
+    }
+    return pathname.startsWith(href)
+  }
+
+  // 🎯 پچ ۴۲: باز/بسته کردن گروه + ذخیره در localStorage
+  const toggleGroup = (key: string) => {
+    setOpenGroups((prev) => {
+      const next = { ...prev, [key]: !(prev[key] !== false) }
+      try {
+        localStorage.setItem(NAV_GROUPS_KEY, JSON.stringify(next))
+      } catch {}
+      return next
+    })
+  }
+
+  // 🎯 پچ ۴۲: بازیابی وضعیت ذخیره‌شده پس از mount (بدون hydration mismatch)
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(NAV_GROUPS_KEY) || '{}')
+      if (saved && typeof saved === 'object') setOpenGroups(saved)
+    } catch {}
+  }, [])
+
+  // 🎯 پچ ۴۲: گروهِ مسیرِ فعال همیشه باز دیده شود (مانند فایل‌برمرها)
+  useEffect(() => {
+    if (pathname === '/admin/login') return
+    const g = MENU_GROUPS.find((gr) => gr.items.some((i) => isActive(i.href)))
+    if (g) {
+      setOpenGroups((prev) =>
+        prev[g.key] === false ? { ...prev, [g.key]: true } : prev
+      )
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname])
 
   // ✅ بستن drawer با ESC
@@ -189,17 +237,6 @@ export default function AdminLayout({
     router.replace('/admin/login')
   }
 
-  const isActive = (href: string) => {
-    if (href === '/admin') return pathname === '/admin'
-    if (href === '/admin/orders') {
-      return (
-        pathname.startsWith('/admin/orders') &&
-        !pathname.startsWith('/admin/orders/new')
-      )
-    }
-    return pathname.startsWith(href)
-  }
-
   // 🎯 پچ ۴۱: شل همیشه رندر می‌شود — در حالت checking فقط محتوا اسکلتون است
   // (قبلاً صفحه لخت «در حال بررسی...» کل پنل از جمله سایدبار را می‌بست)
   return (
@@ -232,35 +269,51 @@ export default function AdminLayout({
         </div>
 
         <nav className="admin-nav">
-          {MENU_GROUPS.map((group) => (
-            <div key={group.key} className="admin-nav-group">
-              <div className="admin-nav-group-label">{group.label}</div>
-              {group.items.map((item) => {
-                const isOrders = item.href === '/admin/orders'
-                const hasBadge = isOrders && pendingCount > 0
+          {MENU_GROUPS.map((group) => {
+            const collapsed = openGroups[group.key] === false
+            return (
+              <div
+                key={group.key}
+                className={`admin-nav-group${collapsed ? ' collapsed' : ''}`}
+              >
+                <button
+                  type="button"
+                  className="admin-nav-group-label"
+                  onClick={() => toggleGroup(group.key)}
+                  aria-expanded={!collapsed}
+                >
+                  <span>{group.label}</span>
+                  <span className="admin-nav-group-chevron">▾</span>
+                </button>
+                <div className="admin-nav-group-items">
+                  {group.items.map((item) => {
+                    const isOrders = item.href === '/admin/orders'
+                    const hasBadge = isOrders && pendingCount > 0
 
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className={`admin-nav-item ${
-                      isActive(item.href) ? 'active' : ''
-                    }`}
-                  >
-                    <span className="admin-nav-icon">{item.icon}</span>
-                    <span>{item.label}</span>
-                    {hasBadge && (
-                      <span
-                        className={`admin-nav-badge ${flash ? 'flash' : ''}`}
+                    return (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        className={`admin-nav-item ${
+                          isActive(item.href) ? 'active' : ''
+                        }`}
                       >
-                        {pendingCount.toLocaleString('fa-IR')}
-                      </span>
-                    )}
-                  </Link>
-                )
-              })}
-            </div>
-          ))}
+                        <span className="admin-nav-icon">{item.icon}</span>
+                        <span>{item.label}</span>
+                        {hasBadge && (
+                          <span
+                            className={`admin-nav-badge ${flash ? 'flash' : ''}`}
+                          >
+                            {pendingCount.toLocaleString('fa-IR')}
+                          </span>
+                        )}
+                      </Link>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })}
         </nav>
 
         <div className="admin-sidebar-footer">
@@ -321,34 +374,50 @@ export default function AdminLayout({
             </div>
 
             <nav className="admin-drawer-nav">
-              {MENU_GROUPS.map((group) => (
-                <div key={group.key} className="admin-drawer-group">
-                  <div className="admin-drawer-group-label">{group.label}</div>
-                  {group.items.map((item) => {
-                    const isOrders = item.href === '/admin/orders'
-                    const hasBadge = isOrders && pendingCount > 0
+              {MENU_GROUPS.map((group) => {
+                const collapsed = openGroups[group.key] === false
+                return (
+                  <div
+                    key={group.key}
+                    className={`admin-drawer-group${collapsed ? ' collapsed' : ''}`}
+                  >
+                    <button
+                      type="button"
+                      className="admin-drawer-group-label"
+                      onClick={() => toggleGroup(group.key)}
+                      aria-expanded={!collapsed}
+                    >
+                      <span>{group.label}</span>
+                      <span className="admin-drawer-group-chevron">▾</span>
+                    </button>
+                    <div className="admin-drawer-group-items">
+                      {group.items.map((item) => {
+                        const isOrders = item.href === '/admin/orders'
+                        const hasBadge = isOrders && pendingCount > 0
 
-                    return (
-                      <Link
-                        key={item.href}
-                        href={item.href}
-                        className={`admin-drawer-item ${
-                          isActive(item.href) ? 'active' : ''
-                        }`}
-                        onClick={() => setDrawerOpen(false)}
-                      >
-                        <span className="admin-drawer-icon">{item.icon}</span>
-                        <span className="admin-drawer-label">{item.label}</span>
-                        {hasBadge && (
-                          <span className="admin-drawer-badge">
-                            {pendingCount.toLocaleString('fa-IR')}
-                          </span>
-                        )}
-                      </Link>
-                    )
-                  })}
-                </div>
-              ))}
+                        return (
+                          <Link
+                            key={item.href}
+                            href={item.href}
+                            className={`admin-drawer-item ${
+                              isActive(item.href) ? 'active' : ''
+                            }`}
+                            onClick={() => setDrawerOpen(false)}
+                          >
+                            <span className="admin-drawer-icon">{item.icon}</span>
+                            <span className="admin-drawer-label">{item.label}</span>
+                            {hasBadge && (
+                              <span className="admin-drawer-badge">
+                                {pendingCount.toLocaleString('fa-IR')}
+                              </span>
+                            )}
+                          </Link>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )
+              })}
             </nav>
 
             <div className="admin-drawer-footer">
