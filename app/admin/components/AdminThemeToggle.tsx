@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 
 const STORAGE_KEY = 'cafe-park-admin-theme'
 
+// 🎯 پچ ۴۴: سوییچ فشرده روز/شب — فقط آیکن، بدون متن (جایگزین دکمه متنی «حالت شبانه»)
 export default function AdminThemeToggle() {
   const [isDark, setIsDark] = useState(false)
   const [mounted, setMounted] = useState(false)
@@ -27,9 +28,10 @@ export default function AdminThemeToggle() {
 
   if (!mounted) {
     return (
-      <button className="admin-nav-item" disabled>
-        <span className="admin-nav-icon">🌙</span>
-        <span>حالت شبانه</span>
+      <button className="admin-theme-switch" disabled aria-label="حالت نمایش">
+        <span className="admin-theme-switch-opt">☀️</span>
+        <span className="admin-theme-switch-opt">🌙</span>
+        <span className="admin-theme-switch-knob" />
       </button>
     )
   }
@@ -38,11 +40,15 @@ export default function AdminThemeToggle() {
     <button
       type="button"
       onClick={toggleTheme}
-      className="admin-nav-item"
-      aria-label={isDark ? 'حالت روز' : 'حالت شبانه'}
+      className={`admin-theme-switch${isDark ? ' dark' : ''}`}
+      role="switch"
+      aria-checked={isDark}
+      aria-label={isDark ? 'رفتن به حالت روز' : 'رفتن به حالت شبانه'}
+      title={isDark ? 'حالت روز' : 'حالت شبانه'}
     >
-      <span className="admin-nav-icon">{isDark ? '☀️' : '🌙'}</span>
-      <span>{isDark ? 'حالت روز' : 'حالت شبانه'}</span>
+      <span className="admin-theme-switch-opt">☀️</span>
+      <span className="admin-theme-switch-opt">🌙</span>
+      <span className="admin-theme-switch-knob" />
     </button>
   )
 }

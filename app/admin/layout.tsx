@@ -424,18 +424,21 @@ export default function AdminLayout({
               <Link
                 href="/"
                 target="_blank"
-                className="admin-drawer-item"
+                className="admin-drawer-item admin-drawer-footer-cell"
                 onClick={() => setDrawerOpen(false)}
               >
                 <span className="admin-drawer-icon">🌐</span>
                 <span className="admin-drawer-label">مشاهده منو</span>
               </Link>
 
-              <AdminThemeToggle />
+              {/* 🎯 پچ ۴۴: سوییچ فشرده روز/شب — بدون متن */}
+              <div className="admin-drawer-footer-cell admin-drawer-footer-switch">
+                <AdminThemeToggle />
+              </div>
 
               <button
                 onClick={handleLogout}
-                className="admin-drawer-logout"
+                className="admin-drawer-logout admin-drawer-footer-cell"
               >
                 <span className="admin-drawer-icon">🚪</span>
                 <span className="admin-drawer-label">خروج</span>
