@@ -1,0 +1,113 @@
+diff --git a/app/admin/cancellation-reasons/actions.ts b/app/admin/cancellation-reasons/actions.ts
+index 33908cc..19efd9c 100644
+--- a/app/admin/cancellation-reasons/actions.ts
++++ b/app/admin/cancellation-reasons/actions.ts
+@@ -1,12 +1,12 @@
+ 'use server'
+ import { assertAdmin } from '@/lib/admin/assert-admin'
+ 
+-import { supabaseServer } from '@/lib/supabase/server'
++import { supabaseAdmin } from '@/lib/supabase/server'
+ import { revalidatePath } from 'next/cache'
+ 
+ export async function addReason(formData: FormData) {
+   await assertAdmin()
+-  const db = await supabaseServer()
++  const db = supabaseAdmin()
+ 
+   const label = String(formData.get('label') || '').trim()
+   const target = String(formData.get('target') || 'both')
+@@ -35,7 +35,7 @@ export async function addReason(formData: FormData) {
+ 
+ export async function updateReason(formData: FormData) {
+   await assertAdmin()
+-  const db = await supabaseServer()
++  const db = supabaseAdmin()
+ 
+   const id = String(formData.get('id') || '')
+   const label = String(formData.get('label') || '').trim()
+@@ -67,7 +67,7 @@ export async function updateReason(formData: FormData) {
+ 
+ export async function deleteReason(formData: FormData) {
+   await assertAdmin()
+-  const db = await supabaseServer()
++  const db = supabaseAdmin()
+   const id = String(formData.get('id') || '')
+ 
+   if (!id) return { error: 'شناسه مشخص نیست' }
+@@ -85,7 +85,7 @@ export async function deleteReason(formData: FormData) {
+ 
+ export async function toggleReasonActive(formData: FormData) {
+   await assertAdmin()
+-  const db = await supabaseServer()
++  const db = supabaseAdmin()
+   const id = String(formData.get('id') || '')
+   const isActive = formData.get('is_active') === 'true'
+ 
+diff --git a/app/admin/cancellation-reasons/page.tsx b/app/admin/cancellation-reasons/page.tsx
+index fb36094..57b2495 100644
+--- a/app/admin/cancellation-reasons/page.tsx
++++ b/app/admin/cancellation-reasons/page.tsx
+@@ -1,5 +1,5 @@
+ import type { Metadata } from 'next'
+-import { supabaseServer } from '@/lib/supabase/server'
++import { supabaseAdmin } from '@/lib/supabase/server'
+ import CancellationReasonsManager from './CancellationReasonsManager'
+ 
+ export const metadata: Metadata = {
+@@ -10,7 +10,7 @@ export const metadata: Metadata = {
+ export const dynamic = 'force-dynamic'
+ 
+ export default async function CancellationReasonsPage() {
+-  const db = await supabaseServer()
++  const db = supabaseAdmin()
+ 
+   const { data: reasons, error } = await db
+     .from('cancellation_reasons')
+diff --git a/patch-48-cancellation-reasons-service-client-RELEASE.md b/patch-48-cancellation-reasons-service-client-RELEASE.md
+new file mode 100644
+index 0000000..64fddfb
+--- /dev/null
++++ b/patch-48-cancellation-reasons-service-client-RELEASE.md
+@@ -0,0 +1,41 @@
++# پچ ۴۸ — فیکس بخش دلایل لغو سفارش: خواندن و نوشتن از کلاینت سرویس
++
++پیش‌نیاز: پچ ۴۷ مرج شده باشد (PR #80). بدون migration. فقط ۲ فایل.
++
++## ریشهٔ باگ (همان بیماری پچ ۴۵ — یک جدول از فهرست جا مانده بود)
++جدول `cancellation_reasons` هم RLS فعال و بدون policy دارد → deny-all مطلق:
++- `app/admin/cancellation-reasons/page.tsx` با `supabaseServer()` می‌خواند → لیست خالی
++- هر ۴ اکشن نوشتن (add/update/delete/toggle) با `supabaseServer()` → خطای
++  «new row violates row-level security policy»
++- دو مصرف‌کنندهٔ سالم (دست‌نخورده): `app/api/cancellation-reasons/route.ts` (از قبل سرویس‌کلاینت)
++  و `lib/stats.ts` (کلید سرویس) — یعنی لیست دلایل در دیالوگ لغو سفارش‌ها و آمار، سالم‌اند
++
++## فیکس — عیناً الگوی پچ ۴۵
++- `page.tsx`: `supabaseServer()` → `supabaseAdmin()`
++- `actions.ts`: import + هر ۴ اکشن → `supabaseAdmin()`
++- گارد امنیتی `assertAdmin()` در همهٔ اکشن‌ها سر جایش (الگوی امنیتی تغییر نمی‌کند)
++
++## دروازه‌ها
++- `tsc --noEmit` ✓ — `next build` تولیدی با mock ✓ — apply-check + تایپ پس از اعمال ✓
++
++## اعمال (PowerShell)
++```powershell
++git checkout main && git pull
++git checkout -b fix/patch-48-cancellation-reasons-service-client
++git apply --ignore-whitespace --verbose patch-48-cancellation-reasons-service-client.patch
++# صحت اعمال — انتظار دقیق:
++(Select-String -Path "app\admin\cancellation-reasons\actions.ts" -Pattern "supabaseAdmin").Count   # 5 (import + ۴ اکشن)
++(Select-String -Path "app\admin\cancellation-reasons\actions.ts" -Pattern "supabaseServer").Count  # 0
++(Select-String -Path "app\admin\cancellation-reasons\page.tsx" -Pattern "supabaseAdmin").Count     # 2
++git add -A
++git commit -m "fix(admin): patch 48 - cancellation reasons CRUD via service client (RLS deny-all proof)"
++git push -u origin fix/patch-48-cancellation-reasons-service-client
++```
++سپس PR و merge: `https://github.com/hadiassadi/cafe-park-menu/compare/main...fix/patch-48-cancellation-reasons-service-client`
++
++## تست بعد از merge (کاربر)
++1. `git checkout main` ← `git pull` ← ری‌استارت dev ← `Ctrl+F5`
++2. بخش «دلایل لغو سفارش»: لیست دلایل قبلی باید نمایش داده شود
++3. افزودن دلیل جدید → بدون خطا + ظاهر شدن در لیست
++4. ویرایش/حذف/فعال‌غیرفعال کردن → هر سه سالم
++5. دیالوگ لغو سفارش در صفحهٔ سفارش‌ها → لیست دلایل پر است (از قبل سالم بود — رگرسیون ندارد)
