@@ -1,11 +1,11 @@
-import { supabaseServer } from '@/lib/supabase/server'
+import { supabaseAdmin } from '@/lib/supabase/server'
 import { headers } from 'next/headers'
 import TablesManager from './TablesManager'
 
 export const dynamic = 'force-dynamic'
 
 export default async function TablesPage() {
-  const db = await supabaseServer()
+  const db = supabaseAdmin()
 
   const { data: tables, error } = await db
     .from('tables')

@@ -1,0 +1,224 @@
+diff --git a/app/admin/categories/page.tsx b/app/admin/categories/page.tsx
+index aaec95d..b5bf190 100644
+--- a/app/admin/categories/page.tsx
++++ b/app/admin/categories/page.tsx
+@@ -1,8 +1,8 @@
+-import { supabaseServer } from '@/lib/supabase/server'
++import { supabaseAdmin } from '@/lib/supabase/server'
+ import CategoriesManager from './CategoriesManager'
+ 
+ export default async function CategoriesPage() {
+-  const db = await supabaseServer()
++  const db = supabaseAdmin()
+ 
+   const { data: categories, error } = await db
+     .from('categories')
+diff --git a/app/admin/products/page.tsx b/app/admin/products/page.tsx
+index 2a3e21a..7d89465 100644
+--- a/app/admin/products/page.tsx
++++ b/app/admin/products/page.tsx
+@@ -4,11 +4,11 @@ export const metadata: Metadata = {
+   title: 'محصولات',
+   robots: { index: false, follow: false },
+ }
+-import { supabaseServer } from '@/lib/supabase/server'
++import { supabaseAdmin } from '@/lib/supabase/server'
+ import ProductsManager from './ProductsManager'
+ 
+ export default async function ProductsPage() {
+-  const db = await supabaseServer()
++  const db = supabaseAdmin()
+ 
+   const productsResult = await db
+   .from('products')
+diff --git a/app/admin/tables/page.tsx b/app/admin/tables/page.tsx
+index 13d5514..d833d21 100644
+--- a/app/admin/tables/page.tsx
++++ b/app/admin/tables/page.tsx
+@@ -1,11 +1,11 @@
+-import { supabaseServer } from '@/lib/supabase/server'
++import { supabaseAdmin } from '@/lib/supabase/server'
+ import { headers } from 'next/headers'
+ import TablesManager from './TablesManager'
+ 
+ export const dynamic = 'force-dynamic'
+ 
+ export default async function TablesPage() {
+-  const db = await supabaseServer()
++  const db = supabaseAdmin()
+ 
+   const { data: tables, error } = await db
+     .from('tables')
+diff --git a/app/admin/themes/page.tsx b/app/admin/themes/page.tsx
+index a698ac8..b173145 100644
+--- a/app/admin/themes/page.tsx
++++ b/app/admin/themes/page.tsx
+@@ -1,10 +1,10 @@
+-import { supabaseServer } from '@/lib/supabase/server'
++import { supabaseAdmin } from '@/lib/supabase/server'
+ import ThemesManager from './ThemesManager'
+ 
+ export const dynamic = 'force-dynamic'
+ 
+ export default async function ThemesPage() {
+-  const db = await supabaseServer()
++  const db = supabaseAdmin()
+ 
+   const { data: themes, error } = await db
+     .from('themes')
+diff --git a/app/api/quotes/[id]/route.ts b/app/api/quotes/[id]/route.ts
+index dcfae99..d4b7cbd 100644
+--- a/app/api/quotes/[id]/route.ts
++++ b/app/api/quotes/[id]/route.ts
+@@ -1,7 +1,7 @@
+ import { requireAdmin } from '@/lib/admin/require-admin'
+ import { apiError } from '@/lib/api-error'
+ import { NextResponse } from 'next/server'
+-import { supabaseServer } from '@/lib/supabase/server'
++import { supabaseAdmin } from '@/lib/supabase/server'
+ 
+ export const dynamic = 'force-dynamic'
+ 
+@@ -12,17 +12,10 @@ export async function PATCH(request: Request, { params }: Params) {
+   const denied = await requireAdmin()
+   if (denied) return denied
+ 
+-  const db = await supabaseServer()
++  // کلاینت سرویس نشست کاربر ندارد؛ مجوز با requireAdmin در بالا تضمین می‌شود (پچ ۴۵)
++  const db = supabaseAdmin()
+   const { id } = await params
+ 
+-  const {
+-    data: { user },
+-  } = await db.auth.getUser()
+-
+-  if (!user) {
+-    return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+-  }
+-
+   const body = await request.json()
+   const updates: Record<string, unknown> = {}
+ 
+@@ -64,17 +57,9 @@ export async function DELETE(_request: Request, { params }: Params) {
+   const denied = await requireAdmin()
+   if (denied) return denied
+ 
+-  const db = await supabaseServer()
++  const db = supabaseAdmin()
+   const { id } = await params
+ 
+-  const {
+-    data: { user },
+-  } = await db.auth.getUser()
+-
+-  if (!user) {
+-    return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+-  }
+-
+   const { error } = await db.from('quotes').delete().eq('id', id)
+ 
+   if (error) {
+diff --git a/app/api/quotes/route.ts b/app/api/quotes/route.ts
+index 8c0c5ae..bcde7a3 100644
+--- a/app/api/quotes/route.ts
++++ b/app/api/quotes/route.ts
+@@ -1,7 +1,7 @@
+ import { requireAdmin } from '@/lib/admin/require-admin'
+ import { apiError } from '@/lib/api-error'
+ import { NextResponse } from 'next/server'
+-import { supabaseServer } from '@/lib/supabase/server'
++import { supabaseAdmin } from '@/lib/supabase/server'
+ 
+ export const dynamic = 'force-dynamic'
+ 
+@@ -10,7 +10,7 @@ export async function GET() {
+   const denied = await requireAdmin()
+   if (denied) return denied
+ 
+-  const db = await supabaseServer()
++  const db = supabaseAdmin()
+ 
+   const { data, error } = await db
+     .from('quotes')
+@@ -30,16 +30,9 @@ export async function POST(request: Request) {
+   const denied = await requireAdmin()
+   if (denied) return denied
+ 
+-  const db = await supabaseServer()
+-
+-  const {
+-    data: { user },
+-  } = await db.auth.getUser()
+-
+-  if (!user) {
+-    return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+-  }
++  const db = supabaseAdmin()
+ 
++  // کلاینت سرویس نشست کاربر ندارد؛ مجوز با requireAdmin در بالا تضمین می‌شود (پچ ۴۵)
+   const body = await request.json()
+ 
+   if (typeof body.text !== 'string' || !body.text.trim()) {
+diff --git a/patch-45-admin-catalog-service-client-RELEASE.md b/patch-45-admin-catalog-service-client-RELEASE.md
+new file mode 100644
+index 0000000..5816c5d
+--- /dev/null
++++ b/patch-45-admin-catalog-service-client-RELEASE.md
+@@ -0,0 +1,57 @@
++# پچ ۴۵ — فیکس قطعی بخش‌های خالی ادمین: خواندن کاتالوگ از کلاینت سرویس
++
++پیش‌نیاز: پچ ۴۴ مرج شده باشد (PR #77). بدون migration.
++
++## ریشه‌یابی قطعی (با تست‌های REST کاربر)
++- **علامت**: ۵ بخش ادمین (محصولات، دسته‌ها، میزها، تم‌ها، جملات) خالی و «خام» بدون پیام خطا؛
++  منوی عمومی و سفارش‌ها سالم
++- **تست ۱**: با کلید عمومی → همهٔ ۵ جدول «200 ولی صفر ردیف» (مسدودسازی بی‌صدا) و orders → 401
++- **تست ۲**: با کلید سرویس و User-Agent سفارشی → محصولات ۸، دسته‌ها ۶، میزها ۶، تم‌ها ۲، جملات ۳۱،
++  سفارش‌ها ۱۱۹ → **داده‌ها کاملاً سالم‌اند**
++- **SQL Editor**: `pg_policies` روی این ۵ جدول → «No rows returned» یعنی **RLS فعال شده ولی هیچ
++  policy تعریف نشده → deny-all مطلق** (PostgREST بی‌صدا صفر ردیف برمی‌گرداند)
++- نکته: خطای 401 اولیه در تست پاورشل (Forbidden use of secret API key in browser) فقط به‌دلیل
++  User-Agent شبیه مرورگر در Invoke-WebRequest بود — کلید کاملاً سالم است
++- **مسیرها**: منوی عمومی (`lib/menu.ts`) و صفحهٔ سفارش‌ها از قبل با کلاینت سرویس می‌خواندند → سالم؛
++  ۵ بخش خراب از `supabaseServer()` (کلید عمومی + RLS) می‌خواندند → خالی
++
++## تغییرات (۶ فایل)
++1. `app/admin/products/page.tsx` → `supabaseAdmin()`
++2. `app/admin/categories/page.tsx` → `supabaseAdmin()`
++3. `app/admin/tables/page.tsx` → `supabaseAdmin()`
++4. `app/admin/themes/page.tsx` → `supabaseAdmin()`
++5. `app/api/quotes/route.ts` → `supabaseAdmin()` + حذف چک `db.auth.getUser()` در POST
++   (کلاینت سرویس نشست کاربر ندارد؛ مجوز با `requireAdmin()` که سر جایش است تضمین می‌شود)
++6. `app/api/quotes/[id]/route.ts` → همین الگو در PATCH و DELETE
++
++امنیت: همهٔ مسیرها همچنان پشت `requireAdmin()`/`assertAdmin()` هستند؛ فقط منبع داده (کلید) عوض شده و
++دقیقاً به الگوی موجود پروژه (سفارش‌ها، منو، کوپن‌ها) یکدست می‌شود.
++
++## دروازه‌ها
++- وریفای شمارش: supabaseAdmin = 2/2/2/2/3/3 و supabaseServer = 0 در هر ۶ فایل ✓
++- `tsc --noEmit` کل پروژه: پاس — `next build` تولیدی با mock: پاس
++- apply-check + تایپ بعد از اعمال (roundtrip): پاس
++
++## اعمال (PowerShell)
++```powershell
++git checkout main && git pull
++git checkout -b fix/patch-45-admin-catalog-service-client
++git apply --ignore-whitespace --verbose patch-45-admin-catalog-service-client.patch
++# صحت اعمال — انتظار دقیق:
++(Select-String -Path "app\admin\products\page.tsx" -Pattern "supabaseAdmin").Count      # 2
++(Select-String -Path "app\admin\categories\page.tsx" -Pattern "supabaseAdmin").Count    # 2
++(Select-String -Path "app\admin\tables\page.tsx" -Pattern "supabaseAdmin").Count        # 2
++(Select-String -Path "app\admin\themes\page.tsx" -Pattern "supabaseAdmin").Count        # 2
++(Select-String -Path "app\api\quotes\route.ts" -Pattern "supabaseAdmin").Count          # 3
++(Select-String -Path "app\api\quotes\[id]\route.ts" -Pattern "supabaseAdmin").Count     # 3
++git add -A
++git commit -m "fix(admin): patch 45 - catalog admin sections read via service client (RLS deny-all proof)"
++git push -u origin fix/patch-45-admin-catalog-service-client
++```
++سپس PR و merge: `https://github.com/hadiassadi/cafe-park-menu/compare/main...fix/patch-45-admin-catalog-service-client`
++
++## تست بعد از merge
++1. `git checkout main` ← `git pull` ← ری‌استارت کامل سرور dev
++2. پنج بخش محصولات/دسته‌ها/میزها/تم‌ها/جملات باید داده نشان بدهند (۸ محصول، ۶ دسته، …)
++3. منوی عمومی + سفارش‌ها + مشتریان: سالم بمانند
++4. افزودن/ویرایش/حذف جمله در بخش جملات کار کند (POST/PATCH/DELETE با مسیر جدید)

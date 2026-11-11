@@ -1,7 +1,7 @@
 import { requireAdmin } from '@/lib/admin/require-admin'
 import { apiError } from '@/lib/api-error'
 import { NextResponse } from 'next/server'
-import { supabaseServer } from '@/lib/supabase/server'
+import { supabaseAdmin } from '@/lib/supabase/server'
 
 export const dynamic = 'force-dynamic'
 
@@ -12,16 +12,9 @@ export async function PATCH(request: Request, { params }: Params) {
   const denied = await requireAdmin()
   if (denied) return denied
 
-  const db = await supabaseServer()
+  // کلاینت سرویس نشست کاربر ندارد؛ مجوز با requireAdmin در بالا تضمین می‌شود (پچ ۴۵)
+  const db = supabaseAdmin()
   const { id } = await params
-
-  const {
-    data: { user },
-  } = await db.auth.getUser()
-
-  if (!user) {
-    return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
-  }
 
   const body = await request.json()
   const updates: Record<string, unknown> = {}
@@ -64,16 +57,8 @@ export async function DELETE(_request: Request, { params }: Params) {
   const denied = await requireAdmin()
   if (denied) return denied
 
-  const db = await supabaseServer()
+  const db = supabaseAdmin()
   const { id } = await params
-
-  const {
-    data: { user },
-  } = await db.auth.getUser()
-
-  if (!user) {
-    return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
-  }
 
   const { error } = await db.from('quotes').delete().eq('id', id)
 
