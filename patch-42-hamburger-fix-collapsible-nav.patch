@@ -1,0 +1,340 @@
+diff --git a/app/admin/layout.tsx b/app/admin/layout.tsx
+index 50a2ed6..a9c9b8a 100644
+--- a/app/admin/layout.tsx
++++ b/app/admin/layout.tsx
+@@ -70,6 +70,9 @@ const MENU_GROUPS = [
+   },
+ ] as const
+ 
++// 🎯 پچ ۴۲: کلید ذخیره وضعیت گروه‌های تاشو
++const NAV_GROUPS_KEY = 'cafe-park-admin-nav-groups'
++
+ export default function AdminLayout({
+   children,
+ }: {
+@@ -79,6 +82,8 @@ export default function AdminLayout({
+   const router = useRouter()
+   const [checking, setChecking] = useState(true)
+   const [drawerOpen, setDrawerOpen] = useState(false)
++  // 🎯 پچ ۴۲: گروه‌های تاشو — undefined/open باز، false بسته؛ پس از mount از localStorage بازیابی می‌شود
++  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({})
+   const isLoginPage = pathname === '/admin/login'
+ 
+   const {
+@@ -95,6 +100,49 @@ export default function AdminLayout({
+     setDrawerOpen(false)
+   }, [pathname])
+ 
++  // 🎯 پچ ۴۲: وضعیت فعال بودن لینک — از effects پایین هم استفاده می‌شود
++  const isActive = (href: string) => {
++    if (href === '/admin') return pathname === '/admin'
++    if (href === '/admin/orders') {
++      return (
++        pathname.startsWith('/admin/orders') &&
++        !pathname.startsWith('/admin/orders/new')
++      )
++    }
++    return pathname.startsWith(href)
++  }
++
++  // 🎯 پچ ۴۲: باز/بسته کردن گروه + ذخیره در localStorage
++  const toggleGroup = (key: string) => {
++    setOpenGroups((prev) => {
++      const next = { ...prev, [key]: !(prev[key] !== false) }
++      try {
++        localStorage.setItem(NAV_GROUPS_KEY, JSON.stringify(next))
++      } catch {}
++      return next
++    })
++  }
++
++  // 🎯 پچ ۴۲: بازیابی وضعیت ذخیره‌شده پس از mount (بدون hydration mismatch)
++  useEffect(() => {
++    try {
++      const saved = JSON.parse(localStorage.getItem(NAV_GROUPS_KEY) || '{}')
++      if (saved && typeof saved === 'object') setOpenGroups(saved)
++    } catch {}
++  }, [])
++
++  // 🎯 پچ ۴۲: گروهِ مسیرِ فعال همیشه باز دیده شود (مانند فایل‌برمرها)
++  useEffect(() => {
++    if (pathname === '/admin/login') return
++    const g = MENU_GROUPS.find((gr) => gr.items.some((i) => isActive(i.href)))
++    if (g) {
++      setOpenGroups((prev) =>
++        prev[g.key] === false ? { ...prev, [g.key]: true } : prev
++      )
++    }
++    // eslint-disable-next-line react-hooks/exhaustive-deps
++  }, [pathname])
++
+   // ✅ بستن drawer با ESC
+   useEffect(() => {
+     if (!drawerOpen) return
+@@ -189,17 +237,6 @@ export default function AdminLayout({
+     router.replace('/admin/login')
+   }
+ 
+-  const isActive = (href: string) => {
+-    if (href === '/admin') return pathname === '/admin'
+-    if (href === '/admin/orders') {
+-      return (
+-        pathname.startsWith('/admin/orders') &&
+-        !pathname.startsWith('/admin/orders/new')
+-      )
+-    }
+-    return pathname.startsWith(href)
+-  }
+-
+   // 🎯 پچ ۴۱: شل همیشه رندر می‌شود — در حالت checking فقط محتوا اسکلتون است
+   // (قبلاً صفحه لخت «در حال بررسی...» کل پنل از جمله سایدبار را می‌بست)
+   return (
+@@ -232,35 +269,51 @@ export default function AdminLayout({
+         </div>
+ 
+         <nav className="admin-nav">
+-          {MENU_GROUPS.map((group) => (
+-            <div key={group.key} className="admin-nav-group">
+-              <div className="admin-nav-group-label">{group.label}</div>
+-              {group.items.map((item) => {
+-                const isOrders = item.href === '/admin/orders'
+-                const hasBadge = isOrders && pendingCount > 0
++          {MENU_GROUPS.map((group) => {
++            const collapsed = openGroups[group.key] === false
++            return (
++              <div
++                key={group.key}
++                className={`admin-nav-group${collapsed ? ' collapsed' : ''}`}
++              >
++                <button
++                  type="button"
++                  className="admin-nav-group-label"
++                  onClick={() => toggleGroup(group.key)}
++                  aria-expanded={!collapsed}
++                >
++                  <span>{group.label}</span>
++                  <span className="admin-nav-group-chevron">▾</span>
++                </button>
++                <div className="admin-nav-group-items">
++                  {group.items.map((item) => {
++                    const isOrders = item.href === '/admin/orders'
++                    const hasBadge = isOrders && pendingCount > 0
+ 
+-                return (
+-                  <Link
+-                    key={item.href}
+-                    href={item.href}
+-                    className={`admin-nav-item ${
+-                      isActive(item.href) ? 'active' : ''
+-                    }`}
+-                  >
+-                    <span className="admin-nav-icon">{item.icon}</span>
+-                    <span>{item.label}</span>
+-                    {hasBadge && (
+-                      <span
+-                        className={`admin-nav-badge ${flash ? 'flash' : ''}`}
++                    return (
++                      <Link
++                        key={item.href}
++                        href={item.href}
++                        className={`admin-nav-item ${
++                          isActive(item.href) ? 'active' : ''
++                        }`}
+                       >
+-                        {pendingCount.toLocaleString('fa-IR')}
+-                      </span>
+-                    )}
+-                  </Link>
+-                )
+-              })}
+-            </div>
+-          ))}
++                        <span className="admin-nav-icon">{item.icon}</span>
++                        <span>{item.label}</span>
++                        {hasBadge && (
++                          <span
++                            className={`admin-nav-badge ${flash ? 'flash' : ''}`}
++                          >
++                            {pendingCount.toLocaleString('fa-IR')}
++                          </span>
++                        )}
++                      </Link>
++                    )
++                  })}
++                </div>
++              </div>
++            )
++          })}
+         </nav>
+ 
+         <div className="admin-sidebar-footer">
+@@ -321,34 +374,50 @@ export default function AdminLayout({
+             </div>
+ 
+             <nav className="admin-drawer-nav">
+-              {MENU_GROUPS.map((group) => (
+-                <div key={group.key} className="admin-drawer-group">
+-                  <div className="admin-drawer-group-label">{group.label}</div>
+-                  {group.items.map((item) => {
+-                    const isOrders = item.href === '/admin/orders'
+-                    const hasBadge = isOrders && pendingCount > 0
+-
+-                    return (
+-                      <Link
+-                        key={item.href}
+-                        href={item.href}
+-                        className={`admin-drawer-item ${
+-                          isActive(item.href) ? 'active' : ''
+-                        }`}
+-                        onClick={() => setDrawerOpen(false)}
+-                      >
+-                        <span className="admin-drawer-icon">{item.icon}</span>
+-                        <span className="admin-drawer-label">{item.label}</span>
+-                        {hasBadge && (
+-                          <span className="admin-drawer-badge">
+-                            {pendingCount.toLocaleString('fa-IR')}
+-                          </span>
+-                        )}
+-                      </Link>
+-                    )
+-                  })}
+-                </div>
+-              ))}
++              {MENU_GROUPS.map((group) => {
++                const collapsed = openGroups[group.key] === false
++                return (
++                  <div
++                    key={group.key}
++                    className={`admin-drawer-group${collapsed ? ' collapsed' : ''}`}
++                  >
++                    <button
++                      type="button"
++                      className="admin-drawer-group-label"
++                      onClick={() => toggleGroup(group.key)}
++                      aria-expanded={!collapsed}
++                    >
++                      <span>{group.label}</span>
++                      <span className="admin-drawer-group-chevron">▾</span>
++                    </button>
++                    <div className="admin-drawer-group-items">
++                      {group.items.map((item) => {
++                        const isOrders = item.href === '/admin/orders'
++                        const hasBadge = isOrders && pendingCount > 0
++
++                        return (
++                          <Link
++                            key={item.href}
++                            href={item.href}
++                            className={`admin-drawer-item ${
++                              isActive(item.href) ? 'active' : ''
++                            }`}
++                            onClick={() => setDrawerOpen(false)}
++                          >
++                            <span className="admin-drawer-icon">{item.icon}</span>
++                            <span className="admin-drawer-label">{item.label}</span>
++                            {hasBadge && (
++                              <span className="admin-drawer-badge">
++                                {pendingCount.toLocaleString('fa-IR')}
++                              </span>
++                            )}
++                          </Link>
++                        )
++                      })}
++                    </div>
++                  </div>
++                )
++              })}
+             </nav>
+ 
+             <div className="admin-drawer-footer">
+diff --git a/app/globals.css b/app/globals.css
+index 0417074..745e530 100644
+--- a/app/globals.css
++++ b/app/globals.css
+@@ -11730,6 +11730,7 @@ body {
+ /* ═══════════════════════════════════════
+    موبایل < 768px
+    ═══════════════════════════════════════ */
++@media (max-width: 768px) { /* پچ ۴۲: این wrapper جا افتاده بود — علت نمایش همبرگر در دسکتاپ */
+   .admin-mobile-header {
+     display: flex;
+     align-items: center;
+@@ -12037,6 +12038,10 @@ body {
+ /* ═══════════════════════════════════════
+    Dark Mode
+    ═══════════════════════════════════════ */
++}
++/* (پچ ۴۲) بستن media query موبایل — قوانین دارک‌مود عناصر موبایل سراسری‌اند؛
++   روی دسکتاپ display:none آن‌ها را بی‌اثر می‌کند */
++
+ .admin-shell.dark-mode .admin-mobile-header {
+   background: var(--admin-surface);
+   border-bottom-color: var(--admin-border);
+@@ -15049,11 +15054,19 @@ a.cat {
+ @keyframes skel-shimmer{to{background-position:-200% 0}}
+ @media (prefers-reduced-motion: reduce){.skel-card{animation:none}}
+ 
+-/* پچ ۴۱ — منوی گروهی پنل ادمین + اسکلتون شل */
+-.admin-nav-group-label{font-size:10px;font-weight:800;color:#9a9287;letter-spacing:.3px;padding:16px 14px 6px;text-align:right;user-select:none}
++/* پچ ۴۲ — گروه‌های تاشوی منوی ادمین (جایگزین استایل برچسب پچ ۴۱؛ فشرده‌تر) */
++.admin-nav-group-label{display:flex;align-items:center;justify-content:space-between;gap:6px;width:100%;background:none;border:0;cursor:pointer;font-size:10px;font-weight:800;color:#9a9287;letter-spacing:.3px;padding:8px 14px 6px;text-align:right;font-family:inherit;user-select:none}
+ .admin-nav-group:first-child .admin-nav-group-label{padding-top:2px}
++.admin-nav-group-label:hover{color:#6b4f3a}
++.admin-nav-group-chevron{font-size:9px;line-height:1;color:currentColor;transition:transform .15s ease}
++.admin-nav-group.collapsed .admin-nav-group-chevron{transform:rotate(-90deg)}
++.admin-nav-group.collapsed .admin-nav-group-items{display:none}
+ .admin-shell.dark-mode .admin-nav-group-label{color:#7a746a}
+-.admin-drawer-group-label{font-size:10px;font-weight:800;color:#9a9287;letter-spacing:.3px;padding:14px 16px 4px;text-align:right;user-select:none}
++.admin-shell.dark-mode .admin-nav-group-label:hover{color:#c9bfae}
++.admin-drawer-group-label{display:flex;align-items:center;justify-content:space-between;gap:6px;width:100%;background:none;border:0;cursor:pointer;font-size:10px;font-weight:800;color:#9a9287;letter-spacing:.3px;padding:10px 16px 4px;text-align:right;font-family:inherit;user-select:none}
+ .admin-drawer-group:first-child .admin-drawer-group-label{padding-top:4px}
++.admin-drawer-group-chevron{font-size:9px;line-height:1;transition:transform .15s ease}
++.admin-drawer-group.collapsed .admin-drawer-group-chevron{transform:rotate(-90deg)}
++.admin-drawer-group.collapsed .admin-drawer-group-items{display:none}
+ .admin-skel-bar{height:38px}
+ .admin-main > [aria-busy='true']{padding:6px 0}
+diff --git a/patch-42-hamburger-fix-collapsible-nav-RELEASE.md b/patch-42-hamburger-fix-collapsible-nav-RELEASE.md
+new file mode 100644
+index 0000000..7702127
+--- /dev/null
++++ b/patch-42-hamburger-fix-collapsible-nav-RELEASE.md
+@@ -0,0 +1,39 @@
++# پچ ۴۲ — رفع همبرگر دسکتاپ + گروه‌های تاشوی منو + فشرده‌سازی
++
++پیش‌نیاز: پچ ۴۱ مرج شده باشد (PR #74). بدون migration.
++
++## ۱) ریشه‌یابی و رفع «همبرگری که در دسکتاپ دیده می‌شود»
++- علت واقعی: در بخش ۷۶ فایل CSS («ADMIN MOBILE HEADER + DRAWER»، از خط ~۱۱۷۳۱)، بلاک `@media (max-width: 768px)` **هرگز باز نشده بود** — قوانین `display:flex` هدر موبایل با تورفتگی فریبنده بدون هیچ media query نوشته شده بودند و روی همه عرض‌ها فعال بودند.
++- رفع: wrapper درست باز شد (بعد از کامنت «موبایل < 768px») و پیش از قوانین Dark Mode بسته شد. توازن آکولادهای کل فایل بررسی شد (۲۲۶۴/۲۲۶۴ ✓).
++- قوانین دارک‌مود عناصر موبایل سراسری ماندند (بی‌خطر — روی دسکتاپ display:none بی‌اثرشان می‌کند).
++
++## ۲) گروه‌های تاشو (آکاردئونی)
++- برچسب هر گروه حالا **دکمه** است: کلیک → باز/بسته + آیکون ▾ (چرخش ۹۰ درجه هنگام بسته‌بودن).
++- وضعیت در `localStorage` با کلید `cafe-park-admin-nav-groups` ذخیره می‌شود؛ بازیابی **بعد از mount** انجام می‌شود تا hydration mismatch رخ ندهد (رندر اول همه باز، بلافاصله وضعیت ذخیره‌شده اعمال می‌شود).
++- گروهِ مسیرِ فعال همیشه خودکار باز می‌شود (رفتار استاندارد فایل‌برمرها) — بدون بازنویسی انتخاب دستی کاربر برای گروه‌های دیگر.
++- همان رفتار در drawer موبایل هم اعمال شد (ساختار واحد `MENU_GROUPS`).
++- فاصله برچسب گروه‌ها فشرده‌تر شد (۱۶px → ۸px عمودی).
++
++## ۳) دروازه‌ها
++- `tsc --noEmit` کل پروژه: پاس (exit 0)
++- `next build` تولیدی: پاس (exit 0)
++- apply-check + تایپ بعد از اعمال: پاس
++
++## اعمال
++```powershell
++git checkout main && git pull
++git checkout -b fix/patch-42-hamburger-fix-collapsible-nav
++git apply --ignore-whitespace patch-42-hamburger-fix-collapsible-nav.patch
++npx tsc --noEmit
++git add -A
++git commit -m "fix(ui): desktop hamburger media-query fix + collapsible grouped nav (patch 42)"
++git push -u origin fix/patch-42-hamburger-fix-collapsible-nav
++```
++
++## تست
++1. **دسکتاپ (>768px): هیچ همبرگری نبین** — نه بالا، نه بعد از رفرش؛ سایدبار گروهی سر جایش
++2. عرض پنجره را بین ۷۰۰ تا ۸۰۰ بکش: زیر ۷۶۸ همبرگر بیاید، بالای آن غیب شود
++3. کلیک روی هر برچسب گروه → باز/بسته؛ ▾ به سمت راست می‌چرخد؛ رفرش → همان وضعیت بماند
++4. رفتن به «مشتریان» از منوی بسته → گروهِ عملیات روزانه خودش باز شود
++5. موبایل: drawer، همان گروه‌های تاشو؛ ESC و قفل اسکرول مثل قبل
++6. تم تاریک: برچسب گروه‌ها خوانا + hover درست
