@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import { supabaseServer } from '@/lib/supabase/server'
+import { supabaseAdmin } from '@/lib/supabase/server'
 import CancellationReasonsManager from './CancellationReasonsManager'
 
 export const metadata: Metadata = {
@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 export const dynamic = 'force-dynamic'
 
 export default async function CancellationReasonsPage() {
-  const db = await supabaseServer()
+  const db = supabaseAdmin()
 
   const { data: reasons, error } = await db
     .from('cancellation_reasons')
