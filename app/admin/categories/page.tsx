@@ -1,8 +1,8 @@
-import { supabaseServer } from '@/lib/supabase/server'
+import { supabaseAdmin } from '@/lib/supabase/server'
 import CategoriesManager from './CategoriesManager'
 
 export default async function CategoriesPage() {
-  const db = await supabaseServer()
+  const db = supabaseAdmin()
 
   const { data: categories, error } = await db
     .from('categories')

@@ -4,11 +4,11 @@ export const metadata: Metadata = {
   title: 'محصولات',
   robots: { index: false, follow: false },
 }
-import { supabaseServer } from '@/lib/supabase/server'
+import { supabaseAdmin } from '@/lib/supabase/server'
 import ProductsManager from './ProductsManager'
 
 export default async function ProductsPage() {
-  const db = await supabaseServer()
+  const db = supabaseAdmin()
 
   const productsResult = await db
   .from('products')

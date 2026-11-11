@@ -1,7 +1,7 @@
 import { requireAdmin } from '@/lib/admin/require-admin'
 import { apiError } from '@/lib/api-error'
 import { NextResponse } from 'next/server'
-import { supabaseServer } from '@/lib/supabase/server'
+import { supabaseAdmin } from '@/lib/supabase/server'
 
 export const dynamic = 'force-dynamic'
 
@@ -10,7 +10,7 @@ export async function GET() {
   const denied = await requireAdmin()
   if (denied) return denied
 
-  const db = await supabaseServer()
+  const db = supabaseAdmin()
 
   const { data, error } = await db
     .from('quotes')
@@ -30,16 +30,9 @@ export async function POST(request: Request) {
   const denied = await requireAdmin()
   if (denied) return denied
 
-  const db = await supabaseServer()
+  const db = supabaseAdmin()
 
-  const {
-    data: { user },
-  } = await db.auth.getUser()
-
-  if (!user) {
-    return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
-  }
-
+  // کلاینت سرویس نشست کاربر ندارد؛ مجوز با requireAdmin در بالا تضمین می‌شود (پچ ۴۵)
   const body = await request.json()
 
   if (typeof body.text !== 'string' || !body.text.trim()) {

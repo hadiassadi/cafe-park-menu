@@ -1,10 +1,10 @@
-import { supabaseServer } from '@/lib/supabase/server'
+import { supabaseAdmin } from '@/lib/supabase/server'
 import ThemesManager from './ThemesManager'
 
 export const dynamic = 'force-dynamic'
 
 export default async function ThemesPage() {
-  const db = await supabaseServer()
+  const db = supabaseAdmin()
 
   const { data: themes, error } = await db
     .from('themes')
