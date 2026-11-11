@@ -1,0 +1,1389 @@
+diff --git a/app/admin/backup/BackupClient.tsx b/app/admin/backup/BackupClient.tsx
+new file mode 100644
+index 0000000..440f783
+--- /dev/null
++++ b/app/admin/backup/BackupClient.tsx
+@@ -0,0 +1,597 @@
++'use client'
++
++import { useEffect, useRef, useState } from 'react'
++import { BACKUP_SECTIONS, STORAGE_SECTION_KEY, STORAGE_SECTION_LABEL } from '@/lib/backup-sections'
++
++type StorageFile = { name: string; data: string }
++
++type BackupMeta = {
++  app?: string
++  backupVersion?: number
++  createdAt?: string
++  counts?: Record<string, number>
++  skipped?: Record<string, string>
++  storageCounts?: Record<string, number>
++  tables?: Record<string, unknown[]>
++  storage?: Record<string, StorageFile[]>
++  storageSkipped?: Record<string, string>
++}
++
++// نسخه‌های پشتیبانی‌شده: ۱ = فقط جداول، ۲ = جداول + فایل‌های Storage
++const BACKUP_VERSION_OK = (v?: number) => v === 1 || v === 2
++
++type SectionStatus = 'pending' | 'active' | 'done' | 'error'
++type BackupItem = {
++  key: string
++  label: string
++  status: SectionStatus
++  rows?: number
++  files?: number
++  error?: string
++}
++type LastBackup = { at: string; rows: number; files: number; size: number; ok: boolean }
++
++type RestoreProgress = { table: string; done: number; total: number }
++type RestoreReport = { table: string; upserted: number; error?: string }
++
++const HISTORY_KEY = 'cafepark_backup_history'
++const RESTORE_WORD = 'بازگردانی'
++const CLIENT_CHUNK = 500 // زیر سقف 4.5MB بدنه‌ی درخواست Vercel
++const SECTION_TIMEOUT_MS = 90_000
++
++function initialItems(): BackupItem[] {
++  return [
++    ...BACKUP_SECTIONS.map((s) => ({ key: s.key, label: s.label, status: 'pending' as SectionStatus })),
++    { key: STORAGE_SECTION_KEY, label: STORAGE_SECTION_LABEL, status: 'pending' as SectionStatus },
++  ]
++}
++
++function fa(n: number): string {
++  return n.toLocaleString('fa-IR')
++}
++
++function formatSize(bytes: number): string {
++  if (bytes >= 1048576) return `${(bytes / 1048576).toFixed(1)} مگابایت`
++  if (bytes >= 1024) return `${Math.round(bytes / 1024)} کیلوبایت`
++  return `${fa(bytes)} بایت`
++}
++
++function loadHistory(): LastBackup[] {
++  try {
++    const raw = window.localStorage.getItem(HISTORY_KEY)
++    const arr = raw ? JSON.parse(raw) : []
++    return Array.isArray(arr) ? arr : []
++  } catch {
++    return []
++  }
++}
++
++function saveHistory(list: LastBackup[]) {
++  try {
++    window.localStorage.setItem(HISTORY_KEY, JSON.stringify(list.slice(0, 5)))
++  } catch {
++    // حافظهٔ مرورگر در دسترس نیست — تاریخچه اختیاری است
++  }
++}
++
++export default function BackupClient() {
++  // ─── بکاپ ───
++  const [modalOpen, setModalOpen] = useState(false)
++  const [items, setItems] = useState<BackupItem[]>(initialItems)
++  const [running, setRunning] = useState(false)
++  const [overall, setOverall] = useState({ done: 0, total: initialItems().length })
++  const [finalError, setFinalError] = useState<string | null>(null)
++  const [resultBlobUrl, setResultBlobUrl] = useState<string | null>(null)
++  const [resultName, setResultName] = useState<string | null>(null)
++  const [lastBackup, setLastBackup] = useState<LastBackup | null>(null)
++  const [history, setHistory] = useState<LastBackup[]>([])
++
++  const payloadRef = useRef<{
++    tables: Record<string, unknown[]>
++    skipped: Record<string, string>
++    storage: Record<string, StorageFile[]>
++    storageSkipped: Record<string, string>
++  } | null>(null)
++  const resultUrlRef = useRef<string | null>(null)
++
++  // ─── بازگردانی ───
++  const fileRef = useRef<HTMLInputElement>(null)
++  const [parsed, setParsed] = useState<BackupMeta | null>(null)
++  const [fileName, setFileName] = useState<string | null>(null)
++  const [confirmText, setConfirmText] = useState('')
++  const [restoring, setRestoring] = useState(false)
++  const [progress, setProgress] = useState<RestoreProgress | null>(null)
++  const [report, setReport] = useState<RestoreReport[] | null>(null)
++  const [restoreError, setRestoreError] = useState<string | null>(null)
++
++  useEffect(() => {
++    const h = loadHistory()
++    setHistory(h)
++    setLastBackup(h[0] ?? null)
++  }, [])
++
++  // قفل اسکرول صفحه در حین بکاپ
++  useEffect(() => {
++    document.body.style.overflow = modalOpen ? 'hidden' : ''
++    return () => {
++      document.body.style.overflow = ''
++    }
++  }, [modalOpen])
++
++  const totalRows = (meta: BackupMeta | null) =>
++    meta?.counts ? Object.values(meta.counts).reduce((a, b) => a + b, 0) : 0
++
++  const totalStorageFiles = (meta: BackupMeta | null) =>
++    meta?.storage ? Object.values(meta.storage).reduce((a, b) => a + b.length, 0) : 0
++
++  const revokeResult = () => {
++    if (resultUrlRef.current) {
++      URL.revokeObjectURL(resultUrlRef.current)
++      resultUrlRef.current = null
++    }
++    setResultBlobUrl(null)
++    setResultName(null)
++  }
++
++  // ───────────────── اجرای یک بخش بکاپ ─────────────────
++  const runSection = async (key: string): Promise<boolean> => {
++    setItems((prev) => prev.map((it) => (it.key === key ? { ...it, status: 'active', error: undefined } : it)))
++    try {
++      const controller = new AbortController()
++      const timer = setTimeout(() => controller.abort(), SECTION_TIMEOUT_MS)
++      const res = await fetch(`/api/admin/backup?section=${encodeURIComponent(key)}`, {
++        cache: 'no-store',
++        signal: controller.signal,
++      })
++      clearTimeout(timer)
++      const j = await res.json().catch(() => null)
++      if (!res.ok || !j?.ok) {
++        throw new Error(j?.error || `خطای سرور (${res.status})`)
++      }
++
++      const p = payloadRef.current
++      if (!p) throw new Error('وضعیت بکاپ از دست رفت')
++
++      if (key === STORAGE_SECTION_KEY) {
++        p.storage = j.storage ?? {}
++        p.storageSkipped = j.storageSkipped ?? {}
++        setItems((prev) =>
++          prev.map((it) =>
++            it.key === key ? { ...it, status: 'done', files: j.files ?? 0 } : it
++          )
++        )
++      } else {
++        Object.assign(p.tables, j.tables ?? {})
++        Object.assign(p.skipped, j.skipped ?? {})
++        setItems((prev) =>
++          prev.map((it) =>
++            it.key === key ? { ...it, status: 'done', rows: j.rows ?? 0 } : it
++          )
++        )
++      }
++      return true
++    } catch (e) {
++      const msg =
++        e instanceof DOMException && e.name === 'AbortError'
++          ? 'زمان انتظار تمام شد'
++          : e instanceof Error
++            ? e.message
++            : 'خطای نامشخص'
++      setItems((prev) => prev.map((it) => (it.key === key ? { ...it, status: 'error', error: msg } : it)))
++      return false
++    }
++  }
++
++  const evaluateAndFinish = () => {
++    const p = payloadRef.current
++    if (!p) return
++    const failed = items.filter((it) => it.status === 'error')
++    if (failed.length === 0) {
++      setFinalError(null)
++    } else {
++      setFinalError(
++        `${fa(failed.length)} بخش کامل نشد${failed.length === 1 ? ` — ${failed[0].label}` : ''}؛ می‌توانید فقط همان بخش را دوباره تلاش کنید.`
++      )
++    }
++    buildAndDownload(failed.length === 0)
++  }
++
++  const runBackup = async () => {
++    setRunning(true)
++    setFinalError(null)
++    revokeResult()
++    payloadRef.current = { tables: {}, skipped: {}, storage: {}, storageSkipped: {} }
++    const seq = [...BACKUP_SECTIONS.map((s) => s.key), STORAGE_SECTION_KEY]
++    setItems(initialItems())
++    for (let i = 0; i < seq.length; i++) {
++      setOverall({ done: i, total: seq.length })
++      await runSection(seq[i])
++      setOverall({ done: i + 1, total: seq.length })
++    }
++    setRunning(false)
++    evaluateAndFinish()
++  }
++
++  const retrySection = async (key: string) => {
++    setRunning(true)
++    await runSection(key)
++    setRunning(false)
++    evaluateAndFinish()
++  }
++
++  const buildAndDownload = (isComplete: boolean) => {
++    const p = payloadRef.current
++    if (!p) return
++    const counts = Object.fromEntries(
++      Object.entries(p.tables).map(([k, v]) => [k, (v as unknown[]).length])
++    )
++    const storageCounts = Object.fromEntries(
++      Object.entries(p.storage).map(([k, v]) => [k, v.length])
++    )
++    const payload: BackupMeta = {
++      app: 'cafe-park-menu',
++      backupVersion: 2,
++      createdAt: new Date().toISOString(),
++      counts,
++      skipped: p.skipped,
++      storageCounts,
++      storageSkipped: p.storageSkipped,
++      tables: p.tables,
++      storage: p.storage,
++    }
++    const text = JSON.stringify(payload)
++    const blob = new Blob([text], { type: 'application/json' })
++    const url = URL.createObjectURL(blob)
++    resultUrlRef.current = url
++    setResultBlobUrl(url)
++    const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')
++    const name = `${isComplete ? 'cafepark-backup' : 'cafepark-backup-INCOMPLETE'}-${stamp}.json`
++    setResultName(name)
++    downloadUrl(url, name)
++
++    const rows = Object.values(counts).reduce((a, b) => a + b, 0)
++    const files = Object.values(storageCounts).reduce((a, b) => a + b, 0)
++    const entry: LastBackup = { at: payload.createdAt!, rows, files, size: blob.size, ok: isComplete }
++    const hist = [entry, ...loadHistory()].slice(0, 5)
++    saveHistory(hist)
++    setHistory(hist)
++    setLastBackup(entry)
++  }
++
++  const downloadUrl = (url: string, name: string) => {
++    const a = document.createElement('a')
++    a.href = url
++    a.download = name
++    document.body.appendChild(a)
++    a.click()
++    a.remove()
++  }
++
++  // ───────────────── انتخاب فایل بکاپ ─────────────────
++  const handleFile = async (file: File | null) => {
++    setParsed(null)
++    setReport(null)
++    setRestoreError(null)
++    setConfirmText('')
++    setProgress(null)
++    if (!file) return
++    setFileName(file.name)
++    try {
++      const text = await file.text()
++      const meta = JSON.parse(text) as BackupMeta
++      if (!BACKUP_VERSION_OK(meta?.backupVersion) || !meta.tables) {
++        throw new Error('این فایل بکاپ کافه پارک نیست یا نسخه‌ی آن پشتیبانی نمی‌شود')
++      }
++      setParsed(meta)
++    } catch (e) {
++      setRestoreError(e instanceof Error ? e.message : 'فایل قابل خواندن نیست')
++    }
++  }
++
++  // ───────────────── بازگردانی (منطق قبلی، حفظ‌شده) ─────────────────
++  const handleRestore = async () => {
++    if (!parsed?.tables) return
++    setRestoring(true)
++    setRestoreError(null)
++    setReport([])
++
++    const reportAcc: RestoreReport[] = []
++
++    try {
++      // ترتیب جداول داخل فایل بکاپ همان ترتیب امن از نظر FK است
++      for (const [table, rows] of Object.entries(parsed.tables)) {
++        if (!Array.isArray(rows) || rows.length === 0) continue
++
++        for (let i = 0; i < rows.length; i += CLIENT_CHUNK) {
++          const chunk = rows.slice(i, i + CLIENT_CHUNK)
++          setProgress({ table, done: Math.min(i + CLIENT_CHUNK, rows.length), total: rows.length })
++
++          const res = await fetch('/api/admin/backup', {
++            method: 'POST',
++            headers: { 'Content-Type': 'application/json' },
++            body: JSON.stringify({ confirm: RESTORE_WORD, table, rows: chunk }),
++          })
++          const j = await res.json().catch(() => null)
++          if (!res.ok || !j?.ok) {
++            throw new Error(`جدول «${table}»: ${j?.error || `خطای سرور (${res.status})`}`)
++          }
++          reportAcc.push({ table, upserted: j.upserted ?? 0 })
++        }
++      }
++
++      // ─── بازگردانی فایل‌های Storage (چانک بر اساس حجم) ───
++      for (const [bucket, files] of Object.entries(parsed.storage ?? {})) {
++        if (!Array.isArray(files) || files.length === 0) continue
++
++        let chunk: StorageFile[] = []
++        let chunkBytes = 0
++        let done = 0
++
++        const flush = async () => {
++          if (chunk.length === 0) return
++          setProgress({ table: `📁 ${bucket}`, done, total: files.length })
++
++          const res = await fetch('/api/admin/backup', {
++            method: 'POST',
++            headers: { 'Content-Type': 'application/json' },
++            body: JSON.stringify({ confirm: RESTORE_WORD, bucket, files: chunk }),
++          })
++          const j = await res.json().catch(() => null)
++          if (!res.ok || !j?.ok) {
++            throw new Error(`bucket «${bucket}»: ${j?.error || `خطای سرور (${res.status})`}`)
++          }
++          const results = (j.results ?? []) as { name: string; ok: boolean; error?: string }[]
++          for (const r of results) {
++            reportAcc.push({
++              table: `📁 ${bucket}/${r.name}`,
++              upserted: r.ok ? 1 : 0,
++              error: r.ok ? undefined : r.error ?? 'خطا',
++            })
++          }
++          done += chunk.length
++          chunk = []
++          chunkBytes = 0
++        }
++
++        for (const file of files) {
++          const bytes = file.data.length * 0.75
++          if (chunkBytes + bytes > 2_500_000 && chunk.length > 0) await flush()
++          chunk.push(file)
++          chunkBytes += bytes
++        }
++        await flush()
++      }
++
++      const merged: Record<string, RestoreReport> = {}
++      for (const r of reportAcc) {
++        if (!merged[r.table]) merged[r.table] = { table: r.table, upserted: 0 }
++        merged[r.table].upserted += r.upserted
++      }
++      setReport(Object.values(merged))
++      setProgress(null)
++    } catch (e) {
++      setRestoreError(e instanceof Error ? e.message : 'خطای نامشخص در بازگردانی')
++      setProgress(null)
++      setReport(reportAcc)
++    } finally {
++      setRestoring(false)
++    }
++  }
++
++  const doneCount = items.filter((it) => it.status === 'done').length
++  const totalBackupRows = lastBackup?.rows ?? 0
++
++  return (
++    <>
++      <div className="admin-header">
++        <div>
++          <h1>💾 پشتیبان‌گیری</h1>
++          <p className="admin-subtitle">
++            بکاپ شامل داده‌های دیتابیس به‌علاوه‌ی فایل‌های Storage (تصاویر محصولات، رسیدها، فونت‌ها) است؛ فایل را در جای امن نگه دارید.
++          </p>
++        </div>
++        <button className="btn primary-btn" onClick={() => { setItems(initialItems()); setFinalError(null); revokeResult(); setModalOpen(true) }}>
++          🛡️ شروع پشتیبان‌گیری
++        </button>
++      </div>
++
++      {/* آخرین بکاپ */}
++      <div className="admin-card backup-hero">
++        {lastBackup ? (
++          <>
++            <div className="backup-hero-title">
++              {lastBackup.ok ? '✅ آخرین پشتیبان‌گیری' : '⚠️ آخرین پشتیبان‌گیری (ناقص)'}
++            </div>
++            <div className="backup-hero-meta">
++              {faDateTime(lastBackup.at)} — {fa(totalBackupRows)} ردیف
++              {lastBackup.files > 0 && ` + ${fa(lastBackup.files)} فایل`} ({formatSize(lastBackup.size)})
++            </div>
++            <div className="backup-hero-note">
++              تاریخچه روی این دستگاه ذخیره می‌شود؛ خود فایل بکاپ جایی ذخیره نمی‌شود مگر اینکه شما دانلود و نگه‌داری کنید.
++            </div>
++          </>
++        ) : (
++          <>
++            <div className="backup-hero-title">هنوز بکاپی گرفته نشده</div>
++            <div className="backup-hero-meta">برای شروع، دکمه‌ی «شروع پشتیبان‌گیری» را بزنید.</div>
++          </>
++        )}
++      </div>
++
++      {/* تاریخچه */}
++      {history.length > 1 && (
++        <div className="admin-card">
++          <div className="backup-history-title">تاریخچه‌ی بکاپ‌ها (۵ مورد اخیر روی این دستگاه)</div>
++          <div className="backup-history-list">
++            {history.map((h) => (
++              <div key={h.at} className="backup-history-row">
++                <span>{h.ok ? '✅' : '⚠️'} {faDateTime(h.at)}</span>
++                <span>
++                  {fa(h.rows)} ردیف{h.files > 0 && ` + ${fa(h.files)} فایل`} — {formatSize(h.size)}
++                </span>
++              </div>
++            ))}
++          </div>
++        </div>
++      )}
++
++      {/* بازگردانی */}
++      <div className="admin-card">
++        <h2 className="backup-section-title">♻️ بازگردانی از فایل بکاپ</h2>
++        <p className="backup-muted">
++          ردیف‌های فایل بکاپ روی دیتابیس فعلی <b>upsert</b> می‌شوند: ردیف‌های موجود با نسخه‌ی بکاپ جایگزین و بقیه اضافه می‌شوند. هیچ داده‌ای حذف نمی‌شود.
++        </p>
++
++        <input
++          ref={fileRef}
++          type="file"
++          accept="application/json,.json"
++          onChange={(e) => handleFile(e.target.files?.[0] ?? null)}
++          className="backup-file-input"
++        />
++
++        {fileName && <div className="backup-muted">فایل انتخاب‌شده: {fileName}</div>}
++
++        {parsed && (
++          <div className="backup-parsed-box">
++            <div className="backup-history-title">
++              تاریخ بکاپ: {parsed.createdAt ? faDateTime(parsed.createdAt) : '—'}
++            </div>
++            <div>
++              مجموع {fa(totalRows(parsed))} ردیف از {fa(parsed.tables ? Object.keys(parsed.tables).length : 0)} جدول
++              {totalStorageFiles(parsed) > 0 && ` + ${fa(totalStorageFiles(parsed))} فایل Storage`}
++            </div>
++          </div>
++        )}
++
++        {parsed && (
++          <>
++            <label className="backup-confirm-label">
++              برای تأیید، عبارت «{RESTORE_WORD}» را تایپ کنید:
++            </label>
++            <input
++              className="backup-confirm-input"
++              value={confirmText}
++              onChange={(e) => setConfirmText(e.target.value)}
++              placeholder={RESTORE_WORD}
++              disabled={restoring}
++            />
++            <button className="btn danger" onClick={handleRestore} disabled={restoring || confirmText !== RESTORE_WORD}>
++              {restoring ? 'در حال بازگردانی…' : '♻️ شروع بازگردانی'}
++            </button>
++          </>
++        )}
++
++        {progress && (
++          <div className="backup-muted">
++            در حال بازگردانی «{progress.table}»: {fa(progress.done)} از {fa(progress.total)} ردیف…
++          </div>
++        )}
++
++        {restoreError && <div className="backup-error-line">خطا: {restoreError}</div>}
++
++        {report && report.length > 0 && (
++          <div className="backup-report-box">
++            {report.map((r) => (
++              <div key={r.table}>
++                {r.error ? '❌' : '✅'} <b>{r.table}</b>: {fa(r.upserted)} ردیف
++                {r.error ? ` — ${r.error}` : ''}
++              </div>
++            ))}
++          </div>
++        )}
++      </div>
++
++      {/* ─── مودال پشتیبان‌گیری ─── */}
++      {modalOpen && (
++        <div className="backup-overlay">
++          <div className="backup-modal" role="dialog" aria-modal="true" aria-label="پشتیبان‌گیری">
++            <div className="backup-modal-head">
++              <div className="backup-modal-title">
++                {running ? 'در حال پشتیبان‌گیری…' : resultBlobUrl ? 'پشتیبان‌گیری تمام شد' : 'پشتیبان‌گیری'}
++              </div>
++              <button
++                className="backup-close"
++                onClick={() => { setModalOpen(false); revokeResult() }}
++                disabled={running}
++                aria-label="بستن"
++              >
++                ✕
++              </button>
++            </div>
++
++            <div className="backup-banner">
++              🔒 در طول پشتیبان‌گیری امکان کار با بخش‌های دیگر منو وجود ندارد؛ تا پایان این صفحه باز می‌ماند.
++            </div>
++
++            <div className="backup-progress-line">
++              بخش {fa(overall.done)} از {fa(overall.total)}
++            </div>
++            <div className="backup-progress">
++              <div className="backup-progress-fill" style={{ width: `${Math.round((overall.done / overall.total) * 100)}%` }} />
++            </div>
++
++            <div className="backup-check">
++              {items.map((it) => (
++                <div key={it.key} className={`backup-item is-${it.status}`}>
++                  <span className="backup-item-icon">
++                    {it.status === 'done' ? '✅' : it.status === 'error' ? '❌' : it.status === 'active' ? <span className="backup-spinner" aria-label="در حال اجرا" /> : '⏳'}
++                  </span>
++                  <span className="backup-item-body">
++                    <span className="backup-item-label">
++                      {it.label}
++                      {it.status === 'done' && it.rows !== undefined && (
++                        <span className="backup-item-meta"> — {fa(it.rows)} ردیف</span>
++                      )}
++                      {it.status === 'done' && it.files !== undefined && (
++                        <span className="backup-item-meta"> — {fa(it.files)} فایل</span>
++                      )}
++                    </span>
++                    {it.status === 'error' && (
++                      <span className="backup-item-error">
++                        {it.error}
++                        <button className="backup-retry" onClick={() => retrySection(it.key)} disabled={running}>
++                          ↻ تلاش مجدد
++                        </button>
++                      </span>
++                    )}
++                  </span>
++                </div>
++              ))}
++            </div>
++
++            {doneCount === items.length && (
++              <div className="backup-summary">
++                <b>✅ بکاپ کامل گرفته شد.</b>
++                <div className="backup-muted">
++                  فایل به‌صورت خودکار دانلود شد؛ اگر دانلود نشد از دکمه‌ی زیر استفاده کنید.
++                </div>
++                {resultBlobUrl && resultName && (
++                  <button className="btn primary-btn backup-download-btn" onClick={() => downloadUrl(resultBlobUrl, resultName!)}>
++                    ⬇️ دانلود فایل بکاپ ({resultName})
++                  </button>
++                )}
++              </div>
++            )}
++
++            {finalError && (
++              <div className="backup-summary is-partial">
++                <b>⚠️ بکاپ ناقص است.</b>
++                <div className="backup-muted">{finalError}</div>
++                {resultBlobUrl && resultName && (
++                  <button className="btn backup-download-btn" onClick={() => downloadUrl(resultBlobUrl, resultName!)}>
++                    ⬇️ دانلود فایل ناقص ({resultName})
++                  </button>
++                )}
++              </div>
++            )}
++          </div>
++        </div>
++      )}
++    </>
++  )
++}
++
++function faDateTime(iso: string): string {
++  return new Date(iso).toLocaleString('fa-IR')
++}
+diff --git a/app/admin/backup/page.tsx b/app/admin/backup/page.tsx
+index c06361b..ab19b60 100644
+--- a/app/admin/backup/page.tsx
++++ b/app/admin/backup/page.tsx
+@@ -1,382 +1,15 @@
+-'use client'
++import type { Metadata } from 'next'
++import BackupClient from './BackupClient'
+ 
+-import { useRef, useState } from 'react'
+-
+-type StorageFile = { name: string; data: string }
+-
+-type BackupMeta = {
+-  app?: string
+-  backupVersion?: number
+-  createdAt?: string
+-  counts?: Record<string, number>
+-  skipped?: Record<string, string>
+-  tables?: Record<string, unknown[]>
+-  storage?: Record<string, StorageFile[]>
+-  storageSkipped?: Record<string, string>
+-}
+-
+-// نسخه‌های پشتیبانی‌شده: ۱ = فقط جداول، ۲ = جداول + فایل‌های Storage
+-const BACKUP_VERSION_OK = (v?: number) => v === 1 || v === 2
+-
+-type RestoreProgress = {
+-  table: string
+-  done: number
+-  total: number
+-}
+-
+-type RestoreReport = {
+-  table: string
+-  upserted: number
+-  error?: string
+-}
+-
+-const RESTORE_WORD = 'بازگردانی'
+-const CLIENT_CHUNK = 500 // هر بار حداکثر این تعداد ردیف به سرور فرستاده می‌شود (زیر سقف 4.5MB بدنه‌ی درخواست Vercel)
+-
+-function fa(n: number): string {
+-  return n.toLocaleString('fa-IR')
++export const metadata: Metadata = {
++  title: 'پشتیبان‌گیری',
++  robots: { index: false, follow: false },
+ }
+ 
+ export default function AdminBackupPage() {
+-  // ─── بکاپ ───
+-  const [backingUp, setBackingUp] = useState(false)
+-  const [backupMeta, setBackupMeta] = useState<BackupMeta | null>(null)
+-  const [backupError, setBackupError] = useState<string | null>(null)
+-
+-  // ─── بازگردانی ───
+-  const fileRef = useRef<HTMLInputElement>(null)
+-  const [parsed, setParsed] = useState<BackupMeta | null>(null)
+-  const [fileName, setFileName] = useState<string | null>(null)
+-  const [confirmText, setConfirmText] = useState('')
+-  const [restoring, setRestoring] = useState(false)
+-  const [progress, setProgress] = useState<RestoreProgress | null>(null)
+-  const [report, setReport] = useState<RestoreReport[] | null>(null)
+-  const [restoreError, setRestoreError] = useState<string | null>(null)
+-
+-  const totalRows = (meta: BackupMeta | null) =>
+-    meta?.counts ? Object.values(meta.counts).reduce((a, b) => a + b, 0) : 0
+-
+-  const totalStorageFiles = (meta: BackupMeta | null) =>
+-    meta?.storage ? Object.values(meta.storage).reduce((a, b) => a + b.length, 0) : 0
+-
+-  // ───────────────── گرفتن بکاپ ─────────────────
+-  const handleBackup = async () => {
+-    setBackingUp(true)
+-    setBackupError(null)
+-    setBackupMeta(null)
+-    try {
+-      const res = await fetch('/api/admin/backup', { cache: 'no-store' })
+-      if (!res.ok) {
+-        const j = await res.json().catch(() => null)
+-        throw new Error(j?.error || `خطای سرور (${res.status})`)
+-      }
+-      const text = await res.text()
+-      const meta = JSON.parse(text) as BackupMeta
+-      if (!BACKUP_VERSION_OK(meta?.backupVersion) || !meta.tables) {
+-        throw new Error('ساختار فایل بکاپ معتبر نیست')
+-      }
+-
+-      // ذخیره‌ی فایل
+-      const disposition = res.headers.get('Content-Disposition') || ''
+-      const match = disposition.match(/filename="([^"]+)"/)
+-      const name = match?.[1] || `cafepark-backup-${Date.now()}.json`
+-      const blob = new Blob([text], { type: 'application/json' })
+-      const url = URL.createObjectURL(blob)
+-      const a = document.createElement('a')
+-      a.href = url
+-      a.download = name
+-      document.body.appendChild(a)
+-      a.click()
+-      a.remove()
+-      URL.revokeObjectURL(url)
+-
+-      setBackupMeta(meta)
+-    } catch (e) {
+-      setBackupError(e instanceof Error ? e.message : 'خطای نامشخص')
+-    } finally {
+-      setBackingUp(false)
+-    }
+-  }
+-
+-  // ───────────────── انتخاب فایل بکاپ ─────────────────
+-  const handleFile = async (file: File | null) => {
+-    setParsed(null)
+-    setReport(null)
+-    setRestoreError(null)
+-    setConfirmText('')
+-    setProgress(null)
+-    if (!file) return
+-    setFileName(file.name)
+-    try {
+-      const text = await file.text()
+-      const meta = JSON.parse(text) as BackupMeta
+-      if (!BACKUP_VERSION_OK(meta?.backupVersion) || !meta.tables) {
+-        throw new Error('این فایل بکاپ کافه پارک نیست یا نسخه‌ی آن پشتیبانی نمی‌شود')
+-      }
+-      setParsed(meta)
+-    } catch (e) {
+-      setRestoreError(e instanceof Error ? e.message : 'فایل قابل خواندن نیست')
+-    }
+-  }
+-
+-  // ───────────────── بازگردانی ─────────────────
+-  const handleRestore = async () => {
+-    if (!parsed?.tables) return
+-    setRestoring(true)
+-    setRestoreError(null)
+-    setReport([])
+-
+-    const reportAcc: RestoreReport[] = []
+-
+-    try {
+-      // ترتیب جداول داخل فایل بکاپ همان ترتیب امن از نظر FK است
+-      for (const [table, rows] of Object.entries(parsed.tables)) {
+-        if (!Array.isArray(rows) || rows.length === 0) continue
+-
+-        for (let i = 0; i < rows.length; i += CLIENT_CHUNK) {
+-          const chunk = rows.slice(i, i + CLIENT_CHUNK)
+-          setProgress({ table, done: Math.min(i + CLIENT_CHUNK, rows.length), total: rows.length })
+-
+-          const res = await fetch('/api/admin/backup', {
+-            method: 'POST',
+-            headers: { 'Content-Type': 'application/json' },
+-            body: JSON.stringify({ confirm: RESTORE_WORD, table, rows: chunk }),
+-          })
+-          const j = await res.json().catch(() => null)
+-          if (!res.ok || !j?.ok) {
+-            throw new Error(
+-              `جدول «${table}»: ${j?.error || `خطای سرور (${res.status})`}`
+-            )
+-          }
+-          reportAcc.push({ table, upserted: j.upserted ?? 0 })
+-        }
+-      }
+-
+-      // ─── بازگردانی فایل‌های Storage (چانک بر اساس حجم، زیر سقف بدنه‌ی درخواست) ───
+-      for (const [bucket, files] of Object.entries(parsed.storage ?? {})) {
+-        if (!Array.isArray(files) || files.length === 0) continue
+-
+-        let chunk: StorageFile[] = []
+-        let chunkBytes = 0
+-        let done = 0
+-
+-        const flush = async () => {
+-          if (chunk.length === 0) return
+-          setProgress({ table: `📁 ${bucket}`, done, total: files.length })
+-
+-          const res = await fetch('/api/admin/backup', {
+-            method: 'POST',
+-            headers: { 'Content-Type': 'application/json' },
+-            body: JSON.stringify({ confirm: RESTORE_WORD, bucket, files: chunk }),
+-          })
+-          const j = await res.json().catch(() => null)
+-          if (!res.ok || !j?.ok) {
+-            throw new Error(`bucket «${bucket}»: ${j?.error || `خطای سرور (${res.status})`}`)
+-          }
+-          const results = (j.results ?? []) as { name: string; ok: boolean; error?: string }[]
+-          for (const r of results) {
+-            reportAcc.push({
+-              table: `📁 ${bucket}/${r.name}`,
+-              upserted: r.ok ? 1 : 0,
+-              error: r.ok ? undefined : r.error ?? 'خطا',
+-            })
+-          }
+-          done += chunk.length
+-          chunk = []
+-          chunkBytes = 0
+-        }
+-
+-        for (const file of files) {
+-          const bytes = file.data.length * 0.75
+-          if (chunkBytes + bytes > 2_500_000 && chunk.length > 0) await flush()
+-          chunk.push(file)
+-          chunkBytes += bytes
+-        }
+-        await flush()
+-      }
+-
+-      // جمع گزارش به‌ازای هر جدول
+-      const merged: Record<string, RestoreReport> = {}
+-      for (const r of reportAcc) {
+-        if (!merged[r.table]) merged[r.table] = { table: r.table, upserted: 0 }
+-        merged[r.table].upserted += r.upserted
+-      }
+-      setReport(Object.values(merged))
+-      setProgress(null)
+-    } catch (e) {
+-      setRestoreError(e instanceof Error ? e.message : 'خطای نامشخص در بازگردانی')
+-      setProgress(null)
+-      setReport(reportAcc)
+-    } finally {
+-      setRestoring(false)
+-    }
+-  }
+-
+-  const card: React.CSSProperties = {
+-    background: '#fff',
+-    border: '1px solid #e5e7eb',
+-    borderRadius: 12,
+-    padding: 20,
+-    marginBottom: 16,
+-  }
+-  const btn: React.CSSProperties = {
+-    padding: '10px 18px',
+-    borderRadius: 8,
+-    border: 'none',
+-    cursor: 'pointer',
+-    fontWeight: 700,
+-    color: '#fff',
+-    background: '#7c3aed',
+-  }
+-  const btnDanger: React.CSSProperties = { ...btn, background: '#dc2626' }
+-  const inputStyle: React.CSSProperties = {
+-    width: '100%',
+-    padding: '8px 12px',
+-    borderRadius: 8,
+-    border: '1px solid #d1d5db',
+-    boxSizing: 'border-box',
+-  }
+-
+   return (
+-    <div style={{ padding: 24, maxWidth: 760, margin: '0 auto' }}>
+-      <h1 style={{ fontSize: 22, marginBottom: 4 }}>💾 پشتیبان‌گیری</h1>
+-      <p style={{ color: '#6b7280', marginBottom: 20 }}>
+-        بکاپ شامل داده‌های دیتابیس (سفارش‌ها، محصولات، مشتریان و…) به‌علاوه‌ی فایل‌های
+-        Storage (تصاویر محصولات، رسیدها، فونت‌ها) است. این فایل را در جای امن نگه دارید.
+-      </p>
+-
+-      {/* گرفتن بکاپ */}
+-      <div style={card}>
+-        <h2 style={{ fontSize: 17, marginBottom: 8 }}>گرفتن بکاپ</h2>
+-        <p style={{ color: '#6b7280', marginBottom: 12 }}>
+-          یک فایل JSON از همه‌ی جداول ساخته می‌شود و دانلود می‌شود. این فایل را در جای
+-          امن نگه دارید (ایمیل، هارد اکسترنال، درایو ابری).
+-        </p>
+-        <button style={btn} onClick={handleBackup} disabled={backingUp}>
+-          {backingUp ? 'در حال گرفتن بکاپ…' : '⬇️ دانلود بکاپ کامل'}
+-        </button>
+-
+-        {backupError && (
+-          <div style={{ color: '#dc2626', marginTop: 12 }}>خطا: {backupError}</div>
+-        )}
+-        {backupMeta && (
+-          <div style={{ marginTop: 12, color: '#16a34a', fontWeight: 600 }}>
+-            ✅ بکاپ گرفته شد — {fa(totalRows(backupMeta))} ردیف از{' '}
+-            {fa(backupMeta.tables ? Object.keys(backupMeta.tables).length : 0)} جدول
+-            {totalStorageFiles(backupMeta) > 0 &&
+-              ` + ${fa(totalStorageFiles(backupMeta))} فایل از ${
+-                backupMeta.storage ? Object.keys(backupMeta.storage).length : 0
+-              } پوشه`}
+-          </div>
+-        )}
+-        {backupMeta?.skipped && Object.keys(backupMeta.skipped).length > 0 && (
+-          <div style={{ marginTop: 8, color: '#b45309', fontSize: 13 }}>
+-            ⚠️ جدول‌های ردشده چون در دیتابیس موجود نیستند:{' '}
+-            {Object.keys(backupMeta.skipped).join('، ')}
+-          </div>
+-        )}
+-        {backupMeta?.storageSkipped && Object.keys(backupMeta.storageSkipped).length > 0 && (
+-          <div style={{ marginTop: 8, color: '#b45309', fontSize: 13 }}>
+-            ⚠️ موارد ردشده از Storage: {Object.keys(backupMeta.storageSkipped).join('، ')}
+-          </div>
+-        )}
+-      </div>
+-
+-      {/* بازگردانی */}
+-      <div style={card}>
+-        <h2 style={{ fontSize: 17, marginBottom: 8 }}>بازگردانی از فایل بکاپ</h2>
+-        <p style={{ color: '#6b7280', marginBottom: 12 }}>
+-          ردیف‌های فایل بکاپ روی دیتابیس فعلی <b>upsert</b> می‌شوند: ردیف‌های موجود با
+-          نسخه‌ی بکاپ جایگزین و بقیه اضافه می‌شوند. هیچ داده‌ای حذف نمی‌شود.
+-        </p>
+-
+-        <input
+-          ref={fileRef}
+-          type="file"
+-          accept="application/json,.json"
+-          onChange={(e) => handleFile(e.target.files?.[0] ?? null)}
+-          style={{ marginBottom: 12 }}
+-        />
+-
+-        {fileName && (
+-          <div style={{ marginBottom: 8, color: '#6b7280' }}>فایل انتخاب‌شده: {fileName}</div>
+-        )}
+-
+-        {parsed && (
+-          <div
+-            style={{
+-              background: '#f9fafb',
+-              border: '1px solid #e5e7eb',
+-              borderRadius: 8,
+-              padding: 12,
+-              marginBottom: 12,
+-            }}
+-          >
+-            <div style={{ fontWeight: 700, marginBottom: 4 }}>
+-              تاریخ بکاپ: {parsed.createdAt ? new Date(parsed.createdAt).toLocaleString('fa-IR') : '—'}
+-            </div>
+-            <div>
+-              مجموع {fa(totalRows(parsed))} ردیف از {fa(parsed.tables ? Object.keys(parsed.tables).length : 0)} جدول
+-              {totalStorageFiles(parsed) > 0 &&
+-                ` + ${fa(totalStorageFiles(parsed))} فایل Storage`}
+-            </div>
+-          </div>
+-        )}
+-
+-        {parsed && (
+-          <>
+-            <label style={{ display: 'block', marginBottom: 6, fontWeight: 600 }}>
+-              برای تأیید، عبارت «{RESTORE_WORD}» را تایپ کنید:
+-            </label>
+-            <input
+-              style={{ ...inputStyle, marginBottom: 12 }}
+-              value={confirmText}
+-              onChange={(e) => setConfirmText(e.target.value)}
+-              placeholder={RESTORE_WORD}
+-              disabled={restoring}
+-            />
+-            <button
+-              style={btnDanger}
+-              onClick={handleRestore}
+-              disabled={restoring || confirmText !== RESTORE_WORD}
+-            >
+-              {restoring ? 'در حال بازگردانی…' : '♻️ شروع بازگردانی'}
+-            </button>
+-          </>
+-        )}
+-
+-        {progress && (
+-          <div style={{ marginTop: 12, color: '#6b7280' }}>
+-            در حال بازگردانی «{progress.table}»: {fa(progress.done)} از {fa(progress.total)} ردیف…
+-          </div>
+-        )}
+-
+-        {restoreError && (
+-          <div style={{ color: '#dc2626', marginTop: 12 }}>خطا: {restoreError}</div>
+-        )}
+-
+-        {report && report.length > 0 && (
+-          <div style={{ marginTop: 12 }}>
+-            <div style={{ fontWeight: 700, marginBottom: 6 }}>نتیجه‌ی بازگردانی:</div>
+-            <div
+-              style={{
+-                maxHeight: 220,
+-                overflowY: 'auto',
+-                border: '1px solid #e5e7eb',
+-                borderRadius: 8,
+-                padding: 8,
+-              }}
+-            >
+-              {report.map((r) => (
+-                <div key={r.table} style={{ padding: '2px 0' }}>
+-                  {r.error ? '❌' : '✅'} <b>{r.table}</b>: {fa(r.upserted)} ردیف
+-                  {r.error ? ` — ${r.error}` : ''}
+-                </div>
+-              ))}
+-            </div>
+-          </div>
+-        )}
+-      </div>
+-    </div>
++    <main className="admin">
++      <BackupClient />
++    </main>
+   )
+ }
+diff --git a/app/api/admin/backup/route.ts b/app/api/admin/backup/route.ts
+index 740a123..37c46f0 100644
+--- a/app/api/admin/backup/route.ts
++++ b/app/api/admin/backup/route.ts
+@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
+ import { apiError } from '@/lib/api-error'
+ import { requireAdmin } from '@/lib/admin/require-admin'
+ import { supabaseAdmin } from '@/lib/supabase/server'
++import { BACKUP_SECTIONS, STORAGE_BUCKETS, STORAGE_SECTION_KEY } from '@/lib/backup-sections'
+ 
+ export const dynamic = 'force-dynamic'
+ 
+@@ -35,8 +36,7 @@ const BACKUP_TABLES = [
+   'club_settings_log',
+ ] as const
+ 
+-// bucketهای Storage سوپابیس که فایل‌هایشان داخل بکاپ می‌آیند (base64)
+-const STORAGE_BUCKETS = ['product-images', 'receipts', 'theme-fonts'] as const
++// bucketهای Storage از lib/backup-sections (منبع واحد برای بکاپ و بازگردانی) import می‌شود
+ 
+ const PAGE_SIZE = 1000 // بکاپ: تعداد ردیف در هر کوئری
+ const RESTORE_CHUNK = 500 // بازگردانی: تعداد ردیف در هر upsert
+@@ -64,15 +64,141 @@ function contentTypeFor(name: string): string {
+   return MIME_BY_EXT[ext] ?? 'application/octet-stream'
+ }
+ 
++// ─────────────────────────────────────────────────────────────
++// helpers مشترک بکاپ کامل و بخش‌بندی‌شده (پچ ۴۹)
++// ─────────────────────────────────────────────────────────────
++
++// خواندن کامل یک جدول با صفحه‌بندی
++async function fetchAllRows(db: ReturnType<typeof supabaseAdmin>, table: string) {
++  const rows: unknown[] = []
++  let from = 0
++  for (;;) {
++    const { data, error } = await db
++      .from(table)
++      .select('*')
++      .range(from, from + PAGE_SIZE - 1)
++    if (error) throw new Error(error.message)
++    if (!data || data.length === 0) break
++    rows.push(...data)
++    if (data.length < PAGE_SIZE) break
++    from += PAGE_SIZE
++  }
++  return rows
++}
++
++// جمع‌آوری فایل‌های Storage:
++// برخلاف نسخهٔ قبلی، خطای دانلود «یک» فایل کل bucket را خراب نمی‌کند؛
++// هر فایل جداگانه تلاش مجدد می‌شود و در صورت شکست با «علت» ثبت می‌شود.
++async function collectStorage(db: ReturnType<typeof supabaseAdmin>) {
++  const storage: Record<string, { name: string; data: string }[]> = {}
++  const storageSkipped: Record<string, string> = {}
++
++  for (const bucket of STORAGE_BUCKETS) {
++    const out: { name: string; data: string }[] = []
++    try {
++      const { data: files, error } = await db.storage
++        .from(bucket)
++        .list('', {
++          limit: MAX_FILES_PER_BUCKET,
++          sortBy: { column: 'created_at', order: 'desc' },
++        })
++      if (error) throw new Error(error.message)
++
++      for (const f of files ?? []) {
++        if (!f.id) continue // پوشه‌های فرضی را رد کن
++        const key = `${bucket}/${f.name}`
++
++        // تلاش مجدد یک‌بار برای خطاهای گذرا
++        let blob: Blob | null = null
++        let lastErr = ''
++        for (let attempt = 0; attempt < 2 && !blob; attempt++) {
++          const { data, error: dlError } = await db.storage.from(bucket).download(f.name)
++          if (!dlError && data) {
++            blob = data
++          } else {
++            lastErr = dlError?.message ?? 'داده خالی'
++            if (attempt === 0) await new Promise((r) => setTimeout(r, 400))
++          }
++        }
++        if (!blob) {
++          storageSkipped[key] = `خطا در دانلود: ${lastErr}`
++          continue
++        }
++        if (blob.size > MAX_FILE_BYTES) {
++          storageSkipped[key] = `حجم ${(blob.size / 1048576).toFixed(1)}MB از سقف ۳ مگابایت بیشتر است`
++          continue
++        }
++        const buf = Buffer.from(await blob.arrayBuffer())
++        out.push({ name: f.name, data: buf.toString('base64') })
++      }
++      storage[bucket] = out
++    } catch (e) {
++      // خطای سطح bucket (مثلاً list) — فایل‌های همین‌جا گرفته‌شده حفظ می‌شوند
++      storage[bucket] = out
++      storageSkipped[bucket] = e instanceof Error ? e.message : 'خطای نامشخص'
++    }
++  }
++  return { storage, storageSkipped }
++}
++
++function storageTotals(storage: Record<string, { name: string; data: string }[]>) {
++  const storageCounts = Object.fromEntries(
++    Object.entries(storage).map(([k, v]) => [k, v.length])
++  )
++  const files = Object.values(storageCounts).reduce((a, b) => a + b, 0)
++  return { storageCounts, files }
++}
++
+ // ─────────────────────────────────────────────────────────────
+ // GET — گرفتن بکاپ کامل (دانلود یک فایل JSON شامل همه‌ی جداول)
+ // ─────────────────────────────────────────────────────────────
+-export async function GET() {
++export async function GET(request: Request) {
+   try {
+     const denied = await requireAdmin()
+     if (denied) return denied
+ 
+     const db = supabaseAdmin()
++
++    // ─── حالت بخش‌بندی‌شده (پچ ۴۹): /api/admin/backup?section=<key> ───
++    // هر بخش جداگانه خوانده می‌شود تا چک‌لیست زنده در UI ممکن شود؛
++    // ادغام بخش‌ها سمت کلاینت همان ساختار payload بکاپ کامل را می‌سازد.
++    const { searchParams } = new URL(request.url)
++    const section = searchParams.get('section')
++    if (section) {
++      if (section === STORAGE_SECTION_KEY) {
++        const { storage, storageSkipped } = await collectStorage(db)
++        const { storageCounts, files } = storageTotals(storage)
++        return NextResponse.json({
++          ok: true,
++          section,
++          storage,
++          storageCounts,
++          storageSkipped,
++          files,
++        })
++      }
++
++      const sec = BACKUP_SECTIONS.find((s) => s.key === section)
++      if (!sec) {
++        return NextResponse.json({ error: 'بخش نامعتبر است' }, { status: 400 })
++      }
++
++      const tables: Record<string, unknown[]> = {}
++      const skipped: Record<string, string> = {}
++      let rows = 0
++      for (const table of sec.tables) {
++        try {
++          tables[table] = await fetchAllRows(db, table)
++          rows += tables[table].length
++        } catch (e) {
++          tables[table] = []
++          skipped[table] = e instanceof Error ? e.message : 'خطای نامشخص'
++        }
++      }
++      return NextResponse.json({ ok: true, section, rows, tables, skipped })
++    }
++
++    // ─── بکاپ کامل (سازگار با نسخهٔ قبل) ───
+     const tables: Record<string, unknown[]> = {}
+     // جدول‌هایی که در دیتابیس موجود نیستند یا خوانده نشدند؛
+     // بکاپ به‌جای شکستن، آن‌ها را خالی ثبت می‌کند و ادامه می‌دهد
+@@ -80,58 +206,14 @@ export async function GET() {
+ 
+     for (const table of BACKUP_TABLES) {
+       try {
+-        const rows: unknown[] = []
+-        let from = 0
+-        for (;;) {
+-          const { data, error } = await db
+-            .from(table)
+-            .select('*')
+-            .range(from, from + PAGE_SIZE - 1)
+-          if (error) throw new Error(error.message)
+-          if (!data || data.length === 0) break
+-          rows.push(...data)
+-          if (data.length < PAGE_SIZE) break
+-          from += PAGE_SIZE
+-        }
+-        tables[table] = rows
++        tables[table] = await fetchAllRows(db, table)
+       } catch (e) {
+         tables[table] = []
+         skipped[table] = e instanceof Error ? e.message : 'خطای نامشخص'
+       }
+     }
+ 
+-    // ─── فایل‌های Storage (تصاویر محصولات، رسیدها، فونت‌ها) ───
+-    const storage: Record<string, { name: string; data: string }[]> = {}
+-    const storageSkipped: Record<string, string> = {}
+-
+-    for (const bucket of STORAGE_BUCKETS) {
+-      try {
+-        const { data: files, error } = await db.storage
+-          .from(bucket)
+-          .list('', {
+-            limit: MAX_FILES_PER_BUCKET,
+-            sortBy: { column: 'created_at', order: 'desc' },
+-          })
+-        if (error) throw new Error(error.message)
+-
+-        const out: { name: string; data: string }[] = []
+-        for (const f of files ?? []) {
+-          if (!f.id) continue // پوشه‌های فرضی را رد کن
+-          const { data: blob, error: dlError } = await db.storage.from(bucket).download(f.name)
+-          if (dlError || !blob) throw new Error(`دانلود «${f.name}»: ${dlError?.message ?? 'داده خالی'}`)
+-          if (blob.size > MAX_FILE_BYTES) {
+-            storageSkipped[`${bucket}/${f.name}`] = 'حجم فایل از سقف مجاز بیشتر است'
+-            continue
+-          }
+-          const buf = Buffer.from(await blob.arrayBuffer())
+-          out.push({ name: f.name, data: buf.toString('base64') })
+-        }
+-        storage[bucket] = out
+-      } catch (e) {
+-        storage[bucket] = []
+-        storageSkipped[bucket] = e instanceof Error ? e.message : 'خطای نامشخص'
+-      }
+-    }
++    const { storage, storageSkipped } = await collectStorage(db)
+ 
+     const payload = {
+       app: 'cafe-park-menu',
+diff --git a/app/globals.css b/app/globals.css
+index 3be00d1..b42f19f 100644
+--- a/app/globals.css
++++ b/app/globals.css
+@@ -15154,3 +15154,49 @@ a.cat {
+ .admin-theme-switch:disabled{opacity:.6;cursor:default}
+ .admin-shell.dark-mode .admin-theme-switch{background:#3a352e;border-color:#2c2822}
+ .admin-sidebar-footer .admin-theme-switch{display:flex;margin:8px auto 0}
++
++/* 🛡️ پچ ۴۹: رابط پشتیبان‌گیری — همه‌ی رنگ‌ها از توکن‌های ادمین (دارک خودکار) */
++.backup-hero{background:var(--admin-surface-3);border:1px solid var(--admin-border);border-radius:var(--admin-radius);padding:16px 18px;margin-bottom:14px}
++.backup-hero-title{font-weight:800;font-size:15px;color:var(--admin-text-strong);margin-bottom:4px}
++.backup-hero-meta{font-size:13px;color:var(--admin-text-muted)}
++.backup-hero-note{font-size:12px;color:var(--admin-text-faint);margin-top:6px}
++.backup-history-title{font-weight:700;font-size:14px;color:var(--admin-text-strong);margin-bottom:8px}
++.backup-history-list{display:flex;flex-direction:column;gap:6px}
++.backup-history-row{display:flex;justify-content:space-between;gap:10px;font-size:13px;color:var(--admin-text-soft);background:var(--admin-surface-3);border:1px solid var(--admin-border-soft);border-radius:10px;padding:8px 12px;flex-wrap:wrap}
++.backup-section-title{font-size:16px;margin:0 0 8px;color:var(--admin-text-strong)}
++.backup-muted{font-size:13px;color:var(--admin-text-muted);margin:6px 0 12px;line-height:1.9}
++.backup-file-input{margin-bottom:12px;color:var(--admin-text)}
++.backup-parsed-box{background:var(--admin-surface-3);border:1px solid var(--admin-border);border-radius:10px;padding:12px 14px;margin-bottom:12px;font-size:13px;color:var(--admin-text-soft)}
++.backup-confirm-label{display:block;font-weight:700;font-size:13px;color:var(--admin-text);margin-bottom:6px}
++.backup-confirm-input{width:100%;max-width:280px;padding:8px 12px;border-radius:10px;border:1px solid var(--admin-border);background:var(--admin-surface);color:var(--admin-text-strong);box-sizing:border-box;margin-bottom:12px;font-family:inherit}
++.backup-error-line{color:var(--admin-danger-strong);font-size:13px;margin-top:10px}
++.backup-report-box{max-height:220px;overflow-y:auto;border:1px solid var(--admin-border);border-radius:10px;padding:8px 12px;font-size:13px;color:var(--admin-text-soft);margin-top:10px;background:var(--admin-surface-3)}
++.backup-overlay{position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(26,24,21,.55);backdrop-filter:grayscale(1) blur(1px);-webkit-backdrop-filter:grayscale(1) blur(1px)}
++.backup-modal{width:min(560px,100%);max-height:88vh;overflow-y:auto;background:var(--admin-surface);border:1px solid var(--admin-border);border-radius:var(--admin-radius);padding:18px 20px;box-shadow:var(--admin-shadow)}
++.backup-modal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
++.backup-modal-title{font-weight:800;font-size:16px;color:var(--admin-text-strong)}
++.backup-close{border:none;background:var(--admin-hover);color:var(--admin-text-muted);width:30px;height:30px;border-radius:8px;cursor:pointer;font-size:14px}
++.backup-close:disabled{opacity:.5;cursor:default}
++.backup-banner{background:rgba(217,159,89,.14);border:1px solid var(--admin-warning);border-radius:10px;padding:9px 12px;font-size:12.5px;color:var(--admin-text-strong);margin-bottom:12px}
++.backup-progress-line{font-size:12px;color:var(--admin-text-muted);margin-bottom:6px}
++.backup-progress{height:8px;border-radius:999px;background:var(--admin-hover);overflow:hidden;margin-bottom:14px}
++.backup-progress-fill{height:100%;background:var(--admin-primary);border-radius:999px;transition:width .3s ease}
++.backup-check{display:flex;flex-direction:column;gap:8px}
++.backup-item{display:flex;gap:10px;align-items:flex-start;border:1px solid var(--admin-border-soft);border-radius:10px;padding:9px 12px;background:var(--admin-surface-3);transition:border-color .2s ease}
++.backup-item.is-active{border-color:var(--admin-primary)}
++.backup-item.is-done{border-color:var(--admin-success)}
++.backup-item.is-error{border-color:var(--admin-danger)}
++.backup-item.is-pending{opacity:.65}
++.backup-item-icon{width:20px;flex-shrink:0;font-size:14px;line-height:1.6}
++.backup-item-body{display:flex;flex-direction:column;gap:4px;font-size:13.5px;color:var(--admin-text)}
++.backup-item-label{font-weight:600}
++.backup-item-meta{font-weight:400;color:var(--admin-text-muted);font-size:12.5px}
++.backup-item-error{font-size:12px;color:var(--admin-danger-strong);display:flex;align-items:center;gap:8px;flex-wrap:wrap}
++.backup-retry{border:none;background:var(--admin-danger-soft);color:var(--admin-danger-strong);border-radius:8px;padding:3px 10px;font-size:12px;cursor:pointer;font-family:inherit}
++.backup-retry:disabled{opacity:.6;cursor:default}
++.backup-spinner{display:inline-block;width:13px;height:13px;border:2px solid var(--admin-border);border-top-color:var(--admin-primary);border-radius:50%;animation:backup-spin .7s linear infinite;vertical-align:middle}
++@keyframes backup-spin{to{transform:rotate(360deg)}}
++.backup-summary{margin-top:14px;border:1px solid var(--admin-success);background:rgba(71,112,82,.1);border-radius:10px;padding:12px 14px;font-size:13.5px;color:var(--admin-text)}
++.backup-summary.is-partial{border-color:var(--admin-warning);background:rgba(217,159,89,.12)}
++.backup-summary .backup-muted{margin:6px 0}
++.backup-download-btn{margin-top:8px}
+diff --git a/lib/backup-sections.ts b/lib/backup-sections.ts
+new file mode 100644
+index 0000000..24d0fb5
+--- /dev/null
++++ b/lib/backup-sections.ts
+@@ -0,0 +1,33 @@
++// lib/backup-sections.ts
++// بخش‌بندی بکاپ برای چک‌لیست زندهٔ پنل ادمین (پچ ۴۹).
++// ترتیب جداول داخل بخش‌ها طوری است که ترتیب کل حاصل، امن از نظر کلیدهای خارجی بماند
++// (مصرف‌کنندهٔ اصلی بازگردانی، ترتیب کلیدهای object «tables» را رعایت می‌کند).
++
++export type BackupSection = {
++  key: string
++  label: string
++  tables: readonly string[]
++}
++
++export const BACKUP_SECTIONS: BackupSection[] = [
++  { key: 'core', label: 'پایه و تنظیمات', tables: ['settings', 'club_settings', 'tables', 'cancellation_reasons'] },
++  { key: 'branding', label: 'تم‌ها و جملات', tables: ['themes', 'quotes'] },
++  {
++    key: 'catalog',
++    label: 'کاتالوگ (دسته‌ها، محصولات، میزها)',
++    tables: ['categories', 'organizations', 'coupons', 'products', 'variant_groups', 'variant_options', 'takeaway_fees'],
++  },
++  {
++    key: 'customers',
++    label: 'مشتریان و باشگاه',
++    tables: ['organization_members', 'customers', 'membership_requests', 'push_subscriptions'],
++  },
++  { key: 'orders', label: 'سفارش‌ها و پرداخت‌ها', tables: ['orders', 'order_payments', 'order_refunds'] },
++  { key: 'logs', label: 'گزارش‌های سیستمی', tables: ['redemption_logs', 'club_settings_log'] },
++]
++
++export const STORAGE_SECTION_KEY = 'storage'
++export const STORAGE_SECTION_LABEL = 'فایل‌های رسانه (تصاویر، رسیدها، فونت‌ها)'
++
++// bucketهای Storage — منبع واحد برای بکاپ و بازگردانی
++export const STORAGE_BUCKETS = ['product-images', 'receipts', 'theme-fonts'] as const
+diff --git a/patch-49-backup-modal-checklist-RELEASE.md b/patch-49-backup-modal-checklist-RELEASE.md
+new file mode 100644
+index 0000000..d74034a
+--- /dev/null
++++ b/patch-49-backup-modal-checklist-RELEASE.md
+@@ -0,0 +1,66 @@
++# پچ ۴۹ — ریدیزاین تجربهٔ پشتیبان‌گیری: مودال + چک‌لیست زنده + دانلود درجای‌ماندن + ریشه‌یابی ردشده‌ها
++
++پیش‌نیاز: پچ ۴۸ مرج شده باشد. بدون migration دیتابیس. بدون تغییر سازگاری فایل بکاپ و بازگردانی.
++
++## ریشه‌یابی «⚠️ موارد ردشده از Storage» (گزارش تو)
++- علت واقعی آن دو فایل: **حجم بیشتر از سقف ۳ مگابایت** (`MAX_FILE_BYTES` در route) — کد قبلی
++  علت را ثبت می‌کرد ولی UI فقط اسم فایل را نشان می‌داد
++- دو ضعف دیگر که در همین پچ حل شد:
++  1. خطای دانلود «یک» فایل، **کل bucket را خالی می‌کرد** (throw در حلقه) → حالا هر فایل
++     جداگانه ایزوله است + یک بار تلاش مجدد + ثبت علت دقیق («حجم X.XMB از سقف ۳ مگابایت…»
++     یا «خطا در دانلود: …»)
++  2. UI علت‌ها را نشان نمی‌داد → حالا در چک‌لیست، علت هر مورد ردشده دیده می‌شود
++- توصیه برای آن دو تصویر: قبل از آپلود، فشرده‌سازی به زیر ۳MB (یا در فاز بعد: نصف‌کردن خودکار رزولوشن آپلود)
++
++## معماری بخش‌بندی‌شده (چک‌لیست واقعاً زنده)
++- `lib/backup-sections.ts` (جدید): ۶ بخش جدولی + بخش Storage + منبع واحد bucketها؛
++  ترتیب حاصل، امن از نظر FK برای بازگردانی (سازگار با POST فعلی)
++- `GET /api/admin/backup?section=<key>`: هر بخش جدا خوانده می‌شود و
++  `{rows, tables, skipped}` یا `{files, storage, storageSkipped}` برمی‌گرداند؛
++  **GET بدون پارامتر عیناً شکل قبلی را می‌دهد** (سازگاری کامل با restore)
++- ادغام بخش‌ها و ساخت فایل نهایی سمت کلاینت (Blob) با همان ساختار payload قبلی
++
++## UI جدید (طرح تو + بهبودها)
++- دکمه «🛡️ شروع پشتیبان‌گیری» → **مودال تمام‌صفحه**؛ پس‌زمینه با `backdrop-filter: grayscale`
++  سیاه‌وسفید و قفل اسکرول → معلوم است سیستم مشغول بکاپ است و بقیه بخش‌ها غیرفعال‌اند
++- بنر: «🔒 در طول پشتیبان‌گیری امکان کار با بخش‌های دیگر منو وجود ندارد»
++- **چک‌لیست فارسی ۷ موردی**: هر بخش ⏳ → چرخان → ✅ (تعداد ردیف/فایل) یا ❌ + «↻ تلاش مجدد همان بخش»؛
++  نوار پیشرفت «بخش X از ۷»؛ دکمه بستن در حین اجرا قفل است
++- پایان: خلاصه + **دانلود خودکار** + دکمه «دانلود مجدد» در همان مودال؛
++  اگر بخشی خطا داده باشد: عنوان فایل `…-INCOMPLETE-…` + هشدار ناقص + امکان دانلودِ ناقص + تلاش مجدد
++- **آخرین بکاپ**: بالای صفحه (تاریخ شمسی، ردیف‌ها، فایل‌ها، حجم) + **تاریخچه ۵ مورد اخیر**
++- تاریخچه در `localStorage` دستگاه ادمین ذخیره می‌شود (جدول `settings` تک‌ردیفیِ ستون‌محور است و
++  کلید جدید نیاز به migration داشت → عمداً به فاز دوم: ثبت سمت سرور + آپلود خودکار به Storage موجود)
++
++## فایل‌ها
++- `lib/backup-sections.ts` (جدید) · `app/api/admin/backup/route.ts` · `app/admin/backup/page.tsx`
++- `app/admin/backup/BackupClient.tsx` (جدید — شامل منطق بازگردانی قبلی، بازاستایل‌شده با کلاس‌های ادمین؛
++  استایل‌های inline بنفش قبلی حذف شد) · `app/globals.css` (کلاس‌های `.backup-*` با توکن‌ها → دارک خودکار)
++
++## دروازه‌ها
++verifier CSS ✓ · `tsc --noEmit` ✓ · `next build` تولیدی ✓ · apply-check + تایپ پس از اعمال ✓
++
++## اعمال (PowerShell)
++```powershell
++git checkout main && git pull
++git checkout -b feat/patch-49-backup-modal-checklist
++git apply --ignore-whitespace --verbose patch-49-backup-modal-checklist.patch
++# صحت اعمال — انتظار:
++(Select-String -Path "lib\backup-sections.ts" -Pattern "BACKUP_SECTIONS").Count          # > 1
++(Select-String -Path "app\api\admin\backup\route.ts" -Pattern "section=").Count          # > 1
++(Select-String -Path "app\globals.css" -Pattern "\.backup-modal").Count                  # >= 1
++git add -A
++git commit -m "feat(admin): patch 49 - backup modal with live checklist, in-place download, storage skip reasons"
++git push -u origin feat/patch-49-backup-modal-checklist
++```
++سپس PR و merge: `https://github.com/hadiassadi/cafe-park-menu/compare/main...feat/patch-49-backup-modal-checklist`
++
++## تست بعد از merge (کاربر)
++1. `git checkout main` ← `git pull` ← ری‌استارت dev ← `Ctrl+F5`
++2. پشتیبان‌گیری → دکمه شروع → مودال باز، پس‌زمینه سیاه‌وسفید، بنر قفل دیده شود
++3. چک‌لیست بخش‌به‌بخش تیک بخورد + نوار پیشرفت جلو برود + در پایان دانلود خودکار
++4. بستن مودال فقط پس از پایان فعال باشد
++5. «آخرین بکاپ» و تاریخچه به‌روز شود (روی همان دستگاه)
++6. درباره‌ی دو فایل ردشده: حالا علت (حجم MB) کنار اسم فایل دیده می‌شود
++7. حالت شب: کل صفحه و مودال خوانا (توکن‌ها)
++8. بازگردانی: منطق قبلی — فایل بکاپ فعلی، تایپ «بازگردانی»، پیشرفت و گزارش سالم

@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { apiError } from '@/lib/api-error'
 import { requireAdmin } from '@/lib/admin/require-admin'
 import { supabaseAdmin } from '@/lib/supabase/server'
+import { BACKUP_SECTIONS, STORAGE_BUCKETS, STORAGE_SECTION_KEY } from '@/lib/backup-sections'
 
 export const dynamic = 'force-dynamic'
 
@@ -35,8 +36,7 @@ const BACKUP_TABLES = [
   'club_settings_log',
 ] as const
 
-// bucketهای Storage سوپابیس که فایل‌هایشان داخل بکاپ می‌آیند (base64)
-const STORAGE_BUCKETS = ['product-images', 'receipts', 'theme-fonts'] as const
+// bucketهای Storage از lib/backup-sections (منبع واحد برای بکاپ و بازگردانی) import می‌شود
 
 const PAGE_SIZE = 1000 // بکاپ: تعداد ردیف در هر کوئری
 const RESTORE_CHUNK = 500 // بازگردانی: تعداد ردیف در هر upsert
@@ -65,14 +65,140 @@ function contentTypeFor(name: string): string {
 }
 
 // ─────────────────────────────────────────────────────────────
+// helpers مشترک بکاپ کامل و بخش‌بندی‌شده (پچ ۴۹)
+// ─────────────────────────────────────────────────────────────
+
+// خواندن کامل یک جدول با صفحه‌بندی
+async function fetchAllRows(db: ReturnType<typeof supabaseAdmin>, table: string) {
+  const rows: unknown[] = []
+  let from = 0
+  for (;;) {
+    const { data, error } = await db
+      .from(table)
+      .select('*')
+      .range(from, from + PAGE_SIZE - 1)
+    if (error) throw new Error(error.message)
+    if (!data || data.length === 0) break
+    rows.push(...data)
+    if (data.length < PAGE_SIZE) break
+    from += PAGE_SIZE
+  }
+  return rows
+}
+
+// جمع‌آوری فایل‌های Storage:
+// برخلاف نسخهٔ قبلی، خطای دانلود «یک» فایل کل bucket را خراب نمی‌کند؛
+// هر فایل جداگانه تلاش مجدد می‌شود و در صورت شکست با «علت» ثبت می‌شود.
+async function collectStorage(db: ReturnType<typeof supabaseAdmin>) {
+  const storage: Record<string, { name: string; data: string }[]> = {}
+  const storageSkipped: Record<string, string> = {}
+
+  for (const bucket of STORAGE_BUCKETS) {
+    const out: { name: string; data: string }[] = []
+    try {
+      const { data: files, error } = await db.storage
+        .from(bucket)
+        .list('', {
+          limit: MAX_FILES_PER_BUCKET,
+          sortBy: { column: 'created_at', order: 'desc' },
+        })
+      if (error) throw new Error(error.message)
+
+      for (const f of files ?? []) {
+        if (!f.id) continue // پوشه‌های فرضی را رد کن
+        const key = `${bucket}/${f.name}`
+
+        // تلاش مجدد یک‌بار برای خطاهای گذرا
+        let blob: Blob | null = null
+        let lastErr = ''
+        for (let attempt = 0; attempt < 2 && !blob; attempt++) {
+          const { data, error: dlError } = await db.storage.from(bucket).download(f.name)
+          if (!dlError && data) {
+            blob = data
+          } else {
+            lastErr = dlError?.message ?? 'داده خالی'
+            if (attempt === 0) await new Promise((r) => setTimeout(r, 400))
+          }
+        }
+        if (!blob) {
+          storageSkipped[key] = `خطا در دانلود: ${lastErr}`
+          continue
+        }
+        if (blob.size > MAX_FILE_BYTES) {
+          storageSkipped[key] = `حجم ${(blob.size / 1048576).toFixed(1)}MB از سقف ۳ مگابایت بیشتر است`
+          continue
+        }
+        const buf = Buffer.from(await blob.arrayBuffer())
+        out.push({ name: f.name, data: buf.toString('base64') })
+      }
+      storage[bucket] = out
+    } catch (e) {
+      // خطای سطح bucket (مثلاً list) — فایل‌های همین‌جا گرفته‌شده حفظ می‌شوند
+      storage[bucket] = out
+      storageSkipped[bucket] = e instanceof Error ? e.message : 'خطای نامشخص'
+    }
+  }
+  return { storage, storageSkipped }
+}
+
+function storageTotals(storage: Record<string, { name: string; data: string }[]>) {
+  const storageCounts = Object.fromEntries(
+    Object.entries(storage).map(([k, v]) => [k, v.length])
+  )
+  const files = Object.values(storageCounts).reduce((a, b) => a + b, 0)
+  return { storageCounts, files }
+}
+
+// ─────────────────────────────────────────────────────────────
 // GET — گرفتن بکاپ کامل (دانلود یک فایل JSON شامل همه‌ی جداول)
 // ─────────────────────────────────────────────────────────────
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const denied = await requireAdmin()
     if (denied) return denied
 
     const db = supabaseAdmin()
+
+    // ─── حالت بخش‌بندی‌شده (پچ ۴۹): /api/admin/backup?section=<key> ───
+    // هر بخش جداگانه خوانده می‌شود تا چک‌لیست زنده در UI ممکن شود؛
+    // ادغام بخش‌ها سمت کلاینت همان ساختار payload بکاپ کامل را می‌سازد.
+    const { searchParams } = new URL(request.url)
+    const section = searchParams.get('section')
+    if (section) {
+      if (section === STORAGE_SECTION_KEY) {
+        const { storage, storageSkipped } = await collectStorage(db)
+        const { storageCounts, files } = storageTotals(storage)
+        return NextResponse.json({
+          ok: true,
+          section,
+          storage,
+          storageCounts,
+          storageSkipped,
+          files,
+        })
+      }
+
+      const sec = BACKUP_SECTIONS.find((s) => s.key === section)
+      if (!sec) {
+        return NextResponse.json({ error: 'بخش نامعتبر است' }, { status: 400 })
+      }
+
+      const tables: Record<string, unknown[]> = {}
+      const skipped: Record<string, string> = {}
+      let rows = 0
+      for (const table of sec.tables) {
+        try {
+          tables[table] = await fetchAllRows(db, table)
+          rows += tables[table].length
+        } catch (e) {
+          tables[table] = []
+          skipped[table] = e instanceof Error ? e.message : 'خطای نامشخص'
+        }
+      }
+      return NextResponse.json({ ok: true, section, rows, tables, skipped })
+    }
+
+    // ─── بکاپ کامل (سازگار با نسخهٔ قبل) ───
     const tables: Record<string, unknown[]> = {}
     // جدول‌هایی که در دیتابیس موجود نیستند یا خوانده نشدند؛
     // بکاپ به‌جای شکستن، آن‌ها را خالی ثبت می‌کند و ادامه می‌دهد
@@ -80,58 +206,14 @@ export async function GET() {
 
     for (const table of BACKUP_TABLES) {
       try {
-        const rows: unknown[] = []
-        let from = 0
-        for (;;) {
-          const { data, error } = await db
-            .from(table)
-            .select('*')
-            .range(from, from + PAGE_SIZE - 1)
-          if (error) throw new Error(error.message)
-          if (!data || data.length === 0) break
-          rows.push(...data)
-          if (data.length < PAGE_SIZE) break
-          from += PAGE_SIZE
-        }
-        tables[table] = rows
+        tables[table] = await fetchAllRows(db, table)
       } catch (e) {
         tables[table] = []
         skipped[table] = e instanceof Error ? e.message : 'خطای نامشخص'
       }
     }
 
-    // ─── فایل‌های Storage (تصاویر محصولات، رسیدها، فونت‌ها) ───
-    const storage: Record<string, { name: string; data: string }[]> = {}
-    const storageSkipped: Record<string, string> = {}
-
-    for (const bucket of STORAGE_BUCKETS) {
-      try {
-        const { data: files, error } = await db.storage
-          .from(bucket)
-          .list('', {
-            limit: MAX_FILES_PER_BUCKET,
-            sortBy: { column: 'created_at', order: 'desc' },
-          })
-        if (error) throw new Error(error.message)
-
-        const out: { name: string; data: string }[] = []
-        for (const f of files ?? []) {
-          if (!f.id) continue // پوشه‌های فرضی را رد کن
-          const { data: blob, error: dlError } = await db.storage.from(bucket).download(f.name)
-          if (dlError || !blob) throw new Error(`دانلود «${f.name}»: ${dlError?.message ?? 'داده خالی'}`)
-          if (blob.size > MAX_FILE_BYTES) {
-            storageSkipped[`${bucket}/${f.name}`] = 'حجم فایل از سقف مجاز بیشتر است'
-            continue
-          }
-          const buf = Buffer.from(await blob.arrayBuffer())
-          out.push({ name: f.name, data: buf.toString('base64') })
-        }
-        storage[bucket] = out
-      } catch (e) {
-        storage[bucket] = []
-        storageSkipped[bucket] = e instanceof Error ? e.message : 'خطای نامشخص'
-      }
-    }
+    const { storage, storageSkipped } = await collectStorage(db)
 
     const payload = {
       app: 'cafe-park-menu',
