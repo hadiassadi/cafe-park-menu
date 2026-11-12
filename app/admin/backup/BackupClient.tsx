@@ -93,6 +93,8 @@ export default function BackupClient() {
     storageSkipped: Record<string, string>
   } | null>(null)
   const resultUrlRef = useRef<string | null>(null)
+  // وضعیت خطای هر بخش در ref نگه‌داری می‌شود تا ارزیابی پایان به state کهنه‌ی closure تکیه نکند
+  const errorsRef = useRef<Set<string>>(new Set())
 
   // ─── بازگردانی ───
   const fileRef = useRef<HTMLInputElement>(null)
@@ -152,6 +154,8 @@ export default function BackupClient() {
       const p = payloadRef.current
       if (!p) throw new Error('وضعیت بکاپ از دست رفت')
 
+      errorsRef.current.delete(key)
+
       if (key === STORAGE_SECTION_KEY) {
         p.storage = j.storage ?? {}
         p.storageSkipped = j.storageSkipped ?? {}
@@ -177,6 +181,7 @@ export default function BackupClient() {
           : e instanceof Error
             ? e.message
             : 'خطای نامشخص'
+      errorsRef.current.add(key)
       setItems((prev) => prev.map((it) => (it.key === key ? { ...it, status: 'error', error: msg } : it)))
       return false
     }
@@ -185,21 +190,27 @@ export default function BackupClient() {
   const evaluateAndFinish = () => {
     const p = payloadRef.current
     if (!p) return
-    const failed = items.filter((it) => it.status === 'error')
-    if (failed.length === 0) {
+    const failedKeys = [...errorsRef.current]
+    if (failedKeys.length === 0) {
       setFinalError(null)
     } else {
+      const labels = failedKeys.map(
+        (k) => initialItems().find((it) => it.key === k)?.label ?? k
+      )
       setFinalError(
-        `${fa(failed.length)} بخش کامل نشد${failed.length === 1 ? ` — ${failed[0].label}` : ''}؛ می‌توانید فقط همان بخش را دوباره تلاش کنید.`
+        `${fa(failedKeys.length)} بخش کامل نشد${
+          failedKeys.length === 1 ? ` — ${labels[0]}` : `: ${labels.join('، ')}`
+        }؛ می‌توانید فقط همان بخش‌ها را دوباره تلاش کنید.`
       )
     }
-    buildAndDownload(failed.length === 0)
+    buildAndDownload(failedKeys.length === 0)
   }
 
   const runBackup = async () => {
     setRunning(true)
     setFinalError(null)
     revokeResult()
+    errorsRef.current = new Set()
     payloadRef.current = { tables: {}, skipped: {}, storage: {}, storageSkipped: {} }
     const seq = [...BACKUP_SECTIONS.map((s) => s.key), STORAGE_SECTION_KEY]
     setItems(initialItems())
@@ -390,7 +401,10 @@ export default function BackupClient() {
             بکاپ شامل داده‌های دیتابیس به‌علاوه‌ی فایل‌های Storage (تصاویر محصولات، رسیدها، فونت‌ها) است؛ فایل را در جای امن نگه دارید.
           </p>
         </div>
-        <button className="btn primary-btn" onClick={() => { setItems(initialItems()); setFinalError(null); revokeResult(); setModalOpen(true) }}>
+        <button
+          className="btn primary-btn"
+          onClick={() => { setModalOpen(true); runBackup() }}
+        >
           🛡️ شروع پشتیبان‌گیری
         </button>
       </div>
@@ -530,6 +544,14 @@ export default function BackupClient() {
             <div className="backup-progress">
               <div className="backup-progress-fill" style={{ width: `${Math.round((overall.done / overall.total) * 100)}%` }} />
             </div>
+
+            {!running && (
+              <div className="backup-restart-row">
+                <button className="backup-retry" onClick={runBackup}>
+                  ↺ شروع دوباره از ابتدا
+                </button>
+              </div>
+            )}
 
             <div className="backup-check">
               {items.map((it) => (

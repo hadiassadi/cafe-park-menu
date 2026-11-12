@@ -1,0 +1,146 @@
+diff --git a/app/admin/backup/BackupClient.tsx b/app/admin/backup/BackupClient.tsx
+index 440f783..331899d 100644
+--- a/app/admin/backup/BackupClient.tsx
++++ b/app/admin/backup/BackupClient.tsx
+@@ -93,6 +93,8 @@ export default function BackupClient() {
+     storageSkipped: Record<string, string>
+   } | null>(null)
+   const resultUrlRef = useRef<string | null>(null)
++  // وضعیت خطای هر بخش در ref نگه‌داری می‌شود تا ارزیابی پایان به state کهنه‌ی closure تکیه نکند
++  const errorsRef = useRef<Set<string>>(new Set())
+ 
+   // ─── بازگردانی ───
+   const fileRef = useRef<HTMLInputElement>(null)
+@@ -152,6 +154,8 @@ export default function BackupClient() {
+       const p = payloadRef.current
+       if (!p) throw new Error('وضعیت بکاپ از دست رفت')
+ 
++      errorsRef.current.delete(key)
++
+       if (key === STORAGE_SECTION_KEY) {
+         p.storage = j.storage ?? {}
+         p.storageSkipped = j.storageSkipped ?? {}
+@@ -177,6 +181,7 @@ export default function BackupClient() {
+           : e instanceof Error
+             ? e.message
+             : 'خطای نامشخص'
++      errorsRef.current.add(key)
+       setItems((prev) => prev.map((it) => (it.key === key ? { ...it, status: 'error', error: msg } : it)))
+       return false
+     }
+@@ -185,21 +190,27 @@ export default function BackupClient() {
+   const evaluateAndFinish = () => {
+     const p = payloadRef.current
+     if (!p) return
+-    const failed = items.filter((it) => it.status === 'error')
+-    if (failed.length === 0) {
++    const failedKeys = [...errorsRef.current]
++    if (failedKeys.length === 0) {
+       setFinalError(null)
+     } else {
++      const labels = failedKeys.map(
++        (k) => initialItems().find((it) => it.key === k)?.label ?? k
++      )
+       setFinalError(
+-        `${fa(failed.length)} بخش کامل نشد${failed.length === 1 ? ` — ${failed[0].label}` : ''}؛ می‌توانید فقط همان بخش را دوباره تلاش کنید.`
++        `${fa(failedKeys.length)} بخش کامل نشد${
++          failedKeys.length === 1 ? ` — ${labels[0]}` : `: ${labels.join('، ')}`
++        }؛ می‌توانید فقط همان بخش‌ها را دوباره تلاش کنید.`
+       )
+     }
+-    buildAndDownload(failed.length === 0)
++    buildAndDownload(failedKeys.length === 0)
+   }
+ 
+   const runBackup = async () => {
+     setRunning(true)
+     setFinalError(null)
+     revokeResult()
++    errorsRef.current = new Set()
+     payloadRef.current = { tables: {}, skipped: {}, storage: {}, storageSkipped: {} }
+     const seq = [...BACKUP_SECTIONS.map((s) => s.key), STORAGE_SECTION_KEY]
+     setItems(initialItems())
+@@ -390,7 +401,10 @@ export default function BackupClient() {
+             بکاپ شامل داده‌های دیتابیس به‌علاوه‌ی فایل‌های Storage (تصاویر محصولات، رسیدها، فونت‌ها) است؛ فایل را در جای امن نگه دارید.
+           </p>
+         </div>
+-        <button className="btn primary-btn" onClick={() => { setItems(initialItems()); setFinalError(null); revokeResult(); setModalOpen(true) }}>
++        <button
++          className="btn primary-btn"
++          onClick={() => { setModalOpen(true); runBackup() }}
++        >
+           🛡️ شروع پشتیبان‌گیری
+         </button>
+       </div>
+@@ -531,6 +545,14 @@ export default function BackupClient() {
+               <div className="backup-progress-fill" style={{ width: `${Math.round((overall.done / overall.total) * 100)}%` }} />
+             </div>
+ 
++            {!running && (
++              <div className="backup-restart-row">
++                <button className="backup-retry" onClick={runBackup}>
++                  ↺ شروع دوباره از ابتدا
++                </button>
++              </div>
++            )}
++
+             <div className="backup-check">
+               {items.map((it) => (
+                 <div key={it.key} className={`backup-item is-${it.status}`}>
+diff --git a/app/globals.css b/app/globals.css
+index b42f19f..251e7d7 100644
+--- a/app/globals.css
++++ b/app/globals.css
+@@ -15200,3 +15200,4 @@ a.cat {
+ .backup-summary.is-partial{border-color:var(--admin-warning);background:rgba(217,159,89,.12)}
+ .backup-summary .backup-muted{margin:6px 0}
+ .backup-download-btn{margin-top:8px}
++.backup-restart-row{margin-top:10px;display:flex;justify-content:flex-start}
+diff --git a/patch-49b-backup-autostart-RELEASE.md b/patch-49b-backup-autostart-RELEASE.md
+new file mode 100644
+index 0000000..4615def
+--- /dev/null
++++ b/patch-49b-backup-autostart-RELEASE.md
+@@ -0,0 +1,42 @@
++# پچ ۴۹-ب — فیکس فوری مودال پشتیبان‌گیری: اجرای خودکار بکاپ + شروع دوباره
++
++پیش‌نیاز: پچ ۴۹ مرج شده (PR #82). فقط ۲ فایل + RELEASE.
++
++## ریشهٔ مشکل (از اسکرین‌شات ۳۸۱)
++- دکمهٔ «🛡️ شروع پشتیبان‌گیری» فقط مودال را باز می‌کرد ولی `runBackup()` هرگز صدا زده
++  نمی‌شد → چک‌لیست برای همیشه در «بخش ۰ از ۷» و همه ⏳ خشک می‌ماند؛ هیچ دکمهٔ اجرای
++  دیگری هم داخل مودال نبود
++- باگ خاموش دوم: ارزیابی پایان (`evaluateAndFinish`) از `items` داخل closure می‌خواند که
++  هنگام شروع اجرا frozen شده — یعنی حتی اگر بخشی خطا می‌داد، تشخیص «ناقص» ممکن بود
++  درست کار نکند → جایگزینی با `errorsRef` (مرج، بی‌تأثیر از state کهنه)
++
++## فیکس‌ها (app/admin/backup/BackupClient.tsx)
++1. دکمهٔ شروع → مودال باز می‌شود **و بلافاصله `runBackup()` اجرا می‌شود**
++2. دکمهٔ «↺ شروع دوباره از ابتدا» داخل مودال (وقتی در حال اجرا نیست) — برای پس از پایان یا خطا
++3. `errorsRef`: خطای هر بخش در ref ثبت/پاک می‌شود؛ ارزیابی پایان و برچسب بخش‌های ناموفق
++   از همین مرج خوانده می‌شود (نام فایل INCOMPLETE و هشدار ناقص حالا قابل‌اعتماد است)
++4. CSS: قاعدهٔ `.backup-restart-row` در انتهای globals.css
++
++## دروازه‌ها
++verifier CSS ✓ · `tsc --noEmit` ✓ · `next build` تولیدی ✓ · apply-check + تایپ پس از اعمال ✓
++
++## اعمال (PowerShell)
++```powershell
++git checkout main && git pull
++git checkout -b fix/patch-49b-backup-autostart
++git apply --ignore-whitespace --verbose patch-49b-backup-autostart.patch
++# صحت اعمال — انتظار:
++(Select-String -Path "app\admin\backup\BackupClient.tsx" -Pattern "errorsRef").Count   # >= 4
++(Select-String -Path "app\admin\backup\BackupClient.tsx" -Pattern "setModalOpen\(true\); runBackup\(\)").Count  # 1
++(Select-String -Path "app\globals.css" -Pattern "backup-restart-row").Count            # 1
++git add -A
++git commit -m "fix(admin): patch 49b - backup modal auto-starts run + restart button + ref-based completion check"
++git push -u origin fix/patch-49b-backup-autostart
++```
++سپس PR و merge: `https://github.com/hadiassadi/cafe-park-menu/compare/main...fix/patch-49b-backup-autostart`
++
++## تست بعد از merge (کاربر)
++1. `git checkout main` ← `git pull` ← ری‌استارت dev ← `Ctrl+F5`
++2. پشتیبان‌گیری → «🛡️ شروع پشتیبان‌گیری» → مودال باز و **بلافاصله** بخش‌ها یکی‌یکی تیک بخورند
++3. پایان: خلاصه + دانلود خودکار + «↺ شروع دوباره» فعال
++4. بستن مودال و اجرای مجدد → از صفر شروع شود و باز خودکار برود

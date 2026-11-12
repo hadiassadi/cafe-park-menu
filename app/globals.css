@@ -15200,3 +15200,4 @@ a.cat {
 .backup-summary.is-partial{border-color:var(--admin-warning);background:rgba(217,159,89,.12)}
 .backup-summary .backup-muted{margin:6px 0}
 .backup-download-btn{margin-top:8px}
+.backup-restart-row{margin-top:10px;display:flex;justify-content:flex-start}
