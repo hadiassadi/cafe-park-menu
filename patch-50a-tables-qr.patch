@@ -1,0 +1,532 @@
+diff --git a/app/admin/tables/TablesManager.tsx b/app/admin/tables/TablesManager.tsx
+index 93fd31f..0ba8a9b 100644
+--- a/app/admin/tables/TablesManager.tsx
++++ b/app/admin/tables/TablesManager.tsx
+@@ -3,7 +3,7 @@
+ import { useMemo, useState } from 'react'
+ import { QRCodeSVG } from 'qrcode.react'
+ import Modal from '../components/Modal'
+-import { addTable, updateTable, deleteTable } from './actions'
++import { addTable, updateTable, deleteTable, rotateTableToken, rotateAllTableTokens } from './actions'
+ 
+ type Table = {
+   id: string
+@@ -14,6 +14,7 @@ type Table = {
+   location: string
+   is_active: boolean
+   sort_order: number
++  reservation_fee: number
+   qr_token: string
+ }
+ 
+@@ -33,6 +34,9 @@ export default function TablesManager({ tables, siteUrl }: Props) {
+   const [isModalOpen, setIsModalOpen] = useState(false)
+   const [editingTable, setEditingTable] = useState<Table | null>(null)
+   const [qrTable, setQrTable] = useState<Table | null>(null)
++  // 🎯 پچ ۵۰-ا: برگهٔ چاپ یکجای QR + وضعیت چرخش گروهی توکن‌ها
++  const [printOpen, setPrintOpen] = useState(false)
++  const [rotatingAll, setRotatingAll] = useState(false)
+ 
+   // state فرم
+   const [formNumber, setFormNumber] = useState('')
+@@ -41,6 +45,7 @@ export default function TablesManager({ tables, siteUrl }: Props) {
+   const [formCapacity, setFormCapacity] = useState('2')
+   const [formLocation, setFormLocation] = useState('indoor')
+   const [formSortOrder, setFormSortOrder] = useState('0')
++  const [formReservationFee, setFormReservationFee] = useState('0')
+   const [formIsActive, setFormIsActive] = useState(true)
+ 
+   const [saving, setSaving] = useState(false)
+@@ -53,6 +58,7 @@ export default function TablesManager({ tables, siteUrl }: Props) {
+     setFormCapacity('2')
+     setFormLocation('indoor')
+     setFormSortOrder('0')
++    setFormReservationFee('0')
+     setFormIsActive(true)
+     setMessage(null)
+   }
+@@ -71,6 +77,7 @@ export default function TablesManager({ tables, siteUrl }: Props) {
+     setFormCapacity(String(table.capacity))
+     setFormLocation(table.location)
+     setFormSortOrder(String(table.sort_order))
++    setFormReservationFee(String(table.reservation_fee ?? 0))
+     setFormIsActive(table.is_active)
+     setMessage(null)
+     setIsModalOpen(true)
+@@ -95,6 +102,7 @@ export default function TablesManager({ tables, siteUrl }: Props) {
+       formData.append('capacity', formCapacity)
+       formData.append('location', formLocation)
+       formData.append('sort_order', formSortOrder)
++      formData.append('reservation_fee', formReservationFee)
+       if (formIsActive) formData.append('is_active', 'on')
+ 
+       const result = editingTable
+@@ -129,8 +137,50 @@ export default function TablesManager({ tables, siteUrl }: Props) {
+     window.location.reload()
+   }
+ 
++  // 🎯 پچ ۵۰-ا: چرخش توکن‌ها — تک‌میز و گروهی
++  async function handleRotateAll() {
++    if (
++      !confirm(
++        'چرخش همهٔ توکن‌ها یعنی همهٔ QRهای چاپ‌شدهٔ فعلی باطل می‌شن و باید برگهٔ جدید چاپ کنی. ادامه بدم؟'
++      )
++    )
++      return
++
++    setRotatingAll(true)
++    try {
++      const result = await rotateAllTableTokens()
++      if (result?.error) {
++        alert('❌ ' + result.error)
++        return
++      }
++      window.location.reload()
++    } finally {
++      setRotatingAll(false)
++    }
++  }
++
++  async function handleRotateOne(table: Table) {
++    if (
++      !confirm(
++        `توکن میز ${table.number} عوض بشه؟ QR چاپ‌شدهٔ فعلی این میز باطل می‌شه.`
++      )
++    )
++      return
++
++    const formData = new FormData()
++    formData.append('id', table.id)
++
++    const result = await rotateTableToken(formData)
++    if (result?.error) {
++      alert('❌ ' + result.error)
++      return
++    }
++    window.location.reload()
++  }
++
+   function getTableUrl(table: Table) {
+-    return `${siteUrl}/?table=${table.number}`
++    // 🎯 پچ ۵۰-ا: لینک امن با توکن تصادفی — شمارهٔ میز قابل حدس نیست
++    return `${siteUrl}/t/${table.qr_token}`
+   }
+ 
+   function downloadQR(table: Table) {
+@@ -180,13 +230,37 @@ export default function TablesManager({ tables, siteUrl }: Props) {
+             میزهای کافه + QR کد اختصاصی برای هر میز
+           </p>
+         </div>
+-        <button
+-          type="button"
+-          className="btn primary-btn"
+-          onClick={openAddModal}
++        <div
++          style={{
++            display: 'flex',
++            gap: 8,
++            flexWrap: 'wrap',
++            alignItems: 'center',
++          }}
+         >
+-          + افزودن میز
+-        </button>
++          <button
++            type="button"
++            className="btn"
++            onClick={() => setPrintOpen(true)}
++          >
++            🖨 برگهٔ QR همهٔ میزها
++          </button>
++          <button
++            type="button"
++            className="btn"
++            onClick={handleRotateAll}
++            disabled={rotatingAll}
++          >
++            {rotatingAll ? '...' : '🔄 چرخش همهٔ توکن‌ها'}
++          </button>
++          <button
++            type="button"
++            className="btn primary-btn"
++            onClick={openAddModal}
++          >
++            + افزودن میز
++          </button>
++        </div>
+       </div>
+ 
+       {tables.length === 0 ? (
+@@ -218,6 +292,11 @@ export default function TablesManager({ tables, siteUrl }: Props) {
+                 <div className="table-meta">
+                   <span>👥 {table.capacity} نفره</span>
+                   <span>📍 {LOCATION_LABELS[table.location] || table.location}</span>
++                  {table.reservation_fee > 0 && (
++                    <span>
++                      💳 رزرو: {table.reservation_fee.toLocaleString('fa-IR')}
++                    </span>
++                  )}
+                 </div>
+               </div>
+ 
+@@ -345,6 +424,17 @@ export default function TablesManager({ tables, siteUrl }: Props) {
+                 onChange={(e) => setFormSortOrder(e.target.value)}
+               />
+             </div>
++
++            <div className="field">
++              <label>هزینهٔ پیش‌فرض رزرو</label>
++              <input
++                type="number"
++                value={formReservationFee}
++                onChange={(e) => setFormReservationFee(e.target.value)}
++                min="0"
++                step="1000"
++              />
++            </div>
+           </div>
+ 
+           <div className="check-row">
+@@ -377,13 +467,22 @@ export default function TablesManager({ tables, siteUrl }: Props) {
+               بستن
+             </button>
+             {qrTable && (
+-              <button
+-                type="button"
+-                className="btn primary-btn"
+-                onClick={() => downloadQR(qrTable)}
+-              >
+-                📥 دانلود PNG
+-              </button>
++              <>
++                <button
++                  type="button"
++                  className="btn"
++                  onClick={() => handleRotateOne(qrTable)}
++                >
++                  🔄 چرخش توکن
++                </button>
++                <button
++                  type="button"
++                  className="btn primary-btn"
++                  onClick={() => downloadQR(qrTable)}
++                >
++                  📥 دانلود PNG
++                </button>
++              </>
+             )}
+           </>
+         }
+@@ -402,11 +501,113 @@ export default function TablesManager({ tables, siteUrl }: Props) {
+             <div className="qr-url">{getTableUrl(qrTable)}</div>
+             <p className="qr-hint">
+               این QR رو روی میز بچسبون. مشتری با اسکن، منو با میز
+-              انتخاب‌شده باز می‌شه.
++              انتخاب‌شده باز می‌شه. لینک با توکن امن ساخته می‌شه و با
++              «چرخش توکن» QRهای قبلی باطل می‌شن. (QRهای قدیمیِ شماره‌محور
++              همچنان کار می‌کنن.)
+             </p>
+           </div>
+         )}
+       </Modal>
++
++      {/* 🎯 پچ ۵۰-ا: برگهٔ چاپ یکجای QR همهٔ میزها */}
++      {printOpen && (
++        <>
++          <style>{`
++            @media print {
++              body * { visibility: hidden !important; }
++              .qr-print-sheet, .qr-print-sheet * { visibility: visible !important; }
++              .qr-print-sheet { position: absolute !important; inset: 0; }
++              .qr-print-actions { display: none !important; }
++            }
++          `}</style>
++          <div
++            style={{
++              position: 'fixed',
++              inset: 0,
++              background: '#fff',
++              zIndex: 9999,
++              overflow: 'auto',
++              padding: 24,
++              direction: 'rtl',
++            }}
++          >
++            <div
++              className="qr-print-actions"
++              style={{
++                display: 'flex',
++                gap: 8,
++                justifyContent: 'center',
++                marginBottom: 16,
++              }}
++            >
++              <button
++                type="button"
++                className="btn primary-btn"
++                onClick={() => window.print()}
++              >
++                🖨 چاپ
++              </button>
++              <button
++                type="button"
++                className="btn"
++                onClick={() => setPrintOpen(false)}
++              >
++                بستن
++              </button>
++            </div>
++            <div className="qr-print-sheet">
++              <h2 style={{ textAlign: 'center', margin: '8px 0 4px' }}>
++                ☕ کافه پارک — QR میزها
++              </h2>
++              <p style={{ textAlign: 'center', color: '#666', margin: 0 }}>
++                هر میز QR اختصاصی خودش رو داره؛ بعد از هر «چرخش توکن» این
++                برگه رو دوباره چاپ کن.
++              </p>
++              <div
++                style={{
++                  display: 'flex',
++                  flexWrap: 'wrap',
++                  gap: 16,
++                  justifyContent: 'center',
++                  marginTop: 16,
++                }}
++              >
++                {tables
++                  .filter((t) => t.is_active)
++                  .map((t) => (
++                    <div
++                      key={t.id}
++                      style={{
++                        border: '1px solid #ddd',
++                        borderRadius: 8,
++                        padding: 12,
++                        textAlign: 'center',
++                        width: 176,
++                      }}
++                    >
++                      <QRCodeSVG
++                        value={getTableUrl(t)}
++                        size={140}
++                        level="M"
++                      />
++                      <div style={{ fontWeight: 700, marginTop: 8 }}>
++                        میز #{t.number}
++                        {t.name ? ` — ${t.name}` : ''}
++                      </div>
++                      <div style={{ color: '#666', fontSize: 12 }}>
++                        {LOCATION_LABELS[t.location] || t.location} ·{' '}
++                        {t.capacity} نفره
++                      </div>
++                      <div style={{ color: '#999', fontSize: 10 }}>
++                        اسکن = مشاهدهٔ منو
++                      </div>
++                    </div>
++                  ))}
++              </div>
++            </div>
++          </div>
++        </>
++      )}
+     </div>
+   )
+ }
+\ No newline at end of file
+diff --git a/app/admin/tables/actions.ts b/app/admin/tables/actions.ts
+index c98a122..c16e676 100644
+--- a/app/admin/tables/actions.ts
++++ b/app/admin/tables/actions.ts
+@@ -3,6 +3,7 @@ import { assertAdmin } from '@/lib/admin/assert-admin'
+ 
+ import { supabaseServer } from '@/lib/supabase/server'
+ import { revalidatePath } from 'next/cache'
++import { randomUUID } from 'crypto'
+ 
+ export async function addTable(formData: FormData) {
+   await assertAdmin()
+@@ -14,6 +15,7 @@ export async function addTable(formData: FormData) {
+   const capacity = Number(formData.get('capacity') || 2)
+   const location = String(formData.get('location') || 'indoor')
+   const sortOrder = Number(formData.get('sort_order') || 0)
++  const reservationFee = Number(formData.get('reservation_fee') || 0)
+   const isActive = formData.get('is_active') === 'on'
+ 
+   if (number <= 0) return { error: 'شماره میز الزامی است.' }
+@@ -25,6 +27,7 @@ export async function addTable(formData: FormData) {
+     capacity,
+     location,
+     sort_order: sortOrder,
++    reservation_fee: reservationFee,
+     is_active: isActive,
+   })
+ 
+@@ -45,6 +48,7 @@ export async function updateTable(formData: FormData) {
+   const capacity = Number(formData.get('capacity') || 2)
+   const location = String(formData.get('location') || 'indoor')
+   const sortOrder = Number(formData.get('sort_order') || 0)
++  const reservationFee = Number(formData.get('reservation_fee') || 0)
+   const isActive = formData.get('is_active') === 'on'
+ 
+   if (!id) return { error: 'شناسه میز مشخص نیست.' }
+@@ -59,6 +63,7 @@ export async function updateTable(formData: FormData) {
+       capacity,
+       location,
+       sort_order: sortOrder,
++      reservation_fee: reservationFee,
+       is_active: isActive,
+       updated_at: new Date().toISOString(),
+     })
+@@ -83,4 +88,47 @@ export async function deleteTable(formData: FormData) {
+ 
+   revalidatePath('/admin/tables')
+   return { success: true }
++}
++
++// 🎯 پچ ۵۰-ا: چرخش توکن QR — لینک قبلی باطل و QR جدید صادر می‌شود
++function newQrToken() {
++  return randomUUID().replace(/-/g, '')
++}
++
++export async function rotateTableToken(formData: FormData) {
++  await assertAdmin()
++  const db = await supabaseServer()
++  const id = String(formData.get('id') || '')
++
++  if (!id) return { error: 'شناسه میز مشخص نیست.' }
++
++  const { error } = await db
++    .from('tables')
++    .update({ qr_token: newQrToken(), updated_at: new Date().toISOString() })
++    .eq('id', id)
++
++  if (error) return { error: error.message }
++
++  revalidatePath('/admin/tables')
++  return { success: true }
++}
++
++export async function rotateAllTableTokens() {
++  await assertAdmin()
++  const db = await supabaseServer()
++
++  const { data: rows, error: selErr } = await db.from('tables').select('id')
++  if (selErr) return { error: selErr.message }
++
++  const list = rows ?? []
++  for (const row of list) {
++    const { error } = await db
++      .from('tables')
++      .update({ qr_token: newQrToken(), updated_at: new Date().toISOString() })
++      .eq('id', row.id)
++    if (error) return { error: error.message }
++  }
++
++  revalidatePath('/admin/tables')
++  return { success: true, count: list.length }
+ }
+\ No newline at end of file
+diff --git a/app/t/[token]/page.tsx b/app/t/[token]/page.tsx
+new file mode 100644
+index 0000000..c31ecfc
+--- /dev/null
++++ b/app/t/[token]/page.tsx
+@@ -0,0 +1,32 @@
++import type { Metadata } from 'next'
++import { redirect } from 'next/navigation'
++import { supabaseAdmin } from '@/lib/supabase/server'
++
++export const metadata: Metadata = {
++  title: 'منوی کافه پارک',
++  robots: { index: false, follow: false },
++}
++
++export const dynamic = 'force-dynamic'
++
++// 🎯 پچ ۵۰-ا: QR امن میز — توکن تصادفی به‌جای شمارهٔ قابل حدس
++export default async function TableTokenPage({
++  params,
++}: {
++  params: Promise<{ token: string }>
++}) {
++  const { token } = await params
++  const db = supabaseAdmin()
++
++  const { data: table } = await db
++    .from('tables')
++    .select('number')
++    .eq('qr_token', token)
++    .eq('is_active', true)
++    .maybeSingle()
++
++  if (!table) redirect('/')
++
++  // منو همان مسیر همیشگی با پارامتر میز باز می‌شود — منطق MenuClient دست‌نخورده
++  redirect(`/?table=${table.number}`)
++}
+diff --git a/patch-50a-tables-qr-RELEASE.md b/patch-50a-tables-qr-RELEASE.md
+new file mode 100644
+index 0000000..e5c8489
+--- /dev/null
++++ b/patch-50a-tables-qr-RELEASE.md
+@@ -0,0 +1,23 @@
++# پچ ۵۰-ا — زیرساخت POS: میزها، QR امن و کارکنان
++
++## تغییرات دیتابیس (`supabase/migrations/20261112_pos50a_tables_staff.sql`)
++- ستون `reservation_fee` (bigint, default 0) روی `tables` — هزینهٔ پیش‌فرض رزرو هر میز
++- جدول جدید `staff_members` (زیرساخت نقش‌ها؛ RLS روشن + فقط دسترسی سرور)
++- ستون `orders.manual_discount` (bigint, default 0) — منطق مصرف در پچ ۵۱
++
++## تغییرات UI مدیریت میزها
++- لینک QR هر میز از `/?table=شماره` به **لینک امن `/t/[token]`** تغییر کرد (توکن تصادفی ۳۲ کاراکتری؛ شمارهٔ میز قابل حدس نیست)
++- دکمهٔ «🔄 چرخش توکن» در مودال QR هر میز + دکمهٔ «🔄 چرخش همهٔ توکن‌ها» در هدر صفحه (با تأیید و هشدار باطل‌شدن QRهای چاپ‌شده)
++- دکمهٔ «🖨 برگهٔ QR همهٔ میزها»: برگهٔ چاپ یکجای همهٔ میزهای فعال (بهینهٔ A4؛ هر کارت شامل QR، شماره و نام میز، موقعیت و ظرفیت)
++- فیلد «هزینهٔ پیش‌فرض رزرو» در فرم افزودن/ویرایش میز + نمایش آن روی کارت میز
++- QRهای قدیمیِ شماره‌محور (`/?table=N`) همچنان کار می‌کنند — هیچ‌چیز خراب نمی‌شود
++
++## فایل جدید
++- `app/t/[token]/page.tsx` — صفحهٔ عمومی: توکن در دیتابیس جست‌وجو می‌شود و به `/?table=شماره` ریدایرکت می‌کند (منطق منو دست‌نخورده)؛ توکن نامعتبر → صفحهٔ اصلی
++
++## بعد از merge
++1. مایگریشن SQL را در Supabase → SQL Editor اجرا کن (قبل از ذخیرهٔ فرم میزها، وگرنه ستون `reservation_fee` وجود ندارد)
++2. `npm run dev` + `Ctrl+F5` → `/admin/tables`
++3. تست: QR یک میز را باز کن → لینک باید `/t/...` باشد → اسکن با موبایل → منو با میز درست باز شود
++4. تست چرخش: «چرخش توکن» یک میز → لینک قبلی باید دیگر کار نکند، لینک جدید کار کند
++5. تست برگهٔ چاپ: پیش‌نمایش چاپ → فقط کارت‌های QR دیده شوند
+diff --git a/supabase/migrations/20261112_pos50a_tables_staff.sql b/supabase/migrations/20261112_pos50a_tables_staff.sql
+new file mode 100644
+index 0000000..a14e742
+--- /dev/null
++++ b/supabase/migrations/20261112_pos50a_tables_staff.sql
+@@ -0,0 +1,31 @@
++-- ============ پچ ۵۰-ا: زیرساخت POS (میزها + کارکنان + تخفیف دستی) ============
++
++-- ۱) هزینهٔ پیش‌فرض رزرو هر میز (مطابق واحد قیمت‌های منو) — منطق رزرو در پچ ۵۳ وصل می‌شود
++alter table public.tables
++  add column if not exists reservation_fee bigint not null default 0;
++
++comment on column public.tables.reservation_fee is 'هزینهٔ پیش‌فرض رزرو؛ در هر رزرو قابل تغییر است';
++
++-- ۲) زیرساخت نقش‌های کارکنان — فعلاً فقط جدول؛ UI سطح دسترسی در پچ‌های بعدی
++create table if not exists public.staff_members (
++  id           bigint generated always as identity primary key,
++  full_name    text not null,
++  role         text not null default 'staff',  -- owner | manager | cashier | waiter | kitchen | staff
++  phone        text,
++  auth_user_id uuid,
++  is_active    boolean not null default true,
++  note         text,
++  created_at   timestamptz not null default now(),
++  updated_at   timestamptz not null default now()
++);
++
++create index if not exists staff_members_active_idx on public.staff_members (is_active);
++
++-- ۳) تخفیف دستی سفارش — منطق مصرف در پچ ۵۱
++alter table public.orders
++  add column if not exists manual_discount bigint not null default 0;
++
++-- ۴) الگوی امنیتی پروژه: RLS روشن + بدون پالیسی عمومی + دسترسی فقط از سرور (service role)
++alter table public.staff_members enable row level security;
++
++revoke all on public.staff_members from anon, authenticated;

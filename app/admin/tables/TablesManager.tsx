@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react'
 import { QRCodeSVG } from 'qrcode.react'
 import Modal from '../components/Modal'
-import { addTable, updateTable, deleteTable } from './actions'
+import { addTable, updateTable, deleteTable, rotateTableToken, rotateAllTableTokens } from './actions'
 
 type Table = {
   id: string
@@ -14,6 +14,7 @@ type Table = {
   location: string
   is_active: boolean
   sort_order: number
+  reservation_fee: number
   qr_token: string
 }
 
@@ -33,6 +34,9 @@ export default function TablesManager({ tables, siteUrl }: Props) {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingTable, setEditingTable] = useState<Table | null>(null)
   const [qrTable, setQrTable] = useState<Table | null>(null)
+  // 🎯 پچ ۵۰-ا: برگهٔ چاپ یکجای QR + وضعیت چرخش گروهی توکن‌ها
+  const [printOpen, setPrintOpen] = useState(false)
+  const [rotatingAll, setRotatingAll] = useState(false)
 
   // state فرم
   const [formNumber, setFormNumber] = useState('')
@@ -41,6 +45,7 @@ export default function TablesManager({ tables, siteUrl }: Props) {
   const [formCapacity, setFormCapacity] = useState('2')
   const [formLocation, setFormLocation] = useState('indoor')
   const [formSortOrder, setFormSortOrder] = useState('0')
+  const [formReservationFee, setFormReservationFee] = useState('0')
   const [formIsActive, setFormIsActive] = useState(true)
 
   const [saving, setSaving] = useState(false)
@@ -53,6 +58,7 @@ export default function TablesManager({ tables, siteUrl }: Props) {
     setFormCapacity('2')
     setFormLocation('indoor')
     setFormSortOrder('0')
+    setFormReservationFee('0')
     setFormIsActive(true)
     setMessage(null)
   }
@@ -71,6 +77,7 @@ export default function TablesManager({ tables, siteUrl }: Props) {
     setFormCapacity(String(table.capacity))
     setFormLocation(table.location)
     setFormSortOrder(String(table.sort_order))
+    setFormReservationFee(String(table.reservation_fee ?? 0))
     setFormIsActive(table.is_active)
     setMessage(null)
     setIsModalOpen(true)
@@ -95,6 +102,7 @@ export default function TablesManager({ tables, siteUrl }: Props) {
       formData.append('capacity', formCapacity)
       formData.append('location', formLocation)
       formData.append('sort_order', formSortOrder)
+      formData.append('reservation_fee', formReservationFee)
       if (formIsActive) formData.append('is_active', 'on')
 
       const result = editingTable
@@ -129,8 +137,50 @@ export default function TablesManager({ tables, siteUrl }: Props) {
     window.location.reload()
   }
 
+  // 🎯 پچ ۵۰-ا: چرخش توکن‌ها — تک‌میز و گروهی
+  async function handleRotateAll() {
+    if (
+      !confirm(
+        'چرخش همهٔ توکن‌ها یعنی همهٔ QRهای چاپ‌شدهٔ فعلی باطل می‌شن و باید برگهٔ جدید چاپ کنی. ادامه بدم؟'
+      )
+    )
+      return
+
+    setRotatingAll(true)
+    try {
+      const result = await rotateAllTableTokens()
+      if (result?.error) {
+        alert('❌ ' + result.error)
+        return
+      }
+      window.location.reload()
+    } finally {
+      setRotatingAll(false)
+    }
+  }
+
+  async function handleRotateOne(table: Table) {
+    if (
+      !confirm(
+        `توکن میز ${table.number} عوض بشه؟ QR چاپ‌شدهٔ فعلی این میز باطل می‌شه.`
+      )
+    )
+      return
+
+    const formData = new FormData()
+    formData.append('id', table.id)
+
+    const result = await rotateTableToken(formData)
+    if (result?.error) {
+      alert('❌ ' + result.error)
+      return
+    }
+    window.location.reload()
+  }
+
   function getTableUrl(table: Table) {
-    return `${siteUrl}/?table=${table.number}`
+    // 🎯 پچ ۵۰-ا: لینک امن با توکن تصادفی — شمارهٔ میز قابل حدس نیست
+    return `${siteUrl}/t/${table.qr_token}`
   }
 
   function downloadQR(table: Table) {
@@ -180,13 +230,37 @@ export default function TablesManager({ tables, siteUrl }: Props) {
             میزهای کافه + QR کد اختصاصی برای هر میز
           </p>
         </div>
-        <button
-          type="button"
-          className="btn primary-btn"
-          onClick={openAddModal}
+        <div
+          style={{
+            display: 'flex',
+            gap: 8,
+            flexWrap: 'wrap',
+            alignItems: 'center',
+          }}
         >
-          + افزودن میز
-        </button>
+          <button
+            type="button"
+            className="btn"
+            onClick={() => setPrintOpen(true)}
+          >
+            🖨 برگهٔ QR همهٔ میزها
+          </button>
+          <button
+            type="button"
+            className="btn"
+            onClick={handleRotateAll}
+            disabled={rotatingAll}
+          >
+            {rotatingAll ? '...' : '🔄 چرخش همهٔ توکن‌ها'}
+          </button>
+          <button
+            type="button"
+            className="btn primary-btn"
+            onClick={openAddModal}
+          >
+            + افزودن میز
+          </button>
+        </div>
       </div>
 
       {tables.length === 0 ? (
@@ -218,6 +292,11 @@ export default function TablesManager({ tables, siteUrl }: Props) {
                 <div className="table-meta">
                   <span>👥 {table.capacity} نفره</span>
                   <span>📍 {LOCATION_LABELS[table.location] || table.location}</span>
+                  {table.reservation_fee > 0 && (
+                    <span>
+                      💳 رزرو: {table.reservation_fee.toLocaleString('fa-IR')}
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -345,6 +424,17 @@ export default function TablesManager({ tables, siteUrl }: Props) {
                 onChange={(e) => setFormSortOrder(e.target.value)}
               />
             </div>
+
+            <div className="field">
+              <label>هزینهٔ پیش‌فرض رزرو</label>
+              <input
+                type="number"
+                value={formReservationFee}
+                onChange={(e) => setFormReservationFee(e.target.value)}
+                min="0"
+                step="1000"
+              />
+            </div>
           </div>
 
           <div className="check-row">
@@ -377,13 +467,22 @@ export default function TablesManager({ tables, siteUrl }: Props) {
               بستن
             </button>
             {qrTable && (
-              <button
-                type="button"
-                className="btn primary-btn"
-                onClick={() => downloadQR(qrTable)}
-              >
-                📥 دانلود PNG
-              </button>
+              <>
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => handleRotateOne(qrTable)}
+                >
+                  🔄 چرخش توکن
+                </button>
+                <button
+                  type="button"
+                  className="btn primary-btn"
+                  onClick={() => downloadQR(qrTable)}
+                >
+                  📥 دانلود PNG
+                </button>
+              </>
             )}
           </>
         }
@@ -402,11 +501,113 @@ export default function TablesManager({ tables, siteUrl }: Props) {
             <div className="qr-url">{getTableUrl(qrTable)}</div>
             <p className="qr-hint">
               این QR رو روی میز بچسبون. مشتری با اسکن، منو با میز
-              انتخاب‌شده باز می‌شه.
+              انتخاب‌شده باز می‌شه. لینک با توکن امن ساخته می‌شه و با
+              «چرخش توکن» QRهای قبلی باطل می‌شن. (QRهای قدیمیِ شماره‌محور
+              همچنان کار می‌کنن.)
             </p>
           </div>
         )}
       </Modal>
+
+      {/* 🎯 پچ ۵۰-ا: برگهٔ چاپ یکجای QR همهٔ میزها */}
+      {printOpen && (
+        <>
+          <style>{`
+            @media print {
+              body * { visibility: hidden !important; }
+              .qr-print-sheet, .qr-print-sheet * { visibility: visible !important; }
+              .qr-print-sheet { position: absolute !important; inset: 0; }
+              .qr-print-actions { display: none !important; }
+            }
+          `}</style>
+          <div
+            style={{
+              position: 'fixed',
+              inset: 0,
+              background: '#fff',
+              zIndex: 9999,
+              overflow: 'auto',
+              padding: 24,
+              direction: 'rtl',
+            }}
+          >
+            <div
+              className="qr-print-actions"
+              style={{
+                display: 'flex',
+                gap: 8,
+                justifyContent: 'center',
+                marginBottom: 16,
+              }}
+            >
+              <button
+                type="button"
+                className="btn primary-btn"
+                onClick={() => window.print()}
+              >
+                🖨 چاپ
+              </button>
+              <button
+                type="button"
+                className="btn"
+                onClick={() => setPrintOpen(false)}
+              >
+                بستن
+              </button>
+            </div>
+            <div className="qr-print-sheet">
+              <h2 style={{ textAlign: 'center', margin: '8px 0 4px' }}>
+                ☕ کافه پارک — QR میزها
+              </h2>
+              <p style={{ textAlign: 'center', color: '#666', margin: 0 }}>
+                هر میز QR اختصاصی خودش رو داره؛ بعد از هر «چرخش توکن» این
+                برگه رو دوباره چاپ کن.
+              </p>
+              <div
+                style={{
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  gap: 16,
+                  justifyContent: 'center',
+                  marginTop: 16,
+                }}
+              >
+                {tables
+                  .filter((t) => t.is_active)
+                  .map((t) => (
+                    <div
+                      key={t.id}
+                      style={{
+                        border: '1px solid #ddd',
+                        borderRadius: 8,
+                        padding: 12,
+                        textAlign: 'center',
+                        width: 176,
+                      }}
+                    >
+                      <QRCodeSVG
+                        value={getTableUrl(t)}
+                        size={140}
+                        level="M"
+                      />
+                      <div style={{ fontWeight: 700, marginTop: 8 }}>
+                        میز #{t.number}
+                        {t.name ? ` — ${t.name}` : ''}
+                      </div>
+                      <div style={{ color: '#666', fontSize: 12 }}>
+                        {LOCATION_LABELS[t.location] || t.location} ·{' '}
+                        {t.capacity} نفره
+                      </div>
+                      <div style={{ color: '#999', fontSize: 10 }}>
+                        اسکن = مشاهدهٔ منو
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   )
 }
