@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { QRCodeSVG } from 'qrcode.react'
 import Modal from '../components/Modal'
 import { addTable, updateTable, deleteTable, rotateTableToken, rotateAllTableTokens } from './actions'
@@ -28,6 +29,13 @@ const LOCATION_LABELS: Record<string, string> = {
   outdoor: 'بیرونی',
   terrace: 'تراس',
   vip: 'VIP',
+}
+
+// 🎯 پچ ۵۰-ب: ارقام فارسی/عربی → انگلیسی — با کیبورد فارسی هم تایپ‌کردن کار می‌کند
+function normalizeDigits(value: string) {
+  return value
+    .replace(/[۰-۹]/g, (d) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d)))
+    .replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
 }
 
 export default function TablesManager({ tables, siteUrl }: Props) {
@@ -230,37 +238,40 @@ export default function TablesManager({ tables, siteUrl }: Props) {
             میزهای کافه + QR کد اختصاصی برای هر میز
           </p>
         </div>
-        <div
-          style={{
-            display: 'flex',
-            gap: 8,
-            flexWrap: 'wrap',
-            alignItems: 'center',
-          }}
+        <button
+          type="button"
+          className="btn primary-btn"
+          onClick={openAddModal}
         >
-          <button
-            type="button"
-            className="btn"
-            onClick={() => setPrintOpen(true)}
-          >
-            🖨 برگهٔ QR همهٔ میزها
-          </button>
-          <button
-            type="button"
-            className="btn"
-            onClick={handleRotateAll}
-            disabled={rotatingAll}
-          >
-            {rotatingAll ? '...' : '🔄 چرخش همهٔ توکن‌ها'}
-          </button>
-          <button
-            type="button"
-            className="btn primary-btn"
-            onClick={openAddModal}
-          >
-            + افزودن میز
-          </button>
-        </div>
+          + افزودن میز
+        </button>
+      </div>
+
+      {/* 🎯 پچ ۵۰-ب: نوار ابزار QR خارج از admin-header تا چیدمان هدر به‌هم نریزد */}
+      <div
+        style={{
+          display: 'flex',
+          gap: 8,
+          flexWrap: 'wrap',
+          alignItems: 'center',
+          marginBottom: 16,
+        }}
+      >
+        <button
+          type="button"
+          className="btn"
+          onClick={() => setPrintOpen(true)}
+        >
+          🖨 چاپ QR میزها
+        </button>
+        <button
+          type="button"
+          className="btn"
+          onClick={handleRotateAll}
+          disabled={rotatingAll}
+        >
+          {rotatingAll ? '...' : '🔄 چرخش توکن‌ها'}
+        </button>
       </div>
 
       {tables.length === 0 ? (
@@ -361,25 +372,31 @@ export default function TablesManager({ tables, siteUrl }: Props) {
         }
       >
         <form id="table-form" onSubmit={handleSubmit}>
+          {/* 🎯 پچ ۵۰-ب: نمایش پیام خطا — قبلاً خطاهای ذخیره بی‌صدا رد می‌شدند */}
+          {message && (
+            <p className="danger" style={{ margin: '0 0 12px' }}>
+              {message}
+            </p>
+          )}
           <div className="form-grid">
             <div className="field">
               <label>شماره میز *</label>
               <input
-                type="number"
+                type="text"
+                inputMode="numeric"
                 value={formNumber}
-                onChange={(e) => setFormNumber(e.target.value)}
+                onChange={(e) => setFormNumber(normalizeDigits(e.target.value))}
                 required
-                min="1"
               />
             </div>
 
             <div className="field">
               <label>تعداد صندلی</label>
               <input
-                type="number"
+                type="text"
+                inputMode="numeric"
                 value={formCapacity}
-                onChange={(e) => setFormCapacity(e.target.value)}
-                min="1"
+                onChange={(e) => setFormCapacity(normalizeDigits(e.target.value))}
               />
             </div>
 
@@ -419,20 +436,23 @@ export default function TablesManager({ tables, siteUrl }: Props) {
             <div className="field">
               <label>ترتیب</label>
               <input
-                type="number"
+                type="text"
+                inputMode="numeric"
                 value={formSortOrder}
-                onChange={(e) => setFormSortOrder(e.target.value)}
+                onChange={(e) => setFormSortOrder(normalizeDigits(e.target.value))}
               />
             </div>
 
             <div className="field">
               <label>هزینهٔ پیش‌فرض رزرو</label>
               <input
-                type="number"
+                type="text"
+                inputMode="numeric"
                 value={formReservationFee}
-                onChange={(e) => setFormReservationFee(e.target.value)}
-                min="0"
-                step="1000"
+                onChange={(e) =>
+                  setFormReservationFee(normalizeDigits(e.target.value))
+                }
+                placeholder="مثلاً ۵۰۰۰۰"
               />
             </div>
           </div>
@@ -509,18 +529,28 @@ export default function TablesManager({ tables, siteUrl }: Props) {
         )}
       </Modal>
 
-      {/* 🎯 پچ ۵۰-ا: برگهٔ چاپ یکجای QR همهٔ میزها */}
-      {printOpen && (
-        <>
+      {/* 🎯 پچ ۵۰-ا: برگهٔ چاپ یکجای QR همهٔ میزها
+          🎯 پچ ۵۰-ب: رندر با portal مستقیم روی body — خارج از .admin-shell،
+          تا قواعد چاپِ موجودِ پروژه (فاکتور) برگه را مخفی نکنند و صفحه سفید نشود */}
+      {printOpen &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <>
           <style>{`
             @media print {
-              body * { visibility: hidden !important; }
-              .qr-print-sheet, .qr-print-sheet * { visibility: visible !important; }
-              .qr-print-sheet { position: absolute !important; inset: 0; }
+              body > *:not(.qr-print-overlay) { display: none !important; }
+              .qr-print-overlay {
+                position: static !important;
+                overflow: visible !important;
+                background: #fff !important;
+                padding: 8mm !important;
+              }
+              .qr-print-overlay, .qr-print-overlay * { visibility: visible !important; }
               .qr-print-actions { display: none !important; }
             }
           `}</style>
           <div
+            className="qr-print-overlay"
             style={{
               position: 'fixed',
               inset: 0,
@@ -583,6 +613,7 @@ export default function TablesManager({ tables, siteUrl }: Props) {
                         padding: 12,
                         textAlign: 'center',
                         width: 176,
+                        breakInside: 'avoid',
                       }}
                     >
                       <QRCodeSVG
@@ -606,8 +637,9 @@ export default function TablesManager({ tables, siteUrl }: Props) {
               </div>
             </div>
           </div>
-        </>
-      )}
+          </>,
+          document.body
+        )}
     </div>
   )
 }
