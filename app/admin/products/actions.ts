@@ -3,6 +3,7 @@ import { assertAdmin } from '@/lib/admin/assert-admin'
 
 import { supabaseServer } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
+import sharp from 'sharp'
 
 type VariantOption = {
   id?: string
@@ -44,34 +45,41 @@ async function uploadProductImage(
     }
   }
 
-  const extension = file.name.includes('.')
-    ? file.name.split('.').pop()?.toLowerCase()
-    : 'jpg'
+  // ✅ فشرده‌سازی سمت سرور با sharp (هم‌تراز با /api/upload):
+  // حداکثر ۱۲۰۰×۱۲۰۰ + WebP کیفیت ۸۵ → تصاویر جدید دیگر از سقف ۳MB بکاپ رد نمی‌شوند
+  try {
+    const buffer = Buffer.from(await file.arrayBuffer())
+    const optimizedBuffer = await sharp(buffer)
+      .resize({ width: 1200, height: 1200, fit: 'inside', withoutEnlargement: true })
+      .webp({ quality: 85 })
+      .toBuffer()
 
-  const fileName =
-    'product-' +
-    Date.now() +
-    '-' +
-    Math.random().toString(36).slice(2) +
-    '.' +
-    extension
+    const fileName =
+      'product-' +
+      Date.now() +
+      '-' +
+      Math.random().toString(36).slice(2) +
+      '.webp'
 
-  const { error: uploadError } = await db.storage
-    .from('product-images')
-    .upload(fileName, file, {
-      contentType: file.type,
-      upsert: false,
-    })
+    const { error: uploadError } = await db.storage
+      .from('product-images')
+      .upload(fileName, optimizedBuffer, {
+        contentType: 'image/webp',
+        upsert: false,
+      })
 
-  if (uploadError) {
-    return { url: null, error: uploadError.message }
+    if (uploadError) {
+      return { url: null, error: uploadError.message }
+    }
+
+    const { data } = db.storage
+      .from('product-images')
+      .getPublicUrl(fileName)
+
+    return { url: data.publicUrl, error: null }
+  } catch {
+    return { url: null, error: 'خطا در پردازش تصویر (فشرده‌سازی).' }
   }
-
-  const { data } = db.storage
-    .from('product-images')
-    .getPublicUrl(fileName)
-
-  return { url: data.publicUrl, error: null }
 }
 
 async function saveVariantGroups(

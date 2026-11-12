@@ -31,3 +31,34 @@ export const STORAGE_SECTION_LABEL = 'فایل‌های رسانه (تصاویر
 
 // bucketهای Storage — منبع واحد برای بکاپ و بازگردانی
 export const STORAGE_BUCKETS = ['product-images', 'receipts', 'theme-fonts'] as const
+
+// bucket نگه‌داری نسخه‌های ابری بکاپ (پچ ۴۹-ج) — در صورت نبود، سمت سرور ساخته می‌شود
+export const BACKUP_BUCKET = 'backups'
+
+// ترتیب جداول = ترتیب امن از نظر کلیدهای خارجی (اول والد، بعد فرزند).
+// در بازگردانی هم همین ترتیب برای upsert استفاده می‌شود.
+// توجه: 'theme-fonts'، 'product-images' و 'receipts' جدول نیستند؛ bucketهای Storage هستند.
+export const BACKUP_TABLES = [
+  'settings',
+  'club_settings',
+  'tables',
+  'cancellation_reasons',
+  'themes',
+  'categories',
+  'organizations',
+  'coupons',
+  'products',
+  'variant_groups',
+  'variant_options',
+  'takeaway_fees',
+  'organization_members',
+  'customers',
+  'membership_requests',
+  'quotes',
+  'orders',
+  'order_payments',
+  'order_refunds',
+  'redemption_logs',
+  'push_subscriptions',
+  'club_settings_log',
+] as const
