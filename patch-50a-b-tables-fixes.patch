@@ -1,0 +1,308 @@
+diff --git a/app/admin/tables/TablesManager.tsx b/app/admin/tables/TablesManager.tsx
+index 0ba8a9b..7b419cd 100644
+--- a/app/admin/tables/TablesManager.tsx
++++ b/app/admin/tables/TablesManager.tsx
+@@ -1,6 +1,7 @@
+ 'use client'
+ 
+ import { useMemo, useState } from 'react'
++import { createPortal } from 'react-dom'
+ import { QRCodeSVG } from 'qrcode.react'
+ import Modal from '../components/Modal'
+ import { addTable, updateTable, deleteTable, rotateTableToken, rotateAllTableTokens } from './actions'
+@@ -30,6 +31,13 @@ const LOCATION_LABELS: Record<string, string> = {
+   vip: 'VIP',
+ }
+ 
++// 🎯 پچ ۵۰-ب: ارقام فارسی/عربی → انگلیسی — با کیبورد فارسی هم تایپ‌کردن کار می‌کند
++function normalizeDigits(value: string) {
++  return value
++    .replace(/[۰-۹]/g, (d) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d)))
++    .replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
++}
++
+ export default function TablesManager({ tables, siteUrl }: Props) {
+   const [isModalOpen, setIsModalOpen] = useState(false)
+   const [editingTable, setEditingTable] = useState<Table | null>(null)
+@@ -230,37 +238,40 @@ export default function TablesManager({ tables, siteUrl }: Props) {
+             میزهای کافه + QR کد اختصاصی برای هر میز
+           </p>
+         </div>
+-        <div
+-          style={{
+-            display: 'flex',
+-            gap: 8,
+-            flexWrap: 'wrap',
+-            alignItems: 'center',
+-          }}
++        <button
++          type="button"
++          className="btn primary-btn"
++          onClick={openAddModal}
+         >
+-          <button
+-            type="button"
+-            className="btn"
+-            onClick={() => setPrintOpen(true)}
+-          >
+-            🖨 برگهٔ QR همهٔ میزها
+-          </button>
+-          <button
+-            type="button"
+-            className="btn"
+-            onClick={handleRotateAll}
+-            disabled={rotatingAll}
+-          >
+-            {rotatingAll ? '...' : '🔄 چرخش همهٔ توکن‌ها'}
+-          </button>
+-          <button
+-            type="button"
+-            className="btn primary-btn"
+-            onClick={openAddModal}
+-          >
+-            + افزودن میز
+-          </button>
+-        </div>
++          + افزودن میز
++        </button>
++      </div>
++
++      {/* 🎯 پچ ۵۰-ب: نوار ابزار QR خارج از admin-header تا چیدمان هدر به‌هم نریزد */}
++      <div
++        style={{
++          display: 'flex',
++          gap: 8,
++          flexWrap: 'wrap',
++          alignItems: 'center',
++          marginBottom: 16,
++        }}
++      >
++        <button
++          type="button"
++          className="btn"
++          onClick={() => setPrintOpen(true)}
++        >
++          🖨 چاپ QR میزها
++        </button>
++        <button
++          type="button"
++          className="btn"
++          onClick={handleRotateAll}
++          disabled={rotatingAll}
++        >
++          {rotatingAll ? '...' : '🔄 چرخش توکن‌ها'}
++        </button>
+       </div>
+ 
+       {tables.length === 0 ? (
+@@ -361,25 +372,31 @@ export default function TablesManager({ tables, siteUrl }: Props) {
+         }
+       >
+         <form id="table-form" onSubmit={handleSubmit}>
++          {/* 🎯 پچ ۵۰-ب: نمایش پیام خطا — قبلاً خطاهای ذخیره بی‌صدا رد می‌شدند */}
++          {message && (
++            <p className="danger" style={{ margin: '0 0 12px' }}>
++              {message}
++            </p>
++          )}
+           <div className="form-grid">
+             <div className="field">
+               <label>شماره میز *</label>
+               <input
+-                type="number"
++                type="text"
++                inputMode="numeric"
+                 value={formNumber}
+-                onChange={(e) => setFormNumber(e.target.value)}
++                onChange={(e) => setFormNumber(normalizeDigits(e.target.value))}
+                 required
+-                min="1"
+               />
+             </div>
+ 
+             <div className="field">
+               <label>تعداد صندلی</label>
+               <input
+-                type="number"
++                type="text"
++                inputMode="numeric"
+                 value={formCapacity}
+-                onChange={(e) => setFormCapacity(e.target.value)}
+-                min="1"
++                onChange={(e) => setFormCapacity(normalizeDigits(e.target.value))}
+               />
+             </div>
+ 
+@@ -419,20 +436,23 @@ export default function TablesManager({ tables, siteUrl }: Props) {
+             <div className="field">
+               <label>ترتیب</label>
+               <input
+-                type="number"
++                type="text"
++                inputMode="numeric"
+                 value={formSortOrder}
+-                onChange={(e) => setFormSortOrder(e.target.value)}
++                onChange={(e) => setFormSortOrder(normalizeDigits(e.target.value))}
+               />
+             </div>
+ 
+             <div className="field">
+               <label>هزینهٔ پیش‌فرض رزرو</label>
+               <input
+-                type="number"
++                type="text"
++                inputMode="numeric"
+                 value={formReservationFee}
+-                onChange={(e) => setFormReservationFee(e.target.value)}
+-                min="0"
+-                step="1000"
++                onChange={(e) =>
++                  setFormReservationFee(normalizeDigits(e.target.value))
++                }
++                placeholder="مثلاً ۵۰۰۰۰"
+               />
+             </div>
+           </div>
+@@ -509,18 +529,28 @@ export default function TablesManager({ tables, siteUrl }: Props) {
+         )}
+       </Modal>
+ 
+-      {/* 🎯 پچ ۵۰-ا: برگهٔ چاپ یکجای QR همهٔ میزها */}
+-      {printOpen && (
+-        <>
++      {/* 🎯 پچ ۵۰-ا: برگهٔ چاپ یکجای QR همهٔ میزها
++          🎯 پچ ۵۰-ب: رندر با portal مستقیم روی body — خارج از .admin-shell،
++          تا قواعد چاپِ موجودِ پروژه (فاکتور) برگه را مخفی نکنند و صفحه سفید نشود */}
++      {printOpen &&
++        typeof document !== 'undefined' &&
++        createPortal(
++          <>
+           <style>{`
+             @media print {
+-              body * { visibility: hidden !important; }
+-              .qr-print-sheet, .qr-print-sheet * { visibility: visible !important; }
+-              .qr-print-sheet { position: absolute !important; inset: 0; }
++              body > *:not(.qr-print-overlay) { display: none !important; }
++              .qr-print-overlay {
++                position: static !important;
++                overflow: visible !important;
++                background: #fff !important;
++                padding: 8mm !important;
++              }
++              .qr-print-overlay, .qr-print-overlay * { visibility: visible !important; }
+               .qr-print-actions { display: none !important; }
+             }
+           `}</style>
+           <div
++            className="qr-print-overlay"
+             style={{
+               position: 'fixed',
+               inset: 0,
+@@ -583,6 +613,7 @@ export default function TablesManager({ tables, siteUrl }: Props) {
+                         padding: 12,
+                         textAlign: 'center',
+                         width: 176,
++                        breakInside: 'avoid',
+                       }}
+                     >
+                       <QRCodeSVG
+@@ -606,8 +637,9 @@ export default function TablesManager({ tables, siteUrl }: Props) {
+               </div>
+             </div>
+           </div>
+-        </>
+-      )}
++          </>,
++          document.body
++        )}
+     </div>
+   )
+ }
+\ No newline at end of file
+diff --git a/app/admin/tables/actions.ts b/app/admin/tables/actions.ts
+index c16e676..249031a 100644
+--- a/app/admin/tables/actions.ts
++++ b/app/admin/tables/actions.ts
+@@ -5,17 +5,24 @@ import { supabaseServer } from '@/lib/supabase/server'
+ import { revalidatePath } from 'next/cache'
+ import { randomUUID } from 'crypto'
+ 
++// 🎯 پچ ۵۰-ب: ارقام فارسی/عربی → انگلیسی قبل از Number — تایپ با کیبورد فارسی هم درست ذخیره می‌شود
++function normalizeDigits(value: string) {
++  return value
++    .replace(/[۰-۹]/g, (d) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d)))
++    .replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
++}
++
+ export async function addTable(formData: FormData) {
+   await assertAdmin()
+   const db = await supabaseServer()
+ 
+-  const number = Number(formData.get('number') || 0)
++  const number = Number(normalizeDigits(String(formData.get('number') || '')) || 0)
+   const name = String(formData.get('name') || '').trim()
+   const description = String(formData.get('description') || '').trim()
+-  const capacity = Number(formData.get('capacity') || 2)
++  const capacity = Number(normalizeDigits(String(formData.get('capacity') || '')) || 2)
+   const location = String(formData.get('location') || 'indoor')
+-  const sortOrder = Number(formData.get('sort_order') || 0)
+-  const reservationFee = Number(formData.get('reservation_fee') || 0)
++  const sortOrder = Number(normalizeDigits(String(formData.get('sort_order') || '')) || 0)
++  const reservationFee = Number(normalizeDigits(String(formData.get('reservation_fee') || '')) || 0)
+   const isActive = formData.get('is_active') === 'on'
+ 
+   if (number <= 0) return { error: 'شماره میز الزامی است.' }
+@@ -42,13 +49,13 @@ export async function updateTable(formData: FormData) {
+   const db = await supabaseServer()
+ 
+   const id = String(formData.get('id') || '')
+-  const number = Number(formData.get('number') || 0)
++  const number = Number(normalizeDigits(String(formData.get('number') || '')) || 0)
+   const name = String(formData.get('name') || '').trim()
+   const description = String(formData.get('description') || '').trim()
+-  const capacity = Number(formData.get('capacity') || 2)
++  const capacity = Number(normalizeDigits(String(formData.get('capacity') || '')) || 2)
+   const location = String(formData.get('location') || 'indoor')
+-  const sortOrder = Number(formData.get('sort_order') || 0)
+-  const reservationFee = Number(formData.get('reservation_fee') || 0)
++  const sortOrder = Number(normalizeDigits(String(formData.get('sort_order') || '')) || 0)
++  const reservationFee = Number(normalizeDigits(String(formData.get('reservation_fee') || '')) || 0)
+   const isActive = formData.get('is_active') === 'on'
+ 
+   if (!id) return { error: 'شناسه میز مشخص نیست.' }
+diff --git a/patch-50a-b-tables-fixes-RELEASE.md b/patch-50a-b-tables-fixes-RELEASE.md
+new file mode 100644
+index 0000000..d271f33
+--- /dev/null
++++ b/patch-50a-b-tables-fixes-RELEASE.md
+@@ -0,0 +1,30 @@
++# پچ ۵۰-ب — اصلاحات صفحهٔ میزها (بعد از ۵۰-ا)
++
++## ۱) پیام خطای ذخیره نمایش داده نمی‌شد (ریشهٔ «ذخیره نمی‌شود»)
++- state `message` در کامپوننت پر می‌شد ولی هیچ‌وقت رندر نمی‌شد → هر خطای ذخیره بی‌صدا رد می‌شد
++- حالا خطا داخل مودال با کلاس `danger` نمایش داده می‌شود
++- ⚠️ اگر هنوز SQL پچ ۵۰-ا اجرا نشده، ذخیره همان‌جا خطای «column reservation_fee does not exist» را **می‌بینی** — اول SQL را اجرا کن
++
++## ۲) ارقام فارسی نرمال‌سازی شدند
++- ورودی‌های شماره میز / صندلی / ترتیب / هزینهٔ رزرو از `type="number"` به `type="text"` + `inputMode="numeric"` تغییر کردند (تایپ فارسی دیگر فیلد را خالی نمی‌گذارد)
++- تابع `normalizeDigits` ارقام ۰-۹ فارسی و ٠-٩ عربی را به انگلیسی تبدیل می‌کند — هم سمت کلاینت، هم سمت سرور (actions)
++- نیازی به سوییچ کیبورد نیست
++
++## ۳) چاپ برگهٔ QR صفحهٔ سفید نمی‌دهد
++- برگهٔ چاپ حالا با `createPortal` مستقیم روی `document.body` رندر می‌شود (خارج از `.admin-shell`)
++- CSS چاپ جدید: همهٔ فرزندان body جز برگه مخفی، خود برگه static و تمام‌عرض + `visibility: visible` برای همهٔ داخلش + `break-inside: avoid` برای کارت‌ها
++- با قواعد چاپ موجود پروژه (فاکتور) تداخل نمی‌کند
++
++## ۴) چیدمان هدر صفحهٔ میزها
++- دو دکمهٔ «چاپ QR» و «چرخش توکن‌ها» از داخل `admin-header` به نوار ابزار جدا زیر هدر منتقل شدند تا چیدمان به‌هم نریزد
++- برچسب‌ها کوتاه‌تر شدند
++
++## فایل‌های تغییرکرده
++- `app/admin/tables/TablesManager.tsx`
++- `app/admin/tables/actions.ts`
++
++## تست بعد از اعمال
++1. `Ctrl+F5` روی `/admin/tables`
++2. افزودن میز با **کیبورد فارسی**: شماره «۱۲» و هزینهٔ رزرو «۵۰۰۰۰» → باید ذخیره شود (اگر خطا بود، حالا می‌بینی‌اش)
++3. ویرایش همان میز → تغییر نام → ذخیره → رفرش → تغییر مانده
++4. «🖨 چاپ QR میزها» → پیش‌نمایش چاپ → کارت‌های QR باید دیده شوند

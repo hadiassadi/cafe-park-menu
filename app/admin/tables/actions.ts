@@ -5,17 +5,24 @@ import { supabaseServer } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { randomUUID } from 'crypto'
 
+// 🎯 پچ ۵۰-ب: ارقام فارسی/عربی → انگلیسی قبل از Number — تایپ با کیبورد فارسی هم درست ذخیره می‌شود
+function normalizeDigits(value: string) {
+  return value
+    .replace(/[۰-۹]/g, (d) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d)))
+    .replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
+}
+
 export async function addTable(formData: FormData) {
   await assertAdmin()
   const db = await supabaseServer()
 
-  const number = Number(formData.get('number') || 0)
+  const number = Number(normalizeDigits(String(formData.get('number') || '')) || 0)
   const name = String(formData.get('name') || '').trim()
   const description = String(formData.get('description') || '').trim()
-  const capacity = Number(formData.get('capacity') || 2)
+  const capacity = Number(normalizeDigits(String(formData.get('capacity') || '')) || 2)
   const location = String(formData.get('location') || 'indoor')
-  const sortOrder = Number(formData.get('sort_order') || 0)
-  const reservationFee = Number(formData.get('reservation_fee') || 0)
+  const sortOrder = Number(normalizeDigits(String(formData.get('sort_order') || '')) || 0)
+  const reservationFee = Number(normalizeDigits(String(formData.get('reservation_fee') || '')) || 0)
   const isActive = formData.get('is_active') === 'on'
 
   if (number <= 0) return { error: 'شماره میز الزامی است.' }
@@ -42,13 +49,13 @@ export async function updateTable(formData: FormData) {
   const db = await supabaseServer()
 
   const id = String(formData.get('id') || '')
-  const number = Number(formData.get('number') || 0)
+  const number = Number(normalizeDigits(String(formData.get('number') || '')) || 0)
   const name = String(formData.get('name') || '').trim()
   const description = String(formData.get('description') || '').trim()
-  const capacity = Number(formData.get('capacity') || 2)
+  const capacity = Number(normalizeDigits(String(formData.get('capacity') || '')) || 2)
   const location = String(formData.get('location') || 'indoor')
-  const sortOrder = Number(formData.get('sort_order') || 0)
-  const reservationFee = Number(formData.get('reservation_fee') || 0)
+  const sortOrder = Number(normalizeDigits(String(formData.get('sort_order') || '')) || 0)
+  const reservationFee = Number(normalizeDigits(String(formData.get('reservation_fee') || '')) || 0)
   const isActive = formData.get('is_active') === 'on'
 
   if (!id) return { error: 'شناسه میز مشخص نیست.' }
