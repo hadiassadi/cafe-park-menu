@@ -1,0 +1,1013 @@
+diff --git a/app/admin/backup/BackupClient.tsx b/app/admin/backup/BackupClient.tsx
+index 331899d..6ce90e5 100644
+--- a/app/admin/backup/BackupClient.tsx
++++ b/app/admin/backup/BackupClient.tsx
+@@ -29,7 +29,25 @@ type BackupItem = {
+   files?: number
+   error?: string
+ }
+-type LastBackup = { at: string; rows: number; files: number; size: number; ok: boolean }
++type LastBackup = {
++  at: string
++  rows: number
++  files: number
++  size: number
++  ok: boolean
++  cloud?: boolean
++}
++type CloudFile = { name: string; size: number; createdAt: string; url: string | null }
++type CloudResult = {
++  ok: boolean
++  file?: string
++  size?: number
++  rows?: number
++  files?: number
++  createdAt?: string
++  historySaved?: boolean
++  error?: string
++}
+ 
+ type RestoreProgress = { table: string; done: number; total: number }
+ type RestoreReport = { table: string; upserted: number; error?: string }
+@@ -86,6 +104,14 @@ export default function BackupClient() {
+   const [lastBackup, setLastBackup] = useState<LastBackup | null>(null)
+   const [history, setHistory] = useState<LastBackup[]>([])
+ 
++  // ─── ذخیرهٔ ابری (پچ ۴۹-ج) ───
++  const [cloudStore, setCloudStore] = useState(true)
++  const cloudStoreRef = useRef(true) // برای ارزیابی پایان — مقاوم به state کهنهٔ closure
++  const [storing, setStoring] = useState(false)
++  const [cloudResult, setCloudResult] = useState<CloudResult | null>(null)
++  const [cloudFiles, setCloudFiles] = useState<CloudFile[] | null>(null)
++  const [cloudLoading, setCloudLoading] = useState(false)
++
+   const payloadRef = useRef<{
+     tables: Record<string, unknown[]>
+     skipped: Record<string, string>
+@@ -110,6 +136,7 @@ export default function BackupClient() {
+     const h = loadHistory()
+     setHistory(h)
+     setLastBackup(h[0] ?? null)
++    void loadCloudFiles()
+   }, [])
+ 
+   // قفل اسکرول صفحه در حین بکاپ
+@@ -204,12 +231,16 @@ export default function BackupClient() {
+       )
+     }
+     buildAndDownload(failedKeys.length === 0)
++    if (failedKeys.length === 0 && cloudStoreRef.current) {
++      void storeToCloud()
++    }
+   }
+ 
+   const runBackup = async () => {
+     setRunning(true)
+     setFinalError(null)
+     revokeResult()
++    setCloudResult(null)
+     errorsRef.current = new Set()
+     payloadRef.current = { tables: {}, skipped: {}, storage: {}, storageSkipped: {} }
+     const seq = [...BACKUP_SECTIONS.map((s) => s.key), STORAGE_SECTION_KEY]
+@@ -278,6 +309,61 @@ export default function BackupClient() {
+     a.remove()
+   }
+ 
++  // ─────────── ذخیرهٔ ابری و فهرست نسخه‌های سرور (پچ ۴۹-ج) ───────────
++  async function storeToCloud() {
++    setStoring(true)
++    setCloudResult(null)
++    try {
++      const res = await fetch('/api/admin/backup/store', { method: 'POST' })
++      const j = await res.json().catch(() => null)
++      if (!res.ok || !j?.ok) {
++        throw new Error(j?.error || `خطای سرور (${res.status})`)
++      }
++      setCloudResult({ ok: true, ...j })
++
++      // ردیف همین اجرا در تاریخچهٔ محلی به «ذخیره‌شده روی سرور» ارتقا می‌یابد
++      const prev = loadHistory()
++      const base = prev[0] && !prev[0].cloud ? prev[0] : undefined
++      const entry: LastBackup = base
++        ? { ...base, cloud: true }
++        : {
++            at: j.createdAt,
++            rows: j.rows ?? 0,
++            files: j.files ?? 0,
++            size: j.size ?? 0,
++            ok: true,
++            cloud: true,
++          }
++      const hist = [entry, ...prev.filter((h) => h !== base)].slice(0, 5)
++      saveHistory(hist)
++      setHistory(hist)
++      setLastBackup(entry)
++
++      void loadCloudFiles()
++    } catch (e) {
++      setCloudResult({ ok: false, error: e instanceof Error ? e.message : 'خطای نامشخص' })
++    } finally {
++      setStoring(false)
++    }
++  }
++
++  async function loadCloudFiles() {
++    setCloudLoading(true)
++    try {
++      const res = await fetch('/api/admin/backup/cloud', { cache: 'no-store' })
++      const j = await res.json().catch(() => null)
++      if (res.ok && j?.ok) {
++        setCloudFiles(j.files ?? [])
++      } else {
++        setCloudFiles([])
++      }
++    } catch {
++      setCloudFiles([])
++    } finally {
++      setCloudLoading(false)
++    }
++  }
++
+   // ───────────────── انتخاب فایل بکاپ ─────────────────
+   const handleFile = async (file: File | null) => {
+     setParsed(null)
+@@ -414,14 +500,18 @@ export default function BackupClient() {
+         {lastBackup ? (
+           <>
+             <div className="backup-hero-title">
+-              {lastBackup.ok ? '✅ آخرین پشتیبان‌گیری' : '⚠️ آخرین پشتیبان‌گیری (ناقص)'}
++              {lastBackup.ok
++                ? lastBackup.cloud
++                  ? '☁️ آخرین پشتیبان‌گیری (روی سرور هم ذخیره شد)'
++                  : '✅ آخرین پشتیبان‌گیری'
++                : '⚠️ آخرین پشتیبان‌گیری (ناقص)'}
+             </div>
+             <div className="backup-hero-meta">
+               {faDateTime(lastBackup.at)} — {fa(totalBackupRows)} ردیف
+               {lastBackup.files > 0 && ` + ${fa(lastBackup.files)} فایل`} ({formatSize(lastBackup.size)})
+             </div>
+             <div className="backup-hero-note">
+-              تاریخچه روی این دستگاه ذخیره می‌شود؛ خود فایل بکاپ جایی ذخیره نمی‌شود مگر اینکه شما دانلود و نگه‌داری کنید.
++              تاریخچه روی این دستگاه ذخیره می‌شود؛ با گزینهٔ «☁️ ذخیرهٔ خودکار روی سرور»، یک نسخهٔ کامل هم در استوریج سرور نگه‌داری می‌شود و از کارت زیر قابل دانلود مجدد است.
+             </div>
+           </>
+         ) : (
+@@ -439,7 +529,7 @@ export default function BackupClient() {
+           <div className="backup-history-list">
+             {history.map((h) => (
+               <div key={h.at} className="backup-history-row">
+-                <span>{h.ok ? '✅' : '⚠️'} {faDateTime(h.at)}</span>
++                <span>{h.cloud ? '☁️' : h.ok ? '✅' : '⚠️'} {faDateTime(h.at)}</span>
+                 <span>
+                   {fa(h.rows)} ردیف{h.files > 0 && ` + ${fa(h.files)} فایل`} — {formatSize(h.size)}
+                 </span>
+@@ -449,6 +539,38 @@ export default function BackupClient() {
+         </div>
+       )}
+ 
++      {/* نسخه‌های روی سرور (پچ ۴۹-ج) */}
++      <div className="admin-card">
++        <div className="backup-cloud-head">
++          <div className="backup-history-title">☁️ نسخه‌های ذخیره‌شده روی سرور</div>
++          <button className="backup-retry" onClick={() => void loadCloudFiles()} disabled={cloudLoading}>
++            {cloudLoading ? 'در حال دریافت…' : '↻ بروزرسانی'}
++          </button>
++        </div>
++        {cloudFiles !== null && cloudFiles.length === 0 && (
++          <div className="backup-muted">
++            هنوز نسخه‌ای روی سرور نیست. با فعال بودن «☁️ ذخیرهٔ خودکار روی سرور» در مودال پشتیبان‌گیری، پس از هر بکاپ کامل یک نسخه اینجا ذخیره می‌شود (حداکثر ۱۰ نسخهٔ اخیر نگه‌داری می‌شود).
++          </div>
++        )}
++        {cloudFiles !== null && cloudFiles.length > 0 && (
++          <div className="backup-history-list">
++            {cloudFiles.map((f) => (
++              <div key={f.name} className="backup-history-row">
++                <span>📦 {faDateTime(f.createdAt)}</span>
++                <span className="backup-cloud-actions">
++                  {formatSize(f.size)}
++                  {f.url && (
++                    <a className="backup-cloud-download" href={f.url} target="_blank" rel="noreferrer">
++                      ⬇️ دانلود
++                    </a>
++                  )}
++                </span>
++              </div>
++            ))}
++          </div>
++        )}
++      </div>
++
+       {/* بازگردانی */}
+       <div className="admin-card">
+         <h2 className="backup-section-title">♻️ بازگردانی از فایل بکاپ</h2>
+@@ -527,7 +649,7 @@ export default function BackupClient() {
+               <button
+                 className="backup-close"
+                 onClick={() => { setModalOpen(false); revokeResult() }}
+-                disabled={running}
++                disabled={running || storing}
+                 aria-label="بستن"
+               >
+                 ✕
+@@ -538,6 +660,19 @@ export default function BackupClient() {
+               🔒 در طول پشتیبان‌گیری امکان کار با بخش‌های دیگر منو وجود ندارد؛ تا پایان این صفحه باز می‌ماند.
+             </div>
+ 
++            <label className="backup-cloud-toggle">
++              <input
++                type="checkbox"
++                checked={cloudStore}
++                onChange={(e) => {
++                  setCloudStore(e.target.checked)
++                  cloudStoreRef.current = e.target.checked
++                }}
++                disabled={running || storing}
++              />
++              ☁️ ذخیرهٔ خودکار نسخهٔ کامل روی سرور (استوریج ابری)
++            </label>
++
+             <div className="backup-progress-line">
+               بخش {fa(overall.done)} از {fa(overall.total)}
+             </div>
+@@ -547,7 +682,7 @@ export default function BackupClient() {
+ 
+             {!running && (
+               <div className="backup-restart-row">
+-                <button className="backup-retry" onClick={runBackup}>
++                <button className="backup-retry" onClick={runBackup} disabled={storing}>
+                   ↺ شروع دوباره از ابتدا
+                 </button>
+               </div>
+@@ -593,6 +728,20 @@ export default function BackupClient() {
+                     ⬇️ دانلود فایل بکاپ ({resultName})
+                   </button>
+                 )}
++                {storing && <div className="backup-muted">☁️ در حال ذخیرهٔ نسخهٔ کامل روی سرور…</div>}
++                {cloudResult?.ok && (
++                  <div className="backup-cloud-ok">
++                    ☁️ نسخه روی سرور ذخیره شد: <b>{cloudResult.file}</b> ({formatSize(cloudResult.size ?? 0)})
++                    {!cloudResult.historySaved && (
++                      <div className="backup-cloud-fail">
++                        ثبت تاریخچهٔ سروری ناموفق بود — احتمالاً migration ستون backup_history اجرا نشده (فایل SQL کنار RELEASE پچ ۴۹-ج).
++                      </div>
++                    )}
++                  </div>
++                )}
++                {cloudResult && !cloudResult.ok && (
++                  <div className="backup-cloud-fail">⚠️ ذخیرهٔ سروری ناموفق بود: {cloudResult.error}</div>
++                )}
+               </div>
+             )}
+ 
+diff --git a/app/admin/products/actions.ts b/app/admin/products/actions.ts
+index 224628e..856b64c 100644
+--- a/app/admin/products/actions.ts
++++ b/app/admin/products/actions.ts
+@@ -3,6 +3,7 @@ import { assertAdmin } from '@/lib/admin/assert-admin'
+ 
+ import { supabaseServer } from '@/lib/supabase/server'
+ import { revalidatePath } from 'next/cache'
++import sharp from 'sharp'
+ 
+ type VariantOption = {
+   id?: string
+@@ -44,34 +45,41 @@ async function uploadProductImage(
+     }
+   }
+ 
+-  const extension = file.name.includes('.')
+-    ? file.name.split('.').pop()?.toLowerCase()
+-    : 'jpg'
+-
+-  const fileName =
+-    'product-' +
+-    Date.now() +
+-    '-' +
+-    Math.random().toString(36).slice(2) +
+-    '.' +
+-    extension
+-
+-  const { error: uploadError } = await db.storage
+-    .from('product-images')
+-    .upload(fileName, file, {
+-      contentType: file.type,
+-      upsert: false,
+-    })
++  // ✅ فشرده‌سازی سمت سرور با sharp (هم‌تراز با /api/upload):
++  // حداکثر ۱۲۰۰×۱۲۰۰ + WebP کیفیت ۸۵ → تصاویر جدید دیگر از سقف ۳MB بکاپ رد نمی‌شوند
++  try {
++    const buffer = Buffer.from(await file.arrayBuffer())
++    const optimizedBuffer = await sharp(buffer)
++      .resize({ width: 1200, height: 1200, fit: 'inside', withoutEnlargement: true })
++      .webp({ quality: 85 })
++      .toBuffer()
++
++    const fileName =
++      'product-' +
++      Date.now() +
++      '-' +
++      Math.random().toString(36).slice(2) +
++      '.webp'
++
++    const { error: uploadError } = await db.storage
++      .from('product-images')
++      .upload(fileName, optimizedBuffer, {
++        contentType: 'image/webp',
++        upsert: false,
++      })
+ 
+-  if (uploadError) {
+-    return { url: null, error: uploadError.message }
+-  }
++    if (uploadError) {
++      return { url: null, error: uploadError.message }
++    }
+ 
+-  const { data } = db.storage
+-    .from('product-images')
+-    .getPublicUrl(fileName)
++    const { data } = db.storage
++      .from('product-images')
++      .getPublicUrl(fileName)
+ 
+-  return { url: data.publicUrl, error: null }
++    return { url: data.publicUrl, error: null }
++  } catch {
++    return { url: null, error: 'خطا در پردازش تصویر (فشرده‌سازی).' }
++  }
+ }
+ 
+ async function saveVariantGroups(
+diff --git a/app/api/admin/backup/cloud/route.ts b/app/api/admin/backup/cloud/route.ts
+new file mode 100644
+index 0000000..42acdf9
+--- /dev/null
++++ b/app/api/admin/backup/cloud/route.ts
+@@ -0,0 +1,45 @@
++import 'server-only'
++import { NextResponse } from 'next/server'
++import { apiError } from '@/lib/api-error'
++import { requireAdmin } from '@/lib/admin/require-admin'
++import { supabaseAdmin } from '@/lib/supabase/server'
++import { BACKUP_BUCKET } from '@/lib/backup-sections'
++
++export const dynamic = 'force-dynamic'
++
++// GET /api/admin/backup/cloud — فهرست نسخه‌های بکاپ ذخیره‌شده روی سرور (پچ ۴۹-ج)
++// برای هر فایل یک URL امضاشدهٔ یک‌ساعته برمی‌گردد (bucket خصوصی است).
++export async function GET() {
++  try {
++    const denied = await requireAdmin()
++    if (denied) return denied
++
++    const db = supabaseAdmin()
++
++    const { data: files, error } = await db.storage.from(BACKUP_BUCKET).list('', {
++      limit: 50,
++      sortBy: { column: 'created_at', order: 'desc' },
++    })
++    if (error) {
++      // bucket هنوز ساخته نشده = هنوز بکاپ ابری نداریم؛ لیست خالی، نه خطا
++      return NextResponse.json({ ok: true, files: [] })
++    }
++
++    const existing = (files ?? []).filter((f) => f.id)
++    const names = existing.map((f) => f.name)
++    const { data: signed } = names.length
++      ? await db.storage.from(BACKUP_BUCKET).createSignedUrls(names, 3600)
++      : { data: [] }
++
++    const out = existing.map((f) => ({
++      name: f.name,
++      size: f.metadata?.size ?? 0,
++      createdAt: f.created_at,
++      url: signed?.find((s) => s.path === f.name)?.signedUrl ?? null,
++    }))
++
++    return NextResponse.json({ ok: true, files: out })
++  } catch (err) {
++    return apiError(err, 'خطا در فهرست نسخه‌های سرور')
++  }
++}
+diff --git a/app/api/admin/backup/route.ts b/app/api/admin/backup/route.ts
+index 37c46f0..acf73f6 100644
+--- a/app/api/admin/backup/route.ts
++++ b/app/api/admin/backup/route.ts
+@@ -3,154 +3,17 @@ import { NextResponse } from 'next/server'
+ import { apiError } from '@/lib/api-error'
+ import { requireAdmin } from '@/lib/admin/require-admin'
+ import { supabaseAdmin } from '@/lib/supabase/server'
+-import { BACKUP_SECTIONS, STORAGE_BUCKETS, STORAGE_SECTION_KEY } from '@/lib/backup-sections'
++import { BACKUP_SECTIONS, BACKUP_TABLES, STORAGE_BUCKETS, STORAGE_SECTION_KEY } from '@/lib/backup-sections'
++import { buildFullPayload, collectStorage, contentTypeFor, fetchAllRows, storageTotals } from '@/lib/backup-core'
+ 
+ export const dynamic = 'force-dynamic'
+ 
+-// ترتیب جداول = ترتیب امن از نظر کلیدهای خارجی (اول والد، بعد فرزند).
+-// در بازگردانی هم همین ترتیب برای upsert استفاده می‌شود.
+-// توجه: 'theme-fonts'، 'product-images' و 'receipts' جدول نیستند؛ bucketهای Storage هستند
+-// و در STORAGE_BUCKETS پایین‌تر مدیریت می‌شوند.
+-const BACKUP_TABLES = [
+-  'settings',
+-  'club_settings',
+-  'tables',
+-  'cancellation_reasons',
+-  'themes',
+-  'categories',
+-  'organizations',
+-  'coupons',
+-  'products',
+-  'variant_groups',
+-  'variant_options',
+-  'takeaway_fees',
+-  'organization_members',
+-  'customers',
+-  'membership_requests',
+-  'quotes',
+-  'orders',
+-  'order_payments',
+-  'order_refunds',
+-  'redemption_logs',
+-  'push_subscriptions',
+-  'club_settings_log',
+-] as const
+-
+-// bucketهای Storage از lib/backup-sections (منبع واحد برای بکاپ و بازگردانی) import می‌شود
+-
+-const PAGE_SIZE = 1000 // بکاپ: تعداد ردیف در هر کوئری
+ const RESTORE_CHUNK = 500 // بازگردانی: تعداد ردیف در هر upsert
+ const MAX_RESTORE_ROWS = 5000 // سقف ردیف در هر درخواست بازگردانی
+-const MAX_FILE_BYTES = 3 * 1024 * 1024 // سقف حجم هر فایل Storage داخل بکاپ
+-const MAX_FILES_PER_BUCKET = 300 // سقف تعداد فایل در هر bucket
+ const MAX_RESTORE_FILES = 50 // سقف فایل در هر درخواست بازگردانی Storage
+ 
+-const MIME_BY_EXT: Record<string, string> = {
+-  jpg: 'image/jpeg',
+-  jpeg: 'image/jpeg',
+-  png: 'image/png',
+-  webp: 'image/webp',
+-  gif: 'image/gif',
+-  svg: 'image/svg+xml',
+-  pdf: 'application/pdf',
+-  ttf: 'font/ttf',
+-  otf: 'font/otf',
+-  woff: 'font/woff',
+-  woff2: 'font/woff2',
+-}
+-
+-function contentTypeFor(name: string): string {
+-  const ext = name.split('.').pop()?.toLowerCase() ?? ''
+-  return MIME_BY_EXT[ext] ?? 'application/octet-stream'
+-}
+-
+-// ─────────────────────────────────────────────────────────────
+-// helpers مشترک بکاپ کامل و بخش‌بندی‌شده (پچ ۴۹)
+-// ─────────────────────────────────────────────────────────────
+-
+-// خواندن کامل یک جدول با صفحه‌بندی
+-async function fetchAllRows(db: ReturnType<typeof supabaseAdmin>, table: string) {
+-  const rows: unknown[] = []
+-  let from = 0
+-  for (;;) {
+-    const { data, error } = await db
+-      .from(table)
+-      .select('*')
+-      .range(from, from + PAGE_SIZE - 1)
+-    if (error) throw new Error(error.message)
+-    if (!data || data.length === 0) break
+-    rows.push(...data)
+-    if (data.length < PAGE_SIZE) break
+-    from += PAGE_SIZE
+-  }
+-  return rows
+-}
+-
+-// جمع‌آوری فایل‌های Storage:
+-// برخلاف نسخهٔ قبلی، خطای دانلود «یک» فایل کل bucket را خراب نمی‌کند؛
+-// هر فایل جداگانه تلاش مجدد می‌شود و در صورت شکست با «علت» ثبت می‌شود.
+-async function collectStorage(db: ReturnType<typeof supabaseAdmin>) {
+-  const storage: Record<string, { name: string; data: string }[]> = {}
+-  const storageSkipped: Record<string, string> = {}
+-
+-  for (const bucket of STORAGE_BUCKETS) {
+-    const out: { name: string; data: string }[] = []
+-    try {
+-      const { data: files, error } = await db.storage
+-        .from(bucket)
+-        .list('', {
+-          limit: MAX_FILES_PER_BUCKET,
+-          sortBy: { column: 'created_at', order: 'desc' },
+-        })
+-      if (error) throw new Error(error.message)
+-
+-      for (const f of files ?? []) {
+-        if (!f.id) continue // پوشه‌های فرضی را رد کن
+-        const key = `${bucket}/${f.name}`
+-
+-        // تلاش مجدد یک‌بار برای خطاهای گذرا
+-        let blob: Blob | null = null
+-        let lastErr = ''
+-        for (let attempt = 0; attempt < 2 && !blob; attempt++) {
+-          const { data, error: dlError } = await db.storage.from(bucket).download(f.name)
+-          if (!dlError && data) {
+-            blob = data
+-          } else {
+-            lastErr = dlError?.message ?? 'داده خالی'
+-            if (attempt === 0) await new Promise((r) => setTimeout(r, 400))
+-          }
+-        }
+-        if (!blob) {
+-          storageSkipped[key] = `خطا در دانلود: ${lastErr}`
+-          continue
+-        }
+-        if (blob.size > MAX_FILE_BYTES) {
+-          storageSkipped[key] = `حجم ${(blob.size / 1048576).toFixed(1)}MB از سقف ۳ مگابایت بیشتر است`
+-          continue
+-        }
+-        const buf = Buffer.from(await blob.arrayBuffer())
+-        out.push({ name: f.name, data: buf.toString('base64') })
+-      }
+-      storage[bucket] = out
+-    } catch (e) {
+-      // خطای سطح bucket (مثلاً list) — فایل‌های همین‌جا گرفته‌شده حفظ می‌شوند
+-      storage[bucket] = out
+-      storageSkipped[bucket] = e instanceof Error ? e.message : 'خطای نامشخص'
+-    }
+-  }
+-  return { storage, storageSkipped }
+-}
+-
+-function storageTotals(storage: Record<string, { name: string; data: string }[]>) {
+-  const storageCounts = Object.fromEntries(
+-    Object.entries(storage).map(([k, v]) => [k, v.length])
+-  )
+-  const files = Object.values(storageCounts).reduce((a, b) => a + b, 0)
+-  return { storageCounts, files }
+-}
+-
+ // ─────────────────────────────────────────────────────────────
+-// GET — گرفتن بکاپ کامل (دانلود یک فایل JSON شامل همه‌ی جداول)
++// GET — بکاپ کامل یا بخش‌بندی‌شده (پچ ۴۹)
+ // ─────────────────────────────────────────────────────────────
+ export async function GET(request: Request) {
+   try {
+@@ -159,7 +22,7 @@ export async function GET(request: Request) {
+ 
+     const db = supabaseAdmin()
+ 
+-    // ─── حالت بخش‌بندی‌شده (پچ ۴۹): /api/admin/backup?section=<key> ───
++    // ─── حالت بخش‌بندی‌شده: /api/admin/backup?section=<key> ───
+     // هر بخش جداگانه خوانده می‌شود تا چک‌لیست زنده در UI ممکن شود؛
+     // ادغام بخش‌ها سمت کلاینت همان ساختار payload بکاپ کامل را می‌سازد.
+     const { searchParams } = new URL(request.url)
+@@ -198,38 +61,10 @@ export async function GET(request: Request) {
+       return NextResponse.json({ ok: true, section, rows, tables, skipped })
+     }
+ 
+-    // ─── بکاپ کامل (سازگار با نسخهٔ قبل) ───
+-    const tables: Record<string, unknown[]> = {}
+-    // جدول‌هایی که در دیتابیس موجود نیستند یا خوانده نشدند؛
+-    // بکاپ به‌جای شکستن، آن‌ها را خالی ثبت می‌کند و ادامه می‌دهد
+-    const skipped: Record<string, string> = {}
+-
+-    for (const table of BACKUP_TABLES) {
+-      try {
+-        tables[table] = await fetchAllRows(db, table)
+-      } catch (e) {
+-        tables[table] = []
+-        skipped[table] = e instanceof Error ? e.message : 'خطای نامشخص'
+-      }
+-    }
+-
+-    const { storage, storageSkipped } = await collectStorage(db)
+-
+-    const payload = {
+-      app: 'cafe-park-menu',
+-      backupVersion: 2,
+-      createdAt: new Date().toISOString(),
+-      counts: Object.fromEntries(Object.entries(tables).map(([k, v]) => [k, v.length])),
+-      skipped,
+-      storageCounts: Object.fromEntries(
+-        Object.entries(storage).map(([k, v]) => [k, v.length])
+-      ),
+-      storageSkipped,
+-      tables,
+-      storage,
+-    }
++    // ─── بکاپ کامل (سازگار با نسخه‌های قبل) ───
++    const payload = await buildFullPayload(db)
+ 
+-    const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')
++    const stamp = payload.createdAt.slice(0, 16).replace(/[:T]/g, '-')
+     const fileName = `cafepark-backup-${stamp}.json`
+ 
+     return new NextResponse(JSON.stringify(payload), {
+diff --git a/app/api/admin/backup/store/route.ts b/app/api/admin/backup/store/route.ts
+new file mode 100644
+index 0000000..7899cfd
+--- /dev/null
++++ b/app/api/admin/backup/store/route.ts
+@@ -0,0 +1,105 @@
++import 'server-only'
++import { NextResponse } from 'next/server'
++import { apiError } from '@/lib/api-error'
++import { requireAdmin } from '@/lib/admin/require-admin'
++import { supabaseAdmin } from '@/lib/supabase/server'
++import { BACKUP_BUCKET } from '@/lib/backup-sections'
++import { buildFullPayload } from '@/lib/backup-core'
++
++export const dynamic = 'force-dynamic'
++
++// POST /api/admin/backup/store — ذخیرهٔ خودکار نسخهٔ کامل بکاپ روی سرور (پچ ۴۹-ج)
++// کل payload سمت سرور ساخته می‌شود (بدون عبور از محدودیت حجم بدنهٔ درخواست) و داخل
++// bucket خصوصی «backups» آپلود می‌شود؛ سپس آخرین ۱۰ نسخه نگه‌داری و تاریخچهٔ سروری
++// در ستون backup_history جدول settings ثبت می‌شود (در نبود migration، بی‌سروصدا رد می‌شود).
++const MAX_CLOUD_BACKUPS = 10
++const HISTORY_LIMIT = 10
++
++type HistoryEntry = {
++  at: string
++  file: string
++  size: number
++  rows: number
++  files: number
++}
++
++export async function POST() {
++  try {
++    const denied = await requireAdmin()
++    if (denied) return denied
++
++    const db = supabaseAdmin()
++
++    const payload = await buildFullPayload(db)
++    const body = JSON.stringify(payload)
++    const rows = Object.values(payload.counts).reduce((a, b) => a + b, 0)
++    const files = Object.values(payload.storageCounts).reduce((a, b) => a + b, 0)
++
++    const stamp = payload.createdAt.slice(0, 16).replace(/[:T]/g, '-')
++    const fileName = `cafepark-backup-${stamp}.json`
++
++    // bucket «backups» در صورت نبود ساخته می‌شود؛ خطای «از قبل موجود» طبیعی است
++    await db.storage.createBucket(BACKUP_BUCKET, { public: false })
++
++    const { error: uploadError } = await db.storage
++      .from(BACKUP_BUCKET)
++      .upload(fileName, body, {
++        contentType: 'application/json; charset=utf-8',
++        upsert: true,
++      })
++    if (uploadError) {
++      throw new Error(`آپلود به سرور: ${uploadError.message}`)
++    }
++
++    // نگهداشت: حذف نسخه‌های قدیمی‌تر از سقف (جدیدترین ۱۰ نسخه می‌ماند)
++    const { data: listed } = await db.storage.from(BACKUP_BUCKET).list('', {
++      limit: 100,
++      sortBy: { column: 'created_at', order: 'desc' },
++    })
++    const oldFiles = (listed ?? [])
++      .filter((f) => f.id && f.name !== fileName)
++      .slice(MAX_CLOUD_BACKUPS - 1)
++    if (oldFiles.length > 0) {
++      await db.storage.from(BACKUP_BUCKET).remove(oldFiles.map((f) => f.name))
++    }
++
++    // ثبت تاریخچهٔ سروری — اگر ستون backup_history موجود نباشد، بدون خطا رد می‌شود
++    let historySaved = true
++    let historyNote: string | undefined
++    try {
++      const { data: row } = await db
++        .from('settings')
++        .select('backup_history')
++        .eq('id', 1)
++        .maybeSingle()
++      const prev = Array.isArray(row?.backup_history)
++        ? (row?.backup_history as HistoryEntry[])
++        : []
++      const next: HistoryEntry[] = [
++        { at: payload.createdAt, file: fileName, size: body.length, rows, files },
++        ...prev,
++      ].slice(0, HISTORY_LIMIT)
++      const { error: histError } = await db
++        .from('settings')
++        .update({ backup_history: next })
++        .eq('id', 1)
++      if (histError) throw new Error(histError.message)
++    } catch (e) {
++      historySaved = false
++      historyNote = e instanceof Error ? e.message : 'خطای نامشخص'
++    }
++
++    return NextResponse.json({
++      ok: true,
++      file: fileName,
++      size: body.length,
++      rows,
++      files,
++      createdAt: payload.createdAt,
++      historySaved,
++      historyNote,
++    })
++  } catch (err) {
++    return apiError(err, 'خطا در ذخیرهٔ بکاپ روی سرور')
++  }
++}
+diff --git a/app/globals.css b/app/globals.css
+index 251e7d7..2a1078c 100644
+--- a/app/globals.css
++++ b/app/globals.css
+@@ -15201,3 +15201,11 @@ a.cat {
+ .backup-summary .backup-muted{margin:6px 0}
+ .backup-download-btn{margin-top:8px}
+ .backup-restart-row{margin-top:10px;display:flex;justify-content:flex-start}
++.backup-cloud-toggle{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--admin-text);margin-bottom:12px;cursor:pointer}
++.backup-cloud-toggle input{accent-color:var(--admin-primary);width:16px;height:16px}
++.backup-cloud-ok{font-size:13px;color:var(--admin-success);background:rgba(71,112,82,.08);border:1px solid var(--admin-success);border-radius:8px;padding:8px 10px;margin-top:8px}
++.backup-cloud-fail{font-size:12px;color:var(--admin-danger-strong);margin-top:4px}
++.backup-cloud-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px}
++.backup-cloud-actions{display:inline-flex;align-items:center;gap:10px}
++.backup-cloud-download{color:var(--admin-primary);font-weight:700;text-decoration:none;font-size:12.5px}
++.backup-cloud-download:hover{text-decoration:underline}
+diff --git a/lib/backup-core.ts b/lib/backup-core.ts
+new file mode 100644
+index 0000000..6a45e66
+--- /dev/null
++++ b/lib/backup-core.ts
+@@ -0,0 +1,157 @@
++// lib/backup-core.ts
++// هستهٔ مشترک بکاپ (پچ ۴۹-ج): خواندن جداول + جمع‌آوری Storage + ساخت payload کامل.
++// مصرف‌کنندگان: GET /api/admin/backup (بخشی و کامل) و POST /api/admin/backup/store (آپلود ابری)
++import 'server-only'
++import { supabaseAdmin } from '@/lib/supabase/server'
++import { BACKUP_TABLES, STORAGE_BUCKETS } from '@/lib/backup-sections'
++
++export type AdminDb = ReturnType<typeof supabaseAdmin>
++
++export const PAGE_SIZE = 1000 // بکاپ: تعداد ردیف در هر کوئری
++export const MAX_FILE_BYTES = 3 * 1024 * 1024 // سقف حجم هر فایل Storage داخل بکاپ
++export const MAX_FILES_PER_BUCKET = 300 // سقف تعداد فایل در هر bucket
++
++const MIME_BY_EXT: Record<string, string> = {
++  jpg: 'image/jpeg',
++  jpeg: 'image/jpeg',
++  png: 'image/png',
++  webp: 'image/webp',
++  gif: 'image/gif',
++  svg: 'image/svg+xml',
++  pdf: 'application/pdf',
++  ttf: 'font/ttf',
++  otf: 'font/otf',
++  woff: 'font/woff',
++  woff2: 'font/woff2',
++}
++
++export function contentTypeFor(name: string): string {
++  const ext = name.split('.').pop()?.toLowerCase() ?? ''
++  return MIME_BY_EXT[ext] ?? 'application/octet-stream'
++}
++
++// خواندن کامل یک جدول با صفحه‌بندی
++export async function fetchAllRows(db: AdminDb, table: string) {
++  const rows: unknown[] = []
++  let from = 0
++  for (;;) {
++    const { data, error } = await db
++      .from(table)
++      .select('*')
++      .range(from, from + PAGE_SIZE - 1)
++    if (error) throw new Error(error.message)
++    if (!data || data.length === 0) break
++    rows.push(...data)
++    if (data.length < PAGE_SIZE) break
++    from += PAGE_SIZE
++  }
++  return rows
++}
++
++// جمع‌آوری فایل‌های Storage:
++// برخلاف نسخهٔ قبل از پچ ۴۹، خطای دانلود «یک» فایل کل bucket را خراب نمی‌کند؛
++// هر فایل جداگانه تلاش مجدد می‌شود و در صورت شکست با «علت» ثبت می‌شود.
++export async function collectStorage(db: AdminDb) {
++  const storage: Record<string, { name: string; data: string }[]> = {}
++  const storageSkipped: Record<string, string> = {}
++
++  for (const bucket of STORAGE_BUCKETS) {
++    const out: { name: string; data: string }[] = []
++    try {
++      const { data: files, error } = await db.storage
++        .from(bucket)
++        .list('', {
++          limit: MAX_FILES_PER_BUCKET,
++          sortBy: { column: 'created_at', order: 'desc' },
++        })
++      if (error) throw new Error(error.message)
++
++      for (const f of files ?? []) {
++        if (!f.id) continue // پوشه‌های فرضی را رد کن
++        const key = `${bucket}/${f.name}`
++
++        // تلاش مجدد یک‌بار برای خطاهای گذرا
++        let blob: Blob | null = null
++        let lastErr = ''
++        for (let attempt = 0; attempt < 2 && !blob; attempt++) {
++          const { data, error: dlError } = await db.storage.from(bucket).download(f.name)
++          if (!dlError && data) {
++            blob = data
++          } else {
++            lastErr = dlError?.message ?? 'داده خالی'
++            if (attempt === 0) await new Promise((r) => setTimeout(r, 400))
++          }
++        }
++        if (!blob) {
++          storageSkipped[key] = `خطا در دانلود: ${lastErr}`
++          continue
++        }
++        if (blob.size > MAX_FILE_BYTES) {
++          storageSkipped[key] = `حجم ${(blob.size / 1048576).toFixed(1)}MB از سقف ۳ مگابایت بیشتر است`
++          continue
++        }
++        const buf = Buffer.from(await blob.arrayBuffer())
++        out.push({ name: f.name, data: buf.toString('base64') })
++      }
++      storage[bucket] = out
++    } catch (e) {
++      // خطای سطح bucket (مثلاً list) — فایل‌های همین‌جا گرفته‌شده حفظ می‌شوند
++      storage[bucket] = out
++      storageSkipped[bucket] = e instanceof Error ? e.message : 'خطای نامشخص'
++    }
++  }
++  return { storage, storageSkipped }
++}
++
++export function storageTotals(storage: Record<string, { name: string; data: string }[]>) {
++  const storageCounts = Object.fromEntries(
++    Object.entries(storage).map(([k, v]) => [k, v.length])
++  )
++  const files = Object.values(storageCounts).reduce((a, b) => a + b, 0)
++  return { storageCounts, files }
++}
++
++export type FullBackupPayload = {
++  app: string
++  backupVersion: number
++  createdAt: string
++  counts: Record<string, number>
++  skipped: Record<string, string>
++  storageCounts: Record<string, number>
++  storageSkipped: Record<string, string>
++  tables: Record<string, unknown[]>
++  storage: Record<string, { name: string; data: string }[]>
++}
++
++// ساخت payload کامل بکاپ — مشترک بین GET کامل و ذخیرهٔ ابری (پچ ۴۹-ج)
++export async function buildFullPayload(db: AdminDb): Promise<FullBackupPayload> {
++  const tables: Record<string, unknown[]> = {}
++  // جدول‌هایی که در دیتابیس موجود نیستند یا خوانده نشدند؛
++  // بکاپ به‌جای شکستن، آن‌ها را خالی ثبت می‌کند و ادامه می‌دهد
++  const skipped: Record<string, string> = {}
++
++  for (const table of BACKUP_TABLES) {
++    try {
++      tables[table] = await fetchAllRows(db, table)
++    } catch (e) {
++      tables[table] = []
++      skipped[table] = e instanceof Error ? e.message : 'خطای نامشخص'
++    }
++  }
++
++  const { storage, storageSkipped } = await collectStorage(db)
++
++  return {
++    app: 'cafe-park-menu',
++    backupVersion: 2,
++    createdAt: new Date().toISOString(),
++    counts: Object.fromEntries(Object.entries(tables).map(([k, v]) => [k, v.length])),
++    skipped,
++    storageCounts: Object.fromEntries(
++      Object.entries(storage).map(([k, v]) => [k, v.length])
++    ),
++    storageSkipped,
++    tables,
++    storage,
++  }
++}
+diff --git a/lib/backup-sections.ts b/lib/backup-sections.ts
+index 24d0fb5..17c0202 100644
+--- a/lib/backup-sections.ts
++++ b/lib/backup-sections.ts
+@@ -31,3 +31,34 @@ export const STORAGE_SECTION_LABEL = 'فایل‌های رسانه (تصاویر
+ 
+ // bucketهای Storage — منبع واحد برای بکاپ و بازگردانی
+ export const STORAGE_BUCKETS = ['product-images', 'receipts', 'theme-fonts'] as const
++
++// bucket نگه‌داری نسخه‌های ابری بکاپ (پچ ۴۹-ج) — در صورت نبود، سمت سرور ساخته می‌شود
++export const BACKUP_BUCKET = 'backups'
++
++// ترتیب جداول = ترتیب امن از نظر کلیدهای خارجی (اول والد، بعد فرزند).
++// در بازگردانی هم همین ترتیب برای upsert استفاده می‌شود.
++// توجه: 'theme-fonts'، 'product-images' و 'receipts' جدول نیستند؛ bucketهای Storage هستند.
++export const BACKUP_TABLES = [
++  'settings',
++  'club_settings',
++  'tables',
++  'cancellation_reasons',
++  'themes',
++  'categories',
++  'organizations',
++  'coupons',
++  'products',
++  'variant_groups',
++  'variant_options',
++  'takeaway_fees',
++  'organization_members',
++  'customers',
++  'membership_requests',
++  'quotes',
++  'orders',
++  'order_payments',
++  'order_refunds',
++  'redemption_logs',
++  'push_subscriptions',
++  'club_settings_log',
++] as const
+diff --git a/patch-49c-backup-cloud-store-RELEASE.md b/patch-49c-backup-cloud-store-RELEASE.md
+new file mode 100644
+index 0000000..26f9227
+--- /dev/null
++++ b/patch-49c-backup-cloud-store-RELEASE.md
+@@ -0,0 +1,74 @@
++# پچ ۴۹-ج — فاز دوم پشتیبان‌گیری: ذخیرهٔ ابری + تاریخچهٔ سروری + دانلود دوباره + فشرده‌سازی تصاویر
++
++پیش‌نیاز: پچ ۴۹-ب مرج شده (PR #83). **یک migration SQL** باید اجرا شود (اختیاری ولی توصیه‌شده):
++فایل `20261112_backup_history.sql` در Supabase → SQL Editor (فقط ADD COLUMN امن است).
++
++## چه چیزی اضافه شد
++
++### ۱) ذخیرهٔ خودکار نسخهٔ کامل روی سرور ☁️
++- در مودال پشتیبان‌گیری چک‌باکس «☁️ ذخیرهٔ خودکار نسخهٔ کامل روی سرور» (پیش‌فرض روشن)
++- پس از هر بکاپ **کامل**، کلاینت به `POST /api/admin/backup/store` خبر می‌دهد؛ سرور خودش
++  کل payload را می‌سازد (بدون محدودیت حجم بدنهٔ درخواست Vercel) و در **bucket خصوصی
++  «backups»** آپلود می‌کند (در نبود bucket، خودکار ساخته می‌شود — idempotent)
++- نگهداشت: فقط **۱۰ نسخهٔ اخیر** می‌ماند و قدیمی‌ها حذف می‌شوند
++- بکاپ ناقص هرگز روی سرور ذخیره نمی‌شود
++- نتیجه در همان مودال: «☁️ نسخه روی سرور ذخیره شد: …» + خطای واضح در صورت شکست
++  (شکست ذخیرهٔ ابری، بکاپ محلی را خراب نمی‌کند)
++
++### ۲) کارت «☁️ نسخه‌های ذخیره‌شده روی سرور» — دانلود دوباره
++- `GET /api/admin/backup/cloud`: فهرست نسخه‌ها + **URL امضاشدهٔ یک‌ساعته** برای هرکدام
++- دکمهٔ «↻ بروزرسانی» + دانلود مستقیم هر نسخه از همان کارت (بدون نیاز به فایل محلی)
++
++### ۳) تاریخچهٔ سروری (با migration)
++- پس از ذخیرهٔ ابری، مشخصات نسخه در ستون جدید `backup_history` جدول `settings` (id=1)
++  ثبت می‌شود (حداکثر ۱۰ مورد)
++- اگر migration اجرا نشده باشد: ذخیرهٔ ابری کار می‌کند، فقط ثبت تاریخچه بی‌سروصدا رد و
++  در UI پیام راهنما نشان داده می‌شود
++- تاریخچهٔ محلی هم ارتقا یافت: ردیف بکاپ ابری با نشان **☁️** در کارت تاریخچه و hero
++
++### ۴) فشرده‌سازی خودکار تصاویر محصول — ریشه‌کن کردن ردِ >۳MB
++- کشف: دو مسیر آپلود وجود داشت — `/api/upload` (فشرده‌سازی با sharp داشت) ولی فرم محصولات
++  از server action به `uploadProductImage` می‌رفت که **فایل خام** آپلود می‌کرد؛ همین منبع
++  آن دو تصویر ردشده در بکاپ بود
++- فیکس: `app/admin/products/actions.ts` حالا مثل `/api/upload` فشرده می‌کند
++  (sharp: حداکثر ۱۲۰۰×۱۲۰۰، WebP کیفیت ۸۵) → تصاویر جدید عملاً زیر ~۲۰۰KB می‌مانند
++- تصاویر قدیمیِ درشت‌تر همچنان با «علت حجم» در بکاپ گزارش می‌شوند (سقف ۳MB سر جایش است)
++
++## معماری
++- `lib/backup-core.ts` (جدید، server-only): هستهٔ مشترک — fetchAllRows / collectStorage /
++  storageTotals / buildFullPayload / contentTypeFor — که GET کامل و store از آن مشترک استفاده می‌کنند
++- `lib/backup-sections.ts`: + `BACKUP_TABLES` (انتقال از route) و `BACKUP_BUCKET='backups'`
++- `app/api/admin/backup/route.ts`: بازنویسی تمیز با import از هسته؛ رفتار GET/POST دست‌نخورده
++- `app/api/admin/backup/store/route.ts` (جدید) · `app/api/admin/backup/cloud/route.ts` (جدید)
++- `app/admin/backup/BackupClient.tsx` + CSS (`.backup-cloud-*` با توکن‌ها → دارک خودکار)
++- `app/admin/products/actions.ts`: sharp
++
++## دروازه‌ها
++verifier CSS ✓ · `tsc --noEmit` ✓ · `next build` تولیدی ✓ (سه مسیر backup/cloud/store خروجی گرفت)
++· apply-check + تایپ پس از اعمال ✓
++
++## اعمال (PowerShell)
++```powershell
++git checkout main && git pull
++git checkout -b feat/patch-49c-backup-cloud-store
++git apply --ignore-whitespace --verbose patch-49c-backup-cloud-store.patch
++# صحت اعمال — انتظار:
++(Select-String -Path "lib\backup-core.ts" -Pattern "buildFullPayload").Count                          # >= 2
++(Test-Path "app\api\admin\backup\store\route.ts")                                                     # True
++(Test-Path "app\api\admin\backup\cloud\route.ts")                                                     # True
++(Select-String -Path "app\admin\products\actions.ts" -Pattern "sharp").Count                          # >= 2
++# سپس migration (یک‌بار): فایل 20261112_backup_history.sql در Supabase SQL Editor اجرا شود
++git add -A
++git commit -m "feat(admin): patch 49c - cloud backup store with server history, re-download list, sharp image compression"
++git push -u origin feat/patch-49c-backup-cloud-store
++```
++سپس PR و merge: `https://github.com/hadiassadi/cafe-park-menu/compare/main...feat/patch-49c-backup-cloud-store`
++
++## تست بعد از merge (کاربر)
++1. `git checkout main` ← `git pull` ← `npm run dev` ← `Ctrl+F5` ← اجرای SQL migration
++2. پشتیبان‌گیری → مودال: چک‌باکس ☁️ روشن → پس از تیک‌های کامل، خط «☁️ نسخه روی سرور ذخیره شد…»
++3. کارت «نسخه‌های روی سرور»: نسخه دیده شود → «⬇️ دانلود» فایل بکاپ را بدهد
++4. hero و تاریخچه: نشان ☁️ روی بکاپ ابری
++5. یک محصول با عکس بزرگ (مثلاً ۵MB) ذخیره کنی → عکس فشرده شود و در بکاپ بعدی ردشده نداشته باشی
++6. چک‌باکس را خاموش کنی → بکاپ بدون پیام ابری، فقط دانلود محلی
++7. حالت شب: کارت‌ها و مودال خوانا

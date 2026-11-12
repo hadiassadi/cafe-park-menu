@@ -29,7 +29,25 @@ type BackupItem = {
   files?: number
   error?: string
 }
-type LastBackup = { at: string; rows: number; files: number; size: number; ok: boolean }
+type LastBackup = {
+  at: string
+  rows: number
+  files: number
+  size: number
+  ok: boolean
+  cloud?: boolean
+}
+type CloudFile = { name: string; size: number; createdAt: string; url: string | null }
+type CloudResult = {
+  ok: boolean
+  file?: string
+  size?: number
+  rows?: number
+  files?: number
+  createdAt?: string
+  historySaved?: boolean
+  error?: string
+}
 
 type RestoreProgress = { table: string; done: number; total: number }
 type RestoreReport = { table: string; upserted: number; error?: string }
@@ -86,6 +104,14 @@ export default function BackupClient() {
   const [lastBackup, setLastBackup] = useState<LastBackup | null>(null)
   const [history, setHistory] = useState<LastBackup[]>([])
 
+  // ─── ذخیرهٔ ابری (پچ ۴۹-ج) ───
+  const [cloudStore, setCloudStore] = useState(true)
+  const cloudStoreRef = useRef(true) // برای ارزیابی پایان — مقاوم به state کهنهٔ closure
+  const [storing, setStoring] = useState(false)
+  const [cloudResult, setCloudResult] = useState<CloudResult | null>(null)
+  const [cloudFiles, setCloudFiles] = useState<CloudFile[] | null>(null)
+  const [cloudLoading, setCloudLoading] = useState(false)
+
   const payloadRef = useRef<{
     tables: Record<string, unknown[]>
     skipped: Record<string, string>
@@ -110,6 +136,7 @@ export default function BackupClient() {
     const h = loadHistory()
     setHistory(h)
     setLastBackup(h[0] ?? null)
+    void loadCloudFiles()
   }, [])
 
   // قفل اسکرول صفحه در حین بکاپ
@@ -204,12 +231,16 @@ export default function BackupClient() {
       )
     }
     buildAndDownload(failedKeys.length === 0)
+    if (failedKeys.length === 0 && cloudStoreRef.current) {
+      void storeToCloud()
+    }
   }
 
   const runBackup = async () => {
     setRunning(true)
     setFinalError(null)
     revokeResult()
+    setCloudResult(null)
     errorsRef.current = new Set()
     payloadRef.current = { tables: {}, skipped: {}, storage: {}, storageSkipped: {} }
     const seq = [...BACKUP_SECTIONS.map((s) => s.key), STORAGE_SECTION_KEY]
@@ -276,6 +307,61 @@ export default function BackupClient() {
     document.body.appendChild(a)
     a.click()
     a.remove()
+  }
+
+  // ─────────── ذخیرهٔ ابری و فهرست نسخه‌های سرور (پچ ۴۹-ج) ───────────
+  async function storeToCloud() {
+    setStoring(true)
+    setCloudResult(null)
+    try {
+      const res = await fetch('/api/admin/backup/store', { method: 'POST' })
+      const j = await res.json().catch(() => null)
+      if (!res.ok || !j?.ok) {
+        throw new Error(j?.error || `خطای سرور (${res.status})`)
+      }
+      setCloudResult({ ok: true, ...j })
+
+      // ردیف همین اجرا در تاریخچهٔ محلی به «ذخیره‌شده روی سرور» ارتقا می‌یابد
+      const prev = loadHistory()
+      const base = prev[0] && !prev[0].cloud ? prev[0] : undefined
+      const entry: LastBackup = base
+        ? { ...base, cloud: true }
+        : {
+            at: j.createdAt,
+            rows: j.rows ?? 0,
+            files: j.files ?? 0,
+            size: j.size ?? 0,
+            ok: true,
+            cloud: true,
+          }
+      const hist = [entry, ...prev.filter((h) => h !== base)].slice(0, 5)
+      saveHistory(hist)
+      setHistory(hist)
+      setLastBackup(entry)
+
+      void loadCloudFiles()
+    } catch (e) {
+      setCloudResult({ ok: false, error: e instanceof Error ? e.message : 'خطای نامشخص' })
+    } finally {
+      setStoring(false)
+    }
+  }
+
+  async function loadCloudFiles() {
+    setCloudLoading(true)
+    try {
+      const res = await fetch('/api/admin/backup/cloud', { cache: 'no-store' })
+      const j = await res.json().catch(() => null)
+      if (res.ok && j?.ok) {
+        setCloudFiles(j.files ?? [])
+      } else {
+        setCloudFiles([])
+      }
+    } catch {
+      setCloudFiles([])
+    } finally {
+      setCloudLoading(false)
+    }
   }
 
   // ───────────────── انتخاب فایل بکاپ ─────────────────
@@ -414,14 +500,18 @@ export default function BackupClient() {
         {lastBackup ? (
           <>
             <div className="backup-hero-title">
-              {lastBackup.ok ? '✅ آخرین پشتیبان‌گیری' : '⚠️ آخرین پشتیبان‌گیری (ناقص)'}
+              {lastBackup.ok
+                ? lastBackup.cloud
+                  ? '☁️ آخرین پشتیبان‌گیری (روی سرور هم ذخیره شد)'
+                  : '✅ آخرین پشتیبان‌گیری'
+                : '⚠️ آخرین پشتیبان‌گیری (ناقص)'}
             </div>
             <div className="backup-hero-meta">
               {faDateTime(lastBackup.at)} — {fa(totalBackupRows)} ردیف
               {lastBackup.files > 0 && ` + ${fa(lastBackup.files)} فایل`} ({formatSize(lastBackup.size)})
             </div>
             <div className="backup-hero-note">
-              تاریخچه روی این دستگاه ذخیره می‌شود؛ خود فایل بکاپ جایی ذخیره نمی‌شود مگر اینکه شما دانلود و نگه‌داری کنید.
+              تاریخچه روی این دستگاه ذخیره می‌شود؛ با گزینهٔ «☁️ ذخیرهٔ خودکار روی سرور»، یک نسخهٔ کامل هم در استوریج سرور نگه‌داری می‌شود و از کارت زیر قابل دانلود مجدد است.
             </div>
           </>
         ) : (
@@ -439,7 +529,7 @@ export default function BackupClient() {
           <div className="backup-history-list">
             {history.map((h) => (
               <div key={h.at} className="backup-history-row">
-                <span>{h.ok ? '✅' : '⚠️'} {faDateTime(h.at)}</span>
+                <span>{h.cloud ? '☁️' : h.ok ? '✅' : '⚠️'} {faDateTime(h.at)}</span>
                 <span>
                   {fa(h.rows)} ردیف{h.files > 0 && ` + ${fa(h.files)} فایل`} — {formatSize(h.size)}
                 </span>
@@ -448,6 +538,38 @@ export default function BackupClient() {
           </div>
         </div>
       )}
+
+      {/* نسخه‌های روی سرور (پچ ۴۹-ج) */}
+      <div className="admin-card">
+        <div className="backup-cloud-head">
+          <div className="backup-history-title">☁️ نسخه‌های ذخیره‌شده روی سرور</div>
+          <button className="backup-retry" onClick={() => void loadCloudFiles()} disabled={cloudLoading}>
+            {cloudLoading ? 'در حال دریافت…' : '↻ بروزرسانی'}
+          </button>
+        </div>
+        {cloudFiles !== null && cloudFiles.length === 0 && (
+          <div className="backup-muted">
+            هنوز نسخه‌ای روی سرور نیست. با فعال بودن «☁️ ذخیرهٔ خودکار روی سرور» در مودال پشتیبان‌گیری، پس از هر بکاپ کامل یک نسخه اینجا ذخیره می‌شود (حداکثر ۱۰ نسخهٔ اخیر نگه‌داری می‌شود).
+          </div>
+        )}
+        {cloudFiles !== null && cloudFiles.length > 0 && (
+          <div className="backup-history-list">
+            {cloudFiles.map((f) => (
+              <div key={f.name} className="backup-history-row">
+                <span>📦 {faDateTime(f.createdAt)}</span>
+                <span className="backup-cloud-actions">
+                  {formatSize(f.size)}
+                  {f.url && (
+                    <a className="backup-cloud-download" href={f.url} target="_blank" rel="noreferrer">
+                      ⬇️ دانلود
+                    </a>
+                  )}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* بازگردانی */}
       <div className="admin-card">
@@ -527,7 +649,7 @@ export default function BackupClient() {
               <button
                 className="backup-close"
                 onClick={() => { setModalOpen(false); revokeResult() }}
-                disabled={running}
+                disabled={running || storing}
                 aria-label="بستن"
               >
                 ✕
@@ -538,6 +660,19 @@ export default function BackupClient() {
               🔒 در طول پشتیبان‌گیری امکان کار با بخش‌های دیگر منو وجود ندارد؛ تا پایان این صفحه باز می‌ماند.
             </div>
 
+            <label className="backup-cloud-toggle">
+              <input
+                type="checkbox"
+                checked={cloudStore}
+                onChange={(e) => {
+                  setCloudStore(e.target.checked)
+                  cloudStoreRef.current = e.target.checked
+                }}
+                disabled={running || storing}
+              />
+              ☁️ ذخیرهٔ خودکار نسخهٔ کامل روی سرور (استوریج ابری)
+            </label>
+
             <div className="backup-progress-line">
               بخش {fa(overall.done)} از {fa(overall.total)}
             </div>
@@ -547,7 +682,7 @@ export default function BackupClient() {
 
             {!running && (
               <div className="backup-restart-row">
-                <button className="backup-retry" onClick={runBackup}>
+                <button className="backup-retry" onClick={runBackup} disabled={storing}>
                   ↺ شروع دوباره از ابتدا
                 </button>
               </div>
@@ -592,6 +727,20 @@ export default function BackupClient() {
                   <button className="btn primary-btn backup-download-btn" onClick={() => downloadUrl(resultBlobUrl, resultName!)}>
                     ⬇️ دانلود فایل بکاپ ({resultName})
                   </button>
+                )}
+                {storing && <div className="backup-muted">☁️ در حال ذخیرهٔ نسخهٔ کامل روی سرور…</div>}
+                {cloudResult?.ok && (
+                  <div className="backup-cloud-ok">
+                    ☁️ نسخه روی سرور ذخیره شد: <b>{cloudResult.file}</b> ({formatSize(cloudResult.size ?? 0)})
+                    {!cloudResult.historySaved && (
+                      <div className="backup-cloud-fail">
+                        ثبت تاریخچهٔ سروری ناموفق بود — احتمالاً migration ستون backup_history اجرا نشده (فایل SQL کنار RELEASE پچ ۴۹-ج).
+                      </div>
+                    )}
+                  </div>
+                )}
+                {cloudResult && !cloudResult.ok && (
+                  <div className="backup-cloud-fail">⚠️ ذخیرهٔ سروری ناموفق بود: {cloudResult.error}</div>
                 )}
               </div>
             )}
