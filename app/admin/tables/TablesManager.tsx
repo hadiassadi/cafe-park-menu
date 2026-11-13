@@ -229,6 +229,73 @@ export default function TablesManager({ tables, siteUrl }: Props) {
     img.src = url
   }
 
+  // 🎯 پچ ۵۰-ج: چاپ برگه در پنجرهٔ مستقل با HTML خودکفا — SVGها سریالایز و
+  // خارج از CSS اپ چاپ می‌شوند؛ @media print در globals.css همهٔ فرزندان body
+  // جز .print-invoice را display:none می‌کند و چاپ در همین صفحه سفید می‌شد
+  function escapeHtml(s: string) {
+    return s
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+  }
+
+  function printSheet() {
+    const activeTables = tables.filter((t) => t.is_active)
+    const svgs = document.querySelectorAll<SVGSVGElement>('.qr-print-sheet svg')
+
+    if (svgs.length < activeTables.length) {
+      alert('QRها هنوز کامل رندر نشده‌اند — یک لحظه صبر کن و دوباره بزن.')
+      return
+    }
+
+    const serializer = new XMLSerializer()
+    const cards = activeTables
+      .map((t, i) => {
+        const svg = svgs[i] ? serializer.serializeToString(svgs[i]) : ''
+        return `<div class="card">
+          <div class="qr">${svg}</div>
+          <div class="t">میز #${t.number}${t.name ? ` — ${escapeHtml(t.name)}` : ''}</div>
+          <div class="m">${LOCATION_LABELS[t.location] || t.location} · ${t.capacity} نفره</div>
+          <div class="s">اسکن = مشاهدهٔ منو</div>
+        </div>`
+      })
+      .join('')
+
+    const win = window.open('', '_blank')
+    if (!win) {
+      alert('پنجرهٔ چاپ بلاک شد — اجازهٔ Popup را بده و دوباره بزن.')
+      return
+    }
+
+    win.document.write(`<!doctype html>
+<html dir="rtl" lang="fa">
+<head>
+<meta charset="utf-8">
+<title>QR میزها — کافه پارک</title>
+<style>
+  @page { size: A4; margin: 10mm; }
+  body { font-family: Tahoma, 'Segoe UI', sans-serif; margin: 0; padding: 8mm; }
+  h1 { text-align: center; font-size: 20px; margin: 0 0 4px; }
+  .sub { text-align: center; color: #666; font-size: 12px; margin: 0 0 16px; }
+  .grid { display: flex; flex-wrap: wrap; gap: 14px; justify-content: center; }
+  .card { border: 1px solid #ddd; border-radius: 8px; padding: 12px; text-align: center; width: 180px; break-inside: avoid; page-break-inside: avoid; }
+  .card svg { width: 140px; height: 140px; }
+  .t { font-weight: 700; margin-top: 8px; font-size: 14px; }
+  .m { color: #666; font-size: 12px; margin-top: 2px; }
+  .s { color: #999; font-size: 10px; margin-top: 2px; }
+</style>
+</head>
+<body>
+<h1>☕ کافه پارک — QR میزها</h1>
+<p class="sub">هر میز QR اختصاصی خودش رو داره؛ بعد از هر «چرخش توکن» این برگه رو دوباره چاپ کن.</p>
+<div class="grid">${cards}</div>
+<script>window.onload = function () { setTimeout(function () { window.print() }, 300) }<\/script>
+</body>
+</html>`)
+    win.document.close()
+  }
+
   return (
     <div className="tables-manager">
       <div className="admin-header">
@@ -303,11 +370,10 @@ export default function TablesManager({ tables, siteUrl }: Props) {
                 <div className="table-meta">
                   <span>👥 {table.capacity} نفره</span>
                   <span>📍 {LOCATION_LABELS[table.location] || table.location}</span>
-                  {table.reservation_fee > 0 && (
-                    <span>
-                      💳 رزرو: {table.reservation_fee.toLocaleString('fa-IR')}
-                    </span>
-                  )}
+                  <span>
+                    💳 رزرو:{' '}
+                    {(table.reservation_fee ?? 0).toLocaleString('fa-IR')}
+                  </span>
                 </div>
               </div>
 
@@ -529,26 +595,14 @@ export default function TablesManager({ tables, siteUrl }: Props) {
         )}
       </Modal>
 
-      {/* 🎯 پچ ۵۰-ا: برگهٔ چاپ یکجای QR همهٔ میزها
-          🎯 پچ ۵۰-ب: رندر با portal مستقیم روی body — خارج از .admin-shell،
-          تا قواعد چاپِ موجودِ پروژه (فاکتور) برگه را مخفی نکنند و صفحه سفید نشود */}
+      {/* 🎯 پچ ۵۰-ا: برگهٔ چاپ یکجای QR همهٔ میزها — پیش‌نمایش روی صفحه
+          🎯 پچ ۵۰-ج: چاپ واقعی با printSheet در پنجرهٔ مستقل انجام می‌شود،
+          چون @media print در globals.css همهٔ فرزندان body جز .print-invoice را
+          display:none می‌کند و چاپ در همین صفحه نتیجهٔ سفید می‌داد */}
       {printOpen &&
         typeof document !== 'undefined' &&
         createPortal(
           <>
-          <style>{`
-            @media print {
-              body > *:not(.qr-print-overlay) { display: none !important; }
-              .qr-print-overlay {
-                position: static !important;
-                overflow: visible !important;
-                background: #fff !important;
-                padding: 8mm !important;
-              }
-              .qr-print-overlay, .qr-print-overlay * { visibility: visible !important; }
-              .qr-print-actions { display: none !important; }
-            }
-          `}</style>
           <div
             className="qr-print-overlay"
             style={{
@@ -573,7 +627,7 @@ export default function TablesManager({ tables, siteUrl }: Props) {
               <button
                 type="button"
                 className="btn primary-btn"
-                onClick={() => window.print()}
+                onClick={printSheet}
               >
                 🖨 چاپ
               </button>
