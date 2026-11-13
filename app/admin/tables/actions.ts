@@ -1,9 +1,14 @@
 'use server'
 import { assertAdmin } from '@/lib/admin/assert-admin'
 
-import { supabaseServer } from '@/lib/supabase/server'
+import { supabaseAdmin } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { randomUUID } from 'crypto'
+
+// 🎯 پچ ۵۰-ج: همهٔ نوشتن‌ها با service role (supabaseAdmin) انجام می‌شود —
+// جدول tables پالیسی RLS ندارد و insert/update/delete با کلاینت کاربر
+// (supabaseServer) خطای «row-level security policy» می‌دهد؛ assertAdmin گیت دسترسی است
+// و خواندن صفحه هم از قبل با supabaseAdmin بود.
 
 // 🎯 پچ ۵۰-ب: ارقام فارسی/عربی → انگلیسی قبل از Number — تایپ با کیبورد فارسی هم درست ذخیره می‌شود
 function normalizeDigits(value: string) {
@@ -14,7 +19,7 @@ function normalizeDigits(value: string) {
 
 export async function addTable(formData: FormData) {
   await assertAdmin()
-  const db = await supabaseServer()
+  const db = supabaseAdmin()
 
   const number = Number(normalizeDigits(String(formData.get('number') || '')) || 0)
   const name = String(formData.get('name') || '').trim()
@@ -46,7 +51,7 @@ export async function addTable(formData: FormData) {
 
 export async function updateTable(formData: FormData) {
   await assertAdmin()
-  const db = await supabaseServer()
+  const db = supabaseAdmin()
 
   const id = String(formData.get('id') || '')
   const number = Number(normalizeDigits(String(formData.get('number') || '')) || 0)
@@ -84,7 +89,7 @@ export async function updateTable(formData: FormData) {
 
 export async function deleteTable(formData: FormData) {
   await assertAdmin()
-  const db = await supabaseServer()
+  const db = supabaseAdmin()
   const id = String(formData.get('id') || '')
 
   if (!id) return { error: 'شناسه میز مشخص نیست.' }
@@ -104,7 +109,7 @@ function newQrToken() {
 
 export async function rotateTableToken(formData: FormData) {
   await assertAdmin()
-  const db = await supabaseServer()
+  const db = supabaseAdmin()
   const id = String(formData.get('id') || '')
 
   if (!id) return { error: 'شناسه میز مشخص نیست.' }
@@ -122,7 +127,7 @@ export async function rotateTableToken(formData: FormData) {
 
 export async function rotateAllTableTokens() {
   await assertAdmin()
-  const db = await supabaseServer()
+  const db = supabaseAdmin()
 
   const { data: rows, error: selErr } = await db.from('tables').select('id')
   if (selErr) return { error: selErr.message }

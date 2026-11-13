@@ -1,0 +1,233 @@
+diff --git a/app/admin/tables/TablesManager.tsx b/app/admin/tables/TablesManager.tsx
+index 7b419cd..96000ae 100644
+--- a/app/admin/tables/TablesManager.tsx
++++ b/app/admin/tables/TablesManager.tsx
+@@ -229,6 +229,73 @@ export default function TablesManager({ tables, siteUrl }: Props) {
+     img.src = url
+   }
+ 
++  // 🎯 پچ ۵۰-ج: چاپ برگه در پنجرهٔ مستقل با HTML خودکفا — SVGها سریالایز و
++  // خارج از CSS اپ چاپ می‌شوند؛ @media print در globals.css همهٔ فرزندان body
++  // جز .print-invoice را display:none می‌کند و چاپ در همین صفحه سفید می‌شد
++  function escapeHtml(s: string) {
++    return s
++      .replace(/&/g, '&amp;')
++      .replace(/</g, '&lt;')
++      .replace(/>/g, '&gt;')
++      .replace(/"/g, '&quot;')
++  }
++
++  function printSheet() {
++    const activeTables = tables.filter((t) => t.is_active)
++    const svgs = document.querySelectorAll<SVGSVGElement>('.qr-print-sheet svg')
++
++    if (svgs.length < activeTables.length) {
++      alert('QRها هنوز کامل رندر نشده‌اند — یک لحظه صبر کن و دوباره بزن.')
++      return
++    }
++
++    const serializer = new XMLSerializer()
++    const cards = activeTables
++      .map((t, i) => {
++        const svg = svgs[i] ? serializer.serializeToString(svgs[i]) : ''
++        return `<div class="card">
++          <div class="qr">${svg}</div>
++          <div class="t">میز #${t.number}${t.name ? ` — ${escapeHtml(t.name)}` : ''}</div>
++          <div class="m">${LOCATION_LABELS[t.location] || t.location} · ${t.capacity} نفره</div>
++          <div class="s">اسکن = مشاهدهٔ منو</div>
++        </div>`
++      })
++      .join('')
++
++    const win = window.open('', '_blank')
++    if (!win) {
++      alert('پنجرهٔ چاپ بلاک شد — اجازهٔ Popup را بده و دوباره بزن.')
++      return
++    }
++
++    win.document.write(`<!doctype html>
++<html dir="rtl" lang="fa">
++<head>
++<meta charset="utf-8">
++<title>QR میزها — کافه پارک</title>
++<style>
++  @page { size: A4; margin: 10mm; }
++  body { font-family: Tahoma, 'Segoe UI', sans-serif; margin: 0; padding: 8mm; }
++  h1 { text-align: center; font-size: 20px; margin: 0 0 4px; }
++  .sub { text-align: center; color: #666; font-size: 12px; margin: 0 0 16px; }
++  .grid { display: flex; flex-wrap: wrap; gap: 14px; justify-content: center; }
++  .card { border: 1px solid #ddd; border-radius: 8px; padding: 12px; text-align: center; width: 180px; break-inside: avoid; page-break-inside: avoid; }
++  .card svg { width: 140px; height: 140px; }
++  .t { font-weight: 700; margin-top: 8px; font-size: 14px; }
++  .m { color: #666; font-size: 12px; margin-top: 2px; }
++  .s { color: #999; font-size: 10px; margin-top: 2px; }
++</style>
++</head>
++<body>
++<h1>☕ کافه پارک — QR میزها</h1>
++<p class="sub">هر میز QR اختصاصی خودش رو داره؛ بعد از هر «چرخش توکن» این برگه رو دوباره چاپ کن.</p>
++<div class="grid">${cards}</div>
++<script>window.onload = function () { setTimeout(function () { window.print() }, 300) }<\/script>
++</body>
++</html>`)
++    win.document.close()
++  }
++
+   return (
+     <div className="tables-manager">
+       <div className="admin-header">
+@@ -303,11 +370,10 @@ export default function TablesManager({ tables, siteUrl }: Props) {
+                 <div className="table-meta">
+                   <span>👥 {table.capacity} نفره</span>
+                   <span>📍 {LOCATION_LABELS[table.location] || table.location}</span>
+-                  {table.reservation_fee > 0 && (
+-                    <span>
+-                      💳 رزرو: {table.reservation_fee.toLocaleString('fa-IR')}
+-                    </span>
+-                  )}
++                  <span>
++                    💳 رزرو:{' '}
++                    {(table.reservation_fee ?? 0).toLocaleString('fa-IR')}
++                  </span>
+                 </div>
+               </div>
+ 
+@@ -529,26 +595,14 @@ export default function TablesManager({ tables, siteUrl }: Props) {
+         )}
+       </Modal>
+ 
+-      {/* 🎯 پچ ۵۰-ا: برگهٔ چاپ یکجای QR همهٔ میزها
+-          🎯 پچ ۵۰-ب: رندر با portal مستقیم روی body — خارج از .admin-shell،
+-          تا قواعد چاپِ موجودِ پروژه (فاکتور) برگه را مخفی نکنند و صفحه سفید نشود */}
++      {/* 🎯 پچ ۵۰-ا: برگهٔ چاپ یکجای QR همهٔ میزها — پیش‌نمایش روی صفحه
++          🎯 پچ ۵۰-ج: چاپ واقعی با printSheet در پنجرهٔ مستقل انجام می‌شود،
++          چون @media print در globals.css همهٔ فرزندان body جز .print-invoice را
++          display:none می‌کند و چاپ در همین صفحه نتیجهٔ سفید می‌داد */}
+       {printOpen &&
+         typeof document !== 'undefined' &&
+         createPortal(
+           <>
+-          <style>{`
+-            @media print {
+-              body > *:not(.qr-print-overlay) { display: none !important; }
+-              .qr-print-overlay {
+-                position: static !important;
+-                overflow: visible !important;
+-                background: #fff !important;
+-                padding: 8mm !important;
+-              }
+-              .qr-print-overlay, .qr-print-overlay * { visibility: visible !important; }
+-              .qr-print-actions { display: none !important; }
+-            }
+-          `}</style>
+           <div
+             className="qr-print-overlay"
+             style={{
+@@ -573,7 +627,7 @@ export default function TablesManager({ tables, siteUrl }: Props) {
+               <button
+                 type="button"
+                 className="btn primary-btn"
+-                onClick={() => window.print()}
++                onClick={printSheet}
+               >
+                 🖨 چاپ
+               </button>
+diff --git a/app/admin/tables/actions.ts b/app/admin/tables/actions.ts
+index 249031a..6f473cd 100644
+--- a/app/admin/tables/actions.ts
++++ b/app/admin/tables/actions.ts
+@@ -1,10 +1,15 @@
+ 'use server'
+ import { assertAdmin } from '@/lib/admin/assert-admin'
+ 
+-import { supabaseServer } from '@/lib/supabase/server'
++import { supabaseAdmin } from '@/lib/supabase/server'
+ import { revalidatePath } from 'next/cache'
+ import { randomUUID } from 'crypto'
+ 
++// 🎯 پچ ۵۰-ج: همهٔ نوشتن‌ها با service role (supabaseAdmin) انجام می‌شود —
++// جدول tables پالیسی RLS ندارد و insert/update/delete با کلاینت کاربر
++// (supabaseServer) خطای «row-level security policy» می‌دهد؛ assertAdmin گیت دسترسی است
++// و خواندن صفحه هم از قبل با supabaseAdmin بود.
++
+ // 🎯 پچ ۵۰-ب: ارقام فارسی/عربی → انگلیسی قبل از Number — تایپ با کیبورد فارسی هم درست ذخیره می‌شود
+ function normalizeDigits(value: string) {
+   return value
+@@ -14,7 +19,7 @@ function normalizeDigits(value: string) {
+ 
+ export async function addTable(formData: FormData) {
+   await assertAdmin()
+-  const db = await supabaseServer()
++  const db = supabaseAdmin()
+ 
+   const number = Number(normalizeDigits(String(formData.get('number') || '')) || 0)
+   const name = String(formData.get('name') || '').trim()
+@@ -46,7 +51,7 @@ export async function addTable(formData: FormData) {
+ 
+ export async function updateTable(formData: FormData) {
+   await assertAdmin()
+-  const db = await supabaseServer()
++  const db = supabaseAdmin()
+ 
+   const id = String(formData.get('id') || '')
+   const number = Number(normalizeDigits(String(formData.get('number') || '')) || 0)
+@@ -84,7 +89,7 @@ export async function updateTable(formData: FormData) {
+ 
+ export async function deleteTable(formData: FormData) {
+   await assertAdmin()
+-  const db = await supabaseServer()
++  const db = supabaseAdmin()
+   const id = String(formData.get('id') || '')
+ 
+   if (!id) return { error: 'شناسه میز مشخص نیست.' }
+@@ -104,7 +109,7 @@ function newQrToken() {
+ 
+ export async function rotateTableToken(formData: FormData) {
+   await assertAdmin()
+-  const db = await supabaseServer()
++  const db = supabaseAdmin()
+   const id = String(formData.get('id') || '')
+ 
+   if (!id) return { error: 'شناسه میز مشخص نیست.' }
+@@ -122,7 +127,7 @@ export async function rotateTableToken(formData: FormData) {
+ 
+ export async function rotateAllTableTokens() {
+   await assertAdmin()
+-  const db = await supabaseServer()
++  const db = supabaseAdmin()
+ 
+   const { data: rows, error: selErr } = await db.from('tables').select('id')
+   if (selErr) return { error: selErr.message }
+diff --git a/patch-50a-c-tables-rls-print-RELEASE.md b/patch-50a-c-tables-rls-print-RELEASE.md
+new file mode 100644
+index 0000000..af5b0fb
+--- /dev/null
++++ b/patch-50a-c-tables-rls-print-RELEASE.md
+@@ -0,0 +1,27 @@
++# پچ ۵۰-ج — رفع خطای RLS و چاپ سفید (بعد از ۵۰-ب)
++
++## ۱) «new row violates row-level security policy for table "tables"»
++- ریشه: جدول `tables` از قبل RLS روشن + **بدون هیچ پالیسی** داشته؛ همهٔ اکشن‌ها با `supabaseServer` (کلاینت کاربر لاگین‌شده) می‌نوشتند → insert/update/delete با خطای RLS رد می‌شد (۶ میز قبلی با سرویس‌رول/SQL ساخته شده بودند)
++- فیکس: همهٔ نوشتن‌ها در `app/admin/tables/actions.ts` با `supabaseAdmin` (service role) انجام می‌شود — همان الگوی خواندن صفحه؛ `assertAdmin` همچنان گیت دسترسی است و پالیسی «deny-all» جدول هم حفظ می‌شود
++- شامل هر ۵ اکشن: addTable / updateTable / deleteTable / rotateTableToken / rotateAllTableTokens
++- این یعنی چرا «ویرایش کار نمی‌کرد» — همان خطای RLS روی UPDATE بود
++
++## ۲) چاپ QR صفحهٔ سفید
++- ریشهٔ قطعی: `@media print` در `globals.css` (بخش فاکتور) دارد `body > *:not(.print-invoice) { display: none !important }` — یعنی در چاپ همهٔ فرزندان body جز فاکتور حذف می‌شوند؛ برگهٔ QR هم فرزند body بود → صفحهٔ سفید. `display:none` از سمت فرزندان قابل خنثی‌کردن نیست
++- فیکس: دکمهٔ «چاپ» حالا برگه را در **پنجرهٔ مستقل** با HTML خودکفا باز می‌کند (`printSheet`): SVGهای QR از پیش‌نمایش سریالایز و با CSS جدا چاپ می‌شوند — کاملاً خارج از CSS اپ
++- پنجرهٔ جدید خودکار دیالوگ چاپ را باز می‌کند؛ اگر Popup بلاک شد پیام راهنما می‌آید
++- پیش‌نمایش روی صفحه سر جایش است (فقط CSS چاپِ بی‌اثر حذف شد)
++
++## ۳) مبلغ رزرو روی کارت میز
++- قبلاً فقط وقتی مبلغ > ۰ بود نمایش داده می‌شد و چون هیچ ذخیره‌ای هنوز موفق نشده بود، همه صفر بودند → چیزی دیده نمی‌شد
++- حالا همیشه نمایش داده می‌شود (۰ هم نشان می‌دهد)؛ بعد از این پچ می‌توانی مبلغ را ذخیره کنی و همان لحظه روی کارت می‌بینی
++
++## فایل‌های تغییرکرده
++- `app/admin/tables/actions.ts` (نوشتن با service role)
++- `app/admin/tables/TablesManager.tsx` (چاپ پنجرهٔ مستقل + چیپ همیشه‌نمایش)
++
++## تست بعد از اعمال
++1. `Ctrl+F5` روی `/admin/tables`
++2. افزودن میز (حتی با کیبورد فارسی) → باید ذخیره شود و خطای RLS نباید بیاید
++3. ویرایش نام/هزینهٔ رزرو → ذخیره → رفرش → تغییر مانده + چیپ «💳 رزرو» روی کارت
++4. «🖨 چاپ QR میزها» → دکمهٔ «چاپ» → پنجرهٔ جدید با کارت‌های QR باز و دیالوگ چاپ خودکار
