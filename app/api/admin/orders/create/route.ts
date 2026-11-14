@@ -94,6 +94,12 @@ export async function POST(request: NextRequest) {
     const discountSource =
       typeof body?.discount_source === 'string' ? body.discount_source : null
 
+    // 🎯 پچ ۵۰-هـ-خ: سفارش ضمیمه — والدِ وابسته (سفارش تمام‌شده‌ای که اقلام اضافه می‌گیرد)
+    const parentOrderId =
+      typeof body?.parent_order_id === 'string' && UUID_RE.test(body.parent_order_id)
+        ? body.parent_order_id
+        : null
+
     // ---------- آیتم‌ها ----------
     if (!Array.isArray(items) || items.length === 0 || items.length > MAX_ITEMS) {
       return bad('هیچ آیتمی انتخاب نشده است')
@@ -181,6 +187,7 @@ if (tableNo !== null) {
     const now = new Date().toISOString()
     let order: any = null
     let orderErr: any = null
+    let allowParent = true
 
     for (let attempt = 0; attempt < 3; attempt++) {
       const { data: lastOrder } = await db
@@ -191,9 +198,9 @@ if (tableNo !== null) {
         .maybeSingle()
       const nextOrderNumber = (lastOrder?.order_number || 1000) + 1
 
-      const res = await db
-        .from('orders')
-            .insert({
+      // 🎯 ۵۰-هـ-خ: ستون parent_order_id — اگر مایگریشن اجرا نشده باشد، سفارش
+      // بدون لینک والد ثبت می‌شود (42703 = undefined column) تا POS نمرده باشد
+      const insertPayload: Record<string, any> = {
       order_number: nextOrderNumber,
       customer_name: name,
       customer_phone: phone,
@@ -225,7 +232,12 @@ if (tableNo !== null) {
       payment_method: 'cash',
       source: 'admin',
 	  is_test: isTest,
-    })
+      }
+      if (parentOrderId && allowParent) insertPayload.parent_order_id = parentOrderId
+
+      const res = await db
+        .from('orders')
+            .insert(insertPayload)
 
         .select('id, order_number, status, subtotal, customer_name, customer_phone, created_at')
         .single()
@@ -233,6 +245,10 @@ if (tableNo !== null) {
       order = res.data
       orderErr = res.error
       if (!orderErr) break
+      if (orderErr.code === '42703' && parentOrderId && allowParent) {
+        allowParent = false
+        continue
+      }
       if (orderErr.code !== '23505') break
     }
 

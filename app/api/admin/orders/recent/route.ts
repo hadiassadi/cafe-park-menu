@@ -24,34 +24,75 @@ export async function GET(req: NextRequest) {
       `${new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Tehran' })}T00:00:00+03:30`
     ).toISOString()
 
-    const BASE_COLS = `id, order_number, created_at, customer_name, customer_phone, table_number,
+    // 🐛 فیکس ۵۰-هـ-خ: ستون paid_amount روی orders وجود ندارد (منبع پرداخت‌ها جدول
+    // order_payments است) — همان ستون قبلاً «خطای پایگاه داده» می‌ساخت.
+    // سه‌لایه: کامل + پرداخت‌ها → کامل → ستون‌های مینیمال همیشه‌کارا
+    const FULL_COLS = `id, order_number, created_at, customer_name, customer_phone, table_number,
        source, status, payment_status, payment_method, subtotal, manual_discount,
-       coupon_code, coupon_discount, paid_amount, is_test, items`
+       coupon_code, coupon_discount, is_test, items`
+    const LEGACY_COLS = `id, order_number, created_at, customer_name, customer_phone, table_number,
+       source, status, payment_status, subtotal, coupon_code, coupon_discount, is_test, items`
 
     let rows: Array<Record<string, any>> | null = null
     let dbError: PostgrestError | null = null
 
     const first = await db
       .from('orders')
-      .select(`${BASE_COLS}, order_payments(method, amount, status)`)
+      .select(`${FULL_COLS}, order_payments(method, amount, status)`)
       .gte('created_at', dayStartTehran)
       .order('order_number', { ascending: false })
       .limit(200)
     rows = (first.data as Array<Record<string, any>> | null) ?? null
     dbError = first.error
 
-    // 🐛 فیکس ۵۰-هـ-ح: اگر embed پرداخت‌ها شکست خورد (مثلاً FK موجود نباشد)،
-    // لیست سفارش‌ها نباید بمیرد — بدون آن دوباره می‌خوانیم
     if (dbError) {
-      console.error('[admin orders recent] with embed failed:', dbError.message)
-      const retry = await db
+      console.error('[admin orders recent] embed failed:', dbError.message)
+      const second = await db
         .from('orders')
-        .select(BASE_COLS)
+        .select(FULL_COLS)
         .gte('created_at', dayStartTehran)
         .order('order_number', { ascending: false })
         .limit(200)
-      rows = (retry.data as Array<Record<string, any>> | null) ?? null
-      dbError = retry.error
+      rows = (second.data as Array<Record<string, any>> | null) ?? null
+      dbError = second.error
+
+      // پرداخت‌ها را جداگانه می‌خوانیم و merge می‌کنیم — تسویه از دست نرود
+      if (!dbError && (rows ?? []).length > 0) {
+        const ids = (rows ?? []).map((r) => String(r.id))
+        const pays = await db
+          .from('order_payments')
+          .select('order_id, method, amount, status')
+          .in('order_id', ids)
+        if (!pays.error) {
+          const byOrder: Record<string, Array<Record<string, any>>> = {}
+          for (const p of pays.data ?? []) {
+            const key = String((p as any).order_id)
+            ;(byOrder[key] ??= []).push({
+              method: (p as any).method,
+              amount: (p as any).amount,
+              status: (p as any).status,
+            })
+          }
+          rows = (rows ?? []).map((r) => ({
+            ...r,
+            order_payments: byOrder[String(r.id)] ?? [],
+          }))
+        } else {
+          console.error('[admin orders recent] payments merge:', pays.error.message)
+        }
+      }
+    }
+
+    if (dbError) {
+      console.error('[admin orders recent] full cols failed:', dbError.message)
+      const third = await db
+        .from('orders')
+        .select(LEGACY_COLS)
+        .gte('created_at', dayStartTehran)
+        .order('order_number', { ascending: false })
+        .limit(200)
+      rows = (third.data as Array<Record<string, any>> | null) ?? null
+      dbError = third.error
     }
 
     if (dbError) {
