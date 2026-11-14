@@ -73,6 +73,9 @@ const MENU_GROUPS = [
 // 🎯 پچ ۴۲: کلید ذخیره وضعیت گروه‌های تاشو
 const NAV_GROUPS_KEY = 'cafe-park-admin-nav-groups'
 
+// 🎯 پچ ۵۰-هـ: کلید وضعیت پین سایدبار در صفحهٔ POS
+const POS_SIDEBAR_PIN_KEY = 'cafe-park-pos-sidebar-pinned'
+
 export default function AdminLayout({
   children,
 }: {
@@ -85,6 +88,12 @@ export default function AdminLayout({
   // 🎯 پچ ۴۲: گروه‌های تاشو — undefined/open باز، false بسته؛ پس از mount از localStorage بازیابی می‌شود
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({})
   const isLoginPage = pathname === '/admin/login'
+
+  // 🎯 پچ ۵۰-هـ: سایدبار خود-پنهان در صفحهٔ POS — با hover باز می‌شود، با پین ثابت می‌ماند
+  const [posSidebarOpen, setPosSidebarOpen] = useState(false)
+  const [posSidebarPinned, setPosSidebarPinned] = useState(false)
+  const isPosPage = pathname === '/admin/orders/new'
+  const sidebarVisible = isPosPage && (posSidebarOpen || posSidebarPinned)
 
   const {
     pendingCount,
@@ -130,6 +139,39 @@ export default function AdminLayout({
       if (saved && typeof saved === 'object') setOpenGroups(saved)
     } catch {}
   }, [])
+
+  // 🎯 پچ ۵۰-هـ: بازیابی وضعیت پین پس از mount (بدون hydration mismatch)
+  useEffect(() => {
+    try {
+      setPosSidebarPinned(localStorage.getItem(POS_SIDEBAR_PIN_KEY) === '1')
+    } catch {}
+  }, [])
+
+  // 🎯 پچ ۵۰-هـ: پین/برداشتن پین + ذخیره در localStorage
+  const togglePosPin = () => {
+    setPosSidebarPinned((p) => {
+      const next = !p
+      try {
+        localStorage.setItem(POS_SIDEBAR_PIN_KEY, next ? '1' : '0')
+      } catch {}
+      return next
+    })
+  }
+
+  // 🎯 پچ ۵۰-هـ: ESC سایدبار خود-پنهان را می‌بندد (وقتی پین نیست)
+  useEffect(() => {
+    if (!isPosPage || posSidebarPinned) return
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setPosSidebarOpen(false)
+    }
+    window.addEventListener('keydown', handleKey)
+    return () => window.removeEventListener('keydown', handleKey)
+  }, [isPosPage, posSidebarPinned])
+
+  // 🎯 پچ ۵۰-هـ: خروج از صفحهٔ POS → سایدبار به حالت عادی برمی‌گردد
+  useEffect(() => {
+    if (!isPosPage) setPosSidebarOpen(false)
+  }, [isPosPage])
 
   // 🎯 پچ ۴۲: گروهِ مسیرِ فعال همیشه باز دیده شود (مانند فایل‌برمرها)
   useEffect(() => {
@@ -240,7 +282,37 @@ export default function AdminLayout({
   // 🎯 پچ ۴۱: شل همیشه رندر می‌شود — در حالت checking فقط محتوا اسکلتون است
   // (قبلاً صفحه لخت «در حال بررسی...» کل پنل از جمله سایدبار را می‌بست)
   return (
-    <div className="admin-shell">
+    <div
+      className={
+        'admin-shell' +
+        (isPosPage ? ' admin-shell--autohide' : '') +
+        (sidebarVisible ? ' admin-sidebar-open' : '') +
+        (isPosPage && posSidebarPinned ? ' admin-sidebar-pinned' : '')
+      }
+    >
+      {/* 🎯 پچ ۵۰-هـ: دستگیرهٔ لبهٔ راست — hover یا کلیک، منو را باز می‌کند */}
+      {isPosPage && !posSidebarPinned && (
+        <button
+          type="button"
+          className="admin-sidebar-handle"
+          aria-label="باز کردن منو"
+          title="منو"
+          onMouseEnter={() => setPosSidebarOpen(true)}
+          onClick={() => setPosSidebarOpen((o) => !o)}
+        >
+          ☰
+        </button>
+      )}
+
+      {/* 🎯 پچ ۵۰-هـ: پس‌زمینهٔ شفاف — کلیک بیرون منو، منو را می‌بندد */}
+      {sidebarVisible && !posSidebarPinned && (
+        <div
+          className="admin-sidebar-backdrop"
+          onClick={() => setPosSidebarOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+
       {/* ═══════════ هدر موبایل (فقط < 768px) ═══════════ */}
       <header className="admin-mobile-header">
         <button
@@ -262,10 +334,27 @@ export default function AdminLayout({
       </header>
 
       {/* ═══════════ سایدبار دسکتاپ (فقط ≥ 768px) ═══════════ */}
-      <aside className="admin-sidebar">
+      <aside
+        className="admin-sidebar"
+        onMouseEnter={() => setPosSidebarOpen(true)}
+        onMouseLeave={() => {
+          if (!posSidebarPinned) setPosSidebarOpen(false)
+        }}
+      >
         <div className="admin-sidebar-header">
           <div className="admin-logo">☕ کافه پارک</div>
           <div className="admin-logo-sub">پنل مدیریت</div>
+          {/* 🎯 پچ ۵۰-هـ: پین — منو باز و ثابت می‌ماند (مثلاً هنگام زدن فاکتور) */}
+          {isPosPage && (
+            <button
+              type="button"
+              className={`admin-pos-pin${posSidebarPinned ? ' pinned' : ''}`}
+              onClick={togglePosPin}
+              title="پین کردن منو"
+            >
+              📌 {posSidebarPinned ? 'منو پین شد' : 'پین کردن منو'}
+            </button>
+          )}
         </div>
 
         <nav className="admin-nav">
