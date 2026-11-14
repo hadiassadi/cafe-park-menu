@@ -1,6 +1,7 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { QRCodeSVG } from 'qrcode.react'
 import type { Category, Product } from '@/lib/menu-types'
 
 const LEGACY_GROUP = 'بیرون بر'
@@ -22,6 +23,30 @@ type Line = {
   quantity: number
   takeaway: boolean
   fee: number | null
+}
+
+// 🎯 پچ ۵۰-هـ: مشتری — جستجوی عضو + خلاصهٔ یک‌خطی + دعوت مهمان
+type CustomerHit = {
+  id: string
+  phone: string
+  name: string | null
+  verification_status: string | null
+}
+type ActiveDiscount = {
+  source: string
+  label: string
+  percent: number
+  color: string | null
+  orgName: string | null
+  planName: string | null
+  gradeName: string | null
+}
+type MemberInfo = {
+  customer_name: string | null
+  verification_status: string | null
+  membership_label: string | null
+  active: ActiveDiscount | null
+  orgNote: string | null
 }
 
 const fmt = (n: number) => Number(n || 0).toLocaleString('fa-IR')
@@ -46,6 +71,18 @@ function normalizeDigits(value: string) {
     .replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
 }
 
+// 🎯 پچ ۵۰-هـ: پالت متمایز دسته‌ها — بر اساس ترتیب دسته‌ها، ثابت و قابل تشخیص
+const CAT_COLORS = [
+  '#6b4f3a', // قهوه‌ای برند
+  '#4a7c9b', // آبی
+  '#3f7d5c', // سبز
+  '#b0722c', // نارنجی
+  '#7b4a6d', // بنفش
+  '#4a5d8a', // سرمه‌ای
+  '#a34a4a', // قرمز آجری
+  '#5d7a3a', // زیتونی
+]
+
 const card: React.CSSProperties = {
   background: '#fff',
   border: '1px solid #e7dfd3',
@@ -54,7 +91,7 @@ const card: React.CSSProperties = {
 }
 const input: React.CSSProperties = {
   width: '100%',
-  padding: '10px 12px',
+  padding: '8px 12px',
   border: '1px solid #d9cfc0',
   borderRadius: 10,
   font: 'inherit',
@@ -68,18 +105,18 @@ const smallBtn: React.CSSProperties = {
   cursor: 'pointer',
   font: 'inherit',
 }
-// 🎯 پچ ۵۰-د: تایل بزرگ لمسی برای گرید محصولات
+// 🎯 پچ ۵۰-هـ: تایل فشرده‌تر و مربع‌تر — با نوار رنگ دسته در لبهٔ راست
 const tile: React.CSSProperties = {
   border: '1px solid #e7dfd3',
   background: '#fff',
   borderRadius: 10,
-  padding: '12px 8px',
-  minHeight: 76,
+  padding: '10px 6px',
+  minHeight: 64,
   display: 'flex',
   flexDirection: 'column',
   alignItems: 'center',
   justifyContent: 'center',
-  gap: 4,
+  gap: 2,
   cursor: 'pointer',
   font: 'inherit',
   textAlign: 'center',
@@ -89,15 +126,39 @@ const chip = (active: boolean): React.CSSProperties => ({
   background: active ? '#6b4f3a' : '#fff',
   color: active ? '#fff' : 'inherit',
   borderRadius: 999,
-  padding: '6px 14px',
+  padding: '5px 14px',
   cursor: 'pointer',
   font: 'inherit',
+  fontSize: 13,
   fontWeight: active ? 700 : 400,
+  flexShrink: 0,
 })
+const badge = (bg: string, fg = '#fff'): React.CSSProperties => ({
+  background: bg,
+  color: fg,
+  borderRadius: 999,
+  padding: '3px 10px',
+  fontSize: 12,
+  fontWeight: 700,
+  whiteSpace: 'nowrap',
+})
+const memberDropdown: React.CSSProperties = {
+  position: 'absolute',
+  top: '100%',
+  right: 0,
+  left: 0,
+  marginTop: 4,
+  background: '#fff',
+  border: '1px solid #d9cfc0',
+  borderRadius: 10,
+  boxShadow: '0 8px 24px rgba(0,0,0,0.14)',
+  zIndex: 40,
+  overflow: 'hidden',
+}
 
-// 🎯 پچ ۵۰-د-ب: منو (دسته‌ها و محصولات) هم server-side با supabaseAdmin خوانده
-// می‌شود و به‌جای /api/menu (که با کلاینت کاربر و RLS deny-all خالی برمی‌گشت)
-// از props می‌آید — همان الگوی صفحهٔ میزها
+// 🎯 پچ ۵۰-هـ: بازطراحی کامل صفحهٔ POS —
+// جریان: اول مشتری (مهمان/عضو + تخفیف فعال)، بعد میز، بعد منو با تب‌های رنگی،
+// سبد تک‌خطی فشرده و همه‌چیز در یک صفحه (فیت-پیج) با اسکرول داخلی.
 export default function NewOrderClient({
   tables,
   categories,
@@ -110,8 +171,6 @@ export default function NewOrderClient({
   const [search, setSearch] = useState('')
   const [cat, setCat] = useState('all')
   const [lines, setLines] = useState<Line[]>([])
-  const [name, setName] = useState('')
-  const [phone, setPhone] = useState('')
   const [note, setNote] = useState('')
   const [isTest, setIsTest] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -124,6 +183,31 @@ export default function NewOrderClient({
   const [variantFor, setVariantFor] = useState<Product | null>(null)
   const [pickedOption, setPickedOption] = useState('')
 
+  // 🎯 پچ ۵۰-هـ: مشتری — مهمان یا عضو
+  const [customerMode, setCustomerMode] = useState<'guest' | 'member'>('guest')
+  const [guestName, setGuestName] = useState('')
+  const [guestPhone, setGuestPhone] = useState('')
+  const [memberQuery, setMemberQuery] = useState('')
+  const [memberHits, setMemberHits] = useState<CustomerHit[]>([])
+  const [memberSearching, setMemberSearching] = useState(false)
+  const [selectedMember, setSelectedMember] = useState<CustomerHit | null>(null)
+  const [memberInfo, setMemberInfo] = useState<MemberInfo | null>(null)
+
+  // تخفیف عضو به‌صورت خودکار روی فاکتور جاری اعمال می‌شود؛ ویرایش دستی، حالت خودکار را خاموش می‌کند
+  const [discountAuto, setDiscountAuto] = useState<'member' | null>(null)
+
+  // دعوت‌نامهٔ عضویت برای مهمان
+  const [invite, setInvite] = useState<{ token: string; expires_at: string } | null>(null)
+  const [inviteBusy, setInviteBusy] = useState(false)
+  const [inviteCopied, setInviteCopied] = useState(false)
+
+  // رنگ هر دسته — ثابت بر اساس ترتیب
+  const catColor = useMemo(() => {
+    const m = new Map<string, string>()
+    categories.forEach((c, i) => m.set(c.id, CAT_COLORS[i % CAT_COLORS.length]))
+    return (id: string) => m.get(id) ?? '#6b4f3a'
+  }, [categories])
+
   const shown = useMemo(() => {
     const q = search.trim().toLowerCase()
     return products.filter(
@@ -133,6 +217,60 @@ export default function NewOrderClient({
         (!q || p.name.toLowerCase().includes(q))
     )
   }, [products, search, cat])
+
+  // 🎯 پچ ۵۰-هـ: جستجوی زندهٔ عضو با debounce — نام یا شماره
+  useEffect(() => {
+    if (customerMode !== 'member' || selectedMember) return
+    const q = memberQuery.trim()
+    if (q.length < 2) {
+      setMemberHits([])
+      return
+    }
+    setMemberSearching(true)
+    const t = setTimeout(async () => {
+      try {
+        const res = await fetch(
+          '/api/admin/customers/search?q=' + encodeURIComponent(q)
+        )
+        const data = await res.json().catch(() => ({}))
+        setMemberHits(Array.isArray(data.customers) ? data.customers : [])
+      } catch {
+        setMemberHits([])
+      } finally {
+        setMemberSearching(false)
+      }
+    }, 300)
+    return () => clearTimeout(t)
+  }, [memberQuery, customerMode, selectedMember])
+
+  function selectMember(hit: CustomerHit) {
+    setSelectedMember(hit)
+    setMemberHits([])
+    setMemberQuery(hit.name ?? hit.phone)
+    setMemberInfo(null)
+    fetch(
+      '/api/admin/customers/active-discount?phone=' + encodeURIComponent(hit.phone)
+    )
+      .then((res) => res.json())
+      .then((data) => {
+        setMemberInfo(data)
+        setDiscountAuto(data?.active?.percent > 0 ? 'member' : null)
+      })
+      .catch(() => setMemberInfo(null))
+  }
+
+  function clearMember() {
+    setSelectedMember(null)
+    setMemberInfo(null)
+    setMemberQuery('')
+    setMemberHits([])
+    setDiscountAuto(null)
+  }
+
+  function switchCustomerMode(mode: 'guest' | 'member') {
+    setCustomerMode(mode)
+    if (mode === 'guest') clearMember()
+  }
 
   function optionsOf(p: Product) {
     return (p.variant_groups ?? [])
@@ -189,6 +327,10 @@ export default function NewOrderClient({
     )
   }
 
+  function removeLine(k: string) {
+    setLines((prev) => prev.filter((l) => lineKey(l) !== k))
+  }
+
   function toggleTakeaway(k: string) {
     setLines((prev) =>
       merge(prev.map((l) => (lineKey(l) === k ? { ...l, takeaway: !l.takeaway } : l)))
@@ -204,6 +346,48 @@ export default function NewOrderClient({
   const discountVal = Math.max(0, Math.floor(Number(normalizeDigits(discount) || 0) || 0))
   const total = Math.max(0, gross - discountVal)
 
+  // 🎯 پچ ۵۰-هـ: تخفیف فعال عضو — خودکار هماهنگ با مبلغ فاکتور جاری
+  const memberPct = memberInfo?.active?.percent ?? 0
+  useEffect(() => {
+    if (discountAuto !== 'member' || memberPct <= 0) return
+    const amt = Math.round((gross * memberPct) / 100)
+    setDiscount(amt > 0 ? String(amt) : '')
+  }, [discountAuto, gross, memberPct])
+
+  // 🎯 پچ ۵۰-هـ: دعوت‌نامهٔ عضویت برای مهمان — همان API پنل کیف پول
+  async function createInvite() {
+    setInviteBusy(true)
+    setError('')
+    try {
+      const res = await fetch('/api/admin/wallet/invites', { method: 'POST' })
+      const data = await res.json().catch(() => ({}))
+      if (res.ok && data?.invite?.token) {
+        setInvite(data.invite)
+        setInviteCopied(false)
+      } else {
+        setError(data.error || 'ساخت دعوت‌نامه ناموفق بود')
+      }
+    } catch {
+      setError('خطای ارتباط با سرور')
+    } finally {
+      setInviteBusy(false)
+    }
+  }
+
+  const inviteUrl = invite
+    ? (typeof window !== 'undefined' ? window.location.origin : '') +
+      '/register/' +
+      invite.token
+    : ''
+
+  function copyInvite() {
+    try {
+      navigator.clipboard.writeText(inviteUrl)
+      setInviteCopied(true)
+      setTimeout(() => setInviteCopied(false), 2000)
+    } catch {}
+  }
+
   async function submit() {
     setError('')
     if (lines.length === 0) return setError('هیچ آیتمی انتخاب نشده است')
@@ -214,8 +398,8 @@ export default function NewOrderClient({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          customer_name: name,
-          customer_phone: phone,
+          customer_name: selectedMember?.name ?? guestName,
+          customer_phone: selectedMember?.phone ?? guestPhone,
           table_number: selectedTable === '' ? null : Number(selectedTable),
           note,
           is_test: isTest,
@@ -234,10 +418,12 @@ export default function NewOrderClient({
       } else {
         setDone(data.order?.order_number ?? 0)
         setLines([])
-        setName('')
-        setPhone('')
+        setGuestName('')
+        setGuestPhone('')
         setNote('')
         setDiscount('')
+        setDiscountAuto(null)
+        clearMember()
       }
     } catch {
       setError('خطای ارتباط با سرور')
@@ -247,14 +433,14 @@ export default function NewOrderClient({
   }
 
   return (
-    <div>
-      <h1>🧾 ثبت سفارش حضوری (POS)</h1>
-      <p style={{ color: '#766f64', marginTop: -6 }}>
-        میز را بزن، محصولات را لمس کن، سفارش ثبت شود.
+    <div className="pos-root">
+      <h1 className="pos-root-title">🧾 ثبت سفارش حضوری (POS)</h1>
+      <p className="pos-root-sub">
+        اول مشتری، بعد میز، بعد محصولات — همه‌چیز در یک صفحه.
       </p>
 
       {done !== null && (
-        <div style={{ ...card, background: '#e8f1e9', marginBottom: 12 }}>
+        <div style={{ ...card, background: '#e8f1e9', padding: 10, flexShrink: 0 }}>
           ✅ سفارش شمارهٔ <strong>{fmt(done)}</strong> ثبت شد.{' '}
           <a href="/admin/orders" style={{ textDecoration: 'underline' }}>
             رفتن به سفارش‌ها
@@ -262,101 +448,235 @@ export default function NewOrderClient({
         </div>
       )}
 
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
-          gap: 16,
-          alignItems: 'start',
-        }}
-      >
-        {/* ─── منو (گرید لمسی) ─── */}
-        <section style={card}>
-          {/* انتخاب میز */}
-          <div style={{ marginBottom: 10 }}>
-            <div style={{ fontSize: 13, color: '#766f64', marginBottom: 6 }}>
-              میز:
-            </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-              <button
-                type="button"
-                style={chip(selectedTable === '')}
-                onClick={() => setSelectedTable('')}
+      {/* ─── 🎯 پچ ۵۰-هـ: ردیف مشتری — چسبان به بالا، با اسکرول ثابت ─── */}
+      <section className="pos-customer-row">
+        <span style={{ fontSize: 13, color: '#766f64', flexShrink: 0 }}>مشتری:</span>
+        <button
+          type="button"
+          style={chip(customerMode === 'guest')}
+          onClick={() => switchCustomerMode('guest')}
+        >
+          مهمان
+        </button>
+        <button
+          type="button"
+          style={chip(customerMode === 'member')}
+          onClick={() => switchCustomerMode('member')}
+        >
+          عضو
+        </button>
+
+        {customerMode === 'guest' && (
+          <>
+            <input
+              style={{ ...input, flex: '1 1 170px', width: 'auto' }}
+              placeholder="نام مشتری (اختیاری)"
+              value={guestName}
+              onChange={(e) => setGuestName(e.target.value)}
+            />
+            <input
+              style={{ ...input, flex: '1 1 150px', width: 'auto' }}
+              placeholder="شمارهٔ تماس (اختیاری — برای پیامک)"
+              inputMode="tel"
+              value={guestPhone}
+              onChange={(e) => setGuestPhone(e.target.value)}
+            />
+            <button
+              type="button"
+              style={{ ...smallBtn, flexShrink: 0, whiteSpace: 'nowrap' }}
+              onClick={createInvite}
+              disabled={inviteBusy}
+              title="ساخت لینک و QR دعوت به عضویت"
+            >
+              {inviteBusy ? '...' : '🔗 دعوت به عضویت'}
+            </button>
+          </>
+        )}
+
+        {customerMode === 'member' && !selectedMember && (
+          <div style={{ position: 'relative', flex: 1, minWidth: 220 }}>
+            <input
+              style={input}
+              placeholder="جستجوی عضو: نام یا شمارهٔ تماس…"
+              inputMode="search"
+              value={memberQuery}
+              onChange={(e) => setMemberQuery(e.target.value)}
+            />
+            {memberSearching && (
+              <small style={{ position: 'absolute', left: 12, top: 10, color: '#766f64' }}>
+                ⏳
+              </small>
+            )}
+            {memberHits.length > 0 && (
+              <div style={memberDropdown}>
+                {memberHits.map((h) => (
+                  <button
+                    key={h.id}
+                    type="button"
+                    style={{
+                      display: 'block',
+                      width: '100%',
+                      padding: '9px 12px',
+                      border: 0,
+                      borderBottom: '1px solid #f0e9dd',
+                      background: '#fff',
+                      cursor: 'pointer',
+                      font: 'inherit',
+                      textAlign: 'right',
+                    }}
+                    onClick={() => selectMember(h)}
+                  >
+                    <strong>{h.name || 'بدون نام'}</strong>
+                    <span dir="ltr" style={{ color: '#766f64', marginInlineStart: 8 }}>
+                      {h.phone}
+                    </span>
+                    {h.verification_status === 'verified' ? (
+                      <span style={{ color: '#3f7d5c', marginInlineStart: 8 }}>✅</span>
+                    ) : (
+                      <span style={{ color: '#b45309', marginInlineStart: 8 }}>⚠️</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+            {memberQuery.trim().length >= 2 && !memberSearching && memberHits.length === 0 && (
+              <small style={{ display: 'block', marginTop: 4, color: '#766f64' }}>
+                عضوی پیدا نشد — می‌توانی «مهمان» را انتخاب کنی.
+              </small>
+            )}
+          </div>
+        )}
+
+        {customerMode === 'member' && selectedMember && (
+          <div
+            style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: 8,
+              alignItems: 'center',
+              flex: 1,
+              minWidth: 0,
+            }}
+          >
+            <strong style={{ fontSize: 14 }}>
+              {selectedMember.name || memberInfo?.customer_name || 'بدون نام'}
+            </strong>
+            <span dir="ltr" style={{ color: '#766f64', fontSize: 13 }}>
+              {selectedMember.phone}
+            </span>
+            <span style={badge('#efe7da', '#6b4f3a')}>
+              {memberInfo?.membership_label ?? '…'}
+            </span>
+            {memberPct > 0 && (
+              <span
+                style={badge(memberInfo?.active?.color ?? '#3f7d5c')}
+                title={memberInfo?.active?.label ?? undefined}
               >
-                بدون میز
+                🏷️ تخفیف فعال {fmt(memberPct)}٪ — خودکار روی فاکتور
+              </span>
+            )}
+            {memberInfo?.orgNote && (
+              <small style={{ color: '#b45309' }}>{memberInfo.orgNote}</small>
+            )}
+            <button type="button" style={{ ...smallBtn, flexShrink: 0 }} onClick={clearMember}>
+              تغییر / حذف
+            </button>
+          </div>
+        )}
+      </section>
+
+      <div className="pos-body">
+        {/* ─── منو ─── */}
+        <section className="pos-card">
+          {/* انتخاب میز */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+            <span style={{ fontSize: 13, color: '#766f64', flexShrink: 0 }}>میز:</span>
+            <button
+              type="button"
+              style={chip(selectedTable === '')}
+              onClick={() => setSelectedTable('')}
+            >
+              بدون میز
+            </button>
+            {tables.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                title={t.name ?? undefined}
+                style={chip(selectedTable === String(t.number))}
+                onClick={() => setSelectedTable(String(t.number))}
+              >
+                میز {t.number}
               </button>
-              {tables.map((t) => (
-                <button
-                  key={t.id}
-                  type="button"
-                  title={t.name ?? undefined}
-                  style={chip(selectedTable === String(t.number))}
-                  onClick={() => setSelectedTable(String(t.number))}
-                >
-                  میز {t.number}
-                </button>
-              ))}
-            </div>
+            ))}
             {tables.length === 0 && (
-              <p style={{ color: '#766f64', fontSize: 13, margin: '4px 0 0' }}>
-                هنوز میزی در «مدیریت میزها» نساخته‌ای — می‌توانی بدون میز هم
-                ثبت کنی.
-              </p>
+              <small style={{ color: '#766f64', fontSize: 12 }}>
+                هنوز میزی نساخته‌ای — بدون میز هم می‌شود ثبت کرد.
+              </small>
             )}
           </div>
 
           <input
-            style={input}
+            style={{ ...input, marginTop: 10 }}
             placeholder="جستجوی محصول..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, margin: '10px 0' }}>
+
+          {/* 🎯 پچ ۵۰-هـ: دسته‌ها به‌صورت تب رنگی بالای گرید */}
+          <div className="pos-tab-row">
             <button
               type="button"
-              style={{ ...smallBtn, background: cat === 'all' ? '#6b4f3a' : '#fff', color: cat === 'all' ? '#fff' : 'inherit' }}
+              className="pos-tab"
+              style={{
+                background: cat === 'all' ? '#6b4f3a' : '#fff',
+                borderColor: '#6b4f3a',
+                color: cat === 'all' ? '#fff' : '#6b4f3a',
+                fontWeight: cat === 'all' ? 700 : 400,
+              }}
               onClick={() => setCat('all')}
             >
               همه
             </button>
-            {categories.map((c) => (
-              <button
-                key={c.id}
-                type="button"
-                style={{ ...smallBtn, background: cat === c.id ? '#6b4f3a' : '#fff', color: cat === c.id ? '#fff' : 'inherit' }}
-                onClick={() => setCat(c.id)}
-              >
-                {c.icon ? c.icon + ' ' : ''}
-                {c.name}
-              </button>
-            ))}
+            {categories.map((c) => {
+              const color = catColor(c.id)
+              const active = cat === c.id
+              return (
+                <button
+                  key={c.id}
+                  type="button"
+                  className="pos-tab"
+                  style={{
+                    background: active ? color : '#fff',
+                    borderColor: color,
+                    color: active ? '#fff' : color,
+                    fontWeight: active ? 700 : 400,
+                  }}
+                  onClick={() => setCat(c.id)}
+                >
+                  {c.icon ? c.icon + ' ' : ''}
+                  {c.name}
+                </button>
+              )
+            })}
           </div>
 
-          {/* 🎯 پچ ۵۰-د: گرید تایل لمسی به‌جای فهرست ردیفی */}
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(104px, 1fr))',
-              gap: 8,
-              maxHeight: '58vh',
-              overflowY: 'auto',
-              paddingTop: 4,
-            }}
-          >
+          {/* گرید تایل لمسی — هر تایل با رنگ دستهٔ خودش */}
+          <div className="pos-menu-grid">
             {shown.map((p) => {
               const opts = optionsOf(p)
               return (
                 <button
                   key={p.id}
                   type="button"
-                  style={tile}
+                  style={{ ...tile, borderRight: '4px solid ' + catColor(p.category_id) }}
                   onClick={() => (opts.length > 0 ? openVariant(p) : add(p))}
                 >
-                  <span style={{ fontWeight: 700, fontSize: 13, lineHeight: 1.3 }}>
+                  <span style={{ fontWeight: 700, fontSize: 12.5, lineHeight: 1.3 }}>
                     {p.name}
                   </span>
-                  <span style={{ fontSize: 12, color: '#6b4f3a', fontWeight: 700 }}>
-                    {opts.length > 0 ? 'انتخاب گزینه…' : fmt(p.price) + ' تومان'}
+                  <span style={{ fontSize: 11.5, color: '#6b4f3a', fontWeight: 700 }}>
+                    {opts.length > 0 ? 'انتخاب گزینه…' : fmt(p.price)}
                   </span>
                 </button>
               )
@@ -366,117 +686,172 @@ export default function NewOrderClient({
         </section>
 
         {/* ─── سبد ─── */}
-        <section style={card}>
-          <h3 style={{ marginTop: 0 }}>🧾 سفارش ({fmt(lines.length)} ردیف)</h3>
+        <section className="pos-card">
+          <h3 style={{ margin: 0, fontSize: 15 }}>🧾 سفارش ({fmt(lines.length)} ردیف)</h3>
 
-          {lines.length === 0 && <p style={{ color: '#766f64' }}>سبد خالی است.</p>}
+          {lines.length === 0 && (
+            <p style={{ color: '#766f64', marginTop: 8 }}>سبد خالی است.</p>
+          )}
 
-          {lines.map((l) => {
-            const k = lineKey(l)
-            return (
-              <div
-                key={k}
-                style={{ padding: '8px 0', borderBottom: '1px dashed #e7dfd3' }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                  <span>
-                    <strong>{l.name}</strong>
-                    {l.option_name && <small> ({l.option_name})</small>}
-                    {l.takeaway && l.fee ? (
-                      <small style={{ color: '#b45309', fontWeight: 700 }}>
+          {/* 🎯 پچ ۵۰-هـ: هر آیتم در یک خط — استپر فشرده + مبلغ + حذف */}
+          <div className="pos-cart-lines">
+            {lines.map((l) => {
+              const k = lineKey(l)
+              return (
+                <div className="pos-line" key={k}>
+                  <div className="pos-line-name">
+                    {l.name}
+                    {l.option_name && (
+                      <small style={{ color: '#766f64', fontWeight: 400 }}>
                         {' '}
-                        🥡 بیرون‌بر (+{fmt(l.fee * l.quantity)})
+                        ({l.option_name})
                       </small>
+                    )}
+                    {l.takeaway && l.fee ? (
+                      <small style={{ color: '#b45309' }}> 🥡</small>
                     ) : null}
-                  </span>
-                  <strong>{fmt(l.unit_price * l.quantity)}</strong>
-                </div>
-                <div style={{ display: 'flex', gap: 6, marginTop: 6, alignItems: 'center' }}>
-                  <button type="button" style={smallBtn} onClick={() => changeQty(k, 1)}>+</button>
-                  <span style={{ minWidth: 24, textAlign: 'center' }}>{fmt(l.quantity)}</span>
-                  <button type="button" style={smallBtn} onClick={() => changeQty(k, -1)}>−</button>
+                  </div>
                   {l.fee ? (
                     <button
                       type="button"
-                      style={{ ...smallBtn, background: l.takeaway ? '#fdf0dc' : '#fff' }}
+                      title="بیرون‌بر"
+                      style={{
+                        ...smallBtn,
+                        padding: '2px 7px',
+                        fontSize: 13,
+                        background: l.takeaway ? '#fdf0dc' : '#fff',
+                        borderColor: l.takeaway ? '#b45309' : '#d9cfc0',
+                        flexShrink: 0,
+                      }}
                       onClick={() => toggleTakeaway(k)}
                     >
-                      🥡 بیرون‌بر (+{fmt(l.fee)})
+                      🥡
                     </button>
                   ) : null}
+                  <div className="pos-step">
+                    <button type="button" onClick={() => changeQty(k, -1)}>−</button>
+                    <span className="pos-qty">{fmt(l.quantity)}</span>
+                    <button type="button" onClick={() => changeQty(k, 1)}>+</button>
+                  </div>
+                  <span
+                    style={{
+                      fontWeight: 700,
+                      fontSize: 12.5,
+                      flexShrink: 0,
+                      minWidth: 66,
+                      textAlign: 'left',
+                    }}
+                  >
+                    {fmt(l.unit_price * l.quantity)}
+                  </span>
+                  <button
+                    type="button"
+                    title="حذف از سفارش"
+                    style={{ ...smallBtn, padding: '2px 8px', flexShrink: 0 }}
+                    onClick={() => removeLine(k)}
+                  >
+                    ✕
+                  </button>
                 </div>
-              </div>
-            )
-          })}
+              )
+            })}
+          </div>
 
-          <div style={{ marginTop: 12, display: 'grid', gap: 6 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+          <div className="pos-totals" style={{ marginTop: 10 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
               <span>جمع اقلام</span>
-              <strong>{fmt(base)} تومان</strong>
+              <strong>{fmt(base)}</strong>
             </div>
             {fees > 0 && (
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span>🥡 هزینهٔ بیرون‌بر</span>
-                <strong>{fmt(fees)} تومان</strong>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+                <span>🥡 بیرون‌بر</span>
+                <strong>{fmt(fees)}</strong>
               </div>
             )}
-            {/* 🎯 پچ ۵۰-د: تخفیف دستی */}
             {discountVal > 0 && (
-              <div style={{ display: 'flex', justifyContent: 'space-between', color: '#b45309' }}>
-                <span>تخفیف دستی</span>
-                <strong>−{fmt(discountVal)} تومان</strong>
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  fontSize: 13,
+                  color: '#b45309',
+                }}
+              >
+                <span>
+                  تخفیف
+                  {discountAuto === 'member' && memberPct > 0
+                    ? ` (${fmt(memberPct)}٪ عضو)`
+                    : ' دستی'}
+                </span>
+                <strong>−{fmt(discountVal)}</strong>
               </div>
             )}
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 18 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 17 }}>
               <span>قابل پرداخت</span>
               <strong>{fmt(total)} تومان</strong>
             </div>
           </div>
 
-          <div style={{ display: 'grid', gap: 8, marginTop: 14 }}>
-            <input
-              style={input}
-              placeholder="تخفیف دستی (تومان) — اختیاری"
-              inputMode="numeric"
-              value={discount}
-              onChange={(e) => setDiscount(normalizeDigits(e.target.value))}
-            />
-            <input style={input} placeholder="نام مشتری (اختیاری)" value={name} onChange={(e) => setName(e.target.value)} />
-            <input style={input} placeholder="شمارهٔ تماس (اختیاری)" inputMode="tel" value={phone} onChange={(e) => setPhone(e.target.value)} />
-            <textarea style={{ ...input, minHeight: 60 }} placeholder="توضیحات (اختیاری)" value={note} onChange={(e) => setNote(e.target.value)} />
-            <label
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                padding: '10px 12px',
-                borderRadius: 10,
-                cursor: 'pointer',
-                border: isTest ? '1px solid #b45309' : '1px solid #d9cfc0',
-                background: isTest ? '#fdf0dc' : '#fff',
-              }}
-            >
+          {/* تخفیف دستی، توضیحات و سفارش آزمایشی — تاشو تا فاکتور جمع‌وجور بماند */}
+          <details style={{ marginTop: 8, flexShrink: 0 }}>
+            <summary style={{ cursor: 'pointer', fontSize: 13, color: '#766f64' }}>
+              ⚙️ تخفیف، توضیحات و گزینه‌ها
+            </summary>
+            <div style={{ display: 'grid', gap: 6, marginTop: 8 }}>
+              {discountAuto === 'member' && memberPct > 0 && (
+                <small style={{ color: '#3f7d5c' }}>
+                  تخفیف عضو ({fmt(memberPct)}٪) خودکار محاسبه می‌شود؛ اگر عدد را دستی
+                  بنویسی، حالت خودکار خاموش می‌شود.
+                </small>
+              )}
               <input
-                type="checkbox"
-                checked={isTest}
-                onChange={(e) => setIsTest(e.target.checked)}
+                style={input}
+                placeholder="تخفیف دستی (تومان) — اختیاری"
+                inputMode="numeric"
+                value={discount}
+                onChange={(e) => {
+                  setDiscount(normalizeDigits(e.target.value))
+                  setDiscountAuto(null)
+                }}
               />
-              <span>
-                🧪 سفارش آزمایشی (در گزارش‌ها حساب نشود)
-              </span>
-            </label>
-          </div>
+              <textarea
+                style={{ ...input, minHeight: 52 }}
+                placeholder="توضیحات (اختیاری)"
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+              />
+              <label
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '8px 12px',
+                  borderRadius: 10,
+                  cursor: 'pointer',
+                  border: isTest ? '1px solid #b45309' : '1px solid #d9cfc0',
+                  background: isTest ? '#fdf0dc' : '#fff',
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={isTest}
+                  onChange={(e) => setIsTest(e.target.checked)}
+                />
+                <span>🧪 سفارش آزمایشی (در گزارش‌ها حساب نشود)</span>
+              </label>
+            </div>
+          </details>
 
-          {error && <p className="danger" style={{ marginTop: 10 }}>{error}</p>}
+          {error && <p className="danger" style={{ marginTop: 8 }}>{error}</p>}
 
           <button
             type="button"
             onClick={submit}
             disabled={busy || lines.length === 0}
             style={{
-              marginTop: 12,
+              marginTop: 10,
               width: '100%',
-              padding: 14,
+              padding: 13,
               border: 0,
               borderRadius: 12,
               background: '#6b4f3a',
@@ -485,6 +860,7 @@ export default function NewOrderClient({
               fontWeight: 700,
               cursor: busy || lines.length === 0 ? 'not-allowed' : 'pointer',
               opacity: busy || lines.length === 0 ? 0.6 : 1,
+              flexShrink: 0,
             }}
           >
             {busy ? 'در حال ثبت...' : 'ثبت سفارش'}
@@ -560,6 +936,79 @@ export default function NewOrderClient({
               </button>
               <button type="button" style={smallBtn} onClick={() => setVariantFor(null)}>
                 انصراف
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 🎯 پچ ۵۰-هـ: مودال دعوت‌نامهٔ عضویت — لینک + QR برای اسکن با گوشی مشتری */}
+      {invite && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.45)',
+            zIndex: 1000,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 16,
+          }}
+          onClick={() => setInvite(null)}
+        >
+          <div
+            style={{
+              background: '#fff',
+              color: '#333',
+              borderRadius: 14,
+              padding: 16,
+              maxWidth: 360,
+              width: '100%',
+              textAlign: 'center',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 style={{ margin: '0 0 6px' }}>🔗 دعوت‌نامهٔ عضویت</h3>
+            <p style={{ margin: '0 0 10px', color: '#766f64', fontSize: 13 }}>
+              مشتری با گوشی‌اش QR را اسکن کند یا لینک را باز کند (۷ روز اعتبار).
+            </p>
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 10 }}>
+              <QRCodeSVG value={inviteUrl} size={150} />
+            </div>
+            <code
+              dir="ltr"
+              style={{
+                display: 'block',
+                fontSize: 11.5,
+                background: '#f7f3eb',
+                borderRadius: 8,
+                padding: '8px 10px',
+                wordBreak: 'break-all',
+              }}
+            >
+              {inviteUrl}
+            </code>
+            <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+              <button
+                type="button"
+                onClick={copyInvite}
+                style={{
+                  flex: 1,
+                  padding: 11,
+                  border: 0,
+                  borderRadius: 10,
+                  background: '#6b4f3a',
+                  color: '#fff',
+                  font: 'inherit',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                }}
+              >
+                {inviteCopied ? 'کپی شد ✓' : 'کپی لینک'}
+              </button>
+              <button type="button" style={smallBtn} onClick={() => setInvite(null)}>
+                بستن
               </button>
             </div>
           </div>

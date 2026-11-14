@@ -15209,3 +15209,293 @@ a.cat {
 .backup-cloud-actions{display:inline-flex;align-items:center;gap:10px}
 .backup-cloud-download{color:var(--admin-primary);font-weight:700;text-decoration:none;font-size:12.5px}
 .backup-cloud-download:hover{text-decoration:underline}
+
+/* ═══════════ 🎯 پچ ۵۰-هـ: سایدبار خود-پنهان در صفحهٔ POS + چیدمان فیت-پیج ═══════════ */
+
+/* دستگیرهٔ لبهٔ راست — فقط در حالت خود-پنهان (صفحهٔ POS) دیده می‌شود */
+.admin-sidebar-handle {
+  display: none;
+}
+
+/* حالت خود-پنهان: سایدبار از جریان خارج می‌شود و به‌صورت لایهٔ کشویی از راست می‌آید */
+.admin-shell--autohide .admin-sidebar {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 240px;
+  transform: translateX(100%);
+  transition: transform 0.18s ease;
+  z-index: 90;
+  box-shadow: -10px 0 28px rgba(0, 0, 0, 0.14);
+}
+
+.admin-shell--autohide.admin-sidebar-open .admin-sidebar {
+  transform: translateX(0);
+}
+
+/* وقتی پین شده، دستگیره لازم نیست */
+.admin-shell--autohide.admin-sidebar-pinned .admin-sidebar-handle {
+  display: none;
+}
+
+.admin-shell--autohide .admin-sidebar-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: fixed;
+  top: 50%;
+  right: 0;
+  transform: translateY(-50%);
+  width: 30px;
+  height: 76px;
+  border: 1px solid var(--admin-border);
+  border-right: 0;
+  border-radius: 12px 0 0 12px;
+  background: #fffdf9;
+  color: var(--admin-primary);
+  font-size: 15px;
+  cursor: pointer;
+  z-index: 89;
+  box-shadow: -6px 0 16px rgba(0, 0, 0, 0.1);
+  padding: 0;
+}
+
+.admin-shell--autohide .admin-sidebar-handle:hover {
+  background: var(--admin-hover);
+}
+
+.admin-sidebar-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 85;
+  background: rgba(0, 0, 0, 0.08);
+}
+
+/* دکمهٔ پین داخل سایدبار (فقط در حالت خود-پنهان رندر می‌شود) */
+.admin-pos-pin {
+  margin-top: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--admin-border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--admin-primary);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.admin-pos-pin.pinned {
+  background: var(--admin-primary);
+  color: #ffffff;
+  border-color: var(--admin-primary);
+}
+
+@media (max-width: 767px) {
+  /* در موبایل drawer هست؛ دستگیره و پین معنا ندارد */
+  .admin-shell--autohide .admin-sidebar-handle,
+  .admin-shell--autohide .admin-pos-pin {
+    display: none;
+  }
+}
+
+.admin-shell.dark-mode .admin-shell--autohide .admin-sidebar-handle {
+  background: var(--admin-surface);
+  color: var(--admin-text);
+}
+
+.admin-shell.dark-mode .admin-pos-pin {
+  color: var(--admin-text);
+}
+
+.admin-shell.dark-mode .admin-pos-pin.pinned {
+  background: var(--admin-primary);
+  color: #ffffff;
+}
+
+/* ─── چیدمان فیت-پیج POS: منو و سبد اسکرول داخلی، صفحهٔ اصلی اسکرول نمی‌خورد ─── */
+.pos-root {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  height: calc(100dvh - 150px);
+  min-height: 520px;
+}
+
+.pos-root-title {
+  margin: 0;
+  font-size: 20px;
+  line-height: 1.4;
+}
+
+.pos-root-sub {
+  margin: -4px 0 0;
+  color: #766f64;
+  font-size: 13px;
+}
+
+/* ردیف مشتری — چسبان به بالای صفحه، با اسکرول ثابت می‌ماند */
+.pos-customer-row {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  flex-shrink: 0;
+  background: #ffffff;
+  border: 1px solid #e7dfd3;
+  border-radius: 12px;
+  padding: 10px 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.pos-body {
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 400px;
+  gap: 12px;
+  min-height: 0;
+}
+
+.pos-card {
+  background: #ffffff;
+  border: 1px solid #e7dfd3;
+  border-radius: 12px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.pos-menu-grid {
+  flex: 1;
+  overflow-y: auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 8px;
+  align-content: start;
+  padding-top: 2px;
+}
+
+.pos-cart-lines {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.pos-totals {
+  border-top: 1px dashed #e7dfd3;
+  padding-top: 8px;
+  display: grid;
+  gap: 4px;
+}
+
+/* آیتم فاکتور — تک‌خطی فشرده */
+.pos-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 0;
+  border-bottom: 1px dashed #e7dfd3;
+}
+
+.pos-line-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.pos-step {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.pos-step button {
+  width: 26px;
+  height: 26px;
+  border: 1px solid #d9cfc0;
+  background: #ffffff;
+  border-radius: 8px;
+  cursor: pointer;
+  font: inherit;
+  line-height: 1;
+  padding: 0;
+}
+
+.pos-qty {
+  min-width: 22px;
+  text-align: center;
+  font-weight: 700;
+  font-size: 13px;
+}
+
+/* تب‌های دسته‌ها — ردیف افقی قابل اسکرول بالای گرید */
+.pos-tab-row {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  margin: 8px 0;
+  flex-wrap: nowrap;
+}
+
+.pos-tab {
+  flex: 0 0 auto;
+  border: 1px solid #d9cfc0;
+  background: #ffffff;
+  border-radius: 999px;
+  padding: 5px 12px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+/* موبایل/تبلت باریک: برگشت به چیدمان عمودی با اسکرول عادی صفحه */
+@media (max-width: 900px) {
+  .pos-root {
+    height: auto;
+    min-height: 0;
+  }
+  .pos-body {
+    grid-template-columns: 1fr;
+  }
+  .pos-menu-grid {
+    max-height: 58vh;
+  }
+  .pos-cart-lines {
+    max-height: 40vh;
+  }
+}
+
+.admin-shell.dark-mode .pos-card,
+.admin-shell.dark-mode .pos-customer-row {
+  background: var(--admin-surface);
+  border-color: var(--admin-border);
+  color: var(--admin-text);
+}
+
+.admin-shell.dark-mode .pos-root-sub {
+  color: #a89f8f;
+}
+
+.admin-shell.dark-mode .pos-totals,
+.admin-shell.dark-mode .pos-line {
+  border-color: var(--admin-border);
+}
+
+.admin-shell.dark-mode .pos-step button,
+.admin-shell.dark-mode .pos-tab {
+  background: transparent;
+  border-color: var(--admin-border);
+  color: var(--admin-text);
+}
