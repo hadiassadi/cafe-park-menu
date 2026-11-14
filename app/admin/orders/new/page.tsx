@@ -26,40 +26,45 @@ export default async function NewOrderPage() {
   // service role از سرور خوانده می‌شود — /api/menu با کلاینت کاربر می‌خواند و
   // چون RLS جدول‌ها deny-all است، خالی برمی‌گشت و POS «محصولی پیدا نشد» می‌داد.
   // شکل داده عیناً همان خروجی /api/menu است (فقط منو؛ تم/تنظیمات/جملات لازم نیست).
-  const [tablesRes, catsRes, productsRes, variantsRes, feesRes] = await Promise.all([
-    db
-      .from('tables')
-      .select('id, number, name, location, is_active')
-      .eq('is_active', true)
-      .order('sort_order', { ascending: true })
-      .order('number', { ascending: true }),
-    db
-      .from('categories')
-      .select('id,name,icon,sort_order,takeaway_fee_id,coupon_eligible')
-      .eq('is_active', true)
-      .order('sort_order', { ascending: true }),
-    db
-      .from('products')
-      .select(
-        `id,category_id,name,description,price,size,image_url,
+  const [tablesRes, catsRes, productsRes, variantsRes, feesRes, settingsRes] =
+    await Promise.all([
+      db
+        .from('tables')
+        .select('id, number, name, location, is_active')
+        .eq('is_active', true)
+        .order('sort_order', { ascending: true })
+        .order('number', { ascending: true }),
+      db
+        .from('categories')
+        .select('id,name,icon,sort_order,takeaway_fee_id,coupon_eligible')
+        .eq('is_active', true)
+        .order('sort_order', { ascending: true }),
+      db
+        .from('products')
+        .select(
+          `id,category_id,name,description,price,size,image_url,
          is_featured,sort_order,is_available,is_new,coupon_eligible,
          calories,prep_time_minutes,ingredients,allergens,dietary_info,
          takeaway_fee_id`
-      )
-      .eq('is_active', true)
-      .order('sort_order', { ascending: true }),
-    db
-      .from('variant_groups')
-      .select(
-        `id,product_id,name,is_required,sort_order,
+        )
+        .eq('is_active', true)
+        .order('sort_order', { ascending: true }),
+      db
+        .from('variant_groups')
+        .select(
+          `id,product_id,name,is_required,sort_order,
          variant_options(id,group_id,name,price_modifier,is_default,is_available,sort_order)`
-      )
-      .order('sort_order', { ascending: true }),
-    db
-      .from('takeaway_fees')
-      .select('id,name,fee')
-      .eq('is_active', true),
-  ])
+        )
+        .order('sort_order', { ascending: true }),
+      db.from('takeaway_fees').select('id,name,fee').eq('is_active', true),
+      // 🎯 پچ ۵۰-هـ-ح: نام و لوگوی کافه برای فاکتور چاپی مشتری
+      db.from('settings').select('cafe_name, logo_url').eq('id', 1).single(),
+    ])
+
+  const settingsRow = (settingsRes.data ?? null) as {
+    cafe_name?: string | null
+    logo_url?: string | null
+  } | null
 
   // گروه‌بندی واریانت‌ها بر اساس product_id
   const variantGroups = (variantsRes.data ?? []) as VariantGroup[]
@@ -110,6 +115,8 @@ export default async function NewOrderPage() {
         tables={(tablesRes.data ?? []) as PosTableRow[]}
         categories={categories}
         products={products}
+        cafeName={(settingsRow?.cafe_name ?? '').trim() || 'کافه پارک'}
+        logoUrl={settingsRow?.logo_url ?? null}
       />
     </main>
   )

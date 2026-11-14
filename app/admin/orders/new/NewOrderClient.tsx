@@ -1,8 +1,10 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
+import type { CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
 import { QRCodeSVG } from 'qrcode.react'
+import { PAYMENT_METHOD_LABELS, type PaymentMethod } from '@/lib/payment/methods'
 import type { Category, Product } from '@/lib/menu-types'
 
 const LEGACY_GROUP = 'بیرون بر'
@@ -75,12 +77,17 @@ type PosOrderRow = {
   source: string | null
   status: string
   payment_status?: string | null
+  payment_method?: string | null
   subtotal: number
   coupon_code: string | null
   coupon_discount: number | null
+  manual_discount?: number | null
+  paid_amount?: number | null
   note?: string | null
   is_test?: boolean
   items: PosOrderItem[]
+  // 🎯 پچ ۵۰-هـ-ح: پرداخت‌های ثبت‌شده برای نمایش تسویه روی فیش‌ها (embed سوپابیس)
+  order_payments?: Array<{ method: string | null; amount: number; status: string | null }> | null
 }
 const POS_STATUS_LABELS: Record<string, string> = {
   pending: 'جدید',
@@ -97,6 +104,44 @@ const POS_STATUS_COLORS: Record<string, string> = {
   ready: '#3f7d5c',
   delivered: '#6b6b6b',
   cancelled: '#9b3c32',
+}
+
+// ─── 🎯 پچ ۵۰-هـ-ح: تسویه و اطلاعات چاپ ───
+
+// اطلاعات عضویت/گرید مشتری — هنگام باز شدن مودال چاپ از active-discount گرفته می‌شود
+type PrintExtra = {
+  title: string
+  gradeName: string | null
+  activePercent: number
+  activeLabel: string | null
+}
+
+// پرداخت‌های تأییدشدهٔ سفارش (برای فیش‌ها و ردیف‌ها)
+function confirmedPayments(o: PosOrderRow) {
+  return (o.order_payments ?? []).filter(
+    (p) => (p.status ?? 'confirmed') === 'confirmed' && Number(p.amount) > 0
+  )
+}
+function paymentMethodLabel(m: string | null): string {
+  if (!m) return '—'
+  return PAYMENT_METHOD_LABELS[m as PaymentMethod] ?? m
+}
+// وضعیت تسویه: از جمع پرداخت‌های تأییدشده، وگرنه از ستون paid_amount
+function settlementOf(o: PosOrderRow): {
+  state: 'paid' | 'partial' | 'none'
+  paid: number
+  remaining: number
+} {
+  const rows = confirmedPayments(o)
+  const paid = Math.round(
+    rows.length > 0
+      ? rows.reduce((s, p) => s + Number(p.amount), 0)
+      : Number(o.paid_amount) || 0
+  )
+  const remaining = Math.max(0, Math.round(Number(o.subtotal) || 0) - paid)
+  if (paid <= 0) return { state: 'none', paid: 0, remaining }
+  if (remaining <= 0) return { state: 'paid', paid, remaining: 0 }
+  return { state: 'partial', paid, remaining }
 }
 
 const fmt = (n: number) => Number(n || 0).toLocaleString('fa-IR')
@@ -228,10 +273,14 @@ export default function NewOrderClient({
   tables,
   categories,
   products,
+  cafeName,
+  logoUrl,
 }: {
   tables: PosTable[]
   categories: Category[]
   products: Product[]
+  cafeName?: string | null
+  logoUrl?: string | null
 }) {
   const [search, setSearch] = useState('')
   const [cat, setCat] = useState('all')
@@ -315,8 +364,13 @@ export default function NewOrderClient({
   const [printJob, setPrintJob] = useState<{
     order: PosOrderRow
     target: 'kitchen' | 'hall' | 'customer'
+    extra?: PrintExtra | null
   } | null>(null)
   const lastPendingRef = useRef<number | null>(null)
+  // 🎯 پچ ۵۰-هـ-ح: باز/بستهٔ ریز اقلام هر ردیف + اطلاعات عضویت برای چاپ
+  const [expandedRowId, setExpandedRowId] = useState<string | null>(null)
+  const [printExtra, setPrintExtra] = useState<PrintExtra | null>(null)
+  const extraCacheRef = useRef<Map<string, PrintExtra | null>>(new Map())
 
   // 🎯 پچ ۵۰-هـ-ب: شمارندهٔ سفارش‌های امروز کنار عنوان — بعد از هر ثبت موفق رفرش می‌شود
   const [todayStats, setTodayStats] = useState<{ count: number; revenue: number } | null>(null)
@@ -831,6 +885,48 @@ export default function NewOrderClient({
     if (soundOn && livePendingOnline > lastPendingRef.current) playNewOrderChime()
     lastPendingRef.current = livePendingOnline
   }, [livePendingOnline, soundOn])
+
+  // 🎯 پچ ۵۰-هـ-ح: باز کردن چاپ + گرفتن عنوان عضویت/گرید مشتری (با کش per phone)
+  async function openPrint(o: PosOrderRow) {
+    setPrinting(o)
+    setPrintExtra(null)
+    const phone = String(o.customer_phone ?? '').replace(/\D/g, '')
+    if (!/^09\d{9}$/.test(phone)) return
+    const cached = extraCacheRef.current.get(phone)
+    if (cached !== undefined) {
+      setPrintExtra(cached)
+      return
+    }
+    try {
+      const res = await fetch(
+        '/api/admin/customers/active-discount?phone=' + encodeURIComponent(phone),
+        { cache: 'no-store' }
+      )
+      const d = res.ok ? await res.json() : null
+      const orgName: string | null = d?.active?.orgName ?? null
+      const gradeName: string | null = d?.active?.gradeName ?? null
+      const pct = Number(d?.active?.percent) || 0
+      const extra: PrintExtra = {
+        title: orgName
+          ? `عضو سازمان${orgName ? ` «${orgName}»` : ''}`
+          : d?.membership_label
+            ? String(d.membership_label)
+            : 'مشتری عادی',
+        gradeName: gradeName ?? null,
+        activePercent: pct,
+        activeLabel:
+          pct > 0
+            ? d?.active?.planName
+              ? `${d.active.planName} — ${pct}٪`
+              : `تخفیف فعال ${pct}٪`
+            : null,
+      }
+      extraCacheRef.current.set(phone, extra)
+      setPrintExtra(extra)
+    } catch {
+      // بدون اطلاعات عضویت هم چاپ انجام می‌شود
+    }
+  }
 
   // چاپ: بعد از انتخاب مقصد، فیش رندر و دیالوگ چاپ باز می‌شود
   useEffect(() => {
@@ -1762,7 +1858,11 @@ export default function NewOrderClient({
                         ? o.source === 'admin'
                         : o.source !== 'admin'
                   )
-                  .map((o) => (
+                  .map((o) => {
+                    const st = settlementOf(o)
+                    const anyTakeaway = o.items.some((it) => it.takeaway)
+                    const expanded = expandedRowId === o.id
+                    return (
                     <div
                       key={o.id}
                       style={{
@@ -1772,6 +1872,8 @@ export default function NewOrderClient({
                         display: 'flex',
                         gap: 8,
                         alignItems: 'center',
+                        // 🐛 فیکس ۵۰-هـ-ح: سرریز افقی — grid-item نباید min-width:auto بماند
+                        minWidth: 0,
                       }}
                     >
                       <div style={{ flex: 1, minWidth: 0 }}>
@@ -1804,6 +1906,62 @@ export default function NewOrderClient({
                           >
                             {POS_STATUS_LABELS[o.status] ?? o.status}
                           </span>
+                          {o.table_number != null && (
+                            <span
+                              style={{
+                                fontSize: 10.5,
+                                fontWeight: 700,
+                                color: '#6b4f3a',
+                                background: '#f3efe7',
+                                borderRadius: 6,
+                                padding: '1px 6px',
+                              }}
+                            >
+                              🪑 میز {fmt(o.table_number)}
+                            </span>
+                          )}
+                          {anyTakeaway && (
+                            <span
+                              style={{
+                                fontSize: 10.5,
+                                fontWeight: 700,
+                                color: '#9a5b1f',
+                                background: '#fdf0e0',
+                                borderRadius: 6,
+                                padding: '1px 6px',
+                              }}
+                            >
+                              🥡 بیرون‌بر
+                            </span>
+                          )}
+                          {st.state === 'paid' && (
+                            <span
+                              style={{
+                                fontSize: 10.5,
+                                fontWeight: 700,
+                                color: '#3f7d5c',
+                                background: '#e5f0e6',
+                                borderRadius: 6,
+                                padding: '1px 6px',
+                              }}
+                            >
+                              💳 تسویه شده
+                            </span>
+                          )}
+                          {st.state === 'partial' && (
+                            <span
+                              style={{
+                                fontSize: 10.5,
+                                fontWeight: 700,
+                                color: '#9a6b3f',
+                                background: '#fdf0e0',
+                                borderRadius: 6,
+                                padding: '1px 6px',
+                              }}
+                            >
+                              💳 مانده {fmt(st.remaining)}
+                            </span>
+                          )}
                           <span dir="ltr" style={{ fontSize: 11, color: '#a89f8f' }}>
                             {new Intl.DateTimeFormat('fa-IR', {
                               hour: '2-digit',
@@ -1811,27 +1969,106 @@ export default function NewOrderClient({
                             }).format(new Date(o.created_at))}
                           </span>
                         </div>
-                        <div
+                        {/* 🎯 ۵۰-هـ-ح: مشتری در خط جدا — همیشه خوانا */}
+                        <div style={{ fontSize: 12, color: '#5c554b', marginTop: 3 }}>
+                          👤 {o.customer_name || 'مهمان'}
+                          {o.customer_phone ? ` — ${o.customer_phone}` : ''}
+                        </div>
+                        {/* 🎯 ۵۰-هـ-ح: خلاصهٔ اقلام — کلیک = ریز اقلام */}
+                        <button
+                          type="button"
+                          title="نمایش ریز اقلام"
+                          onClick={() => setExpandedRowId(expanded ? null : o.id)}
                           style={{
-                            fontSize: 12,
+                            display: 'block',
+                            width: '100%',
+                            textAlign: 'right',
+                            background: 'none',
+                            border: 'none',
+                            padding: 0,
+                            font: 'inherit',
+                            cursor: 'pointer',
                             color: '#766f64',
+                            fontSize: 12,
                             marginTop: 3,
                             overflow: 'hidden',
                             textOverflow: 'ellipsis',
                             whiteSpace: 'nowrap',
+                            minWidth: 0,
                           }}
                         >
-                          {o.customer_name || 'مهمان'}
-                          {o.customer_phone ? ` — ${o.customer_phone}` : ''} ·{' '}
-                          {o.items.length} آیتم:{' '}
-                          {o.items
-                            .slice(0, 2)
-                            .map((it) => it.product_name)
-                            .join('، ')}
-                          {o.items.length > 2
-                            ? ` و ${fmt(o.items.length - 2)} مورد دیگر`
-                            : ''}
-                        </div>
+                          {expanded
+                            ? '▲ بستن ریز اقلام'
+                            : `👁 ${fmt(o.items.length)} آیتم: ${o.items
+                                .slice(0, 2)
+                                .map((it) => it.product_name)
+                                .join('، ')}${
+                                o.items.length > 2
+                                  ? ` و ${fmt(o.items.length - 2)} مورد دیگر`
+                                  : ''
+                              } ▼`}
+                        </button>
+                        {expanded && (
+                          <div
+                            style={{
+                              marginTop: 6,
+                              borderTop: '1px dashed #e7dfd3',
+                              paddingTop: 6,
+                              display: 'grid',
+                              gap: 3,
+                            }}
+                          >
+                            {o.items.map((it, i) => (
+                              <div
+                                key={i}
+                                style={{
+                                  fontSize: 12,
+                                  color: '#4b443b',
+                                  display: 'flex',
+                                  gap: 6,
+                                  minWidth: 0,
+                                }}
+                              >
+                                <strong style={{ minWidth: 38, textAlign: 'center' }}>
+                                  {fmt(it.quantity)}×
+                                </strong>
+                                <span style={{ minWidth: 0 }}>
+                                  {it.product_name}
+                                  {it.option_name ? ` (${it.option_name})` : ''}
+                                  {it.takeaway ? ' · 🥡' : ''}
+                                  {it.line_note && (
+                                    <em
+                                      style={{
+                                        color: '#9a6b3f',
+                                        fontStyle: 'normal',
+                                      }}
+                                    >
+                                      {' '}
+                                      — 💬 {it.line_note}
+                                    </em>
+                                  )}
+                                </span>
+                              </div>
+                            ))}
+                            {o.note && (
+                              <div style={{ fontSize: 11.5, color: '#766f64' }}>
+                                📝 {o.note}
+                              </div>
+                            )}
+                            {st.paid > 0 && (
+                              <div
+                                style={{
+                                  fontSize: 11.5,
+                                  color:
+                                    st.state === 'paid' ? '#3f7d5c' : '#9a6b3f',
+                                }}
+                              >
+                                💳 پرداخت‌شده: {fmt(st.paid)} · مانده:{' '}
+                                {fmt(st.remaining)}
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                       <div style={{ flexShrink: 0, textAlign: 'left' }}>
                         <div style={{ fontWeight: 700, fontSize: 13 }}>
@@ -1847,7 +2084,7 @@ export default function NewOrderClient({
                         <button
                           type="button"
                           title="چاپ فیش (آشپزخانه / سالن / مشتری)"
-                          onClick={() => setPrinting(o)}
+                          onClick={() => openPrint(o)}
                           style={{ ...smallBtn, fontSize: 13, padding: '6px 8px' }}
                         >
                           🖨️
@@ -1881,7 +2118,8 @@ export default function NewOrderClient({
                         </button>
                       </div>
                     </div>
-                  ))}
+                    )
+                  })}
               </div>
             )}
           </div>
@@ -2226,13 +2464,22 @@ export default function NewOrderClient({
           >
             <h3 style={{ margin: 0 }}>🖨️ چاپ سفارش #{fmt(printing.order_number)}</h3>
             <p style={{ margin: 0, fontSize: 12.5, color: '#766f64' }}>
+              👤 {printing.customer_name || 'مهمان'}
+              {printing.customer_phone ? ` — ${printing.customer_phone}` : ''}
+              {printing.table_number != null
+                ? ` · 🪑 میز ${fmt(printing.table_number)}`
+                : printing.items.some((it) => it.takeaway)
+                  ? ' · 🥡 بیرون‌بر'
+                  : ''}
+            </p>
+            <p style={{ margin: 0, fontSize: 12.5, color: '#766f64' }}>
               کدام فیش را چاپ می‌کنی؟ (چاپگرها بعداً در تنظیمات به هر بخش وصل می‌شوند)
             </p>
             {(
               [
                 ['kitchen', '🧑‍🍳 فیش آشپزخانه', 'فقط آیتم‌ها و پیام‌ها — بدون قیمت'],
-                ['hall', '🍽️ فیش سالن', 'آیتم‌ها + میز + قابل پرداخت'],
-                ['customer', '🧾 فاکتور مشتری', 'کامل با قیمت و تخفیف'],
+                ['hall', '🍽️ فیش سالن', 'آیتم‌ها + میز + وضعیت تسویه — بدون قیمت'],
+                ['customer', '🧾 فاکتور مشتری', 'لوگو + تسویه + عضویت/گرید + جدول اقلام'],
               ] as const
             ).map(([key, title, sub]) => (
               <button
@@ -2248,7 +2495,7 @@ export default function NewOrderClient({
                   cursor: 'pointer',
                 }}
                 onClick={() => {
-                  setPrintJob({ order: printing, target: key })
+                  setPrintJob({ order: printing, target: key, extra: printExtra })
                   setPrinting(null)
                 }}
               >
@@ -2265,137 +2512,466 @@ export default function NewOrderClient({
         </div>
       )}
 
-      {/* 🎯 پچ ۵۰-هـ-ز: فیش چاپی — portal به body با همان الگوی .print-invoice */}
+      {/* 🎯 پچ ۵۰-هـ-ح: فیش‌های چاپی — portal به body با الگوی .print-invoice */}
       {printJob &&
         createPortal(
-          <div className="print-invoice" id="pos-print-area" style={{ display: 'none' }}>
-            <div
-              style={{
-                textAlign: 'center',
-                borderBottom: '2px solid #222',
-                paddingBottom: 8,
-                marginBottom: 8,
-              }}
-            >
-              <div style={{ fontSize: 20, fontWeight: 800 }}>☕ کافه پارک</div>
-              <div style={{ fontSize: 14, fontWeight: 700 }}>
-                {printJob.target === 'kitchen'
-                  ? '🧑‍🍳 فیش آشپزخانه'
-                  : printJob.target === 'hall'
-                    ? '🍽️ فیش سالن'
-                    : '🧾 فاکتور مشتری'}
-              </div>
-            </div>
-            <div
-              style={{
-                fontSize: 12.5,
-                display: 'flex',
-                flexWrap: 'wrap',
-                gap: '2px 14px',
-                marginBottom: 8,
-              }}
-            >
-              <span>
-                سفارش: <strong>#{fmt(printJob.order.order_number)}</strong>
-              </span>
-              <span>
-                میز:{' '}
-                <strong>
-                  {printJob.order.table_number == null
-                    ? '—'
-                    : fmt(printJob.order.table_number)}
-                </strong>
-              </span>
-              <span>
-                ساعت:{' '}
-                {new Intl.DateTimeFormat('fa-IR', {
-                  hour: '2-digit',
-                  minute: '2-digit',
-                }).format(new Date(printJob.order.created_at))}
-              </span>
-              {printJob.target !== 'kitchen' && (
-                <span>مشتری: {printJob.order.customer_name || 'مهمان'}</span>
-              )}
-            </div>
-            <table
-              style={{
-                width: '100%',
-                borderCollapse: 'collapse',
-                fontSize: printJob.target === 'kitchen' ? 15 : 12.5,
-              }}
-            >
-              <tbody>
-                {printJob.order.items.map((it, idx) => (
-                  <tr key={idx} style={{ borderBottom: '1px dashed #bbb' }}>
-                    <td style={{ padding: '5px 2px', whiteSpace: 'nowrap', width: 46 }}>
-                      <strong style={{ fontSize: printJob.target === 'kitchen' ? 18 : 14 }}>
-                        {fmt(it.quantity)}
-                      </strong>{' '}
-                      ×
-                    </td>
-                    <td style={{ padding: '5px 2px' }}>
-                      <strong>{it.product_name}</strong>
-                      {it.option_name && <span> ({it.option_name})</span>}
-                      {it.takeaway && <span> · 🥡 بیرون‌بر</span>}
-                      {printJob.target === 'kitchen' && it.line_note && (
-                        <div style={{ fontSize: 14, fontWeight: 700, marginTop: 2 }}>
-                          💬 {it.line_note}
-                        </div>
-                      )}
-                    </td>
-                    {printJob.target !== 'kitchen' && (
-                      <td
-                        style={{
-                          padding: '5px 2px',
-                          textAlign: 'left',
-                          whiteSpace: 'nowrap',
-                        }}
-                      >
-                        {fmt((Number(it.unit_price) || 0) * it.quantity)}
-                      </td>
-                    )}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {printJob.target !== 'kitchen' && (
+          (() => {
+            const o = printJob.order
+            const st = settlementOf(o)
+            const pays = confirmedPayments(o)
+            const feeTotal = o.items.reduce(
+              (s, it) => s + (it.takeaway ? Number(it.takeaway_fee) || 0 : 0),
+              0
+            )
+            const couponDisc = Number(o.coupon_discount) || 0
+            const manualDisc = Number(o.manual_discount) || 0
+            const gross =
+              Math.round(Number(o.subtotal) || 0) + couponDisc + manualDisc - feeTotal
+            const itemCount = o.items.reduce((s, it) => s + it.quantity, 0)
+            const payLine =
+              pays.length > 0
+                ? pays
+                    .map((p) => `${paymentMethodLabel(p.method)} ${fmt(p.amount)}`)
+                    .join(' + ')
+                : o.payment_method
+                  ? paymentMethodLabel(o.payment_method)
+                  : null
+            const settleText =
+              st.state === 'paid'
+                ? '✅ تسویه شده'
+                : st.state === 'partial'
+                  ? `💳 ترکیبی — پرداخت‌شده: ${fmt(st.paid)} · مانده: ${fmt(st.remaining)}`
+                  : `⏳ تسویه نشده — مانده: ${fmt(st.remaining)}`
+            const fullDate = new Intl.DateTimeFormat('fa-IR', {
+              weekday: 'long',
+              day: 'numeric',
+              month: 'long',
+              hour: '2-digit',
+              minute: '2-digit',
+            }).format(new Date(o.created_at))
+            const isKitchen = printJob.target === 'kitchen'
+            const isHall = printJob.target === 'hall'
+            const isCustomer = !isKitchen && !isHall
+            const extra = printJob.extra ?? null
+            const cellBorder = '1px solid #444'
+            const th: CSSProperties = {
+              border: cellBorder,
+              padding: '5px 10px',
+              fontSize: 12,
+              background: '#f2f2f2',
+              whiteSpace: 'nowrap',
+            }
+            const td: CSSProperties = {
+              border: cellBorder,
+              padding: '5px 10px',
+              fontSize: 12.5,
+            }
+            return (
               <div
-                style={{
-                  borderTop: '2px solid #222',
-                  marginTop: 8,
-                  paddingTop: 6,
-                  fontSize: 13,
-                  display: 'grid',
-                  gap: 3,
-                }}
+                className="print-invoice"
+                id="pos-print-area"
+                style={{ display: 'none' }}
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span>جمع اقلام</span>
-                  <strong>
-                    {fmt(
-                      printJob.order.subtotal + (printJob.order.coupon_discount ?? 0)
-                    )}
-                  </strong>
-                </div>
-                {(printJob.order.coupon_discount ?? 0) > 0 && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span>تخفیف</span>
-                    <strong>−{fmt(printJob.order.coupon_discount ?? 0)}</strong>
-                  </div>
-                )}
+                {/* ─── سربرگ ─── */}
                 <div
                   style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    fontSize: 15,
+                    textAlign: 'center',
+                    borderBottom: '2px solid #222',
+                    paddingBottom: 10,
+                    marginBottom: 10,
                   }}
                 >
-                  <span>قابل پرداخت</span>
-                  <strong>{fmt(printJob.order.subtotal)}</strong>
+                  {logoUrl && isCustomer && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={logoUrl}
+                      alt=""
+                      style={{
+                        maxHeight: 62,
+                        maxWidth: 200,
+                        objectFit: 'contain',
+                        margin: '0 auto 6px',
+                      }}
+                    />
+                  )}
+                  <div style={{ fontSize: 21, fontWeight: 800 }}>
+                    {cafeName || 'کافه پارک'}
+                  </div>
+                  <div style={{ fontSize: 14, fontWeight: 700, marginTop: 2 }}>
+                    {isKitchen
+                      ? '🧑‍🍳 فیش آشپزخانه'
+                      : isHall
+                        ? '🍽️ فیش سالن'
+                        : '🧾 فاکتور فروش'}
+                  </div>
                 </div>
+
+                {/* ─── مشخصات سفارش ─── */}
+                <div
+                  style={{
+                    fontSize: 12.5,
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    gap: '3px 16px',
+                    marginBottom: 10,
+                    justifyContent: 'center',
+                  }}
+                >
+                  <span>
+                    سفارش: <strong>#{fmt(o.order_number)}</strong>
+                  </span>
+                  <span>📅 {fullDate}</span>
+                  <span>وضعیت: {POS_STATUS_LABELS[o.status] ?? o.status}</span>
+                  {o.table_number != null ? (
+                    <span>
+                      🪑 میز:{' '}
+                      <strong style={{ fontSize: isHall ? 15 : 12.5 }}>
+                        {fmt(o.table_number)}
+                      </strong>
+                    </span>
+                  ) : o.items.some((it) => it.takeaway) ? (
+                    <span>🥡 بیرون‌بر</span>
+                  ) : null}
+                  {isHall && <span>👤 {o.customer_name || 'مهمان'}</span>}
+                </div>
+
+                {/* 🧾 فاکتور مشتری — جعبهٔ اطلاعات */}
+                {isCustomer && (
+                  <table
+                    style={{
+                      width: 'fit-content',
+                      maxWidth: '100%',
+                      margin: '0 auto 10px',
+                      borderCollapse: 'collapse',
+                    }}
+                  >
+                    <tbody>
+                      <tr>
+                        <td style={{ ...td, fontWeight: 700, background: '#f7f7f7' }}>
+                          مشتری
+                        </td>
+                        <td style={td}>
+                          {o.customer_name || 'مهمان'}
+                          {o.customer_phone ? ` — ${o.customer_phone}` : ''}
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style={{ ...td, fontWeight: 700, background: '#f7f7f7' }}>
+                          عنوان
+                        </td>
+                        <td style={td}>
+                          {extra?.title ?? 'مشتری عادی'}
+                          {extra?.gradeName ? ` · گرید: ${extra.gradeName}` : ''}
+                        </td>
+                      </tr>
+                      {extra?.activeLabel && (
+                        <tr>
+                          <td
+                            style={{ ...td, fontWeight: 700, background: '#f7f7f7' }}
+                          >
+                            تخفیف فعال
+                          </td>
+                          <td style={td}>{extra.activeLabel}</td>
+                        </tr>
+                      )}
+                      <tr>
+                        <td style={{ ...td, fontWeight: 700, background: '#f7f7f7' }}>
+                          نوع سفارش
+                        </td>
+                        <td style={td}>
+                          {o.source === 'admin'
+                            ? 'حضوری (ثبت در صندوق)'
+                            : 'آنلاین'}
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style={{ ...td, fontWeight: 700, background: '#f7f7f7' }}>
+                          تسویه
+                        </td>
+                        <td style={td}>{settleText}</td>
+                      </tr>
+                      {payLine && (
+                        <tr>
+                          <td
+                            style={{ ...td, fontWeight: 700, background: '#f7f7f7' }}
+                          >
+                            نحوهٔ پرداخت
+                          </td>
+                          <td style={td}>{payLine}</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                )}
+
+                {/* ─── اقلام ─── */}
+                {isKitchen || isHall ? (
+                  <table
+                    style={{
+                      width: '100%',
+                      borderCollapse: 'collapse',
+                      fontSize: isKitchen ? 15 : 13,
+                    }}
+                  >
+                    <tbody>
+                      {o.items.map((it, idx) => (
+                        <tr key={idx} style={{ borderBottom: '1px dashed #bbb' }}>
+                          <td
+                            style={{
+                              padding: '5px 2px',
+                              whiteSpace: 'nowrap',
+                              width: 46,
+                            }}
+                          >
+                            <strong style={{ fontSize: isKitchen ? 18 : 15 }}>
+                              {fmt(it.quantity)}
+                            </strong>{' '}
+                            ×
+                          </td>
+                          <td style={{ padding: '5px 2px' }}>
+                            <strong>{it.product_name}</strong>
+                            {it.option_name && <span> ({it.option_name})</span>}
+                            {it.takeaway && <span> · 🥡</span>}
+                            {it.line_note && (
+                              <div
+                                style={{
+                                  fontSize: isKitchen ? 14 : 12,
+                                  fontWeight: 700,
+                                  marginTop: 2,
+                                }}
+                              >
+                                💬 {it.line_note}
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                ) : (
+                  <table
+                    style={{
+                      width: 'fit-content',
+                      maxWidth: '100%',
+                      margin: '0 auto',
+                      borderCollapse: 'collapse',
+                    }}
+                  >
+                    <thead>
+                      <tr>
+                        <th style={{ ...th, width: 30 }}>#</th>
+                        <th style={{ ...th, textAlign: 'right' }}>شرح</th>
+                        <th style={th}>تعداد</th>
+                        <th style={th}>مبلغ (تومان)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {o.items.map((it, idx) => (
+                        <tr key={idx}>
+                          <td style={{ ...td, textAlign: 'center' }}>
+                            {fmt(idx + 1)}
+                          </td>
+                          <td style={{ ...td, textAlign: 'right' }}>
+                            <strong>{it.product_name}</strong>
+                            {it.option_name && <span> ({it.option_name})</span>}
+                            {it.takeaway && <span> · 🥡</span>}
+                            {it.line_note && (
+                              <span
+                                style={{
+                                  display: 'block',
+                                  fontSize: 10.5,
+                                  color: '#555',
+                                }}
+                              >
+                                💬 {it.line_note}
+                              </span>
+                            )}
+                          </td>
+                          <td
+                            style={{
+                              ...td,
+                              textAlign: 'center',
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            {fmt(it.quantity)}
+                          </td>
+                          <td
+                            style={{
+                              ...td,
+                              textAlign: 'left',
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            {fmt((Number(it.unit_price) || 0) * it.quantity)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+
+                {/* ─── جمع‌ها ─── */}
+                {isCustomer ? (
+                  <div
+                    style={{
+                      width: 'fit-content',
+                      maxWidth: '100%',
+                      minWidth: 300,
+                      margin: '10px auto 0',
+                      fontSize: 12.5,
+                      display: 'grid',
+                      gap: 4,
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        gap: 24,
+                      }}
+                    >
+                      <span>جمع اقلام ({fmt(itemCount)} عدد)</span>
+                      <strong>{fmt(gross)}</strong>
+                    </div>
+                    {feeTotal > 0 && (
+                      <div
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          gap: 24,
+                        }}
+                      >
+                        <span>هزینهٔ بیرون‌بر (ظرف)</span>
+                        <strong>{fmt(feeTotal)}</strong>
+                      </div>
+                    )}
+                    {couponDisc > 0 && (
+                      <div
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          gap: 24,
+                        }}
+                      >
+                        <span>
+                          {o.coupon_code === 'MEMBERSHIP'
+                            ? 'تخفیف باشگاه/سازمان'
+                            : `کد تخفیف (${o.coupon_code})`}
+                        </span>
+                        <strong>−{fmt(couponDisc)}</strong>
+                      </div>
+                    )}
+                    {manualDisc > 0 && (
+                      <div
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          gap: 24,
+                        }}
+                      >
+                        <span>تخفیف دستی</span>
+                        <strong>−{fmt(manualDisc)}</strong>
+                      </div>
+                    )}
+                    <div
+                      style={{
+                        borderTop: '2px solid #222',
+                        marginTop: 4,
+                        paddingTop: 6,
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        gap: 24,
+                        fontSize: 15,
+                      }}
+                    >
+                      <span>قابل پرداخت</span>
+                      <strong>{fmt(o.subtotal)}</strong>
+                    </div>
+                    {st.paid > 0 && (
+                      <div
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          gap: 24,
+                          color: '#2d5d3e',
+                        }}
+                      >
+                        <span>پرداخت‌شده</span>
+                        <strong>{fmt(st.paid)}</strong>
+                      </div>
+                    )}
+                    {st.remaining > 0 && (
+                      <div
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          gap: 24,
+                          color: '#9b3c32',
+                        }}
+                      >
+                        <span>مانده</span>
+                        <strong>{fmt(st.remaining)}</strong>
+                      </div>
+                    )}
+                  </div>
+                ) : isHall ? (
+                  <div
+                    style={{
+                      borderTop: '2px solid #222',
+                      marginTop: 10,
+                      paddingTop: 8,
+                      fontSize: 13,
+                      textAlign: 'center',
+                      display: 'grid',
+                      gap: 4,
+                    }}
+                  >
+                    <div>
+                      <strong>{settleText}</strong>
+                    </div>
+                    {payLine && (
+                      <div style={{ fontSize: 11.5, color: '#444' }}>
+                        روش پرداخت: {payLine}
+                      </div>
+                    )}
+                    <div style={{ fontSize: 11, color: '#666' }}>
+                      جمعاً {fmt(itemCount)} عدد اقلام — فیش سالن بدون قیمت
+                    </div>
+                  </div>
+                ) : (
+                  <div
+                    style={{
+                      borderTop: '1px dashed #999',
+                      marginTop: 10,
+                      paddingTop: 6,
+                      fontSize: 11,
+                      textAlign: 'center',
+                      color: '#666',
+                    }}
+                  >
+                    جمعاً {fmt(itemCount)} عدد اقلام
+                  </div>
+                )}
+
+                {/* ─── امضا/تشکر ─── */}
+                {!isKitchen && (
+                  <div
+                    style={{
+                      marginTop: 14,
+                      textAlign: 'center',
+                      fontSize: 11.5,
+                      color: '#444',
+                    }}
+                  >
+                    {isHall
+                      ? 'سفارش شما در راه است ☕'
+                      : 'با تشکر از انتخاب شما ☕'}
+                  </div>
+                )}
               </div>
-            )}
-          </div>,
+            )
+          })(),
           document.body
         )}
     </div>
