@@ -12,7 +12,7 @@ import SubscriptionSection from './SubscriptionSection'
 const formatPrice = (n: number) => new Intl.NumberFormat('fa-IR').format(Math.round(n))
 
 type OrderItem = { product_name: string; option_name: string | null; unit_price: number; quantity: number; option_id?: string | null; variant_option_id?: string | null; variant_group_id?: string | null; product_id?: string | null; image_url?: string | null }
-type Order = { id: string; order_number: number; items: OrderItem[]; subtotal: number; original_subtotal: number | null; coupon_code: string | null; coupon_discount: number | null; status: string; created_at: string; cancelled_by: string | null; cancellation_reason_label: string | null; customer_name: string; customer_phone: string; payment_status?: string; payment_method?: string; paid_amount?: number; customer_confirmed?: boolean }
+type Order = { id: string; order_number: number; items: OrderItem[]; subtotal: number; original_subtotal: number | null; coupon_code: string | null; coupon_discount: number | null; status: string; created_at: string; cancelled_by: string | null; cancellation_reason_label: string | null; customer_name: string; customer_phone: string; payment_status?: string; payment_method?: string; paid_amount?: number; customer_confirmed?: boolean; source?: string | null }
 type WalletTx = { id: string; amount: number; kind: string; status: string | null; note: string | null; order_id: string | null; created_at: string }
 type ChargeReq = { id: string; amount: number; status: string; tracking_no: string | null; reject_reason: string | null; purpose?: string; plan_name?: string | null; created_at: string }
 
@@ -969,7 +969,23 @@ export default function MyOrdersClient() {
             return (
               <div key={order.id} className="my-order-card">
                 <div className="my-order-header">
-                  <div className="my-order-num">🧾 سفارش #{formatPrice(order.order_number)}</div>
+                  {/* 🎯 پچ ۵۰-هـ-د: نشان نحوهٔ ثبت — حضوری در کافه یا آنلاین */}
+                  <div className="my-order-num">
+                    🧾 سفارش #{formatPrice(order.order_number)}
+                    <span
+                      style={{
+                        marginInlineStart: 6,
+                        fontSize: 10,
+                        fontWeight: 700,
+                        color: order.source === 'admin' ? '#6b4f3a' : '#4a7c9b',
+                        background: order.source === 'admin' ? '#f3efe7' : '#e8f0f6',
+                        borderRadius: 6,
+                        padding: '2px 6px',
+                      }}
+                    >
+                      {order.source === 'admin' ? '🏪 ثبت حضوری در کافه' : '📱 سفارش آنلاین'}
+                    </span>
+                  </div>
                   <span className="my-order-status" style={{ background: info.color + '20', color: info.color }}>{info.icon} {info.label}</span>
                 </div>
                 

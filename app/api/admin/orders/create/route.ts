@@ -2,6 +2,7 @@ import 'server-only'
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { requireAdminUser } from '@/lib/admin/require-admin'
+import { hashData } from '@/lib/utils/hash'
 import { loadActiveFees, feeForProduct, findActiveTable } from '@/lib/orders/takeaway'
 
 export const dynamic = 'force-dynamic'
@@ -70,8 +71,9 @@ export async function POST(request: NextRequest) {
           : undefined
     if (tableNo === undefined) return bad('شماره‌ی میز نامعتبر است')
 
+    // 🎯 پچ ۵۰-هـ-د: توضیحات شامل پیام‌های آمادهٔ ردیف‌ها هم می‌شود — سقف ۶۰۰
     const cleanNote =
-      typeof note === 'string' && note.trim() ? note.trim().slice(0, 300) : null
+      typeof note === 'string' && note.trim() ? note.trim().slice(0, 600) : null
 
     // ---------- 🎯 پچ ۵۰-د: تخفیف دستی (POS) ----------
     const rawDiscount = body?.manual_discount
@@ -86,6 +88,10 @@ export async function POST(request: NextRequest) {
       if (!Number.isFinite(parsed) || parsed < 0) return bad('مبلغ تخفیف نامعتبر است')
       manualDiscount = Math.floor(parsed)
     }
+
+    // 🎯 پچ ۵۰-هـ-د: منبع تخفیف عضو — مبنای مصرف سهمیهٔ سازمانی
+    const discountSource =
+      typeof body?.discount_source === 'string' ? body.discount_source : null
 
     // ---------- آیتم‌ها ----------
     if (!Array.isArray(items) || items.length === 0 || items.length > MAX_ITEMS) {
@@ -212,6 +218,11 @@ if (wantsTakeaway) {
       serverItems.push({
         product_id: it.product_id,
         product_name: p.name,
+        // 🎯 پچ ۵۰-هـ-د: پیام آمادهٔ این ردیف — در فیش آشپزخانه چاپ می‌شود
+        line_note:
+          typeof it.line_note === 'string' && it.line_note.trim()
+            ? it.line_note.trim().slice(0, 120)
+            : null,
         option_id: it.option_id ?? null,
         option_name: optionName,
         group_name: groupName,
@@ -225,7 +236,55 @@ if (wantsTakeaway) {
 
     // ---------- 🎯 پچ ۵۰-د: اعتبارسنجی تخفیف ----------
     const grossTotal = baseTotal + takeawayTotal
-    if (manualDiscount > grossTotal) return bad('تخفیف بیشتر از مبلغ سفارش است')
+    // 🎯 پچ ۵۰-هـ-د: تخفیف فقط روی اقلام مشمول — سقف واقعی سرور
+    if (manualDiscount > eligibleSubtotal)
+      return bad('تخفیف بیشتر از اقلام مشمول تخفیف است')
+
+    // 🎯 پچ ۵۰-هـ-د: مصرف اعتبار تخفیف عضو سازمانی — همان مکانیزم ثبت آنلاین.
+    // reserve_membership_redemption سهمیهٔ امروز/کل را اتمی رزرو می‌کند؛
+    // اگر ظرفیت پر باشد، فاکتور با تخفیف عضو ثبت نمی‌شود و اپراتور مطلع می‌شود.
+    let membershipRedemptionId: string | null = null
+    const wantsOrgQuota =
+      manualDiscount > 0 &&
+      phone !== '' &&
+      (discountSource === 'org' || discountSource === 'stacked-org')
+    if (wantsOrgQuota) {
+      const { data: orgMember } = await db
+        .from('organization_members')
+        .select(
+          'id, organizations(discount_percent, max_daily_orders, max_total_orders, expires_at)'
+        )
+        .eq('phone_hash', hashData(phone))
+        .eq('is_registered', true)
+        .maybeSingle()
+      const orgRow: any = (orgMember as any)?.organizations ?? null
+      if (
+        orgMember &&
+        orgRow &&
+        new Date(orgRow.expires_at) > new Date() &&
+        Number(orgRow.discount_percent) > 0
+      ) {
+        const { data: redemptionId, error: reserveErr } = await db.rpc(
+          'reserve_membership_redemption',
+          {
+            p_member_id: (orgMember as any).id,
+            p_max_daily: orgRow.max_daily_orders,
+            p_max_total: orgRow.max_total_orders,
+          }
+        )
+        if (reserveErr) {
+          console.error('[admin orders create] reserve_membership_redemption:', reserveErr)
+          return bad('خطا در ثبت سهمیهٔ تخفیف', 500)
+        }
+        if (!redemptionId) {
+          return bad(
+            'اعتبار تخفیف عضو تمام شده است (سهمیهٔ امروز یا کل) — بدون تخفیف عضو ثبت کنید',
+            409
+          )
+        }
+        membershipRedemptionId = redemptionId as string
+      }
+    }
 
     // ---------- ثبت سفارش ----------
     const now = new Date().toISOString()
@@ -257,6 +316,18 @@ if (wantsTakeaway) {
       eligible_subtotal: eligibleSubtotal,
       ineligible_subtotal: baseTotal - eligibleSubtotal + takeawayTotal,
       takeaway_fee_total: takeawayTotal,
+      // 🎯 پچ ۵۰-هـ-د: منبع و مبلغ تخفیف روی فاکتور — در گردش خرید مشتری دیده می‌شود
+      coupon_code:
+        manualDiscount > 0
+          ? discountSource === 'org' || discountSource === 'stacked-org'
+            ? 'MEMBERSHIP'
+            : discountSource === 'subscription' || discountSource === 'stacked-sub'
+              ? 'SUBSCRIPTION'
+              : discountSource === 'grade'
+                ? 'GRADE'
+                : null
+          : null,
+      coupon_discount: manualDiscount > 0 ? manualDiscount : null,
       status: 'confirmed',
       confirmed_at: now,
       payment_status: 'unpaid',
@@ -276,7 +347,23 @@ if (wantsTakeaway) {
 
     if (orderErr || !order) {
       console.error('[admin orders create] insert:', orderErr)
+      if (membershipRedemptionId) {
+        const { error: undoErr } = await db
+          .from('redemption_logs')
+          .delete()
+          .eq('id', membershipRedemptionId)
+        if (undoErr) console.error('[admin orders create] undo redemption:', undoErr)
+      }
       return bad('خطا در ثبت سفارش', 500)
+    }
+
+    // 🎯 پچ ۵۰-هـ-د: رزرو سهمیه به سفارش گره می‌خورد — گردش تخفیف مشتری کامل می‌ماند
+    if (membershipRedemptionId) {
+      const { error: logErr } = await db
+        .from('redemption_logs')
+        .update({ order_id: order.id })
+        .eq('id', membershipRedemptionId)
+      if (logErr) console.error('[admin orders create] redemption link:', logErr)
     }
 
     return NextResponse.json({ order })

@@ -23,6 +23,7 @@ type Line = {
   quantity: number
   takeaway: boolean
   fee: number | null
+  note?: string | null
 }
 
 // 🎯 پچ ۵۰-هـ: مشتری — جستجوی عضو + خلاصهٔ یک‌خطی + دعوت مهمان
@@ -58,8 +59,13 @@ function merge(lines: Line[]): Line[] {
   for (const l of lines) {
     const k = lineKey(l)
     const ex = map.get(k)
-    if (ex) ex.quantity += l.quantity
-    else map.set(k, { ...l })
+    if (ex) {
+      ex.quantity += l.quantity
+      // 🎯 پچ ۵۰-هـ-د: پیام دو ردیفِ هم‌نام در یک خط ترکیب می‌شود
+      if (l.note && l.note !== ex.note) {
+        ex.note = ex.note ? ex.note + '؛ ' + l.note : l.note
+      }
+    } else map.set(k, { ...l })
   }
   return [...map.values()]
 }
@@ -227,6 +233,24 @@ export default function NewOrderClient({
   const [inviteBusy, setInviteBusy] = useState(false)
   const [inviteCopied, setInviteCopied] = useState(false)
 
+  // 🎯 پچ ۵۰-هـ-د: پیام‌های آماده — یکبار تعریف، روی هر ردیف (کافه و غذا)
+  const [quickNotes, setQuickNotes] = useState<string[]>([])
+  const [noteFor, setNoteFor] = useState<string | null>(null)
+  const [newQuick, setNewQuick] = useState('')
+  const [quickBusy, setQuickBusy] = useState(false)
+
+  // 🎯 پچ ۵۰-هـ-د: ارسال لینک دعوت با پیامک — تا تنظیمات پیامک کامل نشود غیرفعال
+  const [smsOk, setSmsOk] = useState(false)
+  const [smsBusy, setSmsBusy] = useState(false)
+  const [smsMsg, setSmsMsg] = useState<{ ok: boolean; text: string } | null>(null)
+
+  // 🎯 پچ ۵۰-هـ-د: تاریخ و ساعت زندهٔ تهران — سمت چپ، بالای بج امروز
+  const [nowTs, setNowTs] = useState(() => Date.now())
+  useEffect(() => {
+    const t = setInterval(() => setNowTs(Date.now()), 20_000)
+    return () => clearInterval(t)
+  }, [])
+
   // 🎯 پچ ۵۰-هـ-ب: شمارندهٔ سفارش‌های امروز کنار عنوان — بعد از هر ثبت موفق رفرش می‌شود
   const [todayStats, setTodayStats] = useState<{ count: number; revenue: number } | null>(null)
   function loadTodayStats() {
@@ -239,6 +263,20 @@ export default function NewOrderClient({
   }
   useEffect(() => {
     loadTodayStats()
+  }, [])
+
+  // 🎯 پچ ۵۰-هـ-د: پیام‌های آماده + وضعیت تنظیمات پیامک
+  useEffect(() => {
+    fetch('/api/admin/pos-quick-notes', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (Array.isArray(d?.notes)) setQuickNotes(d.notes)
+      })
+      .catch(() => {})
+    fetch('/api/admin/invites/sms', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setSmsOk(d?.configured === true))
+      .catch(() => {})
   }, [])
 
   // 🎯 پچ ۵۰-هـ-ب: جستجوی صوتی — Chrome/Edge با fa-IR؛ بدون پشتیبانی مرورگر، دکمه پنهان می‌ماند
@@ -292,6 +330,13 @@ export default function NewOrderClient({
     )
     return (id: string) => m.get(id) ?? { color: '#6b4f3a', icon: null }
   }, [categories])
+
+  // 🎯 پچ ۵۰-هـ-د: نقشهٔ مشمولیت تخفیف — محصول و دسته (همان قانون سرور)
+  const productMap = useMemo(() => new Map(products.map((p) => [p.id, p])), [products])
+  const catElig = useMemo(
+    () => new Map(categories.map((c) => [c.id, c.coupon_eligible])),
+    [categories]
+  )
 
   const shown = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -384,6 +429,7 @@ export default function NewOrderClient({
       quantity: 1,
       takeaway: false,
       fee,
+      note: null,
     }
     setLines((prev) => merge([...prev, line]))
     setDone(null)
@@ -434,6 +480,21 @@ export default function NewOrderClient({
     0
   )
   const gross = base + fees
+
+  // 🎯 پچ ۵۰-هـ-د: اقلام مشمول تخفیف — همان قانون سرور: فلگ محصول، وگرنه فلگ دسته.
+  // تخفیف فقط روی همین بخش محاسبه می‌شود؛ اقلام غیرمشمول جدا و دست‌نخورده می‌مانند.
+  const isEligible = (l: Line) => {
+    const p = productMap.get(l.product_id)
+    if (!p) return true
+    if (p.coupon_eligible === true) return true
+    if (p.coupon_eligible === false) return false
+    return catElig.get(p.category_id) !== false
+  }
+  const eligibleBase = lines.reduce(
+    (s, l) => (isEligible(l) ? s + l.unit_price * l.quantity : s),
+    0
+  )
+  const ineligibleBase = base - eligibleBase
   const discountVal = Math.max(0, Math.floor(Number(normalizeDigits(discount) || 0) || 0))
   const total = Math.max(0, gross - discountVal)
 
@@ -441,9 +502,9 @@ export default function NewOrderClient({
   const memberPct = memberInfo?.active?.percent ?? 0
   useEffect(() => {
     if (discountAuto !== 'member' || memberPct <= 0) return
-    const amt = Math.round((gross * memberPct) / 100)
+    const amt = Math.round((eligibleBase * memberPct) / 100)
     setDiscount(amt > 0 ? String(amt) : '')
-  }, [discountAuto, gross, memberPct])
+  }, [discountAuto, eligibleBase, memberPct])
 
   // 🎯 پچ ۵۰-هـ: دعوت‌نامهٔ عضویت برای مهمان — همان API پنل کیف پول
   async function createInvite() {
@@ -479,10 +540,76 @@ export default function NewOrderClient({
     } catch {}
   }
 
+  // 🎯 پچ ۵۰-هـ-د: ارسال لینک دعوت با پیامک برای مهمانِ حاضر
+  const invitePhoneOk = /^09\d{9}$/.test(normalizeDigits(guestPhone))
+  async function sendInviteSms() {
+    if (!invite || !invitePhoneOk) return
+    setSmsBusy(true)
+    setSmsMsg(null)
+    try {
+      const res = await fetch('/api/admin/invites/sms', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: invite.token, phone: normalizeDigits(guestPhone) }),
+      })
+      const data = await res.json().catch(() => null)
+      if (res.ok) setSmsMsg({ ok: true, text: '📨 پیامک با موفقیت ارسال شد' })
+      else setSmsMsg({ ok: false, text: data?.error || 'ارسال پیامک ناموفق بود' })
+    } catch {
+      setSmsMsg({ ok: false, text: 'خطای ارتباط با سرور' })
+    } finally {
+      setSmsBusy(false)
+    }
+  }
+
+  // 🎯 پچ ۵۰-هـ-د: مدیریت پیام‌های آماده — افزودن/حذف + انتخاب برای ردیف
+  function setLineNote(k: string, n: string) {
+    const v = n.trim()
+    setLines((prev) =>
+      prev.map((l) => (lineKey(l) === k ? { ...l, note: v || null } : l))
+    )
+    setNoteFor(null)
+  }
+  async function addQuickNote() {
+    const t = newQuick.trim()
+    if (!t || quickBusy) return
+    setQuickBusy(true)
+    try {
+      const res = await fetch('/api/admin/pos-quick-notes', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ note: t }),
+      })
+      const data = await res.json().catch(() => null)
+      if (res.ok && Array.isArray(data?.notes)) {
+        setQuickNotes(data.notes)
+        setNewQuick('')
+      }
+    } catch {}
+    setQuickBusy(false)
+  }
+  async function delQuickNote(n: string) {
+    if (quickBusy) return
+    setQuickBusy(true)
+    try {
+      const res = await fetch('/api/admin/pos-quick-notes', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ remove: n }),
+      })
+      const data = await res.json().catch(() => null)
+      if (res.ok && Array.isArray(data?.notes)) setQuickNotes(data.notes)
+    } catch {}
+    setQuickBusy(false)
+  }
+
   async function submit() {
     setError('')
     if (lines.length === 0) return setError('هیچ آیتمی انتخاب نشده است')
-    if (discountVal > gross) return setError('تخفیف بیشتر از مبلغ سفارش است')
+    if (discountVal > eligibleBase)
+      return setError(
+        'تخفیف نمی‌تواند بیشتر از اقلام مشمول تخفیف (' + fmt(eligibleBase) + ' تومان) باشد'
+      )
     setBusy(true)
     try {
       const res = await fetch('/api/admin/orders/create', {
@@ -492,14 +619,34 @@ export default function NewOrderClient({
           customer_name: selectedMember?.name ?? guestName,
           customer_phone: selectedMember?.phone ?? guestPhone,
           table_number: selectedTable === '' ? null : Number(selectedTable),
-          note,
+          // 🎯 پچ ۵۰-هـ-د: پیام‌های آمادهٔ ردیف‌ها به تفکیک + توضیحات دستی
+          note:
+            [
+              lines
+                .filter((l) => (l.note ?? '').trim())
+                .map(
+                  (l) =>
+                    `${l.name}${l.option_name ? ' (' + l.option_name + ')' : ''} ×${fmt(l.quantity)}: ${l.note!.trim()}`
+                )
+                .join('\n'),
+              note.trim(),
+            ]
+              .filter(Boolean)
+              .join('\n') || null,
           is_test: isTest,
           manual_discount: discountVal,
+          // 🎯 پچ ۵۰-هـ-د: منبع تخفیف عضو — سرور روی همین مبنا سهمیه را مصرف می‌کند
+          discount_source:
+            discountAuto === 'member' && memberPct > 0
+              ? memberInfo?.active?.source ?? null
+              : null,
           items: lines.map((l) => ({
             product_id: l.product_id,
             option_id: l.option_id,
             quantity: l.quantity,
             takeaway: l.takeaway,
+            // 🎯 پچ ۵۰-هـ-د: پیام آمادهٔ هر ردیف — در فیش آشپزخانه چاپ می‌شود
+            line_note: (l.note ?? '').trim() || null,
           })),
         }),
       })
@@ -524,33 +671,39 @@ export default function NewOrderClient({
     }
   }
 
+  // 🎯 پچ ۵۰-هـ-د: تاریخ شمسی + ساعت زنده — مثل «یکشنبه ۱۴۰۵/۰۸/۲۳» و «۱۶:۴۶»
+  const nowDate = new Date(nowTs)
+  const jalaliDate = new Intl.DateTimeFormat('fa-IR', {
+    weekday: 'long',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(nowDate)
+  const clock = new Intl.DateTimeFormat('fa-IR', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(nowDate)
+
   return (
     <div
       className="pos-root"
       ref={rootRef}
       style={posHeight ? { height: posHeight } : undefined}
     >
-      <h1 className="pos-root-title">
-        🧾 ثبت سفارش حضوری (POS)
-        {/* 🎯 پچ ۵۰-هـ-ب: شمارندهٔ سفارش‌های امروز — بدون لغوشده و تستی */}
-        {todayStats && (
-          <span
-            style={{
-              fontSize: 12,
-              fontWeight: 700,
-              color: '#6b4f3a',
-              background: '#f3efe7',
-              border: '1px solid #e3ddd2',
-              borderRadius: 999,
-              padding: '3px 10px',
-              marginRight: 8,
-              whiteSpace: 'nowrap',
-            }}
-          >
-            📊 امروز: {fmt(todayStats.count)} سفارش
-          </span>
-        )}
-      </h1>
+      {/* 🎯 پچ ۵۰-هـ-د: تاریخ و ساعت زندهٔ تهران + شمارندهٔ امروز — سمت چپ فرم */}
+      <div className="pos-title-row">
+        <h1 className="pos-root-title">🧾 ثبت سفارش حضوری (POS)</h1>
+        <div className="pos-clock-box">
+          <span className="pos-clock-date">{jalaliDate}</span>
+          <span className="pos-clock-time">{clock}</span>
+          {todayStats && (
+            <span className="pos-today-badge">
+              📊 امروز: {fmt(todayStats.count)} سفارش
+            </span>
+          )}
+        </div>
+      </div>
       <p className="pos-root-sub">
         اول مشتری، بعد میز، بعد محصولات — همه‌چیز در یک صفحه.
       </p>
@@ -938,7 +1091,35 @@ export default function NewOrderClient({
                     {l.takeaway && l.fee ? (
                       <small style={{ color: '#b45309' }}> 🥡</small>
                     ) : null}
+                    {l.note && (
+                      <small
+                        style={{
+                          display: 'block',
+                          color: '#b45309',
+                          fontWeight: 700,
+                          marginTop: 2,
+                        }}
+                      >
+                        📝 {l.note}
+                      </small>
+                    )}
                   </div>
+                  {/* 🎯 پچ ۵۰-هـ-د: پیام آماده برای همین ردیف — کافه و غذا */}
+                  <button
+                    type="button"
+                    title="پیام آماده برای این آیتم"
+                    style={{
+                      ...smallBtn,
+                      padding: '2px 7px',
+                      fontSize: 13,
+                      background: l.note ? '#e9f3ec' : '#fff',
+                      borderColor: l.note ? '#3f7d5c' : '#d9cfc0',
+                      flexShrink: 0,
+                    }}
+                    onClick={() => setNoteFor(k)}
+                  >
+                    💬
+                  </button>
                   {l.fee ? (
                     <button
                       type="button"
@@ -996,6 +1177,19 @@ export default function NewOrderClient({
                 <strong>{fmt(fees)}</strong>
               </div>
             )}
+            {ineligibleBase > 0 && (
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  fontSize: 11.5,
+                  color: '#8a5a24',
+                }}
+              >
+                <span>⛔ غیرمشمول تخفیف</span>
+                <strong>{fmt(ineligibleBase)}</strong>
+              </div>
+            )}
             {discountVal > 0 && (
               <div
                 style={{
@@ -1010,6 +1204,12 @@ export default function NewOrderClient({
                   {discountAuto === 'member' && memberPct > 0
                     ? ` (${fmt(memberPct)}٪ عضو)`
                     : ' دستی'}
+                  {ineligibleBase > 0 && (
+                    <small style={{ fontSize: 10.5, color: '#8a5a24' }}>
+                      {' '}
+                      — فقط اقلام مشمول
+                    </small>
+                  )}
                 </span>
                 <strong>−{fmt(discountVal)}</strong>
               </div>
@@ -1170,6 +1370,113 @@ export default function NewOrderClient({
         </div>
       )}
 
+      {/* 🎯 پچ ۵۰-هـ-د: انتخاب پیام آماده برای ردیف سبد — کافه و غذا */}
+      {noteFor && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.45)',
+            zIndex: 1000,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 16,
+          }}
+          onClick={() => setNoteFor(null)}
+        >
+          <div
+            style={{
+              background: '#fff',
+              color: '#333',
+              borderRadius: 14,
+              padding: 16,
+              maxWidth: 380,
+              width: '100%',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 style={{ margin: '0 0 10px' }}>
+              💬 پیام آماده — {lines.find((l) => lineKey(l) === noteFor)?.name ?? ''}
+            </h3>
+            {quickNotes.length === 0 && (
+              <p style={{ color: '#766f64', fontSize: 13, margin: '0 0 10px' }}>
+                هنوز پیام آماده‌ای نساخته‌ای — اولین را همین‌جا اضافه کن (مثلاً «بدون شکر»،
+                «اسپرسو دبل»، «کم نمک»).
+              </p>
+            )}
+            <div style={{ display: 'grid', gap: 6, maxHeight: 260, overflowY: 'auto' }}>
+              {quickNotes.map((n) => (
+                <div key={n} style={{ display: 'flex', gap: 6 }}>
+                  <button
+                    type="button"
+                    style={{
+                      flex: 1,
+                      textAlign: 'right',
+                      padding: '8px 12px',
+                      border: '1px solid #e3ddd2',
+                      borderRadius: 10,
+                      background: '#fdf6ec',
+                      color: '#6b4f3a',
+                      font: 'inherit',
+                      fontSize: 13,
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                    }}
+                    onClick={() => setLineNote(noteFor, n)}
+                  >
+                    ➕ {n}
+                  </button>
+                  <button
+                    type="button"
+                    title="حذف از پیام‌های آماده"
+                    style={{ ...smallBtn, padding: '4px 10px', flexShrink: 0 }}
+                    onClick={() => delQuickNote(n)}
+                  >
+                    🗑
+                  </button>
+                </div>
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
+              <input
+                style={input}
+                placeholder="پیام آمادهٔ جدید…"
+                value={newQuick}
+                onChange={(e) => setNewQuick(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    addQuickNote()
+                  }
+                }}
+              />
+              <button
+                type="button"
+                style={{ ...smallBtn, flexShrink: 0, fontWeight: 700 }}
+                onClick={addQuickNote}
+              >
+                {quickBusy ? '...' : '+ افزودن'}
+              </button>
+            </div>
+            <div
+              style={{ display: 'flex', gap: 6, marginTop: 8, justifyContent: 'flex-start' }}
+            >
+              <button
+                type="button"
+                style={{ ...smallBtn, color: '#9b3c32' }}
+                onClick={() => setLineNote(noteFor, '')}
+              >
+                پاک کردن پیام این ردیف
+              </button>
+              <button type="button" style={smallBtn} onClick={() => setNoteFor(null)}>
+                بستن
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 🎯 پچ ۵۰-هـ: مودال دعوت‌نامهٔ عضویت — لینک + QR برای اسکن با گوشی مشتری */}
       {invite && (
         <div
@@ -1238,6 +1545,61 @@ export default function NewOrderClient({
               <button type="button" style={smallBtn} onClick={() => setInvite(null)}>
                 بستن
               </button>
+            </div>
+
+            {/* 🎯 پچ ۵۰-هـ-د: ارسال لینک با پیامک — تا پیامک تنظیم نشود و شماره معتبر نباشد، خاموش */}
+            <div style={{ marginTop: 8 }}>
+              <button
+                type="button"
+                disabled={smsBusy || !smsOk || !invitePhoneOk}
+                title={
+                  !smsOk
+                    ? 'اول کلید پیامک را در تنظیمات ادمین وارد کنید'
+                    : !invitePhoneOk
+                      ? 'شمارهٔ موبایل مهمان را در ردیف مشتری وارد کنید'
+                      : 'ارسال لینک ثبت‌نام با پیامک'
+                }
+                onClick={sendInviteSms}
+                style={{
+                  width: '100%',
+                  padding: 10,
+                  border: '1px solid #e3ddd2',
+                  borderRadius: 10,
+                  background: smsOk && invitePhoneOk ? '#2d5d3e' : '#efece6',
+                  color: smsOk && invitePhoneOk ? '#fff' : '#9a927f',
+                  font: 'inherit',
+                  fontWeight: 700,
+                  cursor: smsOk && invitePhoneOk ? 'pointer' : 'not-allowed',
+                }}
+              >
+                {smsBusy ? '⏳ در حال ارسال...' : '📨 ارسال لینک با پیامک'}
+              </button>
+              {smsMsg && (
+                <small
+                  style={{
+                    display: 'block',
+                    marginTop: 6,
+                    fontSize: 12,
+                    color: smsMsg.ok ? '#2d5d3e' : '#9b3c32',
+                  }}
+                >
+                  {smsMsg.text}
+                </small>
+              )}
+              {!smsOk && (
+                <small
+                  style={{ display: 'block', marginTop: 6, fontSize: 11, color: '#8a5a24' }}
+                >
+                  پیامک تنظیم نشده — کلید کاوه‌نگار را در تنظیمات ادمین وارد کنید.
+                </small>
+              )}
+              {!invitePhoneOk && smsOk && (
+                <small
+                  style={{ display: 'block', marginTop: 6, fontSize: 11, color: '#8a5a24' }}
+                >
+                  شمارهٔ موبایل مهمان را در کادر بالای فرم وارد کنید.
+                </small>
+              )}
             </div>
           </div>
         </div>
