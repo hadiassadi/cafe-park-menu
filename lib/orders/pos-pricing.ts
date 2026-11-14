@@ -133,5 +133,11 @@ if (wantsTakeaway) {
       })
     }
 
+  // 🐛 فیکس ۵۰-هـ-ز: بازگشت موفق — در استخراج اولیه جا افتاده بود و همهٔ ثبت‌ها خطا می‌دادند
+  return {
+    ok: true,
+    data: { serverItems, baseTotal, takeawayTotal, eligibleSubtotal },
+  }
+
   return { ok: false, error: 'خطا در قیمت‌گذاری آیتم‌ها', status: 500 }
 }

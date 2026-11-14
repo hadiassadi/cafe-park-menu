@@ -67,16 +67,31 @@ function getStartOfMonth(date: Date): Date {
 export const getOrderStats = cache(async (): Promise<OrderStats> => {
   const db = createDb()
   const now = new Date()
-  const oneYearAgo = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000)
+  // 🐛 فیکس ۵۰-هـ-ز: قبلاً کل «یک سال» سفارش با ستون jsonb آیتم‌ها می‌آمد و
+  // داشبورد دقیقه‌ها روی لودر می‌ماند. نمودارها حداکثر ۶ ماه را نشان می‌دهند
+  // و آیتم‌ها فقط برای «پرفروش‌های ۳۰ روزه» لازم است → دو کوئری سبک موازی.
+  const sixMonthsAgo = new Date(now.getTime() - 183 * 24 * 60 * 60 * 1000)
+  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
 
-  const { data: orders, error } = await db
-    .from('orders')
-    .select('created_at, subtotal, status, items')
-    .gte('created_at', oneYearAgo.toISOString())
-    .neq('status', 'cancelled')
+  const [totalsRes, itemsRes] = await Promise.all([
+    db
+      .from('orders')
+      .select('created_at, subtotal, status')
+      .gte('created_at', sixMonthsAgo.toISOString())
+      .neq('status', 'cancelled')
 	.is('deleted_at', null)
-	.eq('is_test', false)
-    .order('created_at', { ascending: false })
+	.eq('is_test', false),
+    db
+      .from('orders')
+      .select('created_at, items')
+      .gte('created_at', thirtyDaysAgo.toISOString())
+      .neq('status', 'cancelled')
+	.is('deleted_at', null)
+	.eq('is_test', false),
+  ])
+
+  const orders = totalsRes.data
+  const error = totalsRes.error || itemsRes.error
 
   const emptyStats: OrderStats = {
     today: { orders: 0, revenue: 0 },
@@ -138,19 +153,6 @@ export const getOrderStats = cache(async (): Promise<OrderStats> => {
       prevMonthRevenue += revenue
     }
 
-    if (orderDate >= new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)) {
-      const items = Array.isArray(order.items) ? order.items : []
-      for (const item of items) {
-        const name = item?.product_name || 'نامشخص'
-        const count = Number(item?.quantity) || 0
-        const price = Number(item?.unit_price) || 0
-        const existing = productMap.get(name) || { count: 0, revenue: 0 }
-        existing.count += count
-        existing.revenue += price * count
-        productMap.set(name, existing)
-      }
-    }
-
     const dayKey = orderDate.toISOString().split('T')[0]
     const existingDay = dailyMap.get(dayKey) || { revenue: 0, orders: 0 }
     existingDay.revenue += revenue
@@ -168,9 +170,23 @@ export const getOrderStats = cache(async (): Promise<OrderStats> => {
     existingMonth.orders++
     monthlyMap.set(monthKey, existingMonth)
 
-    if (orderDate >= new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)) {
+    if (orderDate >= thirtyDaysAgo) {
       const hour = orderDate.getHours()
       hourMap.set(hour, (hourMap.get(hour) || 0) + 1)
+    }
+  }
+
+  // پرفروش‌ترین محصولات — از کوئری سبکِ ۳۰ روزه (همین‌جا jsonb می‌آید)
+  for (const order of itemsRes.data ?? []) {
+    const items = Array.isArray(order.items) ? order.items : []
+    for (const item of items) {
+      const name = item?.product_name || 'نامشخص'
+      const count = Number(item?.quantity) || 0
+      const price = Number(item?.unit_price) || 0
+      const existing = productMap.get(name) || { count: 0, revenue: 0 }
+      existing.count += count
+      existing.revenue += price * count
+      productMap.set(name, existing)
     }
   }
 
