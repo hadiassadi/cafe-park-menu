@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import type { Category, Product } from '@/lib/menu-types'
 
 const LEGACY_GROUP = 'بیرون بر'
@@ -95,11 +95,18 @@ const chip = (active: boolean): React.CSSProperties => ({
   fontWeight: active ? 700 : 400,
 })
 
-export default function NewOrderClient({ tables }: { tables: PosTable[] }) {
-  const [categories, setCategories] = useState<Category[]>([])
-  const [products, setProducts] = useState<Product[]>([])
-  const [loading, setLoading] = useState(true)
-  const [loadError, setLoadError] = useState('')
+// 🎯 پچ ۵۰-د-ب: منو (دسته‌ها و محصولات) هم server-side با supabaseAdmin خوانده
+// می‌شود و به‌جای /api/menu (که با کلاینت کاربر و RLS deny-all خالی برمی‌گشت)
+// از props می‌آید — همان الگوی صفحهٔ میزها
+export default function NewOrderClient({
+  tables,
+  categories,
+  products,
+}: {
+  tables: PosTable[]
+  categories: Category[]
+  products: Product[]
+}) {
   const [search, setSearch] = useState('')
   const [cat, setCat] = useState('all')
   const [lines, setLines] = useState<Line[]>([])
@@ -116,17 +123,6 @@ export default function NewOrderClient({ tables }: { tables: PosTable[] }) {
   const [discount, setDiscount] = useState('')
   const [variantFor, setVariantFor] = useState<Product | null>(null)
   const [pickedOption, setPickedOption] = useState('')
-
-  useEffect(() => {
-    fetch('/api/menu', { cache: 'no-store' })
-      .then((r) => r.json())
-      .then((d) => {
-        setCategories(d.categories ?? [])
-        setProducts(d.products ?? [])
-      })
-      .catch(() => setLoadError('بارگذاری منو ناموفق بود'))
-      .finally(() => setLoading(false))
-  }, [])
 
   const shown = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -336,9 +332,6 @@ export default function NewOrderClient({ tables }: { tables: PosTable[] }) {
             ))}
           </div>
 
-          {loading && <p>در حال بارگذاری...</p>}
-          {loadError && <p className="danger">{loadError}</p>}
-
           {/* 🎯 پچ ۵۰-د: گرید تایل لمسی به‌جای فهرست ردیفی */}
           <div
             style={{
@@ -368,7 +361,7 @@ export default function NewOrderClient({ tables }: { tables: PosTable[] }) {
                 </button>
               )
             })}
-            {!loading && shown.length === 0 && <p>محصولی پیدا نشد.</p>}
+            {shown.length === 0 && <p>محصولی پیدا نشد.</p>}
           </div>
         </section>
 
