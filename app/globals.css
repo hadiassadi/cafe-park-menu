@@ -15374,7 +15374,7 @@ a.cat {
   flex: 1;
   overflow-y: auto;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
   gap: 8px;
   align-content: start;
   padding-top: 2px;
@@ -15498,4 +15498,52 @@ a.cat {
   background: transparent;
   border-color: var(--admin-border);
   color: var(--admin-text);
+}
+
+/* ═══════════ 🎯 پچ ۵۰-هـ-ب: صیقل ظاهری POS ═══════════ */
+
+/* پس‌زمینهٔ تایل با کلاس (نه inline) تا دارک‌مود هم کار کند */
+.pos-tile {
+  background: #ffffff;
+  color: #29251f;
+  transition: transform 0.06s ease, box-shadow 0.12s ease;
+}
+
+/* بازخورد لمسی/موس: سایهٔ ملایم و فشار */
+.pos-tile:hover {
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.09);
+  transform: translateY(-1px);
+}
+
+.pos-tile:active {
+  transform: scale(0.97);
+}
+
+.pos-tile img {
+  pointer-events: none;
+  user-select: none;
+}
+
+.pos-tab:hover {
+  filter: brightness(0.95);
+}
+
+.admin-shell.dark-mode .pos-tile {
+  background: var(--admin-surface);
+  border-color: var(--admin-border);
+  color: var(--admin-text);
+}
+
+/* 🎯 پچ ۵۰-هـ-ب: نوار پیشنهاد ویژه — اسکرول افقی ظریف */
+.pos-featured-row {
+  scrollbar-width: thin;
+}
+
+.pos-featured-row::-webkit-scrollbar {
+  height: 6px;
+}
+
+.pos-featured-row::-webkit-scrollbar-thumb {
+  background: #e3ddd2;
+  border-radius: 999px;
 }
