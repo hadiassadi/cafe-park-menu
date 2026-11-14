@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { supabaseAdmin } from '@/lib/supabase/server'
 import NewOrderClient from './NewOrderClient'
 
 export const metadata: Metadata = {
@@ -8,10 +9,19 @@ export const metadata: Metadata = {
 
 export const dynamic = 'force-dynamic'
 
-export default function NewOrderPage() {
+export default async function NewOrderPage() {
+  // 🎯 پچ ۵۰-د: فهرست میزهای فعال برای انتخاب لمسی در POS
+  const db = supabaseAdmin()
+  const { data: tables } = await db
+    .from('tables')
+    .select('id, number, name, location, is_active')
+    .eq('is_active', true)
+    .order('sort_order', { ascending: true })
+    .order('number', { ascending: true })
+
   return (
     <main className="admin">
-      <NewOrderClient />
+      <NewOrderClient tables={tables ?? []} />
     </main>
   )
 }

@@ -73,6 +73,20 @@ export async function POST(request: NextRequest) {
     const cleanNote =
       typeof note === 'string' && note.trim() ? note.trim().slice(0, 300) : null
 
+    // ---------- 🎯 پچ ۵۰-د: تخفیف دستی (POS) ----------
+    const rawDiscount = body?.manual_discount
+    let manualDiscount = 0
+    if (rawDiscount != null && rawDiscount !== '') {
+      const parsed = Number(
+        String(rawDiscount)
+          .replace(/[۰-۹]/g, (ch) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(ch)))
+          .replace(/[٠-٩]/g, (ch) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(ch)))
+          .replace(/\D/g, '') || 0
+      )
+      if (!Number.isFinite(parsed) || parsed < 0) return bad('مبلغ تخفیف نامعتبر است')
+      manualDiscount = Math.floor(parsed)
+    }
+
     // ---------- آیتم‌ها ----------
     if (!Array.isArray(items) || items.length === 0 || items.length > MAX_ITEMS) {
       return bad('هیچ آیتمی انتخاب نشده است')
@@ -209,6 +223,10 @@ if (wantsTakeaway) {
       })
     }
 
+    // ---------- 🎯 پچ ۵۰-د: اعتبارسنجی تخفیف ----------
+    const grossTotal = baseTotal + takeawayTotal
+    if (manualDiscount > grossTotal) return bad('تخفیف بیشتر از مبلغ سفارش است')
+
     // ---------- ثبت سفارش ----------
     const now = new Date().toISOString()
     let order: any = null
@@ -233,8 +251,9 @@ if (wantsTakeaway) {
       table_id: tableRow?.id ?? null,
       note: cleanNote,
       items: serverItems,
-      subtotal: baseTotal + takeawayTotal,
-      original_subtotal: baseTotal + takeawayTotal,
+      subtotal: grossTotal - manualDiscount,
+      original_subtotal: grossTotal,
+      manual_discount: manualDiscount,
       eligible_subtotal: eligibleSubtotal,
       ineligible_subtotal: baseTotal - eligibleSubtotal + takeawayTotal,
       takeaway_fee_total: takeawayTotal,
