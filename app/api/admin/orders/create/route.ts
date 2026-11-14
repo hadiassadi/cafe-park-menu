@@ -3,7 +3,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { requireAdminUser } from '@/lib/admin/require-admin'
 import { hashData } from '@/lib/utils/hash'
-import { loadActiveFees, feeForProduct, findActiveTable } from '@/lib/orders/takeaway'
+import { findActiveTable } from '@/lib/orders/takeaway'
+import { pricePosItems } from '@/lib/orders/pos-pricing'
 
 export const dynamic = 'force-dynamic'
 
@@ -119,120 +120,10 @@ if (tableNo !== null) {
   if (!tableRow) return bad('این میز وجود ندارد یا غیرفعال است')
 }
 
-    const productIds = [...new Set(items.map((i: any) => i.product_id as string))]
-    const optionIds = [
-      ...new Set(items.filter((i: any) => i.option_id).map((i: any) => i.option_id as string)),
-    ]
-
-    const { data: products, error: prodErr } = await db
-      .from('products')
-      .select('id, name, price, is_active, is_available, coupon_eligible, takeaway_fee_id, categories(coupon_eligible, takeaway_fee_id)')
-      .in('id', productIds)
-    if (prodErr || !products) {
-      console.error('[admin orders create] products:', prodErr)
-      return bad('خطا در ثبت سفارش', 500)
-    }
-    const productMap = new Map<string, any>(products.map((p: any) => [p.id, p]))
-const feeMap = await loadActiveFees(db, products)
-
-    const { data: requiredGroups, error: reqErr } = await db
-      .from('variant_groups')
-      .select('id, product_id')
-      .in('product_id', productIds)
-      .eq('is_required', true)
-    if (reqErr) {
-      console.error('[admin orders create] groups:', reqErr)
-      return bad('خطا در ثبت سفارش', 500)
-    }
-
-    let optionMap = new Map<string, any>()
-    if (optionIds.length > 0) {
-      const { data: options, error: optErr } = await db
-        .from('variant_options')
-        .select('id, group_id, name, price_modifier, is_available, variant_groups(product_id, name)')
-        .in('id', optionIds)
-      if (optErr || !options) {
-        console.error('[admin orders create] options:', optErr)
-        return bad('خطا در ثبت سفارش', 500)
-      }
-      optionMap = new Map<string, any>(options.map((o: any) => [o.id, o]))
-    }
-
-    // ---------- قیمت‌گذاری سمت سرور (بدون تخفیف) ----------
-    const serverItems: any[] = []
-    let baseTotal = 0
-	let takeawayTotal = 0
-    let eligibleSubtotal = 0
-
-    for (const it of items) {
-      const p = productMap.get(it.product_id)
-      if (!p || !p.is_active || p.is_available === false) {
-        return bad('یکی از محصولات در دسترس نیست')
-      }
-
-      let optionName: string | null = null
-      let groupName: string | null = null
-      let modifier = 0
-
-      if (it.option_id) {
-        const o = optionMap.get(it.option_id)
-        const grp: any = o?.variant_groups
-        if (!o || o.is_available === false || !grp || grp.product_id !== it.product_id) {
-          return bad('گزینه‌ی انتخاب‌شده نامعتبر است')
-        }
-        modifier = Number(o.price_modifier) || 0
-        optionName = o.name
-        groupName = grp.name
-      } else {
-        const needsOption = (requiredGroups ?? []).some(
-          (g: any) => g.product_id === it.product_id
-        )
-        if (needsOption) return bad(`برای «${p.name}» انتخاب گزینه الزامی است`)
-      }
-
-      const unitPrice = it.option_id ? modifier : Number(p.price)
-      if (!Number.isFinite(unitPrice) || unitPrice <= 0) return bad('قیمت نامعتبر است', 500)
-
-      const lineTotal = unitPrice * it.quantity
-      baseTotal += lineTotal
-
-      const eligible =
-        p.coupon_eligible === true
-          ? true
-          : p.coupon_eligible === false
-            ? false
-            : p.categories?.coupon_eligible === false
-              ? false
-              : true
-      if (eligible) eligibleSubtotal += lineTotal
-const wantsTakeaway = it.takeaway === true
-let takeawayFee = 0
-let takeawayLabel: string | null = null
-if (wantsTakeaway) {
-  const f = feeForProduct(p, feeMap)
-  if (!f) return bad(`بیرون‌بر برای «${p.name}» در دسترس نیست`)
-  takeawayFee = f.fee
-  takeawayLabel = f.name
-  takeawayTotal += f.fee * it.quantity
-}
-      serverItems.push({
-        product_id: it.product_id,
-        product_name: p.name,
-        // 🎯 پچ ۵۰-هـ-د: پیام آمادهٔ این ردیف — در فیش آشپزخانه چاپ می‌شود
-        line_note:
-          typeof it.line_note === 'string' && it.line_note.trim()
-            ? it.line_note.trim().slice(0, 120)
-            : null,
-        option_id: it.option_id ?? null,
-        option_name: optionName,
-        group_name: groupName,
-        unit_price: unitPrice,
-        quantity: it.quantity,
-		takeaway: wantsTakeaway,
-		takeaway_fee: takeawayFee,
-		takeaway_label: takeawayLabel,
-      })
-    }
+    // 🎯 پچ ۵۰-هـ-و: قیمت‌گذاری مشترک ثبت/ویرایش — lib/orders/pos-pricing
+    const priced = await pricePosItems(db, items)
+    if (!priced.ok) return bad(priced.error, priced.status)
+    const { serverItems, baseTotal, takeawayTotal, eligibleSubtotal } = priced.data
 
     // ---------- 🎯 پچ ۵۰-د: اعتبارسنجی تخفیف ----------
     const grossTotal = baseTotal + takeawayTotal

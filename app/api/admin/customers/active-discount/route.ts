@@ -209,13 +209,24 @@ export async function GET(req: NextRequest) {
         membership_label: membershipLabel,
         active,
         orgNote,
+        // 🎯 پچ ۵۰-هـ-و: سهمیهٔ باقی‌ماندهٔ تخفیف سازمانی — نمایش کنار تخفیف در POS
+        orgRemainingToday,
+        orgTotalRemaining,
       },
       { headers: { 'Cache-Control': 'no-store' } }
     )
   } catch (err) {
     console.error('[admin/customers/active-discount]', err)
     return NextResponse.json(
-      { customer_name: null, verification_status: null, membership_label: null, active: null, orgNote: null },
+      {
+        customer_name: null,
+        verification_status: null,
+        membership_label: null,
+        active: null,
+        orgNote: null,
+        orgRemainingToday: null,
+        orgTotalRemaining: null,
+      },
       { status: 200, headers: { 'Cache-Control': 'no-store' } }
     )
   }
