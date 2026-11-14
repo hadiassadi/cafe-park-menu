@@ -15355,7 +15355,9 @@ a.cat {
 .pos-body {
   flex: 1;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 400px;
+  /* 🎯 پچ ۵۰-هـ-ز: ستون منو (سمت راست در RTL) نسبت به عرض صفحه عریض‌تر می‌شود؛
+     سبد هم با clamp مقیاس می‌گیرد تا همیشه fit-page بماند */
+  grid-template-columns: minmax(0, 1fr) clamp(340px, 24vw, 430px);
   gap: 12px;
   min-height: 0;
 }
@@ -15620,4 +15622,17 @@ a.cat {
     max-width: none;
     margin-top: 4px;
   }
+}
+
+/* ========================================
+   54. POS KIOSK MODE — پچ ۵۰-هـ-ز
+   ======================================== */
+.pos-kiosk .admin-sidebar,
+.pos-kiosk .admin-mobile-header,
+.pos-kiosk .admin-sidebar-backdrop,
+.pos-kiosk .admin-sidebar-handle {
+  display: none !important;
+}
+.pos-kiosk .admin-main {
+  padding: 0 !important;
 }

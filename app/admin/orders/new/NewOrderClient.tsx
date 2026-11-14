@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { QRCodeSVG } from 'qrcode.react'
 import type { Category, Product } from '@/lib/menu-types'
 
@@ -306,6 +307,16 @@ export default function NewOrderClient({
   const [ordersLoading, setOrdersLoading] = useState(false)
   const [ordersErr, setOrdersErr] = useState('')
   const [editing, setEditing] = useState<PosOrderRow | null>(null)
+
+  // 🎯 پچ ۵۰-هـ-ز: کیوسک، چاپ، نوار زندهٔ آشپزخانه و بوق سفارش آنلاین
+  const [kiosk, setKiosk] = useState(false)
+  const [soundOn, setSoundOn] = useState(true)
+  const [printing, setPrinting] = useState<PosOrderRow | null>(null)
+  const [printJob, setPrintJob] = useState<{
+    order: PosOrderRow
+    target: 'kitchen' | 'hall' | 'customer'
+  } | null>(null)
+  const lastPendingRef = useRef<number | null>(null)
 
   // 🎯 پچ ۵۰-هـ-ب: شمارندهٔ سفارش‌های امروز کنار عنوان — بعد از هر ثبت موفق رفرش می‌شود
   const [todayStats, setTodayStats] = useState<{ count: number; revenue: number } | null>(null)
@@ -688,8 +699,9 @@ export default function NewOrderClient({
       return 'آماده‌سازی شروع شده — قابل ویرایش نیست'
     return 'ویرایش سفارش'
   }
-  function startEdit(o: PosOrderRow) {
-    if (!isOrderEditable(o)) return
+  // 🎯 پچ ۵۰-هـ-ز: تکرار سفارش — همان بارگیری ولی به‌عنوان سفارش جدید (asNew)
+  function startEdit(o: PosOrderRow, asNew = false) {
+    if (!asNew && !isOrderEditable(o)) return
     setLines(
       o.items.map((it) => ({
         product_id: it.product_id,
@@ -737,7 +749,7 @@ export default function NewOrderClient({
     setDone(null)
     setError('')
     setOrdersOpen(false)
-    setEditing(o)
+    if (!asNew) setEditing(o)
     rootRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
   }
   function cancelEdit() {
@@ -752,6 +764,85 @@ export default function NewOrderClient({
     setCustomerMode('guest')
     setError('')
   }
+
+  // ─── 🎯 پچ ۵۰-هـ-ز: کیوسک، بوق سفارش آنلاین، نوار زنده و چاپ ───
+  function toggleKiosk() {
+    const next = !kiosk
+    setKiosk(next)
+    document.documentElement.classList.toggle('pos-kiosk', next)
+    if (next) {
+      document.documentElement.requestFullscreen?.().catch(() => {})
+    } else if (document.fullscreenElement) {
+      document.exitFullscreen().catch(() => {})
+    }
+  }
+  useEffect(() => () => document.documentElement.classList.remove('pos-kiosk'), [])
+
+  function playNewOrderChime() {
+    try {
+      const Ctx =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext: typeof AudioContext })
+          .webkitAudioContext
+      const ctx = new Ctx()
+      ctx.resume().catch(() => {})
+      const t0 = ctx.currentTime
+      ;[880, 1180].forEach((f, i) => {
+        const o = ctx.createOscillator()
+        const g = ctx.createGain()
+        o.type = 'sine'
+        o.frequency.value = f
+        g.gain.setValueAtTime(0.001, t0 + i * 0.25)
+        g.gain.exponentialRampToValueAtTime(0.4, t0 + i * 0.25 + 0.02)
+        g.gain.exponentialRampToValueAtTime(0.001, t0 + i * 0.25 + 0.22)
+        o.connect(g)
+        g.connect(ctx.destination)
+        o.start(t0 + i * 0.25)
+        o.stop(t0 + i * 0.25 + 0.3)
+      })
+      setTimeout(() => ctx.close().catch(() => {}), 1200)
+    } catch {}
+  }
+
+  // پایهٔ نوار زنده + هر ۶۰ ثانیه (فقط وقتی تب دیده می‌شود)
+  useEffect(() => {
+    loadOrders()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  useEffect(() => {
+    const t = setInterval(() => {
+      if (document.visibilityState === 'visible') loadOrders()
+    }, 60_000)
+    return () => clearInterval(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // بوق سفارش آنلاین جدید — مقایسهٔ تعداد «در انتظار تأیید» با دفعات قبل
+  const livePreparing = ordersList.filter((o) => o.status === 'preparing').length
+  const liveReady = ordersList.filter((o) => o.status === 'ready').length
+  const livePendingOnline = ordersList.filter(
+    (o) => o.source !== 'admin' && o.status === 'pending'
+  ).length
+  useEffect(() => {
+    if (lastPendingRef.current === null) {
+      lastPendingRef.current = livePendingOnline
+      return
+    }
+    if (soundOn && livePendingOnline > lastPendingRef.current) playNewOrderChime()
+    lastPendingRef.current = livePendingOnline
+  }, [livePendingOnline, soundOn])
+
+  // چاپ: بعد از انتخاب مقصد، فیش رندر و دیالوگ چاپ باز می‌شود
+  useEffect(() => {
+    if (!printJob) return
+    const handleAfterPrint = () => setPrintJob(null)
+    window.addEventListener('afterprint', handleAfterPrint)
+    const t = setTimeout(() => window.print(), 350)
+    return () => {
+      window.removeEventListener('afterprint', handleAfterPrint)
+      clearTimeout(t)
+    }
+  }, [printJob])
 
   async function submit() {
     setError('')
@@ -870,6 +961,37 @@ export default function NewOrderClient({
       <p className="pos-root-sub">
         اول مشتری، بعد میز، بعد محصولات — همه‌چیز در یک صفحه.
       </p>
+
+      {/* 🎯 پچ ۵۰-هـ-ز: نوار زندهٔ آشپزخانه + بوق و کیوسک */}
+      <div
+        style={{
+          display: 'flex',
+          gap: 6,
+          flexWrap: 'wrap',
+          alignItems: 'center',
+          flexShrink: 0,
+        }}
+      >
+        <span style={badge('#fdf0e0', '#9a5b1f')}>🔥 در آماده‌سازی: {fmt(livePreparing)}</span>
+        <span style={badge('#e5f0e6', '#2d5d3e')}>✅ آمادهٔ تحویل: {fmt(liveReady)}</span>
+        <span style={badge('#e8f0f6', '#4a7c9b')}>📱 در انتظار تأیید آنلاین: {fmt(livePendingOnline)}</span>
+        <button
+          type="button"
+          style={smallBtn}
+          title={soundOn ? 'بوق سفارش آنلاین روشن است' : 'بوق خاموش'}
+          onClick={() => setSoundOn((v) => !v)}
+        >
+          {soundOn ? '🔔' : '🔕'}
+        </button>
+        <button
+          type="button"
+          style={smallBtn}
+          title="حالت کیوسک — تمام‌صفحه و بدون منوی ادمین"
+          onClick={toggleKiosk}
+        >
+          🖥️ {kiosk ? 'خروج از کیوسک' : 'کیوسک'}
+        </button>
+      </div>
 
       {done !== null && (
         <div style={{ ...card, background: '#e8f1e9', padding: 10, flexShrink: 0 }}>
@@ -1721,22 +1843,43 @@ export default function NewOrderClient({
                           </div>
                         )}
                       </div>
-                      <button
-                        type="button"
-                        disabled={!isOrderEditable(o)}
-                        title={editBlockReason(o)}
-                        onClick={() => startEdit(o)}
-                        style={{
-                          ...smallBtn,
-                          flexShrink: 0,
-                          fontSize: 13,
-                          padding: '6px 10px',
-                          opacity: isOrderEditable(o) ? 1 : 0.45,
-                          cursor: isOrderEditable(o) ? 'pointer' : 'not-allowed',
-                        }}
-                      >
-                        ✏️
-                      </button>
+                      <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                        <button
+                          type="button"
+                          title="چاپ فیش (آشپزخانه / سالن / مشتری)"
+                          onClick={() => setPrinting(o)}
+                          style={{ ...smallBtn, fontSize: 13, padding: '6px 8px' }}
+                        >
+                          🖨️
+                        </button>
+                        <button
+                          type="button"
+                          title="تکرار این سفارش در سبد جدید"
+                          onClick={() => {
+                            setOrdersOpen(false)
+                            startEdit(o, true)
+                          }}
+                          style={{ ...smallBtn, fontSize: 13, padding: '6px 8px' }}
+                        >
+                          🔁
+                        </button>
+                        <button
+                          type="button"
+                          disabled={!isOrderEditable(o)}
+                          title={editBlockReason(o)}
+                          onClick={() => startEdit(o)}
+                          style={{
+                            ...smallBtn,
+                            flexShrink: 0,
+                            fontSize: 13,
+                            padding: '6px 8px',
+                            opacity: isOrderEditable(o) ? 1 : 0.45,
+                            cursor: isOrderEditable(o) ? 'pointer' : 'not-allowed',
+                          }}
+                        >
+                          ✏️
+                        </button>
+                      </div>
                     </div>
                   ))}
               </div>
@@ -2053,6 +2196,208 @@ export default function NewOrderClient({
           </div>
         </div>
       )}
+      {/* 🎯 پچ ۵۰-هـ-ز: مودال انتخاب مقصد چاپ */}
+      {printing && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.45)',
+            zIndex: 1000,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 16,
+          }}
+          onClick={() => setPrinting(null)}
+        >
+          <div
+            style={{
+              background: '#fff',
+              color: '#333',
+              borderRadius: 14,
+              padding: 16,
+              maxWidth: 420,
+              width: '100%',
+              display: 'grid',
+              gap: 8,
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 style={{ margin: 0 }}>🖨️ چاپ سفارش #{fmt(printing.order_number)}</h3>
+            <p style={{ margin: 0, fontSize: 12.5, color: '#766f64' }}>
+              کدام فیش را چاپ می‌کنی؟ (چاپگرها بعداً در تنظیمات به هر بخش وصل می‌شوند)
+            </p>
+            {(
+              [
+                ['kitchen', '🧑‍🍳 فیش آشپزخانه', 'فقط آیتم‌ها و پیام‌ها — بدون قیمت'],
+                ['hall', '🍽️ فیش سالن', 'آیتم‌ها + میز + قابل پرداخت'],
+                ['customer', '🧾 فاکتور مشتری', 'کامل با قیمت و تخفیف'],
+              ] as const
+            ).map(([key, title, sub]) => (
+              <button
+                key={key}
+                type="button"
+                style={{
+                  font: 'inherit',
+                  textAlign: 'right',
+                  border: '1px solid #e7dfd3',
+                  borderRadius: 10,
+                  padding: '9px 12px',
+                  background: '#faf6ef',
+                  cursor: 'pointer',
+                }}
+                onClick={() => {
+                  setPrintJob({ order: printing, target: key })
+                  setPrinting(null)
+                }}
+              >
+                <strong>{title}</strong>
+                <span style={{ display: 'block', fontSize: 11.5, color: '#766f64' }}>
+                  {sub}
+                </span>
+              </button>
+            ))}
+            <button type="button" style={smallBtn} onClick={() => setPrinting(null)}>
+              بستن
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 🎯 پچ ۵۰-هـ-ز: فیش چاپی — portal به body با همان الگوی .print-invoice */}
+      {printJob &&
+        createPortal(
+          <div className="print-invoice" id="pos-print-area" style={{ display: 'none' }}>
+            <div
+              style={{
+                textAlign: 'center',
+                borderBottom: '2px solid #222',
+                paddingBottom: 8,
+                marginBottom: 8,
+              }}
+            >
+              <div style={{ fontSize: 20, fontWeight: 800 }}>☕ کافه پارک</div>
+              <div style={{ fontSize: 14, fontWeight: 700 }}>
+                {printJob.target === 'kitchen'
+                  ? '🧑‍🍳 فیش آشپزخانه'
+                  : printJob.target === 'hall'
+                    ? '🍽️ فیش سالن'
+                    : '🧾 فاکتور مشتری'}
+              </div>
+            </div>
+            <div
+              style={{
+                fontSize: 12.5,
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: '2px 14px',
+                marginBottom: 8,
+              }}
+            >
+              <span>
+                سفارش: <strong>#{fmt(printJob.order.order_number)}</strong>
+              </span>
+              <span>
+                میز:{' '}
+                <strong>
+                  {printJob.order.table_number == null
+                    ? '—'
+                    : fmt(printJob.order.table_number)}
+                </strong>
+              </span>
+              <span>
+                ساعت:{' '}
+                {new Intl.DateTimeFormat('fa-IR', {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                }).format(new Date(printJob.order.created_at))}
+              </span>
+              {printJob.target !== 'kitchen' && (
+                <span>مشتری: {printJob.order.customer_name || 'مهمان'}</span>
+              )}
+            </div>
+            <table
+              style={{
+                width: '100%',
+                borderCollapse: 'collapse',
+                fontSize: printJob.target === 'kitchen' ? 15 : 12.5,
+              }}
+            >
+              <tbody>
+                {printJob.order.items.map((it, idx) => (
+                  <tr key={idx} style={{ borderBottom: '1px dashed #bbb' }}>
+                    <td style={{ padding: '5px 2px', whiteSpace: 'nowrap', width: 46 }}>
+                      <strong style={{ fontSize: printJob.target === 'kitchen' ? 18 : 14 }}>
+                        {fmt(it.quantity)}
+                      </strong>{' '}
+                      ×
+                    </td>
+                    <td style={{ padding: '5px 2px' }}>
+                      <strong>{it.product_name}</strong>
+                      {it.option_name && <span> ({it.option_name})</span>}
+                      {it.takeaway && <span> · 🥡 بیرون‌بر</span>}
+                      {printJob.target === 'kitchen' && it.line_note && (
+                        <div style={{ fontSize: 14, fontWeight: 700, marginTop: 2 }}>
+                          💬 {it.line_note}
+                        </div>
+                      )}
+                    </td>
+                    {printJob.target !== 'kitchen' && (
+                      <td
+                        style={{
+                          padding: '5px 2px',
+                          textAlign: 'left',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {fmt((Number(it.unit_price) || 0) * it.quantity)}
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {printJob.target !== 'kitchen' && (
+              <div
+                style={{
+                  borderTop: '2px solid #222',
+                  marginTop: 8,
+                  paddingTop: 6,
+                  fontSize: 13,
+                  display: 'grid',
+                  gap: 3,
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span>جمع اقلام</span>
+                  <strong>
+                    {fmt(
+                      printJob.order.subtotal + (printJob.order.coupon_discount ?? 0)
+                    )}
+                  </strong>
+                </div>
+                {(printJob.order.coupon_discount ?? 0) > 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span>تخفیف</span>
+                    <strong>−{fmt(printJob.order.coupon_discount ?? 0)}</strong>
+                  </div>
+                )}
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    fontSize: 15,
+                  }}
+                >
+                  <span>قابل پرداخت</span>
+                  <strong>{fmt(printJob.order.subtotal)}</strong>
+                </div>
+              </div>
+            )}
+          </div>,
+          document.body
+        )}
     </div>
   )
 }
