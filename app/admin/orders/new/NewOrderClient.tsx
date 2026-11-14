@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { QRCodeSVG } from 'qrcode.react'
 import type { Category, Product } from '@/lib/menu-types'
 
@@ -105,18 +105,28 @@ const smallBtn: React.CSSProperties = {
   cursor: 'pointer',
   font: 'inherit',
 }
-// 🎯 پچ ۵۰-هـ: تایل فشرده‌تر و مربع‌تر — با نوار رنگ دسته در لبهٔ راست
+// 🎯 پچ ۵۰-هـ-ب: حداقل تایپِ Web Speech API — فقط چیزی که جستجوی صوتی لازم دارد
+interface SpeechRecognitionLike {
+  lang: string
+  interimResults: boolean
+  maxAlternatives: number
+  start: () => void
+  stop: () => void
+  onresult: ((e: { results?: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null
+  onend: (() => void) | null
+  onerror: (() => void) | null
+}
+
+// 🎯 پچ ۵۰-هـ-ب: تایل فشرده اما لمس‌پذیر — پس‌زمینه با کلاس .pos-tile تا دارک‌مود کار کند
 const tile: React.CSSProperties = {
   border: '1px solid #e7dfd3',
-  background: '#fff',
   borderRadius: 10,
-  padding: '10px 6px',
-  minHeight: 64,
+  padding: '8px 6px',
   display: 'flex',
   flexDirection: 'column',
   alignItems: 'center',
   justifyContent: 'center',
-  gap: 2,
+  gap: 4,
   cursor: 'pointer',
   font: 'inherit',
   textAlign: 'center',
@@ -196,16 +206,91 @@ export default function NewOrderClient({
   // تخفیف عضو به‌صورت خودکار روی فاکتور جاری اعمال می‌شود؛ ویرایش دستی، حالت خودکار را خاموش می‌کند
   const [discountAuto, setDiscountAuto] = useState<'member' | null>(null)
 
+  // 🎯 پچ ۵۰-هـ-ب: ارتفاع دقیق صفحه با اندازه‌گیری واقعی — تا منو/سبد تا نزدیک
+  // ته ویوپورت کشیده شوند و فضای خالیِ پایین صفحه هدر نرود
+  const rootRef = useRef<HTMLDivElement | null>(null)
+  const [posHeight, setPosHeight] = useState<number | null>(null)
+  useEffect(() => {
+    const measure = () => {
+      const el = rootRef.current
+      if (!el) return
+      const top = el.getBoundingClientRect().top
+      setPosHeight(Math.max(520, Math.round(window.innerHeight - top - 24)))
+    }
+    measure()
+    window.addEventListener('resize', measure)
+    return () => window.removeEventListener('resize', measure)
+  }, [])
+
   // دعوت‌نامهٔ عضویت برای مهمان
   const [invite, setInvite] = useState<{ token: string; expires_at: string } | null>(null)
   const [inviteBusy, setInviteBusy] = useState(false)
   const [inviteCopied, setInviteCopied] = useState(false)
 
-  // رنگ هر دسته — ثابت بر اساس ترتیب
-  const catColor = useMemo(() => {
-    const m = new Map<string, string>()
-    categories.forEach((c, i) => m.set(c.id, CAT_COLORS[i % CAT_COLORS.length]))
-    return (id: string) => m.get(id) ?? '#6b4f3a'
+  // 🎯 پچ ۵۰-هـ-ب: شمارندهٔ سفارش‌های امروز کنار عنوان — بعد از هر ثبت موفق رفرش می‌شود
+  const [todayStats, setTodayStats] = useState<{ count: number; revenue: number } | null>(null)
+  function loadTodayStats() {
+    fetch('/api/admin/orders/today-stats', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (d && typeof d.count === 'number') setTodayStats(d)
+      })
+      .catch(() => {})
+  }
+  useEffect(() => {
+    loadTodayStats()
+  }, [])
+
+  // 🎯 پچ ۵۰-هـ-ب: جستجوی صوتی — Chrome/Edge با fa-IR؛ بدون پشتیبانی مرورگر، دکمه پنهان می‌ماند
+  const [listening, setListening] = useState(false)
+  const [speechOk, setSpeechOk] = useState(false)
+  const recogRef = useRef<SpeechRecognitionLike | null>(null)
+  useEffect(() => {
+    const w = window as unknown as {
+      SpeechRecognition?: new () => SpeechRecognitionLike
+      webkitSpeechRecognition?: new () => SpeechRecognitionLike
+    }
+    if (w.SpeechRecognition || w.webkitSpeechRecognition) setSpeechOk(true)
+  }, [])
+
+  function toggleVoice() {
+    const w = window as unknown as {
+      SpeechRecognition?: new () => SpeechRecognitionLike
+      webkitSpeechRecognition?: new () => SpeechRecognitionLike
+    }
+    const SR = w.SpeechRecognition || w.webkitSpeechRecognition
+    if (!SR) return
+    if (listening) {
+      recogRef.current?.stop()
+      setListening(false)
+      return
+    }
+    const r = new SR()
+    r.lang = 'fa-IR'
+    r.interimResults = false
+    r.maxAlternatives = 1
+    r.onresult = (e) => {
+      const txt = e.results?.[0]?.[0]?.transcript ?? ''
+      if (txt) setSearch(txt)
+    }
+    r.onend = () => setListening(false)
+    r.onerror = () => setListening(false)
+    recogRef.current = r
+    try {
+      r.start()
+      setListening(true)
+    } catch {
+      setListening(false)
+    }
+  }
+
+  // 🎯 پچ ۵۰-هـ-ب: رنگ + آیکون هر دسته — ثابت بر اساس ترتیب؛ آیکون = جایگزینِ عکسِ محصولات بی‌عکس
+  const catMeta = useMemo(() => {
+    const m = new Map<string, { color: string; icon: string | null }>()
+    categories.forEach((c, i) =>
+      m.set(c.id, { color: CAT_COLORS[i % CAT_COLORS.length], icon: c.icon || null })
+    )
+    return (id: string) => m.get(id) ?? { color: '#6b4f3a', icon: null }
   }, [categories])
 
   const shown = useMemo(() => {
@@ -217,6 +302,12 @@ export default function NewOrderClient({
         (!q || p.name.toLowerCase().includes(q))
     )
   }, [products, search, cat])
+
+  // 🎯 پچ ۵۰-هـ-ب: ردیف «پیشنهاد ویژه» — فلگ پرفروش‌ها؛ افزودن با یک لمس
+  const featured = useMemo(
+    () => products.filter((p) => p.is_featured === true && p.is_available !== false),
+    [products]
+  )
 
   // 🎯 پچ ۵۰-هـ: جستجوی زندهٔ عضو با debounce — نام یا شماره
   useEffect(() => {
@@ -417,6 +508,7 @@ export default function NewOrderClient({
         setError(data.error || 'ثبت سفارش ناموفق بود')
       } else {
         setDone(data.order?.order_number ?? 0)
+        loadTodayStats()
         setLines([])
         setGuestName('')
         setGuestPhone('')
@@ -433,8 +525,32 @@ export default function NewOrderClient({
   }
 
   return (
-    <div className="pos-root">
-      <h1 className="pos-root-title">🧾 ثبت سفارش حضوری (POS)</h1>
+    <div
+      className="pos-root"
+      ref={rootRef}
+      style={posHeight ? { height: posHeight } : undefined}
+    >
+      <h1 className="pos-root-title">
+        🧾 ثبت سفارش حضوری (POS)
+        {/* 🎯 پچ ۵۰-هـ-ب: شمارندهٔ سفارش‌های امروز — بدون لغوشده و تستی */}
+        {todayStats && (
+          <span
+            style={{
+              fontSize: 12,
+              fontWeight: 700,
+              color: '#6b4f3a',
+              background: '#f3efe7',
+              border: '1px solid #e3ddd2',
+              borderRadius: 999,
+              padding: '3px 10px',
+              marginRight: 8,
+              whiteSpace: 'nowrap',
+            }}
+          >
+            📊 امروز: {fmt(todayStats.count)} سفارش
+          </span>
+        )}
+      </h1>
       <p className="pos-root-sub">
         اول مشتری، بعد میز، بعد محصولات — همه‌چیز در یک صفحه.
       </p>
@@ -616,12 +732,81 @@ export default function NewOrderClient({
             )}
           </div>
 
-          <input
-            style={{ ...input, marginTop: 10 }}
-            placeholder="جستجوی محصول..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
+          {/* 🎯 پچ ۵۰-هـ-ب: جستجو + دکمهٔ میکروفون (اگر مرورگر پشتیبانی کند) */}
+          <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
+            <input
+              style={{ ...input, marginTop: 0 }}
+              placeholder="جستجوی محصول..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+            {speechOk && (
+              <button
+                type="button"
+                title="جستجوی صوتی — اسم محصول را بگو"
+                style={{
+                  ...smallBtn,
+                  flexShrink: 0,
+                  padding: '0 12px',
+                  fontSize: 15,
+                  color: listening ? '#fff' : '#6b4f3a',
+                  background: listening ? '#c0392b' : '#fff',
+                  borderColor: listening ? '#c0392b' : '#e3ddd2',
+                }}
+                onClick={toggleVoice}
+              >
+                🎤
+              </button>
+            )}
+          </div>
+          {listening && (
+            <small
+              style={{ color: '#c0392b', fontSize: 11, display: 'block', marginTop: 4 }}
+            >
+              🎤 در حال شنود… اسم محصول را بگو (فارسی).
+            </small>
+          )}
+
+          {/* 🎯 پچ ۵۰-هـ-ب: ردیف پیشنهاد ویژه — پرفروش‌ها با یک لمس */}
+          {featured.length > 0 && (
+            <div
+              className="pos-featured-row"
+              style={{
+                display: 'flex',
+                gap: 6,
+                overflowX: 'auto',
+                flexShrink: 0,
+                marginTop: 10,
+              }}
+            >
+              {featured.map((p) => {
+                const opts = optionsOf(p)
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    className="pos-tile pos-chip"
+                    style={{
+                      flexShrink: 0,
+                      border: '1px solid #e3c98f',
+                      background: '#fdf6ec',
+                      color: '#6b4f3a',
+                      borderRadius: 999,
+                      padding: '5px 12px',
+                      fontSize: 12,
+                      fontWeight: 700,
+                      whiteSpace: 'nowrap',
+                      cursor: 'pointer',
+                      font: 'inherit',
+                    }}
+                    onClick={() => (opts.length > 0 ? openVariant(p) : add(p))}
+                  >
+                    ⭐ {p.name} · {fmt(p.price)}
+                  </button>
+                )
+              })}
+            </div>
+          )}
 
           {/* 🎯 پچ ۵۰-هـ: دسته‌ها به‌صورت تب رنگی بالای گرید */}
           <div className="pos-tab-row">
@@ -639,7 +824,7 @@ export default function NewOrderClient({
               همه
             </button>
             {categories.map((c) => {
-              const color = catColor(c.id)
+              const { color } = catMeta(c.id)
               const active = cat === c.id
               return (
                 <button
@@ -665,13 +850,33 @@ export default function NewOrderClient({
           <div className="pos-menu-grid">
             {shown.map((p) => {
               const opts = optionsOf(p)
+              const meta = catMeta(p.category_id)
               return (
                 <button
                   key={p.id}
                   type="button"
-                  style={{ ...tile, borderRight: '4px solid ' + catColor(p.category_id) }}
+                  className="pos-tile"
+                  style={{ ...tile, borderRight: '4px solid ' + meta.color }}
                   onClick={() => (opts.length > 0 ? openVariant(p) : add(p))}
                 >
+                  {/* 🎯 پچ ۵۰-هـ-ب: عکس محصول؛ اگر عکس ندارد، آیکون دسته‌اش */}
+                  {p.image_url ? (
+                    <img
+                      src={p.image_url}
+                      alt={p.name}
+                      loading="lazy"
+                      draggable={false}
+                      style={{
+                        width: '100%',
+                        height: 62,
+                        objectFit: 'cover',
+                        borderRadius: 8,
+                        flexShrink: 0,
+                      }}
+                    />
+                  ) : (
+                    <span style={{ fontSize: 24, lineHeight: 1 }}>{meta.icon ?? '☕'}</span>
+                  )}
                   <span style={{ fontWeight: 700, fontSize: 12.5, lineHeight: 1.3 }}>
                     {p.name}
                   </span>
@@ -687,10 +892,33 @@ export default function NewOrderClient({
 
         {/* ─── سبد ─── */}
         <section className="pos-card">
-          <h3 style={{ margin: 0, fontSize: 15 }}>🧾 سفارش ({fmt(lines.length)} ردیف)</h3>
+          {/* 🎯 پچ ۵۰-هـ-ب: پاک کردن سریع سبد برای شروع فاکتور بعدی */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexShrink: 0,
+            }}
+          >
+            <h3 style={{ margin: 0, fontSize: 15 }}>🧾 سفارش ({fmt(lines.length)} ردیف)</h3>
+            {lines.length > 0 && (
+              <button
+                type="button"
+                style={{ ...smallBtn, fontSize: 12 }}
+                title="پاک کردن همهٔ ردیف‌ها"
+                onClick={() => setLines([])}
+              >
+                🧹 پاک کردن
+              </button>
+            )}
+          </div>
 
           {lines.length === 0 && (
-            <p style={{ color: '#766f64', marginTop: 8 }}>سبد خالی است.</p>
+            <div style={{ textAlign: 'center', color: '#a89f8f', padding: '26px 10px' }}>
+              <div style={{ fontSize: 34, marginBottom: 6 }}>🧾</div>
+              <div style={{ fontSize: 13 }}>از منو انتخاب کن تا سفارش اینجا جمع شود.</div>
+            </div>
           )}
 
           {/* 🎯 پچ ۵۰-هـ: هر آیتم در یک خط — استپر فشرده + مبلغ + حذف */}

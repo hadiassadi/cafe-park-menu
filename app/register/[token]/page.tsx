@@ -16,6 +16,15 @@ const toEnDigits = (s: string) =>
     .replace(/[۰-۹]/g, (d) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d)))
     .replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
 
+// 🎯 پچ ۵۰-هـ-ب: نرمالایز شماره مثل سرور — ۰۹… / ۹… / +98 / 0098 همه پذیرفته می‌شوند
+const normalizePhoneInput = (v: string) => {
+  let d = toEnDigits(v).replace(/\D/g, '')
+  if (d.startsWith('0098')) d = d.slice(4)
+  else if (d.startsWith('98') && d.length >= 12) d = d.slice(2)
+  else if (d.startsWith('9') && d.length === 10) d = '0' + d
+  return d
+}
+
 const cardStyle: React.CSSProperties = {
   background: '#fff',
   border: '1px solid #e3ddd2',
@@ -90,11 +99,21 @@ export default function RegisterPage({ params }: { params: Promise<{ token: stri
   }, [params])
 
   const isOrg = orgId !== 'general'
+  // 🎯 پچ ۵۰-هـ-ب: اعتبارسنجی زندهٔ شماره — همان قانون سرور (۱۱ رقم، شروع با ۰۹)
+  const phoneDigits = normalizePhoneInput(phone)
+  const phoneValid = /^09\d{9}$/.test(phoneDigits)
   const formValid =
     fullName.trim().length >= 3 &&
-    phone.trim().length >= 10 &&
+    phoneValid &&
     acceptRules &&
     (!isOrg || memberId.trim().length > 0)
+
+  // 🎯 پچ ۵۰-هـ-ب: اگر دکمه غیرفعال است، دلیلش همان‌جا دیده شود — نه بی‌صدا
+  const missing: string[] = []
+  if (fullName.trim().length < 3) missing.push('نام و نام خانوادگی (حداقل ۳ حرف)')
+  if (!phoneValid) missing.push('شمارهٔ موبایل معتبر — ۱۱ رقم و با ۰۹ شروع شود')
+  if (isOrg && memberId.trim().length === 0) missing.push('شمارهٔ دانشجویی / پرسنلی')
+  if (!acceptRules) missing.push('تیک پذیرش شرایط استفاده')
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
@@ -107,7 +126,7 @@ export default function RegisterPage({ params }: { params: Promise<{ token: stri
         body: JSON.stringify({
           token,
           fullName,
-          phone: toEnDigits(phone),
+          phone: phoneDigits,
           orgId,
           memberId: isOrg ? toEnDigits(memberId).trim() : null,
         }),
@@ -217,6 +236,13 @@ export default function RegisterPage({ params }: { params: Promise<{ token: stri
             style={{ ...inputStyle, textAlign: 'left' }}
           />
 
+          {/* 🎯 پچ ۵۰-هـ-ب: خطای زندهٔ شماره — همان لحظه که غلط است دیده می‌شود */}
+          {phone.trim().length > 0 && !phoneValid && (
+            <div style={{ color: '#9b3c32', fontSize: 12, marginTop: 6 }}>
+              شمارهٔ موبایل معتبر نیست؛ مثل ۰۹۱۲۳۴۵۶۷۸۹ وارد کن.
+            </div>
+          )}
+
           <div style={{ background: '#fbf9f5', border: '1px dashed #d8d0c4', borderRadius: 8, padding: 12, fontSize: 12, color: '#766f64', lineHeight: 1.8, marginTop: 14 }}>
             <strong style={{ color: '#6b4f3a', display: 'block', marginBottom: 6 }}>📜 شرایط استفاده:</strong>
             <div style={{ whiteSpace: 'pre-line' }}>{isOrg ? rules.org || 'در حال بارگذاری...' : rules.general || 'در حال بارگذاری...'}</div>
@@ -231,6 +257,24 @@ export default function RegisterPage({ params }: { params: Promise<{ token: stri
           </label>
 
           {error && <div style={{ color: '#9b3c32', fontSize: 12, marginTop: 10 }}>{error}</div>}
+
+          {/* 🎯 پچ ۵۰-هـ-ب: وقتی دکمه غیرفعال است، فهرست چیزهای ناقص همین‌جا نشان داده می‌شود */}
+          {!formValid && missing.length > 0 && (
+            <div
+              style={{
+                color: '#8a5a24',
+                fontSize: 12,
+                marginTop: 10,
+                background: '#fdf6ec',
+                border: '1px dashed #e3c98f',
+                borderRadius: 8,
+                padding: '8px 12px',
+                lineHeight: 1.9,
+              }}
+            >
+              برای فعال شدن دکمه: {missing.join('؛ ')}
+            </div>
+          )}
 
           <button
             type="submit"
