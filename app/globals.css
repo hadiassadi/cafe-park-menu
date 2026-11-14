@@ -15382,6 +15382,12 @@ a.cat {
   padding-top: 2px;
 }
 
+/* 🎯 پچ ۵۰-هـ-خ: نمای متنی فشرده — کارت‌های کوتاه بدون عکس برای منوی شلوغ */
+.pos-grid-text {
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 6px;
+}
+
 .pos-cart-lines {
   flex: 1;
   overflow-y: auto;

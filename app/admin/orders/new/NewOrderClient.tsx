@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
 import { QRCodeSVG } from 'qrcode.react'
-import { PAYMENT_METHOD_LABELS, type PaymentMethod } from '@/lib/payment/methods'
+import { PAYMENT_METHOD_LABELS, PAYMENT_METHODS, type PaymentMethod } from '@/lib/payment/methods'
 import type { Category, Product } from '@/lib/menu-types'
 
 const LEGACY_GROUP = 'بیرون بر'
@@ -86,6 +86,8 @@ type PosOrderRow = {
   note?: string | null
   is_test?: boolean
   items: PosOrderItem[]
+  // 🎯 پچ ۵۰-هـ-خ: سفارش ضمیمه — والدِ این سفارش
+  parent_order_id?: string | null
   // 🎯 پچ ۵۰-هـ-ح: پرداخت‌های ثبت‌شده برای نمایش تسویه روی فیش‌ها (embed سوپابیس)
   order_payments?: Array<{ method: string | null; amount: number; status: string | null }> | null
 }
@@ -371,6 +373,26 @@ export default function NewOrderClient({
   const [expandedRowId, setExpandedRowId] = useState<string | null>(null)
   const [printExtra, setPrintExtra] = useState<PrintExtra | null>(null)
   const extraCacheRef = useRef<Map<string, PrintExtra | null>>(new Map())
+  // 🎯 پچ ۵۰-هـ-خ: سفارش ضمیمه + نمای منو (تصویری/متنی) + ثبت پرداخت در ردیف
+  const [supplementFor, setSupplementFor] = useState<PosOrderRow | null>(null)
+  const [menuView, setMenuView] = useState<'img' | 'text'>('img')
+  const [payForId, setPayForId] = useState<string | null>(null)
+  const [payMethodSel, setPayMethodSel] = useState<PaymentMethod>('cash')
+  const [payAmount, setPayAmount] = useState('')
+  const [payBusy, setPayBusy] = useState(false)
+  const [payMsg, setPayMsg] = useState<string | null>(null)
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem('pos_menu_view')
+      if (saved === 'text' || saved === 'img') setMenuView(saved)
+    } catch {}
+  }, [])
+  function changeMenuView(v: 'img' | 'text') {
+    setMenuView(v)
+    try {
+      window.localStorage.setItem('pos_menu_view', v)
+    } catch {}
+  }
 
   // 🎯 پچ ۵۰-هـ-ب: شمارندهٔ سفارش‌های امروز کنار عنوان — بعد از هر ثبت موفق رفرش می‌شود
   const [todayStats, setTodayStats] = useState<{ count: number; revenue: number } | null>(null)
@@ -464,7 +486,8 @@ export default function NewOrderClient({
     return products.filter(
       (p) =>
         p.is_available !== false &&
-        (cat === 'all' || p.category_id === cat) &&
+        // 🎯 پچ ۵۰-هـ-خ: «اقلام پر سفارش» به‌صورت چیپ ثابت اول دسته‌ها
+        (cat === 'all' || (cat === '__featured' ? p.is_featured === true : p.category_id === cat)) &&
         (!q || p.name.toLowerCase().includes(q))
     )
   }, [products, search, cat])
@@ -817,6 +840,96 @@ export default function NewOrderClient({
     setSelectedTable('')
     setCustomerMode('guest')
     setError('')
+    setSupplementFor(null)
+  }
+
+  // ─── 🎯 پچ ۵۰-هـ-خ: سفارش ضمیمه — اقلام جدید وابسته به سفارش تمام‌شده ───
+  function startSupplement(o: PosOrderRow) {
+    setEditing(null)
+    setLines([])
+    setNote('')
+    setDiscount('')
+    setDiscountAuto(null)
+    setSupplementFor(o)
+    // مشتری و میز از سفارش اصلی به ارث می‌رسد
+    const phone = String(o.customer_phone ?? '').replace(/\D/g, '')
+    if (/^09\d{9}$/.test(phone)) {
+      setCustomerMode('member')
+      setSelectedMember({
+        id: '',
+        phone: o.customer_phone!,
+        name: o.customer_name ?? null,
+        verification_status: null,
+      })
+      setMemberQuery(o.customer_name ?? o.customer_phone ?? '')
+      // اطلاعات عضویت/تخفیف فعال همان مشتری
+      fetch('/api/admin/customers/active-discount?phone=' + encodeURIComponent(phone))
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          setMemberInfo(data)
+          setDiscountAuto(data?.active?.percent > 0 ? 'member' : null)
+        })
+        .catch(() => setMemberInfo(null))
+    } else if (o.customer_name && o.customer_name !== 'مهمان' && o.customer_name !== 'مشتری') {
+      setCustomerMode('guest')
+      setGuestName(o.customer_name)
+      setGuestPhone('')
+    } else {
+      setCustomerMode('guest')
+      setGuestName('')
+      setGuestPhone('')
+    }
+    setSelectedTable(o.table_number == null ? '' : String(o.table_number))
+    setDone(null)
+    setError('')
+    setOrdersOpen(false)
+    rootRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
+  }
+
+  function cancelSupplement() {
+    setSupplementFor(null)
+    setLines([])
+    setNote('')
+    setDiscount('')
+    setDiscountAuto(null)
+    setGuestName('')
+    setGuestPhone('')
+    setSelectedTable('')
+    setCustomerMode('guest')
+    setError('')
+  }
+
+  // ─── 🎯 پچ ۵۰-هـ-خ: ثبت پرداخت روی سفارش (نقدی/کارت‌خوان/…/کیف پول) ───
+  async function submitPayment(o: PosOrderRow) {
+    setPayMsg(null)
+    const amt = Math.max(
+      0,
+      Math.floor(Number(normalizeDigits(payAmount).replace(/\D/g, '') || 0) || 0)
+    )
+    if (amt <= 0) {
+      setPayMsg('مبلغ پرداخت را وارد کن')
+      return
+    }
+    setPayBusy(true)
+    try {
+      const res = await fetch(`/api/admin/orders/${o.id}/payment`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ method: payMethodSel, amount: amt }),
+      })
+      const d = await res.json().catch(() => null)
+      if (!res.ok || d?.error) {
+        setPayMsg(d?.error || 'ثبت پرداخت ناموفق بود')
+      } else {
+        setPayForId(null)
+        setPayAmount('')
+        loadOrders()
+      }
+    } catch {
+      setPayMsg('خطای ارتباط با سرور')
+    } finally {
+      setPayBusy(false)
+    }
   }
 
   // ─── 🎯 پچ ۵۰-هـ-ز: کیوسک، بوق سفارش آنلاین، نوار زنده و چاپ ───
@@ -973,6 +1086,8 @@ export default function NewOrderClient({
             // 🎯 پچ ۵۰-هـ-د: پیام‌های آمادهٔ ردیف‌ها به تفکیک + توضیحات دستی
             note:
               [
+                // 🎯 ۵۰-هـ-خ: نشانهٔ ضمیمه بودن در متن سفارش هم می‌آید (برای فیش‌ها)
+                supplementFor ? `ضمیمهٔ سفارش #${fmt(supplementFor.order_number)}` : null,
                 lines
                   .filter((l) => (l.note ?? '').trim())
                   .map(
@@ -984,6 +1099,8 @@ export default function NewOrderClient({
               ]
                 .filter(Boolean)
                 .join('\n') || null,
+            // 🎯 پچ ۵۰-هـ-خ: سفارش ضمیمه — والد
+            parent_order_id: supplementFor?.id ?? null,
             is_test: isTest,
             manual_discount: discountVal,
             // 🎯 پچ ۵۰-هـ-د/و: منبع تخفیف — سرور روی همین مبنا سهمیه را رزرو/آزاد می‌کند
@@ -1006,13 +1123,16 @@ export default function NewOrderClient({
         setDone(data.order?.order_number ?? 0)
         loadTodayStats()
         setEditing(null)
+        setSupplementFor(null)
         setLines([])
         setGuestName('')
         setGuestPhone('')
+        setSelectedTable('')
         setNote('')
         setDiscount('')
         setDiscountAuto(null)
         clearMember()
+        loadOrders()
       }
     } catch {
       setError('خطای ارتباط با سرور')
@@ -1111,6 +1231,42 @@ export default function NewOrderClient({
           ✏️ در حال ویرایش سفارش شمارهٔ{' '}
           <strong>{fmt(editing.order_number)}</strong> — بعد از تغییرها «ثبت ویرایش» را
           بزن. قیمت‌ها هنگام ثبت، با قیمت روزِ منو دوباره محاسبه می‌شوند.
+        </div>
+      )}
+
+      {/* ─── 🎯 پچ ۵۰-هـ-خ: بنر «سفارش ضمیمه» — مشتری/میز از سفارش اصلی به ارث می‌رسد ─── */}
+      {supplementFor && !editing && (
+        <div
+          style={{
+            ...card,
+            background: '#fdf6ec',
+            border: '1px dashed #e3c98f',
+            padding: 10,
+            flexShrink: 0,
+            display: 'flex',
+            gap: 8,
+            alignItems: 'center',
+            flexWrap: 'wrap',
+          }}
+        >
+          <span style={{ fontSize: 13, fontWeight: 700, color: '#6b4f3a' }}>
+            🧾 ضمیمهٔ سفارش #{fmt(supplementFor.order_number)}
+          </span>
+          <span style={{ fontSize: 12, color: '#766f64' }}>
+            مبلغ اصلی {fmt(supplementFor.subtotal)}
+            {supplementFor.customer_name ? ` · 👤 ${supplementFor.customer_name}` : ''}
+            {supplementFor.table_number != null
+              ? ` · 🪑 میز ${fmt(supplementFor.table_number)}`
+              : ' · 🥡 بیرون‌بر'}
+            — فقط اقلام جدید را اضافه کن؛ با ثبت، فاکتور جداگانه‌ای وابسته به همین سفارش می‌شود.
+          </span>
+          <button
+            type="button"
+            style={{ ...smallBtn, marginRight: 'auto', flexShrink: 0 }}
+            onClick={cancelSupplement}
+          >
+            ✕ لغو ضمیمه
+          </button>
         </div>
       )}
 
@@ -1324,58 +1480,65 @@ export default function NewOrderClient({
                 🎤
               </button>
             )}
-          </div>
-          {listening && (
-            <small
-              style={{ color: '#c0392b', fontSize: 11, display: 'block', marginTop: 4 }}
-            >
-              🎤 در حال شنود… اسم محصول را بگو (فارسی).
-            </small>
-          )}
-
-          {/* 🎯 پچ ۵۰-هـ-ب: ردیف پیشنهاد ویژه — پرفروش‌ها با یک لمس */}
-          {featured.length > 0 && (
-            <div
-              className="pos-featured-row"
+          {/* 🎯 پچ ۵۰-هـ-خ: سوییچ نمای منو — تصویری / متنی فشرده (کنار جستجو) */}
+          <div style={{ display: 'flex', gap: 4, flexShrink: 0, alignItems: 'stretch' }}>
+            <button
+              type="button"
+              title="نمای تصویری"
               style={{
-                display: 'flex',
-                gap: 6,
-                overflowX: 'auto',
-                flexShrink: 0,
-                marginTop: 10,
+                ...smallBtn,
+                padding: '0 10px',
+                fontSize: 14,
+                color: menuView === 'img' ? '#fff' : '#6b4f3a',
+                background: menuView === 'img' ? '#6b4f3a' : '#fff',
+                borderColor: menuView === 'img' ? '#6b4f3a' : '#e3ddd2',
               }}
+              onClick={() => changeMenuView('img')}
             >
-              {featured.map((p) => {
-                const opts = optionsOf(p)
-                return (
-                  <button
-                    key={p.id}
-                    type="button"
-                    className="pos-tile pos-chip"
-                    style={{
-                      flexShrink: 0,
-                      border: '1px solid #e3c98f',
-                      background: '#fdf6ec',
-                      color: '#6b4f3a',
-                      borderRadius: 999,
-                      padding: '5px 12px',
-                      fontSize: 12,
-                      fontWeight: 700,
-                      whiteSpace: 'nowrap',
-                      cursor: 'pointer',
-                      font: 'inherit',
-                    }}
-                    onClick={() => (opts.length > 0 ? openVariant(p) : add(p))}
-                  >
-                    ⭐ {p.name} · {fmt(p.price)}
-                  </button>
-                )
-              })}
-            </div>
-          )}
+              🖼️
+            </button>
+            <button
+              type="button"
+              title="نمای متنی فشرده — برای منوی شلوغ"
+              style={{
+                ...smallBtn,
+                padding: '0 10px',
+                fontSize: 14,
+                color: menuView === 'text' ? '#fff' : '#6b4f3a',
+                background: menuView === 'text' ? '#6b4f3a' : '#fff',
+                borderColor: menuView === 'text' ? '#6b4f3a' : '#e3ddd2',
+              }}
+              onClick={() => changeMenuView('text')}
+            >
+              📝
+            </button>
+          </div>
+        </div>
+        {listening && (
+          <small
+            style={{ color: '#c0392b', fontSize: 11, display: 'block', marginTop: 4 }}
+          >
+            🎤 در حال شنود… اسم محصول را بگو (فارسی).
+          </small>
+        )}
 
-          {/* 🎯 پچ ۵۰-هـ: دسته‌ها به‌صورت تب رنگی بالای گرید */}
+          {/* 🎯 پچ ۵۰-هـ-خ: «اقلام پر سفارش» دیگر ردیف جدا نیست — چیپ ثابتِ اول دسته‌ها */}
           <div className="pos-tab-row">
+            {featured.length > 0 && (
+              <button
+                type="button"
+                className="pos-tab"
+                style={{
+                  background: cat === '__featured' ? '#b0722c' : '#fdf6ec',
+                  borderColor: '#e3c98f',
+                  color: cat === '__featured' ? '#fff' : '#9a5b1f',
+                  fontWeight: cat === '__featured' ? 700 : 700,
+                }}
+                onClick={() => setCat(cat === '__featured' ? 'all' : '__featured')}
+              >
+                ⭐ اقلام پر سفارش
+              </button>
+            )}
             <button
               type="button"
               className="pos-tab"
@@ -1412,8 +1575,8 @@ export default function NewOrderClient({
             })}
           </div>
 
-          {/* گرید تایل لمسی — هر تایل با رنگ دستهٔ خودش */}
-          <div className="pos-menu-grid">
+          {/* گرید تایل لمسی — هر تایل با رنگ دستهٔ خودش؛ 🎯 ۵۰-هـ-خ: دو نمای تصویری/متنی */}
+          <div className={`pos-menu-grid${menuView === 'text' ? ' pos-grid-text' : ''}`}>
             {shown.map((p) => {
               const opts = optionsOf(p)
               const meta = catMeta(p.category_id)
@@ -1422,31 +1585,67 @@ export default function NewOrderClient({
                   key={p.id}
                   type="button"
                   className="pos-tile"
-                  style={{ ...tile, borderRight: '4px solid ' + meta.color }}
+                  style={
+                    menuView === 'text'
+                      ? {
+                          ...tile,
+                          borderRight: '4px solid ' + meta.color,
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          gap: 8,
+                          padding: '9px 10px',
+                        }
+                      : { ...tile, borderRight: '4px solid ' + meta.color }
+                  }
                   onClick={() => (opts.length > 0 ? openVariant(p) : add(p))}
                 >
-                  {/* 🎯 پچ ۵۰-هـ-ب: عکس محصول؛ اگر عکس ندارد، آیکون دسته‌اش */}
-                  {p.image_url ? (
-                    <img
-                      src={p.image_url}
-                      alt={p.name}
-                      loading="lazy"
-                      draggable={false}
-                      style={{
-                        width: '100%',
-                        height: 62,
-                        objectFit: 'cover',
-                        borderRadius: 8,
-                        flexShrink: 0,
-                      }}
-                    />
-                  ) : (
-                    <span style={{ fontSize: 24, lineHeight: 1 }}>{meta.icon ?? '☕'}</span>
-                  )}
-                  <span style={{ fontWeight: 700, fontSize: 12.5, lineHeight: 1.3 }}>
+                  {menuView === 'img' ? (
+                    // 🎯 پچ ۵۰-هـ-ب: عکس محصول؛ اگر عکس ندارد، آیکون دسته‌اش
+                    p.image_url ? (
+                      <img
+                        src={p.image_url}
+                        alt={p.name}
+                        loading="lazy"
+                        draggable={false}
+                        style={{
+                          width: '100%',
+                          height: 62,
+                          objectFit: 'cover',
+                          borderRadius: 8,
+                          flexShrink: 0,
+                        }}
+                      />
+                    ) : (
+                      <span style={{ fontSize: 24, lineHeight: 1 }}>{meta.icon ?? '☕'}</span>
+                    )
+                  ) : null}
+                  <span
+                    style={{
+                      fontWeight: 700,
+                      fontSize: 12.5,
+                      lineHeight: 1.3,
+                      ...(menuView === 'text'
+                        ? {
+                            minWidth: 0,
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                            textAlign: 'right',
+                          }
+                        : {}),
+                    }}
+                  >
                     {p.name}
                   </span>
-                  <span style={{ fontSize: 11.5, color: '#6b4f3a', fontWeight: 700 }}>
+                  <span
+                    style={{
+                      fontSize: 11.5,
+                      color: '#6b4f3a',
+                      fontWeight: 700,
+                      ...(menuView === 'text' ? { flexShrink: 0 } : {}),
+                    }}
+                  >
                     {opts.length > 0 ? '+ گزینه‌ها' : fmt(p.price)}
                   </span>
                 </button>
@@ -1862,6 +2061,11 @@ export default function NewOrderClient({
                     const st = settlementOf(o)
                     const anyTakeaway = o.items.some((it) => it.takeaway)
                     const expanded = expandedRowId === o.id
+                    // 🎯 ۵۰-هـ-خ: شمارهٔ سفارش والد (برای بج ضمیمه)
+                    const parentNum = o.parent_order_id
+                      ? ordersList.find((x) => x.id === o.parent_order_id)
+                          ?.order_number ?? null
+                      : null
                     return (
                     <div
                       key={o.id}
@@ -1962,6 +2166,21 @@ export default function NewOrderClient({
                               💳 مانده {fmt(st.remaining)}
                             </span>
                           )}
+                          {parentNum != null && (
+                            <span
+                              style={{
+                                fontSize: 10.5,
+                                fontWeight: 700,
+                                color: '#6b4f3a',
+                                background: '#fdf6ec',
+                                border: '1px dashed #e3c98f',
+                                borderRadius: 6,
+                                padding: '1px 6px',
+                              }}
+                            >
+                              🧾 ضمیمهٔ #{fmt(parentNum)}
+                            </span>
+                          )}
                           <span dir="ltr" style={{ fontSize: 11, color: '#a89f8f' }}>
                             {new Intl.DateTimeFormat('fa-IR', {
                               hour: '2-digit',
@@ -2055,18 +2274,186 @@ export default function NewOrderClient({
                                 📝 {o.note}
                               </div>
                             )}
-                            {st.paid > 0 && (
-                              <div
-                                style={{
-                                  fontSize: 11.5,
-                                  color:
-                                    st.state === 'paid' ? '#3f7d5c' : '#9a6b3f',
-                                }}
-                              >
-                                💳 پرداخت‌شده: {fmt(st.paid)} · مانده:{' '}
-                                {fmt(st.remaining)}
-                              </div>
-                            )}
+                            {/* 🎯 ۵۰-هـ-خ: پرداخت‌های یکجای زنجیره (اصلی + ضمیمه‌ها) */}
+                            {(() => {
+                              const kids = ordersList.filter(
+                                (x) => x.parent_order_id === o.id
+                              )
+                              const chain = [o, ...kids]
+                              const chainSubtotal = chain.reduce(
+                                (s, x) => s + Math.round(Number(x.subtotal) || 0),
+                                0
+                              )
+                              const chainPaid = chain.reduce(
+                                (s, x) => s + settlementOf(x).paid,
+                                0
+                              )
+                              const chainRemaining = Math.max(
+                                0,
+                                chainSubtotal - chainPaid
+                              )
+                              const chainPays = chain.flatMap((x) =>
+                                confirmedPayments(x)
+                              )
+                              const kidNums = kids
+                                .map((k) => `#${fmt(k.order_number)}`)
+                                .join(' و ')
+                              return (
+                                <div
+                                  style={{
+                                    borderTop: '1px dashed #e7dfd3',
+                                    paddingTop: 6,
+                                    marginTop: 6,
+                                    display: 'grid',
+                                    gap: 4,
+                                    fontSize: 11.5,
+                                    color: '#5c554b',
+                                  }}
+                                >
+                                  {kids.length > 0 && (
+                                    <div
+                                      style={{
+                                        color: '#6b4f3a',
+                                        fontWeight: 700,
+                                      }}
+                                    >
+                                      🧾 ضمیمه‌ها: {kidNums}
+                                    </div>
+                                  )}
+                                  {chainPays.length > 0 ? (
+                                    <div>
+                                      💳 پرداخت‌ها:{' '}
+                                      {chainPays
+                                        .map(
+                                          (p) =>
+                                            `${paymentMethodLabel(p.method)} ${fmt(p.amount)}`
+                                        )
+                                        .join(' + ')}
+                                    </div>
+                                  ) : (
+                                    <div style={{ color: '#9a6b3f' }}>
+                                      💳 هنوز پرداختی ثبت نشده
+                                    </div>
+                                  )}
+                                  <div
+                                    style={{
+                                      fontWeight: 700,
+                                      color:
+                                        chainRemaining > 0 ? '#9a6b3f' : '#3f7d5c',
+                                    }}
+                                  >
+                                    جمع فاکتورها: {fmt(chainSubtotal)} · مانده:{' '}
+                                    {fmt(chainRemaining)}
+                                    {kids.length > 0
+                                      ? ` (${kids.length + 1} فاکتور)`
+                                      : ''}
+                                  </div>
+                                  {payForId === o.id ? (
+                                    <div
+                                      style={{
+                                        display: 'flex',
+                                        gap: 6,
+                                        flexWrap: 'wrap',
+                                        alignItems: 'center',
+                                      }}
+                                    >
+                                      <select
+                                        value={payMethodSel}
+                                        onChange={(e) =>
+                                          setPayMethodSel(
+                                            e.target.value as PaymentMethod
+                                          )
+                                        }
+                                        style={{
+                                          fontSize: 12,
+                                          padding: '4px 8px',
+                                          borderRadius: 8,
+                                          border: '1px solid #e3ddd2',
+                                          font: 'inherit',
+                                          color: '#4b443b',
+                                          background: '#fff',
+                                        }}
+                                      >
+                                        {PAYMENT_METHODS.map((m) => (
+                                          <option key={m} value={m}>
+                                            {PAYMENT_METHOD_LABELS[m]}
+                                          </option>
+                                        ))}
+                                      </select>
+                                      <input
+                                        value={payAmount}
+                                        onChange={(e) => setPayAmount(e.target.value)}
+                                        placeholder={String(chainRemaining)}
+                                        inputMode="numeric"
+                                        style={{
+                                          width: 110,
+                                          fontSize: 12,
+                                          padding: '4px 8px',
+                                          borderRadius: 8,
+                                          border: '1px solid #e3ddd2',
+                                          font: 'inherit',
+                                          color: '#4b443b',
+                                          background: '#fff',
+                                        }}
+                                      />
+                                      <button
+                                        type="button"
+                                        disabled={payBusy}
+                                        onClick={() => submitPayment(o)}
+                                        style={{
+                                          ...smallBtn,
+                                          fontSize: 11.5,
+                                          padding: '3px 8px',
+                                          opacity: payBusy ? 0.6 : 1,
+                                        }}
+                                      >
+                                        {payBusy ? '⏳' : 'ثبت پرداخت'}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        style={{
+                                          ...smallBtn,
+                                          fontSize: 11.5,
+                                          padding: '3px 8px',
+                                        }}
+                                        onClick={() => {
+                                          setPayForId(null)
+                                          setPayMsg(null)
+                                        }}
+                                      >
+                                        انصراف
+                                      </button>
+                                      {payMsg && (
+                                        <span style={{ color: '#9b3c32' }}>
+                                          {payMsg}
+                                        </span>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      style={{
+                                        ...smallBtn,
+                                        fontSize: 11.5,
+                                        padding: '3px 8px',
+                                        justifySelf: 'start',
+                                      }}
+                                      onClick={() => {
+                                        setPayForId(o.id)
+                                        setPayMsg(null)
+                                        setPayAmount(
+                                          chainRemaining > 0
+                                            ? String(chainRemaining)
+                                            : ''
+                                        )
+                                      }}
+                                    >
+                                      ➕ ثبت پرداخت
+                                    </button>
+                                  )}
+                                </div>
+                              )
+                            })()}
                           </div>
                         )}
                       </div>
@@ -2081,6 +2468,22 @@ export default function NewOrderClient({
                         )}
                       </div>
                       <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                        <button
+                          type="button"
+                          title="سفارش ضمیمه — اقلام جدید وابسته به همین فاکتور"
+                          disabled={o.status === 'cancelled'}
+                          onClick={() => startSupplement(o)}
+                          style={{
+                            ...smallBtn,
+                            fontSize: 13,
+                            padding: '6px 8px',
+                            opacity: o.status === 'cancelled' ? 0.45 : 1,
+                            cursor:
+                              o.status === 'cancelled' ? 'not-allowed' : 'pointer',
+                          }}
+                        >
+                          ➕
+                        </button>
                         <button
                           type="button"
                           title="چاپ فیش (آشپزخانه / سالن / مشتری)"
@@ -2523,10 +2926,27 @@ export default function NewOrderClient({
               (s, it) => s + (it.takeaway ? Number(it.takeaway_fee) || 0 : 0),
               0
             )
-            const couponDisc = Number(o.coupon_discount) || 0
-            const manualDisc = Number(o.manual_discount) || 0
+            // 🐛 فیکس ۵۰-هـ-خ: روی سفارش POS، coupon_discount و manual_discount همان یک
+            // مبلغ‌اند (برچسب منبع در coupon_code) — تخفیف فقط یک‌بار شمرده شود
+            const discountTotal =
+              Number(o.coupon_discount) || Number(o.manual_discount) || 0
             const gross =
-              Math.round(Number(o.subtotal) || 0) + couponDisc + manualDisc - feeTotal
+              Math.round(Number(o.subtotal) || 0) + discountTotal - feeTotal
+            const discountLabel =
+              o.coupon_code === 'MEMBERSHIP'
+                ? 'تخفیف باشگاه/سازمان'
+                : o.coupon_code === 'SUBSCRIPTION'
+                  ? 'تخفیف اشتراک'
+                  : o.coupon_code === 'GRADE'
+                    ? 'تخفیف گرید'
+                    : o.coupon_code
+                      ? `کد تخفیف (${o.coupon_code})`
+                      : 'تخفیف دستی'
+            // 🎯 ۵۰-هـ-خ: سفارش ضمیمه — شمارهٔ والد برای فیش‌ها
+            const parentNum = o.parent_order_id
+              ? ordersList.find((x) => x.id === o.parent_order_id)?.order_number ??
+                null
+              : null
             const itemCount = o.items.reduce((s, it) => s + it.quantity, 0)
             const payLine =
               pays.length > 0
@@ -2602,7 +3022,9 @@ export default function NewOrderClient({
                       ? '🧑‍🍳 فیش آشپزخانه'
                       : isHall
                         ? '🍽️ فیش سالن'
-                        : '🧾 فاکتور فروش'}
+                        : parentNum != null
+                          ? `🧾 فاکتور ضمیمهٔ سفارش #${fmt(parentNum)}`
+                          : '🧾 فاکتور فروش'}
                   </div>
                 </div>
 
@@ -2620,6 +3042,12 @@ export default function NewOrderClient({
                   <span>
                     سفارش: <strong>#{fmt(o.order_number)}</strong>
                   </span>
+                  {parentNum != null && (
+                    <span>
+                      🧾 ضمیمهٔ سفارش:{' '}
+                      <strong>#{fmt(parentNum)}</strong>
+                    </span>
+                  )}
                   <span>📅 {fullDate}</span>
                   <span>وضعیت: {POS_STATUS_LABELS[o.status] ?? o.status}</span>
                   {o.table_number != null ? (
@@ -2655,6 +3083,16 @@ export default function NewOrderClient({
                           {o.customer_phone ? ` — ${o.customer_phone}` : ''}
                         </td>
                       </tr>
+                      {parentNum != null && (
+                        <tr>
+                          <td
+                            style={{ ...td, fontWeight: 700, background: '#f7f7f7' }}
+                          >
+                            سفارش اصلی
+                          </td>
+                          <td style={td}>#{fmt(parentNum)}</td>
+                        </tr>
+                      )}
                       <tr>
                         <td style={{ ...td, fontWeight: 700, background: '#f7f7f7' }}>
                           عنوان
@@ -2846,7 +3284,7 @@ export default function NewOrderClient({
                         <strong>{fmt(feeTotal)}</strong>
                       </div>
                     )}
-                    {couponDisc > 0 && (
+                    {discountTotal > 0 && (
                       <div
                         style={{
                           display: 'flex',
@@ -2854,24 +3292,8 @@ export default function NewOrderClient({
                           gap: 24,
                         }}
                       >
-                        <span>
-                          {o.coupon_code === 'MEMBERSHIP'
-                            ? 'تخفیف باشگاه/سازمان'
-                            : `کد تخفیف (${o.coupon_code})`}
-                        </span>
-                        <strong>−{fmt(couponDisc)}</strong>
-                      </div>
-                    )}
-                    {manualDisc > 0 && (
-                      <div
-                        style={{
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          gap: 24,
-                        }}
-                      >
-                        <span>تخفیف دستی</span>
-                        <strong>−{fmt(manualDisc)}</strong>
+                        <span>{discountLabel}</span>
+                        <strong>−{fmt(discountTotal)}</strong>
                       </div>
                     )}
                     <div
