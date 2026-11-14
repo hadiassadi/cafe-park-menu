@@ -48,6 +48,54 @@ type MemberInfo = {
   membership_label: string | null
   active: ActiveDiscount | null
   orgNote: string | null
+  orgRemainingToday: number | null
+  orgTotalRemaining: number | null
+}
+
+// 🎯 پچ ۵۰-هـ-و: سفارش امروز برای «لیست سفارش‌ها» و ویرایش — از /api/admin/orders/recent
+type PosOrderItem = {
+  product_id: string
+  product_name: string
+  option_id: string | null
+  option_name: string | null
+  unit_price: number
+  quantity: number
+  takeaway?: boolean
+  takeaway_fee?: number | null
+  line_note?: string | null
+}
+type PosOrderRow = {
+  id: string
+  order_number: number
+  created_at: string
+  customer_name: string | null
+  customer_phone: string | null
+  table_number: number | null
+  source: string | null
+  status: string
+  payment_status?: string | null
+  subtotal: number
+  coupon_code: string | null
+  coupon_discount: number | null
+  note?: string | null
+  is_test?: boolean
+  items: PosOrderItem[]
+}
+const POS_STATUS_LABELS: Record<string, string> = {
+  pending: 'جدید',
+  confirmed: 'تأیید شده',
+  preparing: 'در حال آماده‌سازی',
+  ready: 'آماده تحویل',
+  delivered: 'تحویل شده',
+  cancelled: 'لغو شده',
+}
+const POS_STATUS_COLORS: Record<string, string> = {
+  pending: '#9a6b3f',
+  confirmed: '#4a7c9b',
+  preparing: '#b0722c',
+  ready: '#3f7d5c',
+  delivered: '#6b6b6b',
+  cancelled: '#9b3c32',
 }
 
 const fmt = (n: number) => Number(n || 0).toLocaleString('fa-IR')
@@ -250,6 +298,14 @@ export default function NewOrderClient({
     const t = setInterval(() => setNowTs(Date.now()), 20_000)
     return () => clearInterval(t)
   }, [])
+
+  // 🎯 پچ ۵۰-هـ-و: لیست سفارش‌های امروز + ویرایش تا قبل از آماده‌سازی
+  const [ordersOpen, setOrdersOpen] = useState(false)
+  const [ordersList, setOrdersList] = useState<PosOrderRow[]>([])
+  const [ordersFilter, setOrdersFilter] = useState<'all' | 'admin' | 'online'>('all')
+  const [ordersLoading, setOrdersLoading] = useState(false)
+  const [ordersErr, setOrdersErr] = useState('')
+  const [editing, setEditing] = useState<PosOrderRow | null>(null)
 
   // 🎯 پچ ۵۰-هـ-ب: شمارندهٔ سفارش‌های امروز کنار عنوان — بعد از هر ثبت موفق رفرش می‌شود
   const [todayStats, setTodayStats] = useState<{ count: number; revenue: number } | null>(null)
@@ -603,6 +659,100 @@ export default function NewOrderClient({
     setQuickBusy(false)
   }
 
+  // 🎯 پچ ۵۰-هـ-و: سفارش‌های امروز + ورود به حالت ویرایش
+  async function loadOrders() {
+    setOrdersLoading(true)
+    setOrdersErr('')
+    try {
+      const res = await fetch('/api/admin/orders/recent', { cache: 'no-store' })
+      const data = await res.json().catch(() => null)
+      if (res.ok && Array.isArray(data?.orders)) setOrdersList(data.orders)
+      else setOrdersErr(data?.error || 'دریافت سفارش‌ها ناموفق بود')
+    } catch {
+      setOrdersErr('خطای ارتباط با سرور')
+    } finally {
+      setOrdersLoading(false)
+    }
+  }
+  function openOrders() {
+    setOrdersOpen(true)
+    loadOrders()
+  }
+  function isOrderEditable(o: PosOrderRow) {
+    return (o.status === 'pending' || o.status === 'confirmed') && o.payment_status !== 'paid'
+  }
+  function editBlockReason(o: PosOrderRow) {
+    if (o.status === 'cancelled') return 'سفارش لغو شده — قابل ویرایش نیست'
+    if (o.payment_status === 'paid') return 'تسویه‌شده — قابل ویرایش نیست'
+    if (o.status !== 'pending' && o.status !== 'confirmed')
+      return 'آماده‌سازی شروع شده — قابل ویرایش نیست'
+    return 'ویرایش سفارش'
+  }
+  function startEdit(o: PosOrderRow) {
+    if (!isOrderEditable(o)) return
+    setLines(
+      o.items.map((it) => ({
+        product_id: it.product_id,
+        name: it.product_name,
+        option_id: it.option_id,
+        option_name: it.option_name,
+        unit_price: Number(it.unit_price) || 0,
+        quantity: it.quantity,
+        takeaway: it.takeaway === true,
+        fee: it.takeaway_fee ? Number(it.takeaway_fee) : null,
+        note: it.line_note ?? null,
+      }))
+    )
+    setCustomerMode('guest')
+    setGuestName(
+      o.customer_name && o.customer_name !== 'مهمان' && o.customer_name !== 'مشتری'
+        ? o.customer_name
+        : ''
+    )
+    setGuestPhone(o.customer_phone ?? '')
+    setSelectedTable(o.table_number == null ? '' : String(o.table_number))
+    // توضیحات قبلی منهای خط‌های خودکار پیام‌های آماده — تا موقع ثبت دوباره اضافه شوند
+    const agg = new Set(
+      o.items
+        .filter((it) => (it.line_note ?? '').trim())
+        .map(
+          (it) =>
+            `${it.product_name}${it.option_name ? ' (' + it.option_name + ')' : ''} ×${fmt(it.quantity)}: ${it.line_note!.trim()}`
+        )
+    )
+    setNote(
+      (o.note ?? '')
+        .split('\n')
+        .map((l) => l.trim())
+        .filter((l) => l && !agg.has(l))
+        .join('\n')
+    )
+    if ((o.coupon_discount ?? 0) > 0) {
+      setDiscount(String(o.coupon_discount))
+      setDiscountAuto(o.coupon_code === 'MEMBERSHIP' ? 'member' : null)
+    } else {
+      setDiscount('')
+      setDiscountAuto(null)
+    }
+    setDone(null)
+    setError('')
+    setOrdersOpen(false)
+    setEditing(o)
+    rootRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
+  }
+  function cancelEdit() {
+    setEditing(null)
+    setLines([])
+    setNote('')
+    setDiscount('')
+    setDiscountAuto(null)
+    setGuestName('')
+    setGuestPhone('')
+    setSelectedTable('')
+    setCustomerMode('guest')
+    setError('')
+  }
+
   async function submit() {
     setError('')
     if (lines.length === 0) return setError('هیچ آیتمی انتخاب نشده است')
@@ -612,50 +762,63 @@ export default function NewOrderClient({
       )
     setBusy(true)
     try {
-      const res = await fetch('/api/admin/orders/create', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          customer_name: selectedMember?.name ?? guestName,
-          customer_phone: selectedMember?.phone ?? guestPhone,
-          table_number: selectedTable === '' ? null : Number(selectedTable),
-          // 🎯 پچ ۵۰-هـ-د: پیام‌های آمادهٔ ردیف‌ها به تفکیک + توضیحات دستی
-          note:
-            [
-              lines
-                .filter((l) => (l.note ?? '').trim())
-                .map(
-                  (l) =>
-                    `${l.name}${l.option_name ? ' (' + l.option_name + ')' : ''} ×${fmt(l.quantity)}: ${l.note!.trim()}`
-                )
-                .join('\n'),
-              note.trim(),
-            ]
-              .filter(Boolean)
-              .join('\n') || null,
-          is_test: isTest,
-          manual_discount: discountVal,
-          // 🎯 پچ ۵۰-هـ-د: منبع تخفیف عضو — سرور روی همین مبنا سهمیه را مصرف می‌کند
-          discount_source:
-            discountAuto === 'member' && memberPct > 0
-              ? memberInfo?.active?.source ?? null
-              : null,
-          items: lines.map((l) => ({
-            product_id: l.product_id,
-            option_id: l.option_id,
-            quantity: l.quantity,
-            takeaway: l.takeaway,
-            // 🎯 پچ ۵۰-هـ-د: پیام آمادهٔ هر ردیف — در فیش آشپزخانه چاپ می‌شود
-            line_note: (l.note ?? '').trim() || null,
-          })),
-        }),
-      })
+      // 🎯 پچ ۵۰-هـ-و: منبع تخفیف در حالت ویرایش از کد ثبت‌شدهٔ فاکتور می‌آید
+      const discountSource = editing
+        ? editing.coupon_code === 'MEMBERSHIP'
+          ? 'org'
+          : editing.coupon_code === 'SUBSCRIPTION'
+            ? 'subscription'
+            : editing.coupon_code === 'GRADE'
+              ? 'grade'
+              : null
+        : discountAuto === 'member' && memberPct > 0
+          ? memberInfo?.active?.source ?? null
+          : null
+      const res = await fetch(
+        editing ? `/api/admin/orders/${editing.id}/update` : '/api/admin/orders/create',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            customer_name: selectedMember?.name ?? guestName,
+            customer_phone: selectedMember?.phone ?? guestPhone,
+            table_number: selectedTable === '' ? null : Number(selectedTable),
+            // 🎯 پچ ۵۰-هـ-د: پیام‌های آمادهٔ ردیف‌ها به تفکیک + توضیحات دستی
+            note:
+              [
+                lines
+                  .filter((l) => (l.note ?? '').trim())
+                  .map(
+                    (l) =>
+                      `${l.name}${l.option_name ? ' (' + l.option_name + ')' : ''} ×${fmt(l.quantity)}: ${l.note!.trim()}`
+                  )
+                  .join('\n'),
+                note.trim(),
+              ]
+                .filter(Boolean)
+                .join('\n') || null,
+            is_test: isTest,
+            manual_discount: discountVal,
+            // 🎯 پچ ۵۰-هـ-د/و: منبع تخفیف — سرور روی همین مبنا سهمیه را رزرو/آزاد می‌کند
+            discount_source: discountSource,
+            items: lines.map((l) => ({
+              product_id: l.product_id,
+              option_id: l.option_id,
+              quantity: l.quantity,
+              takeaway: l.takeaway,
+              // 🎯 پچ ۵۰-هـ-د: پیام آمادهٔ هر ردیف — در فیش آشپزخانه چاپ می‌شود
+              line_note: (l.note ?? '').trim() || null,
+            })),
+          }),
+        }
+      )
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
-        setError(data.error || 'ثبت سفارش ناموفق بود')
+        setError(data.error || (editing ? 'ثبت ویرایش ناموفق بود' : 'ثبت سفارش ناموفق بود'))
       } else {
         setDone(data.order?.order_number ?? 0)
         loadTodayStats()
+        setEditing(null)
         setLines([])
         setGuestName('')
         setGuestPhone('')
@@ -714,6 +877,22 @@ export default function NewOrderClient({
           <a href="/admin/orders" style={{ textDecoration: 'underline' }}>
             رفتن به سفارش‌ها
           </a>
+        </div>
+      )}
+      {/* 🎯 پچ ۵۰-هـ-و: بنر حالت ویرایش */}
+      {editing && done === null && (
+        <div
+          style={{
+            ...card,
+            background: '#fdf4e3',
+            border: '1px solid #e3c98a',
+            padding: 10,
+            flexShrink: 0,
+          }}
+        >
+          ✏️ در حال ویرایش سفارش شمارهٔ{' '}
+          <strong>{fmt(editing.order_number)}</strong> — بعد از تغییرها «ثبت ویرایش» را
+          بزن. قیمت‌ها هنگام ثبت، با قیمت روزِ منو دوباره محاسبه می‌شوند.
         </div>
       )}
 
@@ -844,6 +1023,22 @@ export default function NewOrderClient({
                 🏷️ تخفیف فعال {fmt(memberPct)}٪ — خودکار روی فاکتور
               </span>
             )}
+            {/* 🎯 پچ ۵۰-هـ-و: سهمیهٔ باقی‌ماندهٔ تخفیف سازمانی — امروز و کل */}
+            {(memberInfo?.active?.source === 'org' ||
+              memberInfo?.active?.source === 'stacked-org') &&
+              memberInfo?.orgRemainingToday != null && (
+                <span
+                  style={badge(
+                    memberInfo.orgRemainingToday === 0 ? '#fde8e6' : '#e5f0e6',
+                    memberInfo.orgRemainingToday === 0 ? '#9b3c32' : '#2d5d3e'
+                  )}
+                  title="سهمیهٔ باقی‌ماندهٔ تخفیف سازمانی (امروز · مجموع)"
+                >
+                  🎟️ سهمیهٔ تخفیف — امروز:{' '}
+                  {fmt(memberInfo.orgRemainingToday)} · کل:{' '}
+                  {fmt(memberInfo.orgTotalRemaining ?? 0)}
+                </span>
+              )}
             {memberInfo?.orgNote && (
               <small style={{ color: '#b45309' }}>{memberInfo.orgNote}</small>
             )}
@@ -1034,7 +1229,7 @@ export default function NewOrderClient({
                     {p.name}
                   </span>
                   <span style={{ fontSize: 11.5, color: '#6b4f3a', fontWeight: 700 }}>
-                    {opts.length > 0 ? 'انتخاب گزینه…' : fmt(p.price)}
+                    {opts.length > 0 ? '+ گزینه‌ها' : fmt(p.price)}
                   </span>
                 </button>
               )
@@ -1054,17 +1249,41 @@ export default function NewOrderClient({
               flexShrink: 0,
             }}
           >
-            <h3 style={{ margin: 0, fontSize: 15 }}>🧾 سفارش ({fmt(lines.length)} ردیف)</h3>
-            {lines.length > 0 && (
+            <h3 style={{ margin: 0, fontSize: 15 }}>
+              {editing
+                ? `✏️ ویرایش سفارش #${fmt(editing.order_number)} (${fmt(lines.length)} ردیف)`
+                : `🧾 سفارش (${fmt(lines.length)} ردیف)`}
+            </h3>
+            <div style={{ display: 'flex', gap: 6 }}>
+              {/* 🎯 پچ ۵۰-هـ-و: لیست سفارش‌های امروز — فیلتر حضوری/آنلاین + ویرایش */}
               <button
                 type="button"
                 style={{ ...smallBtn, fontSize: 12 }}
-                title="پاک کردن همهٔ ردیف‌ها"
-                onClick={() => setLines([])}
+                title="سفارش‌های امروز — با فیلتر حضوری/آنلاین و امکان ویرایش"
+                onClick={openOrders}
               >
-                🧹 پاک کردن
+                📋 سفارش‌ها
               </button>
-            )}
+              {lines.length > 0 && !editing && (
+                <button
+                  type="button"
+                  style={{ ...smallBtn, fontSize: 12 }}
+                  title="پاک کردن همهٔ ردیف‌ها"
+                  onClick={() => setLines([])}
+                >
+                  🧹 پاک کردن
+                </button>
+              )}
+              {editing && (
+                <button
+                  type="button"
+                  style={{ ...smallBtn, fontSize: 12, color: '#9b3c32' }}
+                  onClick={cancelEdit}
+                >
+                  انصراف از ویرایش
+                </button>
+              )}
+            </div>
           </div>
 
           {lines.length === 0 && (
@@ -1145,9 +1364,9 @@ export default function NewOrderClient({
                   <span
                     style={{
                       fontWeight: 700,
-                      fontSize: 12.5,
+                      fontSize: 13.5,
                       flexShrink: 0,
-                      minWidth: 66,
+                      minWidth: 74,
                       textAlign: 'left',
                     }}
                   >
@@ -1248,6 +1467,11 @@ export default function NewOrderClient({
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
               />
+              {/* 🎯 پچ ۵۰-هـ-و: یادآوری پیام‌های آماده */}
+              <small style={{ color: '#a89f8f', fontSize: 11 }}>
+                پیام‌های 💬 ردیف‌ها هنگام ثبت، به‌صورت «نام ×تعداد: پیام» به توضیحات
+                اضافه می‌شوند و در فیش آشپزخانه زیر همان آیتم چاپ می‌شوند.
+              </small>
               <label
                 style={{
                   display: 'flex',
@@ -1291,10 +1515,235 @@ export default function NewOrderClient({
               flexShrink: 0,
             }}
           >
-            {busy ? 'در حال ثبت...' : 'ثبت سفارش'}
+            {busy ? 'در حال ثبت...' : editing ? '💾 ثبت ویرایش سفارش' : 'ثبت سفارش'}
           </button>
         </section>
       </div>
+
+      {/* 🎯 پچ ۵۰-هـ-و: مودال لیست سفارش‌های امروز — فیلتر حضوری/آنلاین + ویرایش */}
+      {ordersOpen && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.45)',
+            zIndex: 1000,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 16,
+          }}
+          onClick={() => setOrdersOpen(false)}
+        >
+          <div
+            style={{
+              background: '#fff',
+              color: '#333',
+              borderRadius: 14,
+              padding: 16,
+              maxWidth: 580,
+              width: '100%',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                marginBottom: 10,
+              }}
+            >
+              <h3 style={{ margin: 0 }}>
+                📋 سفارش‌های امروز
+                <span style={{ fontSize: 12, color: '#766f64', fontWeight: 400 }}>
+                  {' '}
+                  ({fmt(ordersList.length)})
+                </span>
+              </h3>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button
+                  type="button"
+                  style={{ ...smallBtn, fontSize: 12 }}
+                  onClick={loadOrders}
+                >
+                  ↻
+                </button>
+                <button
+                  type="button"
+                  style={smallBtn}
+                  onClick={() => setOrdersOpen(false)}
+                >
+                  بستن
+                </button>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
+              {(
+                [
+                  ['all', 'همه'],
+                  ['admin', '🏪 حضوری'],
+                  ['online', '📱 آنلاین'],
+                ] as const
+              ).map(([key, label]) => {
+                const n =
+                  key === 'all'
+                    ? ordersList.length
+                    : ordersList.filter((o) =>
+                        key === 'admin' ? o.source === 'admin' : o.source !== 'admin'
+                      ).length
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    style={chip(ordersFilter === key)}
+                    onClick={() => setOrdersFilter(key)}
+                  >
+                    {label} ({fmt(n)})
+                  </button>
+                )
+              })}
+            </div>
+            {ordersErr && (
+              <small style={{ display: 'block', color: '#9b3c32', marginBottom: 8 }}>
+                {ordersErr}
+              </small>
+            )}
+            {ordersLoading ? (
+              <p style={{ color: '#766f64', fontSize: 13, margin: '8px 0' }}>
+                ⏳ در حال دریافت سفارش‌ها...
+              </p>
+            ) : ordersList.filter((o) =>
+                ordersFilter === 'all'
+                  ? true
+                  : ordersFilter === 'admin'
+                    ? o.source === 'admin'
+                    : o.source !== 'admin'
+              ).length === 0 ? (
+              <p style={{ color: '#766f64', fontSize: 13, margin: '8px 0' }}>
+                امروز در این دسته سفارشی نیست.
+              </p>
+            ) : (
+              <div
+                style={{
+                  display: 'grid',
+                  gap: 8,
+                  maxHeight: 400,
+                  overflowY: 'auto',
+                }}
+              >
+                {ordersList
+                  .filter((o) =>
+                    ordersFilter === 'all'
+                      ? true
+                      : ordersFilter === 'admin'
+                        ? o.source === 'admin'
+                        : o.source !== 'admin'
+                  )
+                  .map((o) => (
+                    <div
+                      key={o.id}
+                      style={{
+                        border: '1px solid #e7dfd3',
+                        borderRadius: 10,
+                        padding: '8px 10px',
+                        display: 'flex',
+                        gap: 8,
+                        alignItems: 'center',
+                      }}
+                    >
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                          <strong style={{ fontSize: 13.5 }}>
+                            #{fmt(o.order_number)}
+                          </strong>
+                          {o.is_test && (
+                            <span style={{ fontSize: 10, color: '#9a6b3f' }}>🧪 تستی</span>
+                          )}
+                          <span
+                            style={{
+                              fontSize: 10.5,
+                              fontWeight: 700,
+                              color: o.source === 'admin' ? '#6b4f3a' : '#4a7c9b',
+                              background: o.source === 'admin' ? '#f3efe7' : '#e8f0f6',
+                              borderRadius: 6,
+                              padding: '1px 6px',
+                            }}
+                          >
+                            {o.source === 'admin' ? '🏪 حضوری' : '📱 آنلاین'}
+                          </span>
+                          <span
+                            style={{
+                              fontSize: 10.5,
+                              fontWeight: 700,
+                              color:
+                                POS_STATUS_COLORS[o.status] ?? '#766f64',
+                            }}
+                          >
+                            {POS_STATUS_LABELS[o.status] ?? o.status}
+                          </span>
+                          <span dir="ltr" style={{ fontSize: 11, color: '#a89f8f' }}>
+                            {new Intl.DateTimeFormat('fa-IR', {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            }).format(new Date(o.created_at))}
+                          </span>
+                        </div>
+                        <div
+                          style={{
+                            fontSize: 12,
+                            color: '#766f64',
+                            marginTop: 3,
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {o.customer_name || 'مهمان'}
+                          {o.customer_phone ? ` — ${o.customer_phone}` : ''} ·{' '}
+                          {o.items.length} آیتم:{' '}
+                          {o.items
+                            .slice(0, 2)
+                            .map((it) => it.product_name)
+                            .join('، ')}
+                          {o.items.length > 2
+                            ? ` و ${fmt(o.items.length - 2)} مورد دیگر`
+                            : ''}
+                        </div>
+                      </div>
+                      <div style={{ flexShrink: 0, textAlign: 'left' }}>
+                        <div style={{ fontWeight: 700, fontSize: 13 }}>
+                          {fmt(o.subtotal)}
+                        </div>
+                        {(o.coupon_discount ?? 0) > 0 && (
+                          <div style={{ fontSize: 10.5, color: '#b45309' }}>
+                            🏷️ −{fmt(o.coupon_discount ?? 0)}
+                          </div>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        disabled={!isOrderEditable(o)}
+                        title={editBlockReason(o)}
+                        onClick={() => startEdit(o)}
+                        style={{
+                          ...smallBtn,
+                          flexShrink: 0,
+                          fontSize: 13,
+                          padding: '6px 10px',
+                          opacity: isOrderEditable(o) ? 1 : 0.45,
+                          cursor: isOrderEditable(o) ? 'pointer' : 'not-allowed',
+                        }}
+                      >
+                        ✏️
+                      </button>
+                    </div>
+                  ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* 🎯 پچ ۵۰-د: مودال انتخاب گزینهٔ محصول */}
       {variantFor && (
