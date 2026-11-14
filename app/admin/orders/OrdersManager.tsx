@@ -2345,6 +2345,18 @@ export default function OrdersManager({
                               ({item.option_name})
                             </small>
                           )}
+                          {/* 🎯 پچ ۵۰-هـ-د: پیام آمادهٔ ردیف — در فیش آشپزخانه چاپ می‌شود */}
+                          {item.line_note && (
+                            <small
+                              style={{
+                                color: '#b45309',
+                                display: 'block',
+                                fontWeight: 700,
+                              }}
+                            >
+                              📝 {item.line_note}
+                            </small>
+                          )}
                         </td>
                         <td style={{ textAlign: 'center' }}>
                           {formatPrice(item.quantity)}

@@ -35,14 +35,14 @@ export default async function NewOrderPage() {
       .order('number', { ascending: true }),
     db
       .from('categories')
-      .select('id,name,icon,sort_order,takeaway_fee_id')
+      .select('id,name,icon,sort_order,takeaway_fee_id,coupon_eligible')
       .eq('is_active', true)
       .order('sort_order', { ascending: true }),
     db
       .from('products')
       .select(
         `id,category_id,name,description,price,size,image_url,
-         is_featured,sort_order,is_available,is_new,
+         is_featured,sort_order,is_available,is_new,coupon_eligible,
          calories,prep_time_minutes,ingredients,allergens,dietary_info,
          takeaway_fee_id`
       )
