@@ -1,0 +1,227 @@
+diff --git a/app/admin/orders/new/NewOrderClient.tsx b/app/admin/orders/new/NewOrderClient.tsx
+index 9159a5e..c3ff3eb 100644
+--- a/app/admin/orders/new/NewOrderClient.tsx
++++ b/app/admin/orders/new/NewOrderClient.tsx
+@@ -1,6 +1,6 @@
+ 'use client'
+ 
+-import { useEffect, useMemo, useState } from 'react'
++import { useMemo, useState } from 'react'
+ import type { Category, Product } from '@/lib/menu-types'
+ 
+ const LEGACY_GROUP = 'بیرون بر'
+@@ -95,11 +95,18 @@ const chip = (active: boolean): React.CSSProperties => ({
+   fontWeight: active ? 700 : 400,
+ })
+ 
+-export default function NewOrderClient({ tables }: { tables: PosTable[] }) {
+-  const [categories, setCategories] = useState<Category[]>([])
+-  const [products, setProducts] = useState<Product[]>([])
+-  const [loading, setLoading] = useState(true)
+-  const [loadError, setLoadError] = useState('')
++// 🎯 پچ ۵۰-د-ب: منو (دسته‌ها و محصولات) هم server-side با supabaseAdmin خوانده
++// می‌شود و به‌جای /api/menu (که با کلاینت کاربر و RLS deny-all خالی برمی‌گشت)
++// از props می‌آید — همان الگوی صفحهٔ میزها
++export default function NewOrderClient({
++  tables,
++  categories,
++  products,
++}: {
++  tables: PosTable[]
++  categories: Category[]
++  products: Product[]
++}) {
+   const [search, setSearch] = useState('')
+   const [cat, setCat] = useState('all')
+   const [lines, setLines] = useState<Line[]>([])
+@@ -117,17 +124,6 @@ export default function NewOrderClient({ tables }: { tables: PosTable[] }) {
+   const [variantFor, setVariantFor] = useState<Product | null>(null)
+   const [pickedOption, setPickedOption] = useState('')
+ 
+-  useEffect(() => {
+-    fetch('/api/menu', { cache: 'no-store' })
+-      .then((r) => r.json())
+-      .then((d) => {
+-        setCategories(d.categories ?? [])
+-        setProducts(d.products ?? [])
+-      })
+-      .catch(() => setLoadError('بارگذاری منو ناموفق بود'))
+-      .finally(() => setLoading(false))
+-  }, [])
+-
+   const shown = useMemo(() => {
+     const q = search.trim().toLowerCase()
+     return products.filter(
+@@ -336,9 +332,6 @@ export default function NewOrderClient({ tables }: { tables: PosTable[] }) {
+             ))}
+           </div>
+ 
+-          {loading && <p>در حال بارگذاری...</p>}
+-          {loadError && <p className="danger">{loadError}</p>}
+-
+           {/* 🎯 پچ ۵۰-د: گرید تایل لمسی به‌جای فهرست ردیفی */}
+           <div
+             style={{
+@@ -368,7 +361,7 @@ export default function NewOrderClient({ tables }: { tables: PosTable[] }) {
+                 </button>
+               )
+             })}
+-            {!loading && shown.length === 0 && <p>محصولی پیدا نشد.</p>}
++            {shown.length === 0 && <p>محصولی پیدا نشد.</p>}
+           </div>
+         </section>
+ 
+diff --git a/app/admin/orders/new/page.tsx b/app/admin/orders/new/page.tsx
+index 714438d..ea7b847 100644
+--- a/app/admin/orders/new/page.tsx
++++ b/app/admin/orders/new/page.tsx
+@@ -1,5 +1,6 @@
+ import type { Metadata } from 'next'
+ import { supabaseAdmin } from '@/lib/supabase/server'
++import type { Category, Product, VariantGroup } from '@/lib/menu-types'
+ import NewOrderClient from './NewOrderClient'
+ 
+ export const metadata: Metadata = {
+@@ -9,19 +10,107 @@ export const metadata: Metadata = {
+ 
+ export const dynamic = 'force-dynamic'
+ 
++type FeeRow = { id: string; name: string; fee: number }
++type PosTableRow = {
++  id: string
++  number: number
++  name: string | null
++  location: string | null
++}
++
+ export default async function NewOrderPage() {
+-  // 🎯 پچ ۵۰-د: فهرست میزهای فعال برای انتخاب لمسی در POS
+   const db = supabaseAdmin()
+-  const { data: tables } = await db
+-    .from('tables')
+-    .select('id, number, name, location, is_active')
+-    .eq('is_active', true)
+-    .order('sort_order', { ascending: true })
+-    .order('number', { ascending: true })
++
++  // 🎯 پچ ۵۰-د: میزهای فعال برای انتخاب لمسی
++  // 🎯 پچ ۵۰-د-ب: منو (دسته‌ها + محصولات + واریانت‌ها + هزینهٔ بیرون‌بر) هم با
++  // service role از سرور خوانده می‌شود — /api/menu با کلاینت کاربر می‌خواند و
++  // چون RLS جدول‌ها deny-all است، خالی برمی‌گشت و POS «محصولی پیدا نشد» می‌داد.
++  // شکل داده عیناً همان خروجی /api/menu است (فقط منو؛ تم/تنظیمات/جملات لازم نیست).
++  const [tablesRes, catsRes, productsRes, variantsRes, feesRes] = await Promise.all([
++    db
++      .from('tables')
++      .select('id, number, name, location, is_active')
++      .eq('is_active', true)
++      .order('sort_order', { ascending: true })
++      .order('number', { ascending: true }),
++    db
++      .from('categories')
++      .select('id,name,icon,sort_order,takeaway_fee_id')
++      .eq('is_active', true)
++      .order('sort_order', { ascending: true }),
++    db
++      .from('products')
++      .select(
++        `id,category_id,name,description,price,size,image_url,
++         is_featured,sort_order,is_available,is_new,
++         calories,prep_time_minutes,ingredients,allergens,dietary_info,
++         takeaway_fee_id`
++      )
++      .eq('is_active', true)
++      .order('sort_order', { ascending: true }),
++    db
++      .from('variant_groups')
++      .select(
++        `id,product_id,name,is_required,sort_order,
++         variant_options(id,group_id,name,price_modifier,is_default,is_available,sort_order)`
++      )
++      .order('sort_order', { ascending: true }),
++    db
++      .from('takeaway_fees')
++      .select('id,name,fee')
++      .eq('is_active', true),
++  ])
++
++  // گروه‌بندی واریانت‌ها بر اساس product_id
++  const variantGroups = (variantsRes.data ?? []) as VariantGroup[]
++  const variantsByProduct = new Map<string, VariantGroup[]>()
++  for (const group of variantGroups) {
++    const list = variantsByProduct.get(group.product_id) ?? []
++    list.push(group)
++    variantsByProduct.set(group.product_id, list)
++  }
++
++  // هزینهٔ بیرون‌بر: اولویت با گروه خود محصول، بعد گروه دسته
++  const feeById = new Map<string, FeeRow>(
++    ((feesRes.data ?? []) as FeeRow[]).map((f) => [f.id, f])
++  )
++  const catFeeId = new Map<string, string | null>(
++    ((catsRes.data ?? []) as Array<{ id: string; takeaway_fee_id: string | null }>).map(
++      (c) => [c.id, c.takeaway_fee_id ?? null]
++    )
++  )
++
++  const categories: Category[] = (
++    (catsRes.data ?? []) as Array<{ takeaway_fee_id?: string | null } & Category>
++  ).map((c) => {
++    const { takeaway_fee_id, ...rest } = c
++    void takeaway_fee_id
++    return rest
++  })
++
++  const products: Product[] = (
++    (productsRes.data ?? []) as Array<
++      { takeaway_fee_id?: string | null; category_id: string; id: string } & Product
++    >
++  ).map((p) => {
++    const { takeaway_fee_id, ...rest } = p
++    const feeId = takeaway_fee_id ?? catFeeId.get(p.category_id) ?? null
++    const f = feeId ? feeById.get(feeId) : undefined
++    return {
++      ...rest,
++      variant_groups: variantsByProduct.get(p.id) ?? [],
++      takeaway_fee: f ? Number(f.fee) : null,
++      takeaway_label: f ? f.name : null,
++    }
++  })
+ 
+   return (
+     <main className="admin">
+-      <NewOrderClient tables={tables ?? []} />
++      <NewOrderClient
++        tables={(tablesRes.data ?? []) as PosTableRow[]}
++        categories={categories}
++        products={products}
++      />
+     </main>
+   )
+ }
+diff --git a/patch-50d-b-pos-menu-fix-RELEASE.md b/patch-50d-b-pos-menu-fix-RELEASE.md
+new file mode 100644
+index 0000000..8892c32
+--- /dev/null
++++ b/patch-50d-b-pos-menu-fix-RELEASE.md
+@@ -0,0 +1,21 @@
++# پچ ۵۰-د-ب — رفع «محصولی پیدا نشد» در POS
++
++## ریشه
++کلاینت POS منو را از `/api/menu` می‌گرفت؛ این API دسته‌ها و محصولات را با
++کلاینت کاربر/anon (`supabaseServer`) می‌خواند و چون RLS جدول‌ها deny-all است،
++خالی برمی‌گشت → گرید خالی با پیام «محصولی پیدا نشد». (صفحهٔ قدیمی ثبت سفارش هم
++دقیقاً همین باگ را داشت؛ مصرف‌کنندهٔ دیگرِ این API وجود نداشت.)
++
++## فیکس
++- `app/admin/orders/new/page.tsx` — حالا علاوه بر میزها، کل منو را هم با
++  `supabaseAdmin` (service role) می‌خواند: دسته‌های فعال، محصولات فعال،
++  گروه‌های واریانت با گزینه‌ها، هزینه‌های فعال بیرون‌بر — و شکل داده را عیناً
++  مثل خروجی `/api/menu` می‌سازد (fee محصول ← گروه خود محصول، بعد گروه دسته)
++- `app/admin/orders/new/NewOrderClient.tsx` — منو از props می‌آید؛ fetch
++  `/api/menu` و حالت‌های loading/loadError حذف شد
++- تغییر دیگری در منطق سبد/تخفیف/ثبت نیست؛ `route.ts` هم دست‌نخورده است
++
++## تست
++1. `Ctrl+F5` روی `/admin/orders/new` — دسته‌ها و تایل محصولات باید پر باشند
++2. لمس تایل ساده → افزودن؛ تایل گزینه‌دار → مودال گزینه
++3. ثبت سفارش با میز و تخفیف مثل قبل
