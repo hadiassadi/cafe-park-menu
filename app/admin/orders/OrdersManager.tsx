@@ -64,6 +64,13 @@ type Order = {
   items: OrderItem[]
   subtotal: number
   paid_amount?: number
+  // 🎯 پچ ۵۰-هـ-ف: ردیف‌های دفتر پرداخت (برای نمایش شفافِ پرداخت ترکیبی)
+  order_payments?: Array<{
+    method: string | null
+    amount: number
+    status: string | null
+    created_at: string | null
+  }> | null
   original_subtotal: number | null
   coupon_code: string | null
   coupon_discount: number | null
@@ -108,6 +115,15 @@ const PAYMENT_METHOD_LABELS: Record<string, string> = {
   cash: 'نقدی',
   card: 'کارت‌خوان',
   transfer: 'واریز به حساب',
+}
+
+// 🎯 پچ ۵۰-هـ-ف: آیکن روش‌های پرداخت برای دفتر ردیف‌به‌ردیف
+const PAYMENT_METHOD_ICONS: Record<string, string> = {
+  cash: '💵',
+  card: '💳',
+  online: '🌐',
+  transfer: '🏦',
+  wallet: '👛',
 }
 
 const PAYMENT_STATUS_LABELS: Record<string, string> = {
@@ -637,6 +653,8 @@ export default function OrdersManager({
         }
       }
 
+        const remaining =
+          Math.max(0, settleOrder.subtotal - (settleOrder.paid_amount ?? 0))
         const updated = {
         ...settleOrder,
         payment_status: 'paid',
@@ -644,6 +662,19 @@ export default function OrdersManager({
         payment_note: settleNote.trim() || settleOrder.payment_note,
         paid_amount: settleOrder.subtotal,
         status: newStatus,
+        // 🎯 پچ ۵۰-هـ-ف: ردیف تازهٔ تسویه در دفتر نمایشی هم دیده شود
+        order_payments:
+          remaining > 0
+            ? [
+                ...(settleOrder.order_payments ?? []),
+                {
+                  method: settleMethod === 'split' ? 'cash' : settleMethod,
+                  amount: remaining,
+                  status: 'confirmed',
+                  created_at: new Date().toISOString(),
+                },
+              ]
+            : settleOrder.order_payments ?? [],
       }
 
 
@@ -1692,6 +1723,66 @@ export default function OrdersManager({
                         </strong>
                       </div>
                     </>
+                  )}
+                  {/* 🎯 پچ ۵۰-هـ-ف: دفتر پرداخت ردیف‌به‌ردیف — شفافیت پرداخت ترکیبی */}
+                  {(selectedOrder.order_payments?.length ?? 0) > 0 && (
+                    <div
+                      style={{
+                        marginTop: 10,
+                        borderTop: '1px dashed #e7dfd3',
+                        paddingTop: 8,
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontSize: 12.5,
+                          fontWeight: 700,
+                          marginBottom: 6,
+                          color: '#4b443b',
+                        }}
+                      >
+                        💳 ردیف‌های پرداخت ({formatPrice(selectedOrder.order_payments!.length)} مورد):
+                      </div>
+                      {selectedOrder.order_payments!.map((p, i) => (
+                        <div
+                          key={i}
+                          style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            gap: 8,
+                            fontSize: 12,
+                            padding: '3px 0',
+                            color: '#4b443b',
+                          }}
+                        >
+                          <span>
+                            {PAYMENT_METHOD_ICONS[p.method ?? ''] ?? '💳'}{' '}
+                            {PAYMENT_METHOD_LABELS[p.method ?? ''] ?? p.method}
+                            {p.created_at && (
+                              <span
+                                dir="ltr"
+                                style={{
+                                  fontSize: 10.5,
+                                  color: '#a89f8f',
+                                  marginRight: 6,
+                                }}
+                              >
+                                {new Intl.DateTimeFormat('fa-IR', {
+                                  month: '2-digit',
+                                  day: '2-digit',
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                }).format(new Date(p.created_at))}
+                              </span>
+                            )}
+                          </span>
+                          <strong style={{ whiteSpace: 'nowrap' }}>
+                            {formatPrice(Number(p.amount))} تومان
+                          </strong>
+                        </div>
+                      ))}
+                    </div>
                   )}
                 </div>
 
