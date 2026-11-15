@@ -13,6 +13,7 @@ import {
 import { formatPersianDate } from '@/lib/format-date'
 import { useStepUp } from '@/lib/admin/use-step-up'
 import StepUpModal from '../components/StepUpModal'
+import AdminSplitPayment from '@/app/admin/components/AdminSplitPayment'
 
 const formatPrice = (price: number) =>
   new Intl.NumberFormat('fa-IR').format(price)
@@ -214,7 +215,8 @@ export default function OrdersManager({
   const [paymentNote, setPaymentNote] = useState('')
   const [showApprovePayment, setShowApprovePayment] = useState(false)
   const [settleOrder, setSettleOrder] = useState<Order | null>(null)
-  const [settleMethod, setSettleMethod] = useState<'cash' | 'card'>('cash')
+  // 🎯 پچ ۵۰-هـ-او: حالت «split» = پرداخت ترکیبی (تقسیم مبلغ بین روش‌ها)
+  const [settleMethod, setSettleMethod] = useState<'cash' | 'card' | 'split'>('cash')
   const [settleNote, setSettleNote] = useState('')
   const [settling, setSettling] = useState(false)
   const [settleAndDeliver, setSettleAndDeliver] = useState(false)
@@ -585,6 +587,8 @@ export default function OrdersManager({
     setSettleOrder(null)
     setSettleAndDeliver(false)
     setSettleNote('')
+    // 🎯 پچ ۵۰-هـ-او: حالت ترکیبی هم ریست شود
+    setSettleMethod('cash')
   }
 
   async function confirmSettle() {
@@ -597,7 +601,8 @@ export default function OrdersManager({
         settleOrder.id,
         'paid',
         settleNote.trim() || 'تسویه در محل',
-        settleMethod
+        // 🎯 پچ ۵۰-هـ-او: حالت split از مسیر confirmSettle رد نمی‌شود (دکمه مخفی)
+        settleMethod === 'split' ? 'cash' : settleMethod
       )
 
       if (payRes.error) {
@@ -1840,8 +1845,27 @@ export default function OrdersManager({
                     💳 کارت‌خوان
                   </button>
                 </div>
+                {/* 🎯 پچ ۵۰-هـ-او: حالت پرداخت ترکیبی */}
+                <button
+                  type="button"
+                  className={`btn ${settleMethod === 'split' ? 'primary-btn' : ''}`}
+                  style={{
+                    minHeight: '50px',
+                    width: '100%',
+                    justifyContent: 'center',
+                    fontSize: '15px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    marginTop: '10px',
+                  }}
+                  onClick={() => setSettleMethod('split')}
+                >
+                  🧩 پرداخت ترکیبی (تقسیم مبلغ بین روش‌ها)
+                </button>
               </div>
 
+            {settleMethod !== 'split' && (
               <div
                 className="field"
                 style={{ marginBottom: '16px' }}
@@ -1872,8 +1896,27 @@ export default function OrdersManager({
                   }}
                 />
               </div>
+            )}
 
-              {settleAndDeliver && (
+            {settleMethod === 'split' && (
+              // 🎯 پچ ۵۰-هـ-او: پنل پرداخت ترکیبی — هر بخش همان‌جا روی دفتر ثبت می‌شود
+              <div style={{ marginBottom: '16px' }}>
+                <AdminSplitPayment
+                  orderId={settleOrder.id}
+                  remaining={Math.max(
+                    0,
+                    settleOrder.subtotal - (settleOrder.paid_amount ?? 0)
+                  )}
+                  onDone={() => {
+                    closeSettleModal()
+                    router.refresh()
+                  }}
+                  onCancel={() => setSettleMethod('cash')}
+                />
+              </div>
+            )}
+
+            {settleMethod !== 'split' && settleAndDeliver && (
                 <>
                   <div
                     style={{
@@ -1916,18 +1959,21 @@ export default function OrdersManager({
               >
                 انصراف
               </button>
-              <button
-                type="button"
-                className="btn primary-btn"
-                onClick={confirmSettle}
-                disabled={settling}
-              >
-                {settling
-                  ? '...'
-                  : settleAndDeliver
-                    ? '✅ تسویه و تحویل'
-                    : '✅ ثبت تسویه'}
-              </button>
+              {/* 🎯 پچ ۵۰-هـ-او: در حالت ترکیبی، ثبت از داخل پنل انجام می‌شود */}
+              {settleMethod !== 'split' && (
+                <button
+                  type="button"
+                  className="btn primary-btn"
+                  onClick={confirmSettle}
+                  disabled={settling}
+                >
+                  {settling
+                    ? '...'
+                    : settleAndDeliver
+                      ? '✅ تسویه و تحویل'
+                      : '✅ ثبت تسویه'}
+                </button>
+              )}
             </div>
           </div>
         </div>
