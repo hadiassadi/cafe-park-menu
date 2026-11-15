@@ -3,18 +3,24 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase/server'
 import { UUID_RE } from '@/lib/orders/owner'
 import { verifyZarinPalPayment } from '@/lib/payment/zarinpal'
+import { resolveRequestOrigin } from '@/lib/site'
 
 export const dynamic = 'force-dynamic'
 
-function siteUrl() {
-  return (process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000').replace(/\/$/, '')
-}
-
-function back(code: string, orderId?: string, extra?: Record<string, string>) {
+// 🎯 پچ ۵۰-هـ-وِی: آدرس بازگشت بعد از پرداخت — env نبود از هدرهای همان
+// درخواستِ مرورگر ساخته می‌شود (قبلاً localhost فرض می‌شد و redirect می‌شکست)
+function back(
+  req: NextRequest,
+  code: string,
+  orderId?: string,
+  extra?: Record<string, string>
+) {
   const p = new URLSearchParams({ status: code })
   if (orderId) p.set('orderId', orderId)
   for (const [k, v] of Object.entries(extra ?? {})) p.set(k, v)
-  return NextResponse.redirect(`${siteUrl()}/payment/callback?${p.toString()}`)
+  return NextResponse.redirect(
+    `${resolveRequestOrigin(req)}/payment/callback?${p.toString()}`
+  )
 }
 
 export async function GET(req: NextRequest) {
@@ -25,10 +31,10 @@ export async function GET(req: NextRequest) {
     const paymentId = searchParams.get('paymentId')
 
     if (!authority || authority.length > 64) {
-      return back('error', undefined, { code: 'no_authority' })
+      return back(req, 'error', undefined, { code: 'no_authority' })
     }
     if (!paymentId || !UUID_RE.test(paymentId)) {
-      return back('error', undefined, { code: 'bad_order' })
+      return back(req, 'error', undefined, { code: 'bad_order' })
     }
 
     const db = supabaseAdmin()
@@ -40,22 +46,22 @@ export async function GET(req: NextRequest) {
       .maybeSingle()
 
     if (payErr || !payment) {
-      return back('error', undefined, { code: 'order_not_found' })
+      return back(req, 'error', undefined, { code: 'order_not_found' })
     }
     const orderId = payment.order_id as string
 
     if (payment.method !== 'online' || !payment.authority || payment.authority !== authority) {
       console.error('[payment/verify] authority mismatch', { paymentId })
-      return back('error', orderId, { code: 'authority_mismatch' })
+      return back(req, 'error', orderId, { code: 'authority_mismatch' })
     }
 
     // قبلاً تأیید شده
     if (payment.status === 'confirmed') {
-      return back('already-paid', orderId)
+      return back(req, 'already-paid', orderId)
     }
     // فقط پرداخت در حال انتظار قابل تأیید است
     if (payment.status !== 'pending') {
-      return back('error', orderId, { code: 'verify_failed' })
+      return back(req, 'error', orderId, { code: 'verify_failed' })
     }
 
     const markFinal = async (newStatus: 'failed', reason: string) => {
@@ -72,7 +78,7 @@ export async function GET(req: NextRequest) {
     // کاربر در درگاه انصراف داد
     if (status !== 'OK') {
       await markFinal('failed', 'user_cancelled')
-      return back('cancelled', orderId)
+      return back(req, 'cancelled', orderId)
     }
     // سفارش لغو یا حذف شده: پرداخت را تأیید نکنید
     const { data: orderRow } = await db
@@ -87,13 +93,13 @@ export async function GET(req: NextRequest) {
       ['cancelled', 'canceled'].includes(orderRow.status)
     ) {
       await markFinal('failed', 'order_cancelled')
-      return back('error', orderId, { code: 'order_cancelled' })
+      return back(req, 'error', orderId, { code: 'order_cancelled' })
     }
 
     const amount = Number(payment.amount)
     if (!Number.isInteger(amount) || amount <= 0) {
       console.error('[payment/verify] invalid stored amount', { paymentId })
-      return back('error', orderId, { code: 'bad_amount' })
+      return back(req, 'error', orderId, { code: 'bad_amount' })
     }
 
     const { data: settings, error: settingsErr } = await db
@@ -103,7 +109,7 @@ export async function GET(req: NextRequest) {
       .single()
 
     if (settingsErr || !settings?.payment_merchant_id) {
-      return back('error', orderId, { code: 'settings' })
+      return back(req, 'error', orderId, { code: 'settings' })
     }
 
     const result = await verifyZarinPalPayment(
@@ -119,10 +125,10 @@ export async function GET(req: NextRequest) {
       if (result.retryable) {
         // وضعیت نامعلوم است؛ ردیف را failed نکنید
         console.error('[payment/verify] retryable failure', { paymentId })
-        return back('pending', orderId)
+        return back(req, 'pending', orderId)
       }
       await markFinal('failed', 'verify_rejected')
-      return back('error', orderId, { code: 'verify_failed' })
+      return back(req, 'error', orderId, { code: 'verify_failed' })
     }
 
     // ثبت موفقیت (اتمیک)
@@ -134,7 +140,7 @@ export async function GET(req: NextRequest) {
 
     if (confirmErr) {
       if (String(confirmErr.message).includes('payment_already_final')) {
-        return back('already-paid', orderId)
+        return back(req, 'already-paid', orderId)
       }
       // پول تأیید شده ولی ثبت نشد: حتماً در لاگ بماند
       console.error('[payment/verify] CRITICAL paid but not saved', {
@@ -143,12 +149,12 @@ export async function GET(req: NextRequest) {
         refId: result.refId,
         confirmErr,
       })
-      return back('error', orderId, { code: 'save_failed', refId: result.refId })
+      return back(req, 'error', orderId, { code: 'save_failed', refId: result.refId })
     }
 
-    return back('success', orderId, { refId: result.refId })
+    return back(req, 'success', orderId, { refId: result.refId })
   } catch (err) {
     console.error('[payment/verify]', err)
-    return back('error', undefined, { code: 'unexpected' })
+    return back(req, 'error', undefined, { code: 'unexpected' })
   }
 }

@@ -6,6 +6,14 @@ import { createPortal } from 'react-dom'
 import { QRCodeSVG } from 'qrcode.react'
 import AdminSplitPayment from '@/app/admin/components/AdminSplitPayment'
 import type { Category, Product } from '@/lib/menu-types'
+import {
+  toJalaali,
+  toGregorian,
+  jalaaliMonthLength,
+  JALALI_MONTHS,
+  pad2,
+  formatJalali,
+} from '@/lib/jalali'
 
 const LEGACY_GROUP = 'بیرون بر'
 
@@ -292,6 +300,87 @@ function pageWindow(page: number, pages: number): Array<number | '…'> {
   return out
 }
 
+// 🎯 پچ ۵۰-هـ-وِی: انتخابگر تاریخ شمسی فشرده (روز/ماه/سال) — خروجی میلادی برای API
+// مقادیر نمایشی وقتی بازه خالی است «امروز» است (همان رفتار پیش‌فرض API)
+function JalaliDateSelect({
+  value,
+  onChange,
+}: {
+  value: string
+  onChange: (gregorian: string) => void
+}) {
+  const now = new Date()
+  const nowJ = toJalaali(now.getFullYear(), now.getMonth() + 1, now.getDate())
+  let jy = nowJ.jy
+  let jm = nowJ.jm
+  let jd = nowJ.jd
+  if (value) {
+    const [y, m, d] = value.split('-').map(Number)
+    if (y && m && d) {
+      const j = toJalaali(y, m, d)
+      jy = j.jy
+      jm = j.jm
+      jd = j.jd
+    }
+  }
+  const commit = (yy: number, mm: number, dd: number) => {
+    const g = toGregorian(yy, mm, Math.min(dd, jalaaliMonthLength(yy, mm)))
+    onChange(`${g.gy}-${pad2(g.gm)}-${pad2(g.gd)}`)
+  }
+  const faNum = (n: number) => n.toLocaleString('fa-IR')
+  const selStyle: React.CSSProperties = {
+    fontSize: 12,
+    padding: '3px 4px',
+    borderRadius: 8,
+    border: '1px solid #e3ddd2',
+    font: 'inherit',
+    color: '#4b443b',
+    background: '#fff',
+  }
+  return (
+    <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+      <select
+        style={selStyle}
+        value={jd}
+        onChange={(e) => commit(jy, jm, Number(e.target.value))}
+        aria-label="روز شمسی"
+      >
+        {Array.from({ length: jalaaliMonthLength(jy, jm) }, (_, i) => i + 1).map(
+          (d) => (
+            <option key={d} value={d}>
+              {faNum(d)}
+            </option>
+          )
+        )}
+      </select>
+      <select
+        style={selStyle}
+        value={jm}
+        onChange={(e) => commit(jy, Number(e.target.value), jd)}
+        aria-label="ماه شمسی"
+      >
+        {JALALI_MONTHS.map((name, i) => (
+          <option key={name} value={i + 1}>
+            {faNum(i + 1)} {name}
+          </option>
+        ))}
+      </select>
+      <select
+        style={selStyle}
+        value={jy}
+        onChange={(e) => commit(Number(e.target.value), jm, jd)}
+        aria-label="سال شمسی"
+      >
+        {[nowJ.jy - 1, nowJ.jy, nowJ.jy + 1].map((y) => (
+          <option key={y} value={y}>
+            {faNum(y)}
+          </option>
+        ))}
+      </select>
+    </div>
+  )
+}
+
 export default function NewOrderClient({
   tables,
   categories,
@@ -403,9 +492,9 @@ export default function NewOrderClient({
   // 🎯 پچ ۵۰-هـ-خ: سفارش ضمیمه + نمای منو (تصویری/متنی) + ثبت پرداخت در ردیف
   const [supplementFor, setSupplementFor] = useState<PosOrderRow | null>(null)
   const [menuView, setMenuView] = useState<'img' | 'text'>('img')
-  // 🎯 پچ ۵۰-هـ-او: پرداخت در ردیف با پنل ترکیبی (AdminSplitPayment) جایگزین
-  // فرم تک‌روشیِ قبلی شد — stateهای payMethodSel/payAmount/payBusy/payMsg حذف
-  const [payForId, setPayForId] = useState<string | null>(null)
+  // 🎯 پچ ۵۰-هـ-وِی: پرداخت با دکمهٔ ردیفی + مودال — پنل ترکیبی (AdminSplitPayment)
+  // پچ ۵۰-هـ-او: stateهای payMethodSel/payAmount/payBusy/payMsg حذف شدند
+  const [payModalOrder, setPayModalOrder] = useState<PosOrderRow | null>(null)
   useEffect(() => {
     try {
       const saved = window.localStorage.getItem('pos_menu_view')
@@ -1987,6 +2076,22 @@ export default function NewOrderClient({
                   {' '}
                   ({fmt(listTotal)})
                 </span>
+                {/* 🎯 پچ ۵۰-هـ-وِی: نمایش بازه به تاریخ شمسی */}
+                {(listFrom || listTo) && (
+                  <span
+                    style={{
+                      fontSize: 11.5,
+                      color: '#9a6b3f',
+                      fontWeight: 400,
+                      marginRight: 6,
+                    }}
+                  >
+                    {listFrom ? `از ${formatJalali(listFrom)}` : ''}
+                    {listFrom && listTo ? ' ' : ''}
+                    {listTo ? `تا ${formatJalali(listTo)}` : listFrom ? ' به بعد' : ''}
+                    {!listFrom && listTo ? `تا ${formatJalali(listTo)}` : ''}
+                  </span>
+                )}
               </h3>
               <div style={{ display: 'flex', gap: 6 }}>
                 <button
@@ -2005,7 +2110,7 @@ export default function NewOrderClient({
                 </button>
               </div>
             </div>
-            {/* 🎯 پچ ۵۰-هـ-او: فیلتر بازهٔ تاریخ (از/تا) + بازگشت به امروز */}
+            {/* 🎯 پچ ۵۰-هـ-او/وِی: فیلتر بازهٔ تاریخ شمسی (از/تا) + بازگشت به امروز */}
             <div
               style={{
                 display: 'flex',
@@ -2016,39 +2121,19 @@ export default function NewOrderClient({
               }}
             >
               <span style={{ fontSize: 12, color: '#766f64' }}>📅 از</span>
-              <input
-                type="date"
+              <JalaliDateSelect
                 value={listFrom}
-                onChange={(e) => {
-                  const v = e.target.value
-                  setListFrom(v)
-                  loadOrders({ page: 1, from: v })
-                }}
-                style={{
-                  fontSize: 12,
-                  padding: '4px 8px',
-                  borderRadius: 8,
-                  border: '1px solid #e3ddd2',
-                  font: 'inherit',
-                  color: '#4b443b',
+                onChange={(g) => {
+                  setListFrom(g)
+                  loadOrders({ page: 1, from: g })
                 }}
               />
               <span style={{ fontSize: 12, color: '#766f64' }}>تا</span>
-              <input
-                type="date"
+              <JalaliDateSelect
                 value={listTo}
-                onChange={(e) => {
-                  const v = e.target.value
-                  setListTo(v)
-                  loadOrders({ page: 1, to: v })
-                }}
-                style={{
-                  fontSize: 12,
-                  padding: '4px 8px',
-                  borderRadius: 8,
-                  border: '1px solid #e3ddd2',
-                  font: 'inherit',
-                  color: '#4b443b',
+                onChange={(g) => {
+                  setListTo(g)
+                  loadOrders({ page: 1, to: g })
                 }}
               />
               <button
@@ -2416,32 +2501,6 @@ export default function NewOrderClient({
                                       ? ` (${kids.length + 1} فاکتور)`
                                       : ''}
                                   </div>
-                                  {payForId === o.id ? (
-                                    // 🎯 پچ ۵۰-هـ-او: پرداخت ترکیبی واقعی — تقسیم
-                                    // مبلغ بین روش‌ها یا کل مبلغ با یک روش
-                                    <AdminSplitPayment
-                                      orderId={o.id}
-                                      remaining={chainRemaining}
-                                      onDone={() => {
-                                        setPayForId(null)
-                                        loadOrders()
-                                      }}
-                                      onCancel={() => setPayForId(null)}
-                                    />
-                                  ) : (
-                                    <button
-                                      type="button"
-                                      style={{
-                                        ...smallBtn,
-                                        fontSize: 11.5,
-                                        padding: '3px 8px',
-                                        justifySelf: 'start',
-                                      }}
-                                      onClick={() => setPayForId(o.id)}
-                                    >
-                                      💳 پرداخت / تسویه 🧩
-                                    </button>
-                                  )}
                                 </div>
                               )
                             })()}
@@ -2493,6 +2552,16 @@ export default function NewOrderClient({
                           style={{ ...smallBtn, fontSize: 13, padding: '6px 8px' }}
                         >
                           🔁
+                        </button>
+                        {/* 🎯 پچ ۵۰-هـ-وِی: دکمهٔ پرداخت مستقیم روی ردیف — مودال
+                            پرداخت با همهٔ روش‌ها (تک‌روشی یا ترکیبی) */}
+                        <button
+                          type="button"
+                          title="پرداخت / تسویه — تک‌روشی یا ترکیبی 🧩"
+                          onClick={() => setPayModalOrder(o)}
+                          style={{ ...smallBtn, flexShrink: 0, fontSize: 13, padding: '6px 8px' }}
+                        >
+                          💳
                         </button>
                         <button
                           type="button"
@@ -2579,6 +2648,100 @@ export default function NewOrderClient({
           </div>
         </div>
       )}
+
+      {/* 🎯 پچ ۵۰-هـ-وِی: مودال پرداخت سفارش — تک‌روشی یا ترکیبی 🧩 */}
+      {payModalOrder &&
+        (() => {
+          const kids = ordersList.filter(
+            (x) => x.parent_order_id === payModalOrder.id
+          )
+          const chain = [payModalOrder, ...kids]
+          const chainSubtotal = chain.reduce(
+            (s, x) => s + Math.round(Number(x.subtotal) || 0),
+            0
+          )
+          const chainPaid = chain.reduce((s, x) => s + settlementOf(x).paid, 0)
+          const chainRemaining = Math.max(0, chainSubtotal - chainPaid)
+          return (
+            <div
+              style={{
+                position: 'fixed',
+                inset: 0,
+                background: 'rgba(0,0,0,0.45)',
+                zIndex: 1000,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: 16,
+              }}
+              onClick={() => setPayModalOrder(null)}
+            >
+              <div
+                style={{
+                  background: '#fff',
+                  color: '#333',
+                  borderRadius: 14,
+                  padding: 16,
+                  maxWidth: 560,
+                  width: '100%',
+                }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    marginBottom: 8,
+                  }}
+                >
+                  <h3 style={{ margin: 0 }}>
+                    💳 پرداخت سفارش #{fmt(payModalOrder.order_number)}
+                  </h3>
+                  <button
+                    type="button"
+                    style={smallBtn}
+                    onClick={() => setPayModalOrder(null)}
+                  >
+                    ✕
+                  </button>
+                </div>
+                {kids.length > 0 && (
+                  <div
+                    style={{
+                      fontSize: 12,
+                      color: '#6b4f3a',
+                      fontWeight: 700,
+                      marginBottom: 6,
+                    }}
+                  >
+                    🧾 با ضمیمه‌ها:{' '}
+                    {kids.map((k) => `#${fmt(k.order_number)}`).join(' و ')}
+                  </div>
+                )}
+                <div
+                  style={{
+                    fontSize: 12.5,
+                    color: '#5c554b',
+                    marginBottom: 10,
+                  }}
+                >
+                  جمع فاکتورها: {fmt(chainSubtotal)} · مانده:{' '}
+                  <b>{fmt(chainRemaining)}</b>
+                </div>
+                <AdminSplitPayment
+                  orderId={payModalOrder.id}
+                  remaining={chainRemaining}
+                  onDone={() => {
+                    setPayModalOrder(null)
+                    loadOrders()
+                  }}
+                  onCancel={() => setPayModalOrder(null)}
+                />
+              </div>
+            </div>
+          )
+        })()}
 
       {/* 🎯 پچ ۵۰-د: مودال انتخاب گزینهٔ محصول */}
       {variantFor && (

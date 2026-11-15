@@ -71,6 +71,23 @@ export async function requestZarinPalPayment(
       }
     }
 
+    // 🎯 پچ ۵۰-هـ-وِی: نگاشت خطاهای شناخته‌شدهٔ درگاه به پیام روشن فارسی
+    // (مثلاً -9 = merchant نامعتبر — سندباکس merchant پنل سندباکس می‌خواهد)
+    const errCode =
+      data?.errors && !Array.isArray(data.errors)
+        ? Number((data.errors as { code?: number | string }).code)
+        : null
+    if (errCode === -9) {
+      return {
+        success: false,
+        error:
+          'Merchant ID نامعتبر است — در حالت سندباکس باید Merchant از پنل sandbox.zarinpal.com باشد',
+      }
+    }
+    if (errCode === -50 || errCode === -51 || errCode === -53) {
+      return { success: false, error: 'مبلغ یا مقادیر تراکنش از سوی درگاه رد شد' }
+    }
+
     console.error('[zarinpal/request] rejected:', data?.errors)
     return { success: false, error: 'خطا در ایجاد تراکنش زرین‌پال' }
   } catch (err) {
