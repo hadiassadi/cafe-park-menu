@@ -3,9 +3,11 @@
 import { useMemo, useState } from 'react'
 
 // ─────────────────────────────────────────────
-// 🎯 پچ ۵۰-هـ-او — پنل «پرداخت ترکیبی» سمت ادمین (مشترک بین پنل سفارش‌ها و POS)
-// مبلغ باقی‌مانده بین روش‌ها تقسیم می‌شود (نقدی/کارت‌خوان/درگاه/کارت‌به‌کارت)
-// یا کل مبلغ با یک روش («کل مبلغ»). هر بخش با همان API پرداخت POS ثبت می‌شود:
+// 🎯 پچ ۵۰-هـ-وِی — پنل «پرداخت ترکیبی» ادمین، نسخهٔ فشرده
+// بازطراحی بر اساس بازخورد: روش‌ها چیپ‌های کوچک تیک‌دار هستند (نه ردیف‌های
+// بلند پشت‌سرهم)؛ با تیک هر روش فقط باکس مبلغ همان روش باز می‌شود.
+// «کل مبلغ» روی یک روش، بقیه را غیرفعال می‌کند (پرداخت تکی).
+// هر بخش با همان API پرداخت POS ثبت می‌شود:
 // POST /api/admin/orders/[id]/payment → ردیف confirmed روی دفتر + recalc.
 // ─────────────────────────────────────────────
 
@@ -14,7 +16,7 @@ type MethodKey = 'cash' | 'card' | 'online' | 'transfer'
 const METHODS: Array<{ key: MethodKey; icon: string; label: string }> = [
   { key: 'cash', icon: '💵', label: 'نقدی' },
   { key: 'card', icon: '💳', label: 'کارت‌خوان' },
-  { key: 'online', icon: '🌐', label: 'درگاه آنلاین' },
+  { key: 'online', icon: '🌐', label: 'درگاه' },
   { key: 'transfer', icon: '🏦', label: 'کارت‌به‌کارت' },
 ]
 
@@ -40,52 +42,71 @@ export default function AdminSplitPayment({
   onDone,
   onCancel,
 }: Props) {
-  const [raws, setRaws] = useState<Record<MethodKey, string>>({
-    cash: '',
-    card: '',
-    online: '',
-    transfer: '',
-  })
+  const [selected, setSelected] = useState<MethodKey[]>([])
+  const [amounts, setAmounts] = useState<Partial<Record<MethodKey, number>>>({})
+  const [locked, setLocked] = useState<MethodKey | null>(null) // «کل مبلغ»
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [doneParts, setDoneParts] = useState<MethodKey[]>([])
 
-  const amounts = useMemo(() => {
-    const out: Record<MethodKey, number | null> = {
-      cash: null,
-      card: null,
-      online: null,
-      transfer: null,
-    }
-    for (const m of METHODS) {
-      const n = parseInt(toEnDigits(raws[m.key]).replace(/\D/g, ''), 10)
-      if (Number.isFinite(n) && n > 0) out[m.key] = Math.min(n, remaining)
-    }
-    return out
-  }, [raws, remaining])
-
-  const allocated = METHODS.reduce((s, m) => s + (amounts[m.key] ?? 0), 0)
+  const allocated = useMemo(
+    () => selected.reduce((s, k) => s + (amounts[k] ?? 0), 0),
+    [selected, amounts]
+  )
   const overLimit = allocated > remaining
+
+  function toggleMethod(key: MethodKey) {
+    if (busy) return
+    setError(null)
+    setSelected((sel) => {
+      if (sel.includes(key)) {
+        // لغو تیک: اگر همان روش قفلِ «کل مبلغ» بود، قفل هم باز می‌شود
+        setLocked((l) => (l === key ? null : l))
+        setAmounts((a) => {
+          const next = { ...a }
+          delete next[key]
+          return next
+        })
+        return sel.filter((k) => k !== key)
+      }
+      return [...sel, key]
+    })
+  }
 
   function setAmount(key: MethodKey, raw: string) {
     const digits = toEnDigits(raw).replace(/\D/g, '')
-    setRaws((r) => ({ ...r, [key]: digits }))
+    const n = parseInt(digits, 10)
     setError(null)
+    setAmounts((a) => ({
+      ...a,
+      [key]: Number.isFinite(n) && n > 0 ? Math.min(n, remaining) : undefined,
+    }))
   }
 
+  /** «کل مبلغ» با این روش: مبلغ را کامل می‌کند و بقیهٔ روش‌ها را غیرفعال می‌کند */
   function assignAll(key: MethodKey) {
     if (remaining < MIN_PART) return
-    const next = { cash: '', card: '', online: '', transfer: '' } as Record<
-      MethodKey,
-      string
-    >
-    next[key] = String(remaining)
-    setRaws(next)
     setError(null)
+    setLocked(key)
+    setSelected((sel) => sel.filter((k) => k === key))
+    setAmounts({ [key]: remaining })
+  }
+
+  /** باقی‌ماندهٔ بعد از تخصیص‌های دیگر */
+  function fillRest(key: MethodKey) {
+    const rest = remaining - (allocated - (amounts[key] ?? 0))
+    if (rest <= 0) return
+    setError(null)
+    setAmounts((a) => ({ ...a, [key]: rest }))
   }
 
   function clearRow(key: MethodKey) {
-    setRaws((r) => ({ ...r, [key]: '' }))
+    setLocked((l) => (l === key ? null : l))
+    setAmounts((a) => {
+      const next = { ...a }
+      delete next[key]
+      return next
+    })
     setError(null)
   }
 
@@ -93,7 +114,9 @@ export default function AdminSplitPayment({
     setError(null)
     if (remaining <= 0) return
 
-    const parts = METHODS.filter((m) => (amounts[m.key] ?? 0) >= MIN_PART)
+    const parts = selected
+      .map((k) => ({ k, amount: amounts[k] ?? 0 }))
+      .filter((p) => p.amount >= MIN_PART)
     if (parts.length === 0) {
       setError(`مبلغ هر بخش باید حداقل ${fa(MIN_PART)} تومان باشد.`)
       return
@@ -105,17 +128,20 @@ export default function AdminSplitPayment({
 
     setBusy(true)
     try {
-      for (const m of parts) {
+      for (const p of parts) {
         const res = await fetch(`/api/admin/orders/${orderId}/payment`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ method: m.key, amount: amounts[m.key] }),
+          body: JSON.stringify({ method: p.k, amount: p.amount }),
         })
         const d = await res.json().catch(() => null)
         if (!res.ok || d?.error) {
-          throw new Error(d?.error || `ثبت بخش ${m.label} ناموفق بود`)
+          throw new Error(
+            d?.error ||
+              `ثبت بخش ${METHODS.find((m) => m.key === p.k)?.label} ناموفق بود`
+          )
         }
-        setDoneParts((p) => [...p, m.key])
+        setDoneParts((prev) => [...prev, p.k])
       }
       onDone()
     } catch (e) {
@@ -125,11 +151,24 @@ export default function AdminSplitPayment({
     }
   }
 
+  const chipBase: React.CSSProperties = {
+    fontSize: 12,
+    padding: '4px 10px',
+    borderRadius: 999,
+    border: '1px solid #e3ddd2',
+    background: '#fff',
+    color: '#4b443b',
+    cursor: 'pointer',
+    font: 'inherit',
+    whiteSpace: 'nowrap',
+    fontWeight: 600,
+  }
+
   const inputStyle: React.CSSProperties = {
     flex: 1,
-    minWidth: 120,
-    fontSize: 13,
-    padding: '6px 10px',
+    minWidth: 110,
+    fontSize: 12.5,
+    padding: '5px 9px',
     borderRadius: 8,
     border: '1px solid #e3ddd2',
     font: 'inherit',
@@ -139,8 +178,8 @@ export default function AdminSplitPayment({
     textAlign: 'left',
   }
 
-  const chipStyle: React.CSSProperties = {
-    fontSize: 11.5,
+  const miniBtn: React.CSSProperties = {
+    fontSize: 11,
     padding: '3px 8px',
     borderRadius: 8,
     border: '1px solid #e3ddd2',
@@ -172,62 +211,112 @@ export default function AdminSplitPayment({
         🧩 پرداخت ترکیبی
       </div>
       <div style={{ fontSize: 11.5, color: '#766f64', marginBottom: 8 }}>
-        باقی‌ماندهٔ {fa(remaining)} تومان را بین روش‌ها تقسیم کن یا «کل مبلغ» را با
-        یک روش ثبت کن. هر بخش بلافاصله روی دفتر ثبت می‌شود.
+        باقی‌مانده: <b>{fa(remaining)}</b> تومان — روش‌ها را تیک بزن (چند روش =
+        تقسیم مبلغ). دکمهٔ «کل مبلغ» فقط همان روش را فعال نگه می‌دارد.
       </div>
 
       {doneParts.length > 0 && (
-        <div style={{ fontSize: 12, color: '#3f7d5c', marginBottom: 8 }}>
-          ✅ {doneParts.length} بخش ثبت شد
+        <div style={{ fontSize: 12, color: '#3f7d5c', marginBottom: 6 }}>
+          ✅ {fa(doneParts.length)} بخش ثبت شد
         </div>
       )}
       {error && (
-        <div style={{ fontSize: 12, color: '#9b3c32', marginBottom: 8 }}>❌ {error}</div>
+        <div style={{ fontSize: 12, color: '#9b3c32', marginBottom: 6 }}>❌ {error}</div>
       )}
 
-      {METHODS.map((m) => (
-        <div
-          key={m.key}
-          style={{
-            display: 'flex',
-            gap: 6,
-            alignItems: 'center',
-            marginBottom: 6,
-            flexWrap: 'wrap',
-          }}
-        >
-          <span style={{ fontSize: 13, width: 110, fontWeight: 600 }}>
-            {m.icon} {m.label}
-          </span>
-          <input
-            value={raws[m.key]}
-            onChange={(e) => setAmount(m.key, e.target.value)}
-            placeholder={`مبلغ (تومان) — حداکثر ${fa(remaining)}`}
-            inputMode="numeric"
-            disabled={busy}
-            style={inputStyle}
-          />
-          <button
-            type="button"
-            style={chipStyle}
-            onClick={() => assignAll(m.key)}
-            disabled={busy}
+      {/* ── چیپ‌های فشردهٔ روش‌ها ── */}
+      <div
+        style={{
+          display: 'flex',
+          gap: 6,
+          flexWrap: 'wrap',
+          marginBottom: 8,
+        }}
+      >
+        {METHODS.map((m) => {
+          const isSel = selected.includes(m.key)
+          const disabled = busy || (locked !== null && !isSel)
+          return (
+            <button
+              key={m.key}
+              type="button"
+              disabled={disabled}
+              onClick={() => toggleMethod(m.key)}
+              style={{
+                ...chipBase,
+                ...(isSel
+                  ? { background: '#2d5d3e', borderColor: '#2d5d3e', color: '#fff' }
+                  : {}),
+                ...(disabled ? { opacity: 0.4, cursor: 'not-allowed' } : {}),
+              }}
+            >
+              {isSel ? '✓ ' : ''}
+              {m.icon} {m.label}
+              {!isSel && locked !== null ? ' 🔒' : ''}
+            </button>
+          )
+        })}
+      </div>
+
+      {/* ── باکس مبلغ فقط برای روش‌های تیک‌خورده ── */}
+      {selected.map((k) => {
+        const m = METHODS.find((x) => x.key === k)!
+        return (
+          <div
+            key={k}
+            style={{
+              display: 'flex',
+              gap: 5,
+              alignItems: 'center',
+              marginBottom: 6,
+              flexWrap: 'wrap',
+            }}
           >
-            کل مبلغ
-          </button>
-          {(amounts[m.key] ?? 0) > 0 && (
+            <span style={{ fontSize: 12, fontWeight: 600, minWidth: 96 }}>
+              {m.icon} {m.label}
+            </span>
+            <input
+              value={
+                amounts[k] !== undefined && amounts[k] !== null
+                  ? String(amounts[k])
+                  : ''
+              }
+              onChange={(e) => setAmount(k, e.target.value)}
+              placeholder={locked === k ? String(remaining) : 'مبلغ (تومان)'}
+              inputMode="numeric"
+              disabled={busy}
+              style={inputStyle}
+            />
             <button
               type="button"
-              style={{ ...chipStyle, border: 'none', background: 'none' }}
-              onClick={() => clearRow(m.key)}
+              style={miniBtn}
+              onClick={() => assignAll(k)}
               disabled={busy}
-              aria-label="پاک کردن"
+              title="کل باقی‌مانده با این روش — بقیهٔ روش‌ها غیرفعال می‌شوند"
+            >
+              کل مبلغ
+            </button>
+            <button
+              type="button"
+              style={miniBtn}
+              onClick={() => fillRest(k)}
+              disabled={busy}
+              title="بقیهٔ مبلغِ تخصیص‌نشده"
+            >
+              باقی
+            </button>
+            <button
+              type="button"
+              style={{ ...miniBtn, border: 'none', background: 'none' }}
+              onClick={() => clearRow(k)}
+              disabled={busy}
+              aria-label="حذف روش"
             >
               ✕
             </button>
-          )}
-        </div>
-      ))}
+          </div>
+        )
+      })}
 
       <div
         style={{
@@ -235,7 +324,7 @@ export default function AdminSplitPayment({
           justifyContent: 'space-between',
           fontSize: 12,
           fontWeight: 700,
-          padding: '6px 8px',
+          padding: '5px 8px',
           borderRadius: 8,
           background: overLimit ? '#fdecec' : '#f1ede4',
           color: overLimit ? '#9b3c32' : '#4b443b',
@@ -246,7 +335,7 @@ export default function AdminSplitPayment({
         <span>
           {overLimit
             ? 'بیشتر از باقی‌مانده!'
-            : `باقی‌ماندهٔ بدون تخصیص: ${fa(Math.max(0, remaining - allocated))}`}
+            : `بدون تخصیص: ${fa(Math.max(0, remaining - allocated))}`}
         </span>
       </div>
 
@@ -268,7 +357,7 @@ export default function AdminSplitPayment({
             opacity: busy ? 0.6 : 1,
           }}
         >
-          {busy ? '⏳ در حال ثبت…' : '🧩 ثبت پرداخت ترکیبی'}
+          {busy ? '⏳ در حال ثبت…' : '🧩 ثبت پرداخت'}
         </button>
         {onCancel && (
           <button

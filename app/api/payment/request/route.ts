@@ -10,6 +10,7 @@ import {
 } from '@/lib/orders/owner'
 import { requestZarinPalPayment } from '@/lib/payment/zarinpal'
 import { paymentErrorMessage } from '@/lib/payment/methods'
+import { resolveRequestOrigin } from '@/lib/site'
 
 export const dynamic = 'force-dynamic'
 
@@ -30,11 +31,10 @@ export async function POST(req: NextRequest) {
       requestedAmount = body.amount
     }
 
-    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL
-    if (!siteUrl) {
-      console.error('[payment/request] NEXT_PUBLIC_SITE_URL is not set')
-      return NextResponse.json({ error: 'خطای پیکربندی سرور' }, { status: 500 })
-    }
+    // 🎯 پچ ۵۰-هـ-وِی: siteUrl الزامی نیست — env نبود، از هدرهای درخواست
+    // ساخته می‌شود (قبلاً «خطای پیکربندی سرور» می‌داد و پرداخت آنلاین از کار
+    // می‌افتاد حتی در حالت سندباکس زرین‌پال)
+    const siteUrl = resolveRequestOrigin(req)
 
     // 🎯 پچ ۵۰-هـ-ز: دسترسی با دستگاه یا شمارهٔ مشتری (سفارش حضوری POS)
     const deviceHashes = await getDeviceHashes()
@@ -138,7 +138,8 @@ export async function POST(req: NextRequest) {
     if (!result.success) {
       console.error('[payment/request] gateway error:', result.error)
       await failPayment('gateway_error')
-      return NextResponse.json({ error: 'ایجاد تراکنش ناموفق بود' }, { status: 502 })
+      // 🎯 پچ ۵۰-هـ-وِی: پیام دقیق درگاه (مثلاً Merchant نامعتبر در سندباکس) برسد
+      return NextResponse.json({ error: result.error }, { status: 502 })
     }
 
     // ۳) ذخیرهٔ Authority روی ردیف پرداخت

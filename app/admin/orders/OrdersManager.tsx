@@ -216,7 +216,10 @@ export default function OrdersManager({
   const [showApprovePayment, setShowApprovePayment] = useState(false)
   const [settleOrder, setSettleOrder] = useState<Order | null>(null)
   // 🎯 پچ ۵۰-هـ-او: حالت «split» = پرداخت ترکیبی (تقسیم مبلغ بین روش‌ها)
-  const [settleMethod, setSettleMethod] = useState<'cash' | 'card' | 'split'>('cash')
+  // 🎯 پچ ۵۰-هـ-وِی: روش‌های تکی درگاه/کارت‌به‌کارت هم اضافه شد
+  const [settleMethod, setSettleMethod] = useState<
+    'cash' | 'card' | 'online' | 'transfer' | 'split'
+  >('cash')
   const [settleNote, setSettleNote] = useState('')
   const [settling, setSettling] = useState(false)
   const [settleAndDeliver, setSettleAndDeliver] = useState(false)
@@ -578,7 +581,14 @@ export default function OrdersManager({
   function openSettleModal(order: Order, deliverToo: boolean = false) {
     setSettleOrder(order)
     setSettleAndDeliver(deliverToo)
-    setSettleMethod(order.payment_method === 'card' ? 'card' : 'cash')
+    // 🎯 پچ ۵۰-هـ-وِی: روش ذخیره‌شدهٔ سفارش (نقدی/کارت/درگاه/کارت‌به‌کارت) پیش‌فرض شود
+    const pm = order.payment_method as
+      | 'cash'
+      | 'card'
+      | 'online'
+      | 'transfer'
+      | null
+    setSettleMethod(pm ?? 'cash')
     setSettleNote('')
   }
 
@@ -1807,62 +1817,45 @@ export default function OrdersManager({
                 >
                   نحوه پرداخت:
                 </label>
-                <div
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: '1fr 1fr',
-                    gap: '10px',
-                  }}
-                >
-                  <button
-                    type="button"
-                    className={`btn ${settleMethod === 'cash' ? 'primary-btn' : ''}`}
-                    style={{
-                      minHeight: '50px',
-                      justifyContent: 'center',
-                      fontSize: '15px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                    }}
-                    onClick={() => setSettleMethod('cash')}
-                  >
-                    💵 نقدی
-                  </button>
-                  <button
-                    type="button"
-                    className={`btn ${settleMethod === 'card' ? 'primary-btn' : ''}`}
-                    style={{
-                      minHeight: '50px',
-                      justifyContent: 'center',
-                      fontSize: '15px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                    }}
-                    onClick={() => setSettleMethod('card')}
-                  >
-                    💳 کارت‌خوان
-                  </button>
+                {/* 🎯 پچ ۵۰-هـ-وِی: چیپ‌های فشرده به‌جای دکمه‌های بزرگ ردیفی */}
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  {(
+                    [
+                      ['cash', '💵', 'نقدی'],
+                      ['card', '💳', 'کارت‌خوان'],
+                      ['online', '🌐', 'درگاه'],
+                      ['transfer', '🏦', 'کارت‌به‌کارت'],
+                      ['split', '🧩', 'ترکیبی'],
+                    ] as const
+                  ).map(([key, icon, label]) => (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => setSettleMethod(key)}
+                      style={{
+                        fontSize: 12.5,
+                        padding: '6px 12px',
+                        borderRadius: 999,
+                        border: `1px solid ${settleMethod === key ? '#2d5d3e' : '#d8d0c4'}`,
+                        background: settleMethod === key ? '#2d5d3e' : '#fff',
+                        color: settleMethod === key ? '#fff' : '#4b443b',
+                        cursor: 'pointer',
+                        font: 'inherit',
+                        fontWeight: 600,
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {settleMethod === key ? '✓ ' : ''}
+                      {icon} {label}
+                    </button>
+                  ))}
                 </div>
-                {/* 🎯 پچ ۵۰-هـ-او: حالت پرداخت ترکیبی */}
-                <button
-                  type="button"
-                  className={`btn ${settleMethod === 'split' ? 'primary-btn' : ''}`}
-                  style={{
-                    minHeight: '50px',
-                    width: '100%',
-                    justifyContent: 'center',
-                    fontSize: '15px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    marginTop: '10px',
-                  }}
-                  onClick={() => setSettleMethod('split')}
-                >
-                  🧩 پرداخت ترکیبی (تقسیم مبلغ بین روش‌ها)
-                </button>
+                {settleMethod !== 'split' && (
+                  <div style={{ fontSize: 11.5, color: '#766f64', marginTop: 6 }}>
+                    کل باقی‌مانده با این روش ثبت می‌شود؛ برای تقسیم مبلغ، «🧩 ترکیبی» را
+                    انتخاب کن.
+                  </div>
+                )}
               </div>
 
             {settleMethod !== 'split' && (
