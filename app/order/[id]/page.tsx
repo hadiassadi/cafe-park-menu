@@ -822,40 +822,42 @@ export default function OrderPage({
                 <div className="checkout-error" style={{ marginBottom: '12px' }}>❌ {paymentError}</div>
               )}
 
+              {/* 🎯 پچ ۵۰-هـ-ف: چیپ‌های فشرده — توضیحات به title منتقل شد */}
               <div className="order-payment-methods">
                 {walletSessionAvailable && (
-                  <button type="button" className="order-payment-method-btn" onClick={() => { setShowChangeMethod(false); handlePayWallet() }} disabled={paying}>
+                  <button type="button" className="order-payment-method-btn" title={`موجودی: ${formatPrice(walletBalance ?? 0)} تومان`} onClick={() => { setShowChangeMethod(false); handlePayWallet() }} disabled={paying}>
                     <span className="order-payment-method-icon">👛</span>
-                    <div><strong>{isPartial ? 'باقی‌مانده با کیف پول' : 'کیف پول'}</strong><small>موجودی: {formatPrice(walletBalance ?? 0)} تومان</small></div>
+                    <strong>{isPartial ? 'باقی‌مانده با کیف پول' : 'کیف پول'}</strong>
                   </button>
                 )}
                 {paymentSettings?.payment_online_enabled && (
-                  <button type="button" className="order-payment-method-btn" onClick={() => { setShowChangeMethod(false); handlePayOnline() }} disabled={paying}>
+                  <button type="button" className="order-payment-method-btn" title="زرین‌پال / آیدی‌پی" onClick={() => { setShowChangeMethod(false); handlePayOnline() }} disabled={paying}>
                     <span className="order-payment-method-icon">💳</span>
-                    <div><strong>پرداخت آنلاین</strong><small>زرین‌پال / آیدی‌پی</small></div>
+                    <strong>پرداخت آنلاین</strong>
                   </button>
                 )}
                 {(paymentSettings?.payment_cash_enabled || paymentSettings?.payment_card_enabled) && (
-                  <button type="button" className="order-payment-method-btn" onClick={() => handleChangeMethod('cash')} disabled={paying}>
+                  <button type="button" className="order-payment-method-btn" title="نقدی / کارت‌خوان" onClick={() => handleChangeMethod('cash')} disabled={paying}>
                     <span className="order-payment-method-icon">💵</span>
-                    <div><strong>پرداخت در محل</strong><small>نقدی / کارت‌خوان</small></div>
+                    <strong>پرداخت در محل</strong>
                   </button>
                 )}
                 {paymentSettings?.payment_transfer_enabled && (
-                  <button type="button" className="order-payment-method-btn" onClick={() => handleChangeMethod('transfer')} disabled={paying}>
+                  <button type="button" className="order-payment-method-btn" title="با آپلود رسید" onClick={() => handleChangeMethod('transfer')} disabled={paying}>
                     <span className="order-payment-method-icon">🏦</span>
-                    <div><strong>واریز به حساب</strong><small>با رسید</small></div>
+                    <strong>واریز به حساب</strong>
                   </button>
                 )}
                 {/* 🎯 پچ ۵۰-هـ-ن: ورود به حالت پرداخت ترکیبی */}
                 <button
                   type="button"
                   className="order-payment-method-btn"
+                  title="تقسیم مبلغ بین روش‌ها"
                   onClick={() => { setShowChangeMethod(false); setPaymentError(null); setSplitMode(true) }}
                   disabled={paying}
                 >
                   <span className="order-payment-method-icon">🧩</span>
-                  <div><strong>پرداخت ترکیبی</strong><small>تقسیم مبلغ بین روش‌ها</small></div>
+                  <strong>پرداخت ترکیبی</strong>
                 </button>
               </div>
 

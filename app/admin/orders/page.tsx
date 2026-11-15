@@ -56,16 +56,27 @@ export default async function OrdersPage() {
   const rawOrders = ordersResult.data ?? []
 
   // جمع پرداخت‌های تأییدشدهٔ هر سفارش از دفتر پرداخت
+  // 🎯 پچ ۵۰-هـ-ف: خودِ ردیف‌ها هم (روش/مبلغ/زمان) برای نمایش شفاف در جزییات
   const paidByOrder: Record<string, number> = {}
+  const ledgerByOrder: Record<
+    string,
+    Array<{
+      method: string | null
+      amount: number
+      status: string | null
+      created_at: string | null
+    }>
+  > = {}
   if (rawOrders.length > 0) {
     const { data: payments, error: payErr } = await db
       .from('order_payments')
-      .select('order_id, amount')
+      .select('order_id, amount, method, status, created_at')
       .in(
         'order_id',
         rawOrders.map((o: any) => o.id)
       )
       .eq('status', 'confirmed')
+      .order('created_at', { ascending: true })
 
     if (payErr) {
       return (
@@ -77,14 +88,21 @@ export default async function OrdersPage() {
     }
 
     for (const p of payments ?? []) {
-      paidByOrder[p.order_id] =
-        (paidByOrder[p.order_id] ?? 0) + Number(p.amount)
+      const amount = Number(p.amount)
+      paidByOrder[p.order_id] = (paidByOrder[p.order_id] ?? 0) + amount
+      ;(ledgerByOrder[p.order_id] ??= []).push({
+        method: p.method ?? null,
+        amount,
+        status: p.status ?? null,
+        created_at: p.created_at ?? null,
+      })
     }
   }
 
   const orders = rawOrders.map((o: any) => ({
     ...o,
     paid_amount: paidByOrder[o.id] ?? 0,
+    order_payments: ledgerByOrder[o.id] ?? [],
   }))
 
   const allowDeleteOrders =

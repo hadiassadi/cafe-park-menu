@@ -1634,8 +1634,9 @@ export default function NewOrderClient({
                   fontWeight: cat === '__featured' ? 700 : 700,
                 }}
                 onClick={() => setCat(cat === '__featured' ? 'all' : '__featured')}
+                title="اقلام پر سفارش"
               >
-                ⭐ اقلام پر سفارش
+                ⭐
               </button>
             )}
             <button
@@ -2223,16 +2224,24 @@ export default function NewOrderClient({
                     <div
                       key={o.id}
                       style={{
-                        border: '1px solid #e7dfd3',
-                        borderRadius: 10,
-                        padding: '8px 10px',
                         display: 'flex',
-                        gap: 8,
-                        alignItems: 'center',
+                        flexDirection: 'column',
+                        gap: 4,
                         // 🐛 فیکس ۵۰-هـ-ح: سرریز افقی — grid-item نباید min-width:auto بماند
                         minWidth: 0,
                       }}
                     >
+                      <div
+                        style={{
+                          border: '1px solid #e7dfd3',
+                          borderRadius: 10,
+                          padding: '8px 10px',
+                          display: 'flex',
+                          gap: 8,
+                          alignItems: 'center',
+                          minWidth: 0,
+                        }}
+                      >
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
                           <strong style={{ fontSize: 13.5 }}>
@@ -2553,16 +2562,8 @@ export default function NewOrderClient({
                         >
                           🔁
                         </button>
-                        {/* 🎯 پچ ۵۰-هـ-وِی: دکمهٔ پرداخت مستقیم روی ردیف — مودال
-                            پرداخت با همهٔ روش‌ها (تک‌روشی یا ترکیبی) */}
-                        <button
-                          type="button"
-                          title="پرداخت / تسویه — تک‌روشی یا ترکیبی 🧩"
-                          onClick={() => setPayModalOrder(o)}
-                          style={{ ...smallBtn, flexShrink: 0, fontSize: 13, padding: '6px 8px' }}
-                        >
-                          💳
-                        </button>
+                        {/* 🎯 پچ ۵۰-هـ-ف: دکمهٔ 💳 فشرده از ردیف حذف شد — نوار پرداخت
+                            واضح زیر کارت جای آن را گرفته */}
                         <button
                           type="button"
                           disabled={!isOrderEditable(o)}
@@ -2580,6 +2581,59 @@ export default function NewOrderClient({
                           ✏️
                         </button>
                       </div>
+                      </div>
+                      {/* 🎯 پچ ۵۰-هـ-ف: نوار پرداخت واضح زیر هر سفارش — برای
+                          سفارش لغوشده/تسویه‌شده فعال نیست */}
+                      {o.status === 'cancelled' ? (
+                        <div
+                          style={{
+                            fontSize: 11.5,
+                            color: '#9b3c32',
+                            background: '#fdecec',
+                            borderRadius: 8,
+                            padding: '6px 10px',
+                            textAlign: 'center',
+                          }}
+                        >
+                          🚫 سفارش لغو شده — امکان پرداخت ندارد
+                        </div>
+                      ) : st.remaining <= 0 ? (
+                        <div
+                          style={{
+                            fontSize: 11.5,
+                            fontWeight: 700,
+                            color: '#3f7d5c',
+                            background: '#e5f0e6',
+                            borderRadius: 8,
+                            padding: '6px 10px',
+                            textAlign: 'center',
+                          }}
+                        >
+                          ✅ تسویه شده — {fmt(st.paid)} تومان پرداخت ثبت شده است
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setPayModalOrder(o)}
+                          style={{
+                            display: 'block',
+                            width: '100%',
+                            padding: '8px 10px',
+                            borderRadius: 8,
+                            border: 'none',
+                            background: '#2d5d3e',
+                            color: '#fff',
+                            fontWeight: 700,
+                            fontSize: 13,
+                            cursor: 'pointer',
+                            font: 'inherit',
+                            textAlign: 'center',
+                          }}
+                        >
+                          💳 پرداخت / تسویه این سفارش — مانده:{' '}
+                          {fmt(st.remaining)} تومان 🧩
+                        </button>
+                      )}
                     </div>
                     )
                   })}

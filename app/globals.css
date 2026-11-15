@@ -14795,24 +14795,27 @@ a.cat {
     padding: 1px 6px !important;
   }
 }
+/* 🎯 پچ ۵۰-هـ-ف: چیپ‌های فشرده به‌جای ردیف‌های بلند (بدون اسکرول اضافه) */
 .order-payment-methods {
   display: flex;
-  flex-direction: column;
-  gap: 10px;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .order-payment-method-btn {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 12px;
-  width: 100%;
-  padding: 12px 14px;
+  gap: 6px;
+  width: auto;
+  padding: 8px 14px;
   background: #fffdf9;
   border: 1px solid #d8d0c4;
-  border-radius: 12px;
+  border-radius: 999px;
   cursor: pointer;
   text-align: right;
   font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
   color: #29251f;
 }
 
@@ -14827,7 +14830,7 @@ a.cat {
 }
 
 .order-payment-method-icon {
-  font-size: 24px;
+  font-size: 17px;
   flex: 0 0 auto;
 }
 
