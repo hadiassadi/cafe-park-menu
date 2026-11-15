@@ -2,9 +2,8 @@ import { apiError } from '@/lib/api-error'
 import 'server-only'
 import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
-import crypto from 'crypto'
 import { supabaseAdmin } from '@/lib/supabase/server'
-import { hashData } from '@/lib/utils/hash'
+import { getDeviceHashes, getDeviceCustomerPhone } from '@/lib/orders/owner'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,49 +18,14 @@ export async function GET() {
 
     const db = supabaseAdmin()
 
-    // هش قدیمی (برای سفارش‌هایی که قبل از تغییرات ثبت شده‌اند)
-    const oldDeviceIdHash = crypto.createHash('sha256').update(deviceToken).digest('hex')
-
-    // هش جدید (برای سفارش‌های جدید با Salt)
-    const newDeviceIdHash = hashData(deviceToken)
-
-    // 🎯 پچ ۵۰-هـ-ذ + ۵۰-هـ-ر: سفارش‌های POS (حضوری، source=admin) هم به پنل مشتری
-    // وصل می‌شوند. زنجیرهٔ شناسایی شمارهٔ مشتری:
-    // ۱) آخرین سفارشِ دستگاهِ این مشتری → شماره‌اش (لنگر قبلی)
-    // ۲) 🐛 فیکس ۵۰-هـ-ر: اگر لنگر نبود، ردیفِ customers وصل‌شده به همین دستگاه
-    //    (عضو ثبت‌شده ممکن است هیچ سفارش آنلاینِ حاوی شماره از این دستگاه نداشته باشد)
-    // ۳) و اگر آن هم نبود، شمارهٔ عضو سازمانیِ همان دستگاه (metadata._phone)
-    const { data: anchor } = await db
-      .from('orders')
-      .select('customer_phone')
-      .in('device_id_hash', [oldDeviceIdHash, newDeviceIdHash])
-      .not('customer_phone', 'is', null)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-    let anchorPhone = String((anchor as any)?.customer_phone ?? '').trim()
-
-    if (!anchorPhone) {
-      const { data: custRow } = await db
-        .from('customers')
-        .select('phone')
-        .in('device_id_hash', [oldDeviceIdHash, newDeviceIdHash])
-        .not('phone', 'is', null)
-        .limit(1)
-        .maybeSingle()
-      anchorPhone = String((custRow as any)?.phone ?? '').trim()
+    // 🎯 پچ ۵۰-هـ-ذ/هـ-ر (از ۵۰-هـ-ز منطق مشترک شد در lib/orders/owner.ts):
+    // سفارش‌های POS (حضوری، source=admin) هم به پنل مشتری وصل می‌شوند —
+    // زنجیرهٔ شناسایی شماره: سفارشِ دستگاه → customers.device_id_hash → عضو سازمانی
+    const deviceHashes = await getDeviceHashes()
+    if (deviceHashes.length === 0) {
+      return NextResponse.json({ orders: [] })
     }
-
-    if (!anchorPhone) {
-      const { data: orgRow } = await db
-        .from('organization_members')
-        .select('metadata')
-        .in('device_id_hash', [oldDeviceIdHash, newDeviceIdHash])
-        .eq('is_registered', true)
-        .limit(1)
-        .maybeSingle()
-      anchorPhone = String((orgRow as any)?.metadata?._phone ?? '').trim()
-    }
+    const anchorPhone = await getDeviceCustomerPhone(db, deviceHashes)
 
     let query = db
       .from('orders')
@@ -75,9 +39,9 @@ export async function GET() {
       .limit(60)
     query = anchorPhone
       ? query.or(
-          `device_id_hash.in.(${oldDeviceIdHash},${newDeviceIdHash}),customer_phone.eq.${anchorPhone}`
+          `device_id_hash.in.(${deviceHashes.join(',')}),customer_phone.eq.${anchorPhone}`
         )
-      : query.in('device_id_hash', [oldDeviceIdHash, newDeviceIdHash])
+      : query.in('device_id_hash', deviceHashes)
 
     const { data, error } = await query
 

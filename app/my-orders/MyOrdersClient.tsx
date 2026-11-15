@@ -1056,6 +1056,16 @@ export default function MyOrdersClient() {
                     💳 مشاهده و تسویه
                   </Link>
                 )}
+                {/* 🎯 پچ ۵۰-هـ-ز: تسویهٔ سفارشِ بازِ تسویه‌نشده (آنلاین یا حضوری POS) از پنل مشتری */}
+                {activeTab === 'open' && order.payment_status !== 'paid' && order.payment_status !== 'partial' && (
+                  <Link
+                    href={`/order/${order.id}`}
+                    className="my-order-btn primary"
+                    style={{ display: 'block', textAlign: 'center', marginTop: '10px' }}
+                  >
+                    💳 تسویه سفارش
+                  </Link>
+                )}
 
                 <div className="my-orders-actions" style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
                   <button type="button" className="my-order-btn primary" style={{ flex: 1 }} onClick={() => handleReorder(order)}>🔄 سفارش مجدد</button>

@@ -2,7 +2,12 @@ import { apiError } from '@/lib/api-error'
 import 'server-only'
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase/server'
-import { getDeviceHash, UUID_RE } from '@/lib/orders/owner'
+import {
+  getDeviceHashes,
+  getDeviceCustomerPhone,
+  deviceOwnsOrderRow,
+  UUID_RE,
+} from '@/lib/orders/owner'
 import { paymentErrorMessage } from '@/lib/payment/methods'
 
 export const dynamic = 'force-dynamic'
@@ -30,25 +35,26 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'لینک رسید نامعتبر است' }, { status: 400 })
     }
 
-    const deviceHash = await getDeviceHash()
-    if (!deviceHash) {
+    // 🎯 پچ ۵۰-هـ-ز: دسترسی با دستگاه یا شمارهٔ مشتری (سفارش حضوری POS)
+    const deviceHashes = await getDeviceHashes()
+    if (deviceHashes.length === 0) {
       return NextResponse.json({ error: 'سفارش یافت نشد' }, { status: 404 })
     }
 
     const db = supabaseAdmin()
+    const devicePhone = await getDeviceCustomerPhone(db, deviceHashes)
 
     const { data: order, error: orderErr } = await db
       .from('orders')
-      .select('id, status, subtotal, deleted_at')
+      .select('id, status, subtotal, deleted_at, device_id_hash, customer_phone')
       .eq('id', orderId)
-      .eq('device_id_hash', deviceHash)
       .maybeSingle()
 
     if (orderErr) {
       console.error('[payment/upload-receipt] order error:', orderErr)
       return apiError(orderErr, 'خطای پایگاه داده')
     }
-    if (!order) {
+    if (!order || !deviceOwnsOrderRow(order, deviceHashes, devicePhone)) {
       return NextResponse.json({ error: 'سفارش یافت نشد' }, { status: 404 })
     }
 
@@ -105,7 +111,6 @@ export async function POST(req: NextRequest) {
       .from('orders')
       .update(updates)
       .eq('id', orderId)
-      .eq('device_id_hash', deviceHash)
       .eq('payment_method', 'transfer')
       .in('payment_status', ['unpaid', 'failed', 'pending_review'])
       .is('payment_receipt_url', null)

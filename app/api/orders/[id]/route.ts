@@ -2,7 +2,12 @@ import { apiError } from '@/lib/api-error'
 import 'server-only'
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase/server'
-import { getDeviceHash, UUID_RE } from '@/lib/orders/owner'
+import {
+  getDeviceHashes,
+  getDeviceCustomerPhone,
+  deviceOwnsOrderRow,
+  UUID_RE,
+} from '@/lib/orders/owner'
 
 export const dynamic = 'force-dynamic'
 
@@ -46,22 +51,24 @@ export async function GET(
       return NextResponse.json({ error: 'سفارش پیدا نشد' }, { status: 404 })
     }
 
-    const deviceHash = await getDeviceHash()
-    if (!deviceHash) {
+    // 🎯 پچ ۵۰-هـ-ز: دسترسی با دستگاه یا شمارهٔ مشتری — سفارش‌های حضوری (POS)
+    // هش دستگاهی ندارند و با شمارهٔ عضو به پنل وصل می‌شوند
+    const deviceHashes = await getDeviceHashes()
+    if (deviceHashes.length === 0) {
       return NextResponse.json({ error: 'سفارش پیدا نشد' }, { status: 404 })
     }
 
     const db = supabaseAdmin()
+    const devicePhone = await getDeviceCustomerPhone(db, deviceHashes)
 
     const { data, error } = await db
       .from('orders')
       .select(CUSTOMER_COLUMNS)
       .eq('id', id)
-      .eq('device_id_hash', deviceHash)
       .is('deleted_at', null)
       .maybeSingle()
 
-    if (error || !data) {
+    if (error || !data || !deviceOwnsOrderRow(data as any, deviceHashes, devicePhone)) {
       return NextResponse.json({ error: 'سفارش پیدا نشد' }, { status: 404 })
     }
 

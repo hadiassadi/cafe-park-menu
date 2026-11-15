@@ -1,7 +1,12 @@
 import 'server-only'
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase/server'
-import { getDeviceHash, UUID_RE } from '@/lib/orders/owner'
+import {
+  getDeviceHashes,
+  getDeviceCustomerPhone,
+  deviceOwnsOrderRow,
+  UUID_RE,
+} from '@/lib/orders/owner'
 
 export const dynamic = 'force-dynamic'
 
@@ -25,25 +30,28 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'روش پرداخت نامعتبر است' }, { status: 400 })
     }
 
-    const deviceHash = await getDeviceHash()
-    if (!deviceHash) {
+    // 🎯 پچ ۵۰-هـ-ز: دسترسی با دستگاه یا شمارهٔ مشتری (سفارش حضوری POS)
+    const deviceHashes = await getDeviceHashes()
+    if (deviceHashes.length === 0) {
       return NextResponse.json({ error: 'سفارش پیدا نشد' }, { status: 404 })
     }
 
     const db = supabaseAdmin()
+    const devicePhone = await getDeviceCustomerPhone(db, deviceHashes)
 
     const { data: order, error: readErr } = await db
       .from('orders')
-      .select('id, status, payment_status, deleted_at, payment_receipt_url, payment_note')
+      .select(
+        'id, status, payment_status, deleted_at, payment_receipt_url, payment_note, device_id_hash, customer_phone'
+      )
       .eq('id', orderId)
-      .eq('device_id_hash', deviceHash)
       .maybeSingle()
 
     if (readErr) {
       console.error('[payment/set-method] read:', readErr.message)
       return NextResponse.json({ error: 'خطای سرور' }, { status: 500 })
     }
-    if (!order || order.deleted_at) {
+    if (!order || order.deleted_at || !deviceOwnsOrderRow(order, deviceHashes, devicePhone)) {
       return NextResponse.json(
         { error: 'تغییر روش پرداخت ممکن نیست. اگر رسید فرستاده‌اید، منتظر تأیید مدیر بمانید.' },
         { status: 404 }
@@ -76,7 +84,6 @@ export async function POST(req: NextRequest) {
       .from('orders')
       .update(updates)
       .eq('id', orderId)
-      .eq('device_id_hash', deviceHash)
       .is('deleted_at', null)
       .select('id')
 

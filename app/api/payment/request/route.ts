@@ -2,7 +2,12 @@ import 'server-only'
 import { NextRequest, NextResponse } from 'next/server'
 import { apiError } from '@/lib/api-error'
 import { supabaseAdmin } from '@/lib/supabase/server'
-import { getDeviceHash, UUID_RE } from '@/lib/orders/owner'
+import {
+  getDeviceHashes,
+  getDeviceCustomerPhone,
+  deviceOwnsOrderRow,
+  UUID_RE,
+} from '@/lib/orders/owner'
 import { requestZarinPalPayment } from '@/lib/payment/zarinpal'
 import { paymentErrorMessage } from '@/lib/payment/methods'
 
@@ -31,21 +36,22 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'خطای پیکربندی سرور' }, { status: 500 })
     }
 
-    const deviceHash = await getDeviceHash()
-    if (!deviceHash) {
+    // 🎯 پچ ۵۰-هـ-ز: دسترسی با دستگاه یا شمارهٔ مشتری (سفارش حضوری POS)
+    const deviceHashes = await getDeviceHashes()
+    if (deviceHashes.length === 0) {
       return NextResponse.json({ error: 'سفارش پیدا نشد' }, { status: 404 })
     }
 
     const db = supabaseAdmin()
+    const devicePhone = await getDeviceCustomerPhone(db, deviceHashes)
 
     const { data: order, error: orderErr } = await db
       .from('orders')
-      .select('id, order_number, subtotal, status, deleted_at, customer_phone')
+      .select('id, order_number, subtotal, status, deleted_at, customer_phone, device_id_hash')
       .eq('id', orderId)
-      .eq('device_id_hash', deviceHash)
       .maybeSingle()
 
-    if (orderErr || !order) {
+    if (orderErr || !order || !deviceOwnsOrderRow(order, deviceHashes, devicePhone)) {
       return NextResponse.json({ error: 'سفارش پیدا نشد' }, { status: 404 })
     }
     if (order.deleted_at || ['cancelled', 'canceled'].includes(order.status)) {

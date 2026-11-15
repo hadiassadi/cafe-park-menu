@@ -2,7 +2,13 @@ import { apiError } from '@/lib/api-error'
 import 'server-only'
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase/server'
-import { getDeviceHash, UUID_RE } from '@/lib/orders/owner'
+import {
+  getDeviceHashes,
+  getDeviceCustomerPhone,
+  deviceOwnsOrderRow,
+  hashesInclude,
+  UUID_RE,
+} from '@/lib/orders/owner'
 import { resolveWalletCustomer } from '@/lib/wallet/wallet'
 import { getVerifiedCustomerGrade } from '@/lib/customers/grades'
 import { getActiveSubscriptionByPhone } from '@/lib/subscriptions/subscriptions'
@@ -84,26 +90,27 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const deviceHash = await getDeviceHash()
-    if (!deviceHash) {
+    // 🎯 پچ ۵۰-هـ-ز: مالکیت سفارش با دستگاه یا شمارهٔ مشتری (سفارش حضوری POS)
+    // + تطابق شماره سفارش با شماره کیف پول
+    const deviceHashes = await getDeviceHashes()
+    if (deviceHashes.length === 0) {
       return NextResponse.json({ error: 'سفارش پیدا نشد' }, { status: 404 })
     }
 
     const db = supabaseAdmin()
+    const devicePhone = await getDeviceCustomerPhone(db, deviceHashes)
 
-    // مالکیت سفارش با دستگاه + تطابق شماره سفارش با شماره کیف پول
     const { data: order, error: orderErr } = await db
       .from('orders')
-      .select('id, customer_phone')
+      .select('id, customer_phone, device_id_hash')
       .eq('id', orderId)
-      .eq('device_id_hash', deviceHash)
       .maybeSingle()
 
     if (orderErr) {
       console.error('[payment/wallet] order read:', orderErr.message)
       return NextResponse.json({ error: 'خطای سرور' }, { status: 500 })
     }
-    if (!order) {
+    if (!order || !deviceOwnsOrderRow(order, deviceHashes, devicePhone)) {
       return NextResponse.json({ error: 'سفارش پیدا نشد' }, { status: 404 })
     }
     if (order.customer_phone !== customer.phone) {
@@ -113,9 +120,15 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    // RPC: اگر سفارشِ دستگاهِ خودمان است هش را می‌دهیم؛ سفارش حضوری با p_phone باز می‌شود
+    const rpcDeviceHash = hashesInclude(order.device_id_hash, deviceHashes)
+      ? (order.device_id_hash as string)
+      : null
+
     const { data: result, error } = await db.rpc('pay_order_with_wallet', {
       p_order_id: orderId,
-      p_device_hash: deviceHash,
+      p_device_hash: rpcDeviceHash,
+      p_phone: customer.phone,
       ...(amount !== null ? { p_amount: amount } : {}),
     })
 
