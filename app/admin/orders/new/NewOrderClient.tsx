@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
 import { QRCodeSVG } from 'qrcode.react'
-import { PAYMENT_METHOD_LABELS, PAYMENT_METHODS, type PaymentMethod } from '@/lib/payment/methods'
+import AdminSplitPayment from '@/app/admin/components/AdminSplitPayment'
 import type { Category, Product } from '@/lib/menu-types'
 
 const LEGACY_GROUP = 'بیرون بر'
@@ -126,7 +126,15 @@ function confirmedPayments(o: PosOrderRow) {
 }
 function paymentMethodLabel(m: string | null): string {
   if (!m) return '—'
-  return PAYMENT_METHOD_LABELS[m as PaymentMethod] ?? m
+  // 🎯 پچ ۵۰-هـ-او: برچسب‌ها محلی نگه داشته شدند (وابستگی به lib حذف شد)
+  const labels: Record<string, string> = {
+    cash: '💵 نقدی',
+    card: '💳 کارت‌خوان',
+    online: '🌐 درگاه آنلاین',
+    transfer: '🏦 کارت‌به‌کارت',
+    wallet: '👛 کیف پول',
+  }
+  return labels[m] ?? m
 }
 // وضعیت تسویه: از جمع پرداخت‌های تأییدشده، وگرنه از ستون paid_amount
 function settlementOf(o: PosOrderRow): {
@@ -271,6 +279,19 @@ const memberDropdown: React.CSSProperties = {
 // 🎯 پچ ۵۰-هـ: بازطراحی کامل صفحهٔ POS —
 // جریان: اول مشتری (مهمان/عضو + تخفیف فعال)، بعد میز، بعد منو با تب‌های رنگی،
 // سبد تک‌خطی فشرده و همه‌چیز در یک صفحه (فیت-پیج) با اسکرول داخلی.
+// 🎯 پچ ۵۰-هـ-او: پنجرهٔ شمارهٔ صفحات — حداکثر ۷ دکمه با «…» بین بازه‌ها
+function pageWindow(page: number, pages: number): Array<number | '…'> {
+  if (pages <= 7) return Array.from({ length: pages }, (_, i) => i + 1)
+  const out: Array<number | '…'> = [1]
+  const s = Math.max(2, page - 1)
+  const e = Math.min(pages - 1, page + 1)
+  if (s > 2) out.push('…')
+  for (let i = s; i <= e; i++) out.push(i)
+  if (e < pages - 1) out.push('…')
+  out.push(pages)
+  return out
+}
+
 export default function NewOrderClient({
   tables,
   categories,
@@ -357,6 +378,12 @@ export default function NewOrderClient({
   const [ordersFilter, setOrdersFilter] = useState<'all' | 'admin' | 'online'>('all')
   const [ordersLoading, setOrdersLoading] = useState(false)
   const [ordersErr, setOrdersErr] = useState('')
+  // 🎯 پچ ۵۰-هـ-او: فیلتر بازهٔ تاریخ + صفحه‌بندی لیست سفارش‌ها
+  const [listFrom, setListFrom] = useState('') // '' = امروز تهران
+  const [listTo, setListTo] = useState('') // '' = بدون سقف
+  const [listPage, setListPage] = useState(1)
+  const [listPages, setListPages] = useState(1)
+  const [listTotal, setListTotal] = useState(0)
   const [editing, setEditing] = useState<PosOrderRow | null>(null)
 
   // 🎯 پچ ۵۰-هـ-ز: کیوسک، چاپ، نوار زندهٔ آشپزخانه و بوق سفارش آنلاین
@@ -376,11 +403,9 @@ export default function NewOrderClient({
   // 🎯 پچ ۵۰-هـ-خ: سفارش ضمیمه + نمای منو (تصویری/متنی) + ثبت پرداخت در ردیف
   const [supplementFor, setSupplementFor] = useState<PosOrderRow | null>(null)
   const [menuView, setMenuView] = useState<'img' | 'text'>('img')
+  // 🎯 پچ ۵۰-هـ-او: پرداخت در ردیف با پنل ترکیبی (AdminSplitPayment) جایگزین
+  // فرم تک‌روشیِ قبلی شد — stateهای payMethodSel/payAmount/payBusy/payMsg حذف
   const [payForId, setPayForId] = useState<string | null>(null)
-  const [payMethodSel, setPayMethodSel] = useState<PaymentMethod>('cash')
-  const [payAmount, setPayAmount] = useState('')
-  const [payBusy, setPayBusy] = useState(false)
-  const [payMsg, setPayMsg] = useState<string | null>(null)
   useEffect(() => {
     try {
       const saved = window.localStorage.getItem('pos_menu_view')
@@ -748,14 +773,29 @@ export default function NewOrderClient({
   }
 
   // 🎯 پچ ۵۰-هـ-و: سفارش‌های امروز + ورود به حالت ویرایش
-  async function loadOrders() {
+  // 🎯 پچ ۵۰-هـ-او: لیست سفارش‌ها با بازهٔ تاریخ و صفحه‌بندی سرورسمت (۱۰ در صفحه)
+  async function loadOrders(opts?: { page?: number; from?: string; to?: string }) {
     setOrdersLoading(true)
     setOrdersErr('')
+    const page = opts?.page ?? listPage
+    const from = opts?.from ?? listFrom
+    const to = opts?.to ?? listTo
+    const params = new URLSearchParams({ page: String(page), pageSize: '10' })
+    if (from) params.set('from', from)
+    if (to) params.set('to', to)
     try {
-      const res = await fetch('/api/admin/orders/recent', { cache: 'no-store' })
+      const res = await fetch('/api/admin/orders/recent?' + params.toString(), {
+        cache: 'no-store',
+      })
       const data = await res.json().catch(() => null)
-      if (res.ok && Array.isArray(data?.orders)) setOrdersList(data.orders)
-      else setOrdersErr(data?.error || 'دریافت سفارش‌ها ناموفق بود')
+      if (res.ok && Array.isArray(data?.orders)) {
+        setOrdersList(data.orders)
+        setListTotal(Number(data.total ?? data.orders.length))
+        setListPages(Math.max(1, Number(data.pages ?? 1)))
+        setListPage(Math.max(1, Number(data.page ?? page)))
+      } else {
+        setOrdersErr(data?.error || 'دریافت سفارش‌ها ناموفق بود')
+      }
     } catch {
       setOrdersErr('خطای ارتباط با سرور')
     } finally {
@@ -899,38 +939,8 @@ export default function NewOrderClient({
     setError('')
   }
 
-  // ─── 🎯 پچ ۵۰-هـ-خ: ثبت پرداخت روی سفارش (نقدی/کارت‌خوان/…/کیف پول) ───
-  async function submitPayment(o: PosOrderRow) {
-    setPayMsg(null)
-    const amt = Math.max(
-      0,
-      Math.floor(Number(normalizeDigits(payAmount).replace(/\D/g, '') || 0) || 0)
-    )
-    if (amt <= 0) {
-      setPayMsg('مبلغ پرداخت را وارد کن')
-      return
-    }
-    setPayBusy(true)
-    try {
-      const res = await fetch(`/api/admin/orders/${o.id}/payment`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ method: payMethodSel, amount: amt }),
-      })
-      const d = await res.json().catch(() => null)
-      if (!res.ok || d?.error) {
-        setPayMsg(d?.error || 'ثبت پرداخت ناموفق بود')
-      } else {
-        setPayForId(null)
-        setPayAmount('')
-        loadOrders()
-      }
-    } catch {
-      setPayMsg('خطای ارتباط با سرور')
-    } finally {
-      setPayBusy(false)
-    }
-  }
+  // 🎯 پچ ۵۰-هـ-او: تابع submitPayment تک‌روشی حذف شد — ثبت پرداخت حالا در
+  // کامپوننت AdminSplitPayment انجام می‌شود (تقسیم مبلغ بین روش‌ها یا کل مبلغ)
 
   // ─── 🎯 پچ ۵۰-هـ-ز: کیوسک، بوق سفارش آنلاین، نوار زنده و چاپ ───
   function toggleKiosk() {
@@ -1972,17 +1982,17 @@ export default function NewOrderClient({
               }}
             >
               <h3 style={{ margin: 0 }}>
-                📋 سفارش‌های امروز
+                📋 {listFrom || listTo ? 'سفارش‌های بازهٔ انتخابی' : 'سفارش‌های امروز'}
                 <span style={{ fontSize: 12, color: '#766f64', fontWeight: 400 }}>
                   {' '}
-                  ({fmt(ordersList.length)})
+                  ({fmt(listTotal)})
                 </span>
               </h3>
               <div style={{ display: 'flex', gap: 6 }}>
                 <button
                   type="button"
                   style={{ ...smallBtn, fontSize: 12 }}
-                  onClick={loadOrders}
+                  onClick={() => loadOrders()}
                 >
                   ↻
                 </button>
@@ -1994,6 +2004,64 @@ export default function NewOrderClient({
                   بستن
                 </button>
               </div>
+            </div>
+            {/* 🎯 پچ ۵۰-هـ-او: فیلتر بازهٔ تاریخ (از/تا) + بازگشت به امروز */}
+            <div
+              style={{
+                display: 'flex',
+                gap: 6,
+                marginBottom: 10,
+                flexWrap: 'wrap',
+                alignItems: 'center',
+              }}
+            >
+              <span style={{ fontSize: 12, color: '#766f64' }}>📅 از</span>
+              <input
+                type="date"
+                value={listFrom}
+                onChange={(e) => {
+                  const v = e.target.value
+                  setListFrom(v)
+                  loadOrders({ page: 1, from: v })
+                }}
+                style={{
+                  fontSize: 12,
+                  padding: '4px 8px',
+                  borderRadius: 8,
+                  border: '1px solid #e3ddd2',
+                  font: 'inherit',
+                  color: '#4b443b',
+                }}
+              />
+              <span style={{ fontSize: 12, color: '#766f64' }}>تا</span>
+              <input
+                type="date"
+                value={listTo}
+                onChange={(e) => {
+                  const v = e.target.value
+                  setListTo(v)
+                  loadOrders({ page: 1, to: v })
+                }}
+                style={{
+                  fontSize: 12,
+                  padding: '4px 8px',
+                  borderRadius: 8,
+                  border: '1px solid #e3ddd2',
+                  font: 'inherit',
+                  color: '#4b443b',
+                }}
+              />
+              <button
+                type="button"
+                style={{ ...smallBtn, fontSize: 12 }}
+                onClick={() => {
+                  setListFrom('')
+                  setListTo('')
+                  loadOrders({ page: 1, from: '', to: '' })
+                }}
+              >
+                امروز
+              </button>
             </div>
             <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
               {(
@@ -2349,86 +2417,17 @@ export default function NewOrderClient({
                                       : ''}
                                   </div>
                                   {payForId === o.id ? (
-                                    <div
-                                      style={{
-                                        display: 'flex',
-                                        gap: 6,
-                                        flexWrap: 'wrap',
-                                        alignItems: 'center',
+                                    // 🎯 پچ ۵۰-هـ-او: پرداخت ترکیبی واقعی — تقسیم
+                                    // مبلغ بین روش‌ها یا کل مبلغ با یک روش
+                                    <AdminSplitPayment
+                                      orderId={o.id}
+                                      remaining={chainRemaining}
+                                      onDone={() => {
+                                        setPayForId(null)
+                                        loadOrders()
                                       }}
-                                    >
-                                      <select
-                                        value={payMethodSel}
-                                        onChange={(e) =>
-                                          setPayMethodSel(
-                                            e.target.value as PaymentMethod
-                                          )
-                                        }
-                                        style={{
-                                          fontSize: 12,
-                                          padding: '4px 8px',
-                                          borderRadius: 8,
-                                          border: '1px solid #e3ddd2',
-                                          font: 'inherit',
-                                          color: '#4b443b',
-                                          background: '#fff',
-                                        }}
-                                      >
-                                        {PAYMENT_METHODS.map((m) => (
-                                          <option key={m} value={m}>
-                                            {PAYMENT_METHOD_LABELS[m]}
-                                          </option>
-                                        ))}
-                                      </select>
-                                      <input
-                                        value={payAmount}
-                                        onChange={(e) => setPayAmount(e.target.value)}
-                                        placeholder={String(chainRemaining)}
-                                        inputMode="numeric"
-                                        style={{
-                                          width: 110,
-                                          fontSize: 12,
-                                          padding: '4px 8px',
-                                          borderRadius: 8,
-                                          border: '1px solid #e3ddd2',
-                                          font: 'inherit',
-                                          color: '#4b443b',
-                                          background: '#fff',
-                                        }}
-                                      />
-                                      <button
-                                        type="button"
-                                        disabled={payBusy}
-                                        onClick={() => submitPayment(o)}
-                                        style={{
-                                          ...smallBtn,
-                                          fontSize: 11.5,
-                                          padding: '3px 8px',
-                                          opacity: payBusy ? 0.6 : 1,
-                                        }}
-                                      >
-                                        {payBusy ? '⏳' : 'ثبت پرداخت'}
-                                      </button>
-                                      <button
-                                        type="button"
-                                        style={{
-                                          ...smallBtn,
-                                          fontSize: 11.5,
-                                          padding: '3px 8px',
-                                        }}
-                                        onClick={() => {
-                                          setPayForId(null)
-                                          setPayMsg(null)
-                                        }}
-                                      >
-                                        انصراف
-                                      </button>
-                                      {payMsg && (
-                                        <span style={{ color: '#9b3c32' }}>
-                                          {payMsg}
-                                        </span>
-                                      )}
-                                    </div>
+                                      onCancel={() => setPayForId(null)}
+                                    />
                                   ) : (
                                     <button
                                       type="button"
@@ -2438,17 +2437,9 @@ export default function NewOrderClient({
                                         padding: '3px 8px',
                                         justifySelf: 'start',
                                       }}
-                                      onClick={() => {
-                                        setPayForId(o.id)
-                                        setPayMsg(null)
-                                        setPayAmount(
-                                          chainRemaining > 0
-                                            ? String(chainRemaining)
-                                            : ''
-                                        )
-                                      }}
+                                      onClick={() => setPayForId(o.id)}
                                     >
-                                      ➕ ثبت پرداخت
+                                      💳 پرداخت / تسویه 🧩
                                     </button>
                                   )}
                                 </div>
@@ -2525,6 +2516,66 @@ export default function NewOrderClient({
                   })}
               </div>
             )}
+
+            {/* 🎯 پچ ۵۰-هـ-او: صفحه‌بندی لیست — قبلی/بعدی + شمارهٔ صفحهٔ قابل انتخاب */}
+            <div style={{ marginTop: 10 }}>
+              <div style={{ textAlign: 'center', fontSize: 11.5, color: '#766f64' }}>
+                مجموع: {fmt(listTotal)} سفارش · صفحهٔ {fmt(listPage)} از {fmt(listPages)}
+              </div>
+              {listPages > 1 && (
+                <div
+                  style={{
+                    display: 'flex',
+                    gap: 4,
+                    justifyContent: 'center',
+                    marginTop: 6,
+                    flexWrap: 'wrap',
+                  }}
+                >
+                  <button
+                    type="button"
+                    style={{ ...smallBtn, opacity: listPage <= 1 ? 0.45 : 1 }}
+                    disabled={listPage <= 1 || ordersLoading}
+                    onClick={() => loadOrders({ page: listPage - 1 })}
+                  >
+                    صفحهٔ قبل
+                  </button>
+                  {pageWindow(listPage, listPages).map((p, i) =>
+                    p === '…' ? (
+                      <span
+                        key={`dots-${i}`}
+                        style={{ alignSelf: 'center', color: '#766f64', fontSize: 12 }}
+                      >
+                        …
+                      </span>
+                    ) : (
+                      <button
+                        key={p}
+                        type="button"
+                        style={{
+                          ...smallBtn,
+                          ...(p === listPage
+                            ? { background: '#6b4f3a', color: '#fff' }
+                            : {}),
+                        }}
+                        disabled={ordersLoading}
+                        onClick={() => loadOrders({ page: p })}
+                      >
+                        {fmt(p)}
+                      </button>
+                    )
+                  )}
+                  <button
+                    type="button"
+                    style={{ ...smallBtn, opacity: listPage >= listPages ? 0.45 : 1 }}
+                    disabled={listPage >= listPages || ordersLoading}
+                    onClick={() => loadOrders({ page: listPage + 1 })}
+                  >
+                    صفحهٔ بعد
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}

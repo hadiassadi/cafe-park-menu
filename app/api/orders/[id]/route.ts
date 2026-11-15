@@ -38,8 +38,8 @@ const CUSTOMER_COLUMNS = [
   'payment_ref_id',
   'payment_receipt_url',
   'payment_note',
-  // 🎯 پچ ۵۰-هـ-ن: برای پرداخت ترکیبی — باقی‌مانده = subtotal − paid_amount
-  'paid_amount',
+  // 🐛 پچ ۵۰-هـ-او: paid_amount ستون orders نیست (منبعش جدول order_payments است؛
+  // فیکس مشابه ۵۰-هـ-خ) — در select نیاید؛ پایین از دفتر حساب می‌شود
 ].join(',')
 
 export async function GET(
@@ -70,8 +70,30 @@ export async function GET(
       .is('deleted_at', null)
       .maybeSingle()
 
-    if (error || !data || !deviceOwnsOrderRow(data as any, deviceHashes, devicePhone)) {
+    if (error) {
+      // 🐛 پچ ۵۰-هـ-او: خطای دیتابیس نباید به «سفارش پیدا نشد» تبدیل شود
+      console.error('[api/orders/[id]] select error:', error.message)
+      return NextResponse.json(
+        { error: 'خطا در خواندن سفارش از پایگاه داده' },
+        { status: 500 }
+      )
+    }
+    if (!data || !deviceOwnsOrderRow(data as any, deviceHashes, devicePhone)) {
       return NextResponse.json({ error: 'سفارش پیدا نشد' }, { status: 404 })
+    }
+
+    // 🎯 پچ ۵۰-هـ-ن/او: paid_amount از دفتر پرداخت (جمع تأییدشده‌ها) — مثل
+    // /api/customer/orders؛ برای باقی‌ماندهٔ پرداخت ترکیبی در صفحهٔ جزئیات
+    let paidAmount = 0
+    const { data: payRows, error: payErr } = await db
+      .from('order_payments')
+      .select('amount')
+      .eq('order_id', id)
+      .eq('status', 'confirmed')
+    if (payErr) {
+      console.error('[api/orders/[id]] payments sum error:', payErr.message)
+    } else {
+      paidAmount = (payRows ?? []).reduce((s, r) => s + Number(r.amount), 0)
     }
 
         // فقط یک مقدار ساده؛ مبلغ و جزئیات مالی به مشتری نمی‌رسد
@@ -92,7 +114,13 @@ export async function GET(
     }
 
     return NextResponse.json(
-      { order: { ...(data as any), refund_pending: refundPending } },
+      {
+        order: {
+          ...(data as any),
+          paid_amount: paidAmount,
+          refund_pending: refundPending,
+        },
+      },
       { headers: { 'Cache-Control': 'no-store' } }
     )
 
