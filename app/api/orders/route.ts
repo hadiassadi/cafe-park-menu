@@ -221,7 +221,7 @@ if (wantsTakeaway) {
 
     // فقط برای عیب‌یابی
     const clientOriginal = Number(body?.original_subtotal)
-	    const INITIAL_METHODS = ['cash', 'card', 'transfer', 'online', 'wallet']
+	    const INITIAL_METHODS = ['cash', 'card', 'transfer', 'online', 'wallet', 'split']
     const initialMethod: string = INITIAL_METHODS.includes(body?.payment_method)
       ? body.payment_method
       : 'cash'

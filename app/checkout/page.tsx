@@ -8,7 +8,7 @@ import { useCart } from '@/lib/cart-context'
 const formatPrice = (price: number) => new Intl.NumberFormat('fa-IR').format(Math.round(price))
 const toLatinDigits = (s: string) => s.replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06f0)).replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660))
 
-type PaymentMethod = 'online' | 'cash' | 'card' | 'transfer' | 'wallet'
+type PaymentMethod = 'online' | 'cash' | 'card' | 'transfer' | 'wallet' | 'split'
 type PaymentSettings = { payment_enabled: boolean; payment_online_enabled: boolean; payment_cash_enabled: boolean; payment_card_enabled: boolean; payment_transfer_enabled: boolean; payment_wallet_enabled: boolean; payment_min_online_amount: number; payment_transfer_bank_name: string | null; payment_transfer_account_number: string | null; payment_transfer_card_number: string | null; payment_transfer_account_holder: string | null; payment_transfer_requires_review: boolean }
 // 🎯 تخفیف فعال موتور تخفیف — آینه‌ی تصمیم سرور (بدون محاسبه‌ی مبلغ سمت کلاینت)
 type EngineDiscount = { source: 'org' | 'subscription' | 'grade' | 'stacked-org' | 'stacked-sub'; label: string; percent: number; color: string | null; orgName: string | null; planName: string | null; gradeName: string | null }
@@ -247,6 +247,13 @@ function CheckoutForm() {
         } catch {}
       }
 
+      // 🎯 پچ ۵۰-هـ-گ: ترکیبی — سفارش ثبت و مستقیم به پنل پرداخت ترکیبی صفحهٔ سفارش
+      if (paymentMethod === 'split') {
+        try { sessionStorage.setItem(`cafe-park-order-success-${orderId}`, '1') } catch {}
+        window.location.href = `/order/${orderId}?pay=split`
+        return
+      }
+
       if (paymentMethod === 'online') {
         const payRes = await fetch('/api/payment/request', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ orderId }) })
         const payData = await payRes.json()
@@ -293,6 +300,8 @@ function CheckoutForm() {
     // کیف پول فقط وقتی موجودی کل مبلغ را پوشاند در لیست روش‌ها می‌آید (پچ ۳۹b)؛
     // برای خرج کردن بخشی از موجودی، تیک کیف پول بالای همین کارت است.
     if (paymentSettings.payment_wallet_enabled && walletAvailable && !walletShort) availableMethods.push('wallet')
+    // 🎯 پچ ۵۰-هـ-گ: ترکیبی همیشه در دسترس (تقسیم بین روش‌های فعال)
+    availableMethods.push('split')
   }
   if (availableMethods.length === 0) availableMethods.push('cash')
   if (!availableMethods.includes(paymentMethod)) setPaymentMethod(availableMethods[0])
@@ -302,6 +311,8 @@ function CheckoutForm() {
     cash: { icon: '💵', title: 'پرداخت در محل', hint: 'نقدی یا کارت‌خوان' },
     card: { icon: '💳', title: 'کارت‌خوان', hint: 'پرداخت حضوری' },
     transfer: { icon: '🏦', title: 'کارت به کارت', hint: 'واریز + آپلود رسید' },
+    // 🎯 پچ ۵۰-هـ-گ: ترکیبی — سفارش ثبت و پنل تقسیم مبلغ باز می‌شود
+    split: { icon: '🧩', title: 'پرداخت ترکیبی', hint: 'تقسیم مبلغ بین روش‌ها' },
     wallet: { icon: '👛', title: 'کیف پول', hint: 'پرداخت از موجودی کیف پول' },
   }
 
@@ -586,7 +597,7 @@ function CheckoutForm() {
           <strong>{formatPrice(remainderAfterWallet)} <small>تومان</small></strong>
         </div>
         <button type="submit" form="checkout-form" className="checkout-btn" disabled={saving}>
-          {saving ? 'در حال پردازش...' : paymentMethod === 'online' ? `💳 پرداخت ${formatPrice(remainderAfterWallet)} تومان` : '✅ ثبت سفارش'}
+          {saving ? 'در حال پردازش...' : paymentMethod === 'online' ? `💳 پرداخت ${formatPrice(remainderAfterWallet)} تومان` : paymentMethod === 'split' ? '🧩 ثبت و تسویه ترکیبی' : '✅ ثبت سفارش'}
         </button>
       </div>
     </div>

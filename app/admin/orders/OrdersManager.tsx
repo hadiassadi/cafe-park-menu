@@ -115,6 +115,8 @@ const PAYMENT_METHOD_LABELS: Record<string, string> = {
   cash: 'نقدی',
   card: 'کارت‌خوان',
   transfer: 'واریز به حساب',
+  // 🎯 پچ ۵۰-هـ-گ: روش ترکیبی از checkout
+  split: 'ترکیبی 🧩',
 }
 
 // 🎯 پچ ۵۰-هـ-ف: آیکن روش‌های پرداخت برای دفتر ردیف‌به‌ردیف
@@ -124,6 +126,7 @@ const PAYMENT_METHOD_ICONS: Record<string, string> = {
   online: '🌐',
   transfer: '🏦',
   wallet: '👛',
+  split: '🧩',
 }
 
 const PAYMENT_STATUS_LABELS: Record<string, string> = {
