@@ -1,0 +1,50 @@
+diff --git a/app/api/customer/orders/route.ts b/app/api/customer/orders/route.ts
+index a313aef..7118fdd 100644
+--- a/app/api/customer/orders/route.ts
++++ b/app/api/customer/orders/route.ts
+@@ -18,18 +18,41 @@ export async function GET() {
+     }
+ 
+     const db = supabaseAdmin()
+-    
++
+     // هش قدیمی (برای سفارش‌هایی که قبل از تغییرات ثبت شده‌اند)
+     const oldDeviceIdHash = crypto.createHash('sha256').update(deviceToken).digest('hex')
+-    
++
+     // هش جدید (برای سفارش‌های جدید با Salt)
+     const newDeviceIdHash = hashData(deviceToken)
+ 
+-    const { data, error } = await db
++    // 🎯 پچ ۵۰-هـ-ذ: سفارش‌های POS (حضوری، source=admin) را هم به پنل مشتری وصل کن.
++    // لنگر: آخرین سفارشِ دستگاهِ این مشتری → شماره‌اش؛ سپس همهٔ سفارش‌های همان شماره
++    // (حضوری یا آنلاین). بدون این، تاریخچهٔ مشتری فقط سفارش‌های آنلاین خودش را نشان می‌داد.
++    const { data: anchor } = await db
+       .from('orders')
+-      .select('*')
++      .select('customer_phone')
+       .in('device_id_hash', [oldDeviceIdHash, newDeviceIdHash])
++      .not('customer_phone', 'is', null)
++      .order('created_at', { ascending: false })
++      .limit(1)
++      .maybeSingle()
++    const anchorPhone = String((anchor as any)?.customer_phone ?? '').trim()
++
++    let query = db
++      .from('orders')
++      .select('*')
++      // 🎯 فیکس ۵۰-هـ-ذ: حذف‌شده‌ها و سفارش‌های تستی در پنل مشتری دیده نشوند
++      .is('deleted_at', null)
++      .neq('is_test', true)
+       .order('created_at', { ascending: false })
++      .limit(60)
++    query = anchorPhone
++      ? query.or(
++          `device_id_hash.in.(${oldDeviceIdHash},${newDeviceIdHash}),customer_phone.eq.${anchorPhone}`
++        )
++      : query.in('device_id_hash', [oldDeviceIdHash, newDeviceIdHash])
++
++    const { data, error } = await query
+ 
+     if (error) {
+       console.error('Orders Error:', error)

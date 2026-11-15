@@ -2948,12 +2948,15 @@ export default function NewOrderClient({
                 null
               : null
             const itemCount = o.items.reduce((s, it) => s + it.quantity, 0)
+            // 🐛 فیکس ۵۰-هـ-ر: روش پرداخت فقط وقتی نمایش داده شود که پرداخت واقعی
+            // وجود دارد — سفارش POSِ بازِ تسویه‌نشده payment_method پیش‌فرض «نقدی»
+            // دارد و نباید روی فاکتور مشتری/سالن به‌عنوان پرداخت‌شده دیده شود
             const payLine =
               pays.length > 0
                 ? pays
                     .map((p) => `${paymentMethodLabel(p.method)} ${fmt(p.amount)}`)
                     .join(' + ')
-                : o.payment_method
+                : st.state === 'paid' && o.payment_method
                   ? paymentMethodLabel(o.payment_method)
                   : null
             const settleText =

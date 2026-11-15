@@ -25,9 +25,12 @@ export async function GET() {
     // هش جدید (برای سفارش‌های جدید با Salt)
     const newDeviceIdHash = hashData(deviceToken)
 
-    // 🎯 پچ ۵۰-هـ-ذ: سفارش‌های POS (حضوری، source=admin) را هم به پنل مشتری وصل کن.
-    // لنگر: آخرین سفارشِ دستگاهِ این مشتری → شماره‌اش؛ سپس همهٔ سفارش‌های همان شماره
-    // (حضوری یا آنلاین). بدون این، تاریخچهٔ مشتری فقط سفارش‌های آنلاین خودش را نشان می‌داد.
+    // 🎯 پچ ۵۰-هـ-ذ + ۵۰-هـ-ر: سفارش‌های POS (حضوری، source=admin) هم به پنل مشتری
+    // وصل می‌شوند. زنجیرهٔ شناسایی شمارهٔ مشتری:
+    // ۱) آخرین سفارشِ دستگاهِ این مشتری → شماره‌اش (لنگر قبلی)
+    // ۲) 🐛 فیکس ۵۰-هـ-ر: اگر لنگر نبود، ردیفِ customers وصل‌شده به همین دستگاه
+    //    (عضو ثبت‌شده ممکن است هیچ سفارش آنلاینِ حاوی شماره از این دستگاه نداشته باشد)
+    // ۳) و اگر آن هم نبود، شمارهٔ عضو سازمانیِ همان دستگاه (metadata._phone)
     const { data: anchor } = await db
       .from('orders')
       .select('customer_phone')
@@ -36,14 +39,38 @@ export async function GET() {
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle()
-    const anchorPhone = String((anchor as any)?.customer_phone ?? '').trim()
+    let anchorPhone = String((anchor as any)?.customer_phone ?? '').trim()
+
+    if (!anchorPhone) {
+      const { data: custRow } = await db
+        .from('customers')
+        .select('phone')
+        .in('device_id_hash', [oldDeviceIdHash, newDeviceIdHash])
+        .not('phone', 'is', null)
+        .limit(1)
+        .maybeSingle()
+      anchorPhone = String((custRow as any)?.phone ?? '').trim()
+    }
+
+    if (!anchorPhone) {
+      const { data: orgRow } = await db
+        .from('organization_members')
+        .select('metadata')
+        .in('device_id_hash', [oldDeviceIdHash, newDeviceIdHash])
+        .eq('is_registered', true)
+        .limit(1)
+        .maybeSingle()
+      anchorPhone = String((orgRow as any)?.metadata?._phone ?? '').trim()
+    }
 
     let query = db
       .from('orders')
       .select('*')
-      // 🎯 فیکس ۵۰-هـ-ذ: حذف‌شده‌ها و سفارش‌های تستی در پنل مشتری دیده نشوند
+      // 🎯 حذف‌شده‌ها و سفارش‌های تستی در پنل مشتری دیده نشوند
       .is('deleted_at', null)
-      .neq('is_test', true)
+      // 🐛 فیکس ۵۰-هـ-ر: neq ساده `is_test <> true` است و ردیف‌هایی که ستونشان
+      // NULL است (سفارش‌های قدیمی) را هم کنار می‌گذارد — صریح و null-safe بنویسیم
+      .or('is_test.is.null,is_test.eq.false')
       .order('created_at', { ascending: false })
       .limit(60)
     query = anchorPhone
