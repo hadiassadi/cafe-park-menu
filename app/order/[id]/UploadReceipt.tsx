@@ -6,12 +6,15 @@ type Props = {
   orderId: string
   onSuccess: (url: string | null, note: string | null) => void
   initialUrl?: string | null
+  // 🎯 پچ ۵۰-هـ-ن: در پرداخت ترکیبی، رسید فقط این مبلغ را پوشش می‌دهد
+  amount?: number
 }
 
 export default function UploadReceipt({
   orderId,
   onSuccess,
   initialUrl,
+  amount,
 }: Props) {
   const [mode, setMode] = useState<'image' | 'text'>('image')
   const [uploading, setUploading] = useState(false)
@@ -68,7 +71,7 @@ export default function UploadReceipt({
       const updateRes = await fetch('/api/payment/upload-receipt', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ orderId, receiptUrl: data.url }),
+        body: JSON.stringify({ orderId, receiptUrl: data.url, ...(amount ? { amount } : {}) }),
       })
 
       if (!updateRes.ok) {
@@ -102,6 +105,7 @@ export default function UploadReceipt({
         body: JSON.stringify({
           orderId,
           receiptNote: noteText.trim(),
+          ...(amount ? { amount } : {}),
         }),
       })
 

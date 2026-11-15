@@ -5,6 +5,7 @@ import { useEffect, useState, use } from 'react'
 import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import UploadReceipt from './UploadReceipt'
+import SplitPaymentPanel from './SplitPaymentPanel'
 import EnablePushCard from '@/app/components/EnablePushCard'
 import { formatPersianDate } from '@/lib/format-date'
 
@@ -68,6 +69,8 @@ type Order = {
   payment_ref_id: string | null
   payment_receipt_url: string | null
   payment_note: string | null
+  // 🎯 پچ ۵۰-هـ-ن: برای پرداخت ترکیبی — باقی‌مانده = subtotal − paid_amount
+  paid_amount?: number | null
 }
 
 const STATUS_STEPS = [
@@ -130,6 +133,8 @@ export default function OrderPage({
   const [paymentSuccess, setPaymentSuccess] = useState<string | null>(null)
   const [showChangeMethod, setShowChangeMethod] = useState(false)
   const [debtReceiptSent, setDebtReceiptSent] = useState(false)
+  // 🎯 پچ ۵۰-هـ-ن: حالت پرداخت ترکیبی (تقسیم مبلغ بین روش‌ها)
+  const [splitMode, setSplitMode] = useState(false)
 
   const [paymentSettings, setPaymentSettings] = useState<{
     payment_enabled: boolean
@@ -144,6 +149,17 @@ export default function OrderPage({
   useEffect(() => {
     setMounted(true)
   }, [])
+
+  // 🎯 پچ ۵۰-هـ-ن: رفرش فوری سفارش بعد از هر گام پرداخت ترکیبی (polling هم هست)
+  async function refreshOrder() {
+    try {
+      const res = await fetch(`/api/orders/${id}`, { cache: 'no-store' })
+      const data = await res.json()
+      if (res.ok && data.order) setOrder(data.order as Order)
+    } catch {
+      // خطا نادیده گرفته می‌شود — interval نظارتی وضعیت را به‌روز می‌کند
+    }
+  }
 
   useEffect(() => {
     async function load() {
@@ -481,6 +497,12 @@ export default function OrderPage({
     (isUnpaid || isFailed) &&
     ['pending', 'confirmed', 'preparing', 'ready'].includes(order.status)
 
+  // 🎯 پچ ۵۰-هـ-ن: باقی‌ماندهٔ واقعی سفارش (برای پرداخت ترکیبی) = کل − پرداخت‌شده
+  const remainingAmount = Math.max(
+    0,
+    Math.round(order.subtotal - Number(order.paid_amount ?? 0))
+  )
+
   // ✅ رسید (عکس یا متن) ارسال شده و منتظر تعیین‌تکلیف مدیر هستیم
   const receiptSubmitted =
     isTransfer && isPendingReview && !!(order.payment_receipt_url || order.payment_note)
@@ -519,7 +541,9 @@ export default function OrderPage({
       isFailed ||
       needsWalletPayment ||
       isPartial ||
-      isOpenInPlaceUnpaid)
+      isOpenInPlaceUnpaid ||
+      // 🎯 پچ ۵۰-هـ-ن: رسیدِ ترکیبی روی سفارشِ حضوری → در انتظار تأیید
+      (isPendingReview && !isTransfer))
 
   const shouldShowBanner = !bannerDismissed && !isCancelled && (isPaid || isCash || isCard)
 
@@ -557,6 +581,9 @@ export default function OrderPage({
   } else if (isPartial) {
     badgeType = 'pending'
     badgeText = '🧩 پرداخت جزئی — باقی‌مانده پرداخت نشده'
+  } else if (isPendingReview) {
+    badgeType = 'pending'
+    badgeText = '⏳ رسید/اعلام ثبت شد — در انتظار تأیید مدیر'
   } else if (isOpenInPlaceUnpaid) {
     badgeType = 'unpaid'
     badgeText = '⏱ پرداخت نشده — قابل تسویه از همین صفحه'
@@ -684,6 +711,25 @@ export default function OrderPage({
           {paymentError && (
             <div className="checkout-error" style={{ marginBottom: '12px' }}>❌ {paymentError}</div>
           )}
+
+          {splitMode ? (
+            // 🎯 پچ ۵۰-هـ-ن: پرداخت ترکیبی روی بدهی — تقسیم مبلغ بین روش‌ها
+            <SplitPaymentPanel
+              orderId={order.id}
+              remaining={remainingAmount}
+              settings={{
+                online: paymentSettings?.payment_online_enabled === true,
+                transfer: paymentSettings?.payment_transfer_enabled === true,
+                cash:
+                  paymentSettings?.payment_cash_enabled === true ||
+                  paymentSettings?.payment_card_enabled === true,
+              }}
+              walletBalance={walletSessionAvailable ? walletBalance : null}
+              onDone={refreshOrder}
+              onBack={() => setSplitMode(false)}
+            />
+          ) : (
+            <>
           {canPayDebtOnline && !(debtReceiptSent || isPendingReview) && (
             <button
               type="button"
@@ -730,6 +776,20 @@ export default function OrderPage({
               </div>
             )}
 
+              {paymentSettings?.payment_enabled === true && (
+                <button
+                  type="button"
+                  className="order-payment-btn secondary"
+                  style={{ marginTop: '12px', width: '100%' }}
+                  onClick={() => setSplitMode(true)}
+                  disabled={paying}
+                >
+                  🧩 پرداخت ترکیبی — تقسیم مبلغ بین روش‌ها
+                </button>
+              )}
+            </>
+          )}
+
         </div>
       )}
 
@@ -738,7 +798,23 @@ export default function OrderPage({
         <div className="order-payment-section">
           <div className="order-payment-section-title">💳 پرداخت سفارش</div>
 
-          {showChangeMethod && !receiptSubmitted ? (
+          {splitMode && !receiptSubmitted ? (
+            // 🎯 پچ ۵۰-هـ-ن: پنل پرداخت ترکیبی روی سفارشِ باز
+            <SplitPaymentPanel
+              orderId={order.id}
+              remaining={remainingAmount}
+              settings={{
+                online: paymentSettings?.payment_online_enabled === true,
+                transfer: paymentSettings?.payment_transfer_enabled === true,
+                cash:
+                  paymentSettings?.payment_cash_enabled === true ||
+                  paymentSettings?.payment_card_enabled === true,
+              }}
+              walletBalance={walletSessionAvailable ? walletBalance : null}
+              onDone={refreshOrder}
+              onBack={() => { setSplitMode(false); setShowChangeMethod(true) }}
+            />
+          ) : showChangeMethod && !receiptSubmitted ? (
             <>
               <p className="order-payment-section-desc">{isPartial ? 'روش تسویهٔ باقی‌مانده رو انتخاب کن:' : 'روش پرداخت جدید رو انتخاب کن:'}</p>
 
@@ -771,6 +847,16 @@ export default function OrderPage({
                     <div><strong>واریز به حساب</strong><small>با رسید</small></div>
                   </button>
                 )}
+                {/* 🎯 پچ ۵۰-هـ-ن: ورود به حالت پرداخت ترکیبی */}
+                <button
+                  type="button"
+                  className="order-payment-method-btn"
+                  onClick={() => { setShowChangeMethod(false); setPaymentError(null); setSplitMode(true) }}
+                  disabled={paying}
+                >
+                  <span className="order-payment-method-icon">🧩</span>
+                  <div><strong>پرداخت ترکیبی</strong><small>تقسیم مبلغ بین روش‌ها</small></div>
+                </button>
               </div>
 
               <button type="button" className="order-payment-btn secondary" onClick={() => { setShowChangeMethod(false); setPaymentError(null) }} disabled={paying} style={{ marginTop: '12px' }}>
