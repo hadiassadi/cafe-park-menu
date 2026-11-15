@@ -136,6 +136,15 @@ export default function OrderPage({
   // 🎯 پچ ۵۰-هـ-ن: حالت پرداخت ترکیبی (تقسیم مبلغ بین روش‌ها)
   const [splitMode, setSplitMode] = useState(false)
 
+  // 🎯 پچ ۵۰-هـ-گ: ورود مستقیم به پرداخت ترکیبی از checkout (?pay=split)
+  useEffect(() => {
+    try {
+      if (new URLSearchParams(window.location.search).get('pay') === 'split') {
+        setSplitMode(true)
+      }
+    } catch {}
+  }, [])
+
   const [paymentSettings, setPaymentSettings] = useState<{
     payment_enabled: boolean
     payment_online_enabled: boolean

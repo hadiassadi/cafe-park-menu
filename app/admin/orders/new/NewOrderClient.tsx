@@ -300,8 +300,8 @@ function pageWindow(page: number, pages: number): Array<number | '…'> {
   return out
 }
 
-// 🎯 پچ ۵۰-هـ-وِی: انتخابگر تاریخ شمسی فشرده (روز/ماه/سال) — خروجی میلادی برای API
-// مقادیر نمایشی وقتی بازه خالی است «امروز» است (همان رفتار پیش‌فرض API)
+// 🎯 پچ ۵۰-هـ-گ: تقویم ماهانهٔ شمسی — ناوبری ماه در یک صفحه و کلیک روی روز
+// خروجی میلادی برای API؛ وقتی بازه خالی است «امروز» است (رفتار پیش‌فرض API)
 function JalaliDateSelect({
   value,
   onChange,
@@ -309,74 +309,183 @@ function JalaliDateSelect({
   value: string
   onChange: (gregorian: string) => void
 }) {
+  const [open, setOpen] = useState(false)
   const now = new Date()
   const nowJ = toJalaali(now.getFullYear(), now.getMonth() + 1, now.getDate())
-  let jy = nowJ.jy
-  let jm = nowJ.jm
-  let jd = nowJ.jd
-  if (value) {
-    const [y, m, d] = value.split('-').map(Number)
-    if (y && m && d) {
-      const j = toJalaali(y, m, d)
-      jy = j.jy
-      jm = j.jm
-      jd = j.jd
+  // ماهِ در حال نمایش — از مقدار انتخابی یا امروز شروع می‌شود
+  const [view, setView] = useState(() => {
+    if (value) {
+      const [y, m, d] = value.split('-').map(Number)
+      if (y && m && d) {
+        const j = toJalaali(y, m, d)
+        return { jy: j.jy, jm: j.jm }
+      }
     }
-  }
+    return { jy: nowJ.jy, jm: nowJ.jm }
+  })
+  // روزِ انتخاب‌شده فقط وقتی در ماهِ جاریِ تقویم است پررنگ می‌شود
+  const selectedJd = (() => {
+    if (value) {
+      const [y, m, d] = value.split('-').map(Number)
+      if (y && m && d) {
+        const j = toJalaali(y, m, d)
+        if (j.jy === view.jy && j.jm === view.jm) return j.jd
+      }
+    }
+    return null
+  })()
+  const faNum = (n: number) => n.toLocaleString('fa-IR')
   const commit = (yy: number, mm: number, dd: number) => {
     const g = toGregorian(yy, mm, Math.min(dd, jalaaliMonthLength(yy, mm)))
     onChange(`${g.gy}-${pad2(g.gm)}-${pad2(g.gd)}`)
+    setOpen(false)
   }
-  const faNum = (n: number) => n.toLocaleString('fa-IR')
-  const selStyle: React.CSSProperties = {
-    fontSize: 12,
-    padding: '3px 4px',
-    borderRadius: 8,
-    border: '1px solid #e3ddd2',
-    font: 'inherit',
-    color: '#4b443b',
-    background: '#fff',
-  }
+  const nav = (dir: number) =>
+    setView((v) => {
+      let m = v.jm + dir
+      let y = v.jy
+      if (m < 1) {
+        m = 12
+        y -= 1
+      }
+      if (m > 12) {
+        m = 1
+        y += 1
+      }
+      return { jy: y, jm: m }
+    })
+  // روز هفتهٔ اول ماه (شنبه = ستون صفر)
+  const firstG = toGregorian(view.jy, view.jm, 1)
+  const firstWeekday = (new Date(firstG.gy, firstG.gm - 1, firstG.gd).getDay() + 1) % 7
+  const daysInMonth = jalaaliMonthLength(view.jy, view.jm)
+  const weekDays = ['ش', 'ی', 'د', 'س', 'چ', 'پ', 'ج']
   return (
-    <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-      <select
-        style={selStyle}
-        value={jd}
-        onChange={(e) => commit(jy, jm, Number(e.target.value))}
-        aria-label="روز شمسی"
+    <div style={{ position: 'relative' }}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        style={{
+          fontSize: 12,
+          padding: '4px 8px',
+          borderRadius: 8,
+          border: '1px solid #e3ddd2',
+          font: 'inherit',
+          color: '#4b443b',
+          background: '#fff',
+          cursor: 'pointer',
+          whiteSpace: 'nowrap',
+        }}
       >
-        {Array.from({ length: jalaaliMonthLength(jy, jm) }, (_, i) => i + 1).map(
-          (d) => (
-            <option key={d} value={d}>
-              {faNum(d)}
-            </option>
-          )
-        )}
-      </select>
-      <select
-        style={selStyle}
-        value={jm}
-        onChange={(e) => commit(jy, Number(e.target.value), jd)}
-        aria-label="ماه شمسی"
-      >
-        {JALALI_MONTHS.map((name, i) => (
-          <option key={name} value={i + 1}>
-            {faNum(i + 1)} {name}
-          </option>
-        ))}
-      </select>
-      <select
-        style={selStyle}
-        value={jy}
-        onChange={(e) => commit(Number(e.target.value), jm, jd)}
-        aria-label="سال شمسی"
-      >
-        {[nowJ.jy - 1, nowJ.jy, nowJ.jy + 1].map((y) => (
-          <option key={y} value={y}>
-            {faNum(y)}
-          </option>
-        ))}
-      </select>
+        📅{' '}
+        {(() => {
+          if (value) {
+            const [y, m, d] = value.split('-').map(Number)
+            if (y && m && d) {
+              const j = toJalaali(y, m, d)
+              return `${faNum(j.jy)}/${faNum(j.jm)}/${faNum(j.jd)}`
+            }
+          }
+          return 'امروز'
+        })()}
+      </button>
+      {open && (
+        <div
+          style={{
+            position: 'absolute',
+            top: 'calc(100% + 6px)',
+            right: 0,
+            zIndex: 60,
+            width: 238,
+            background: '#fff',
+            border: '1px solid #e3ddd2',
+            borderRadius: 12,
+            boxShadow: '0 8px 24px rgba(0,0,0,0.14)',
+            padding: 8,
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginBottom: 6,
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => nav(-1)}
+              style={{
+                ...smallBtn,
+                padding: '2px 8px',
+              }}
+            >
+              ›
+            </button>
+            <strong style={{ fontSize: 12.5 }}>
+              {JALALI_MONTHS[view.jm - 1]} {faNum(view.jy)}
+            </strong>
+            <button
+              type="button"
+              onClick={() => nav(1)}
+              style={{
+                ...smallBtn,
+                padding: '2px 8px',
+              }}
+            >
+              ‹
+            </button>
+          </div>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(7, 1fr)',
+              gap: 2,
+            }}
+          >
+            {weekDays.map((w) => (
+              <div
+                key={w}
+                style={{
+                  textAlign: 'center',
+                  fontSize: 10,
+                  color: '#9a6b3f',
+                  fontWeight: 700,
+                  padding: '2px 0',
+                }}
+              >
+                {w}
+              </div>
+            ))}
+            {Array.from({ length: firstWeekday }, (_, i) => (
+              <div key={`blank-${i}`} />
+            ))}
+            {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((d) => {
+              const isSel = selectedJd === d
+              const isToday =
+                nowJ.jy === view.jy && nowJ.jm === view.jm && nowJ.jd === d
+              return (
+                <button
+                  key={d}
+                  type="button"
+                  onClick={() => commit(view.jy, view.jm, d)}
+                  style={{
+                    height: 26,
+                    borderRadius: 7,
+                    border: isToday ? '1px solid #b0722c' : '1px solid transparent',
+                    background: isSel ? '#6b4f3a' : 'transparent',
+                    color: isSel ? '#fff' : '#4b443b',
+                    font: 'inherit',
+                    fontSize: 11.5,
+                    cursor: 'pointer',
+                  }}
+                >
+                  {faNum(d)}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -882,6 +991,8 @@ export default function NewOrderClient({
         setListTotal(Number(data.total ?? data.orders.length))
         setListPages(Math.max(1, Number(data.pages ?? 1)))
         setListPage(Math.max(1, Number(data.page ?? page)))
+        // 🎯 پچ ۵۰-هـ-گ: لیست تازه برمی‌گردد تا سفارش تازه‌ساخته پیدا شود
+        return data.orders as PosOrderRow[]
       } else {
         setOrdersErr(data?.error || 'دریافت سفارش‌ها ناموفق بود')
       }
@@ -890,6 +1001,7 @@ export default function NewOrderClient({
     } finally {
       setOrdersLoading(false)
     }
+    return []
   }
   function openOrders() {
     setOrdersOpen(true)
@@ -1152,7 +1264,7 @@ export default function NewOrderClient({
     }
   }, [printJob])
 
-  async function submit() {
+  async function submit(thenPay = false) {
     setError('')
     if (lines.length === 0) return setError('هیچ آیتمی انتخاب نشده است')
     if (discountVal > eligibleBase)
@@ -1231,7 +1343,14 @@ export default function NewOrderClient({
         setDiscount('')
         setDiscountAuto(null)
         clearMember()
-        loadOrders()
+        // 🎯 پچ ۵۰-هـ-گ: لیست تازه + باز شدن مودال پرداخت مشترک برای فاکتور جدید
+        // (اگر فیلتر تاریخ سفارش تازه را نیاورد، ردیف خام پاسخ سرور استفاده می‌شود)
+        const list = await loadOrders()
+        if (thenPay && data.order?.id) {
+          const created =
+            (list ?? []).find((x) => x.id === data.order.id) ?? data.order
+          if (created) setPayModalOrder(created)
+        }
       }
     } catch {
       setError('خطای ارتباط با سرور')
@@ -2013,27 +2132,79 @@ export default function NewOrderClient({
 
           {error && <p className="danger" style={{ marginTop: 8 }}>{error}</p>}
 
-          <button
-            type="button"
-            onClick={submit}
-            disabled={busy || lines.length === 0}
-            style={{
-              marginTop: 10,
-              width: '100%',
-              padding: 13,
-              border: 0,
-              borderRadius: 12,
-              background: '#6b4f3a',
-              color: '#fff',
-              font: 'inherit',
-              fontWeight: 700,
-              cursor: busy || lines.length === 0 ? 'not-allowed' : 'pointer',
-              opacity: busy || lines.length === 0 ? 0.6 : 1,
-              flexShrink: 0,
-            }}
-          >
-            {busy ? 'در حال ثبت...' : editing ? '💾 ثبت ویرایش سفارش' : 'ثبت سفارش'}
-          </button>
+          {/* 🎯 پچ ۵۰-هـ-گ: «💳 پرداخت و ثبت» کنار «ثبت سفارش» — سفارش ثبت و
+              مودال پرداخت مشترک برای فاکتور جاری باز می‌شود */}
+          {editing ? (
+            <button
+              type="button"
+              onClick={() => submit(false)}
+              disabled={busy || lines.length === 0}
+              style={{
+                marginTop: 10,
+                width: '100%',
+                padding: 13,
+                border: 0,
+                borderRadius: 12,
+                background: '#6b4f3a',
+                color: '#fff',
+                font: 'inherit',
+                fontWeight: 700,
+                cursor: busy || lines.length === 0 ? 'not-allowed' : 'pointer',
+                opacity: busy || lines.length === 0 ? 0.6 : 1,
+                flexShrink: 0,
+              }}
+            >
+              {busy ? 'در حال ثبت...' : '💾 ثبت ویرایش سفارش'}
+            </button>
+          ) : (
+            <div
+              style={{
+                display: 'flex',
+                gap: 8,
+                marginTop: 10,
+                flexShrink: 0,
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => submit(true)}
+                disabled={busy || lines.length === 0}
+                style={{
+                  flex: 1.15,
+                  padding: 13,
+                  border: 0,
+                  borderRadius: 12,
+                  background: '#2d5d3e',
+                  color: '#fff',
+                  font: 'inherit',
+                  fontWeight: 700,
+                  cursor: busy || lines.length === 0 ? 'not-allowed' : 'pointer',
+                  opacity: busy || lines.length === 0 ? 0.6 : 1,
+                }}
+              >
+                {busy ? 'در حال ثبت...' : '💳 پرداخت و ثبت'}
+              </button>
+              <button
+                type="button"
+                onClick={() => submit(false)}
+                disabled={busy || lines.length === 0}
+                style={{
+                  flex: 1,
+                  padding: 13,
+                  border: 0,
+                  borderRadius: 12,
+                  background: '#6b4f3a',
+                  color: '#fff',
+                  font: 'inherit',
+                  fontWeight: 700,
+                  cursor: busy || lines.length === 0 ? 'not-allowed' : 'pointer',
+                  opacity: busy || lines.length === 0 ? 0.6 : 1,
+                }}
+              >
+                {busy ? 'در حال ثبت...' : 'ثبت سفارش'}
+              </button>
+            </div>
+          )}
         </section>
       </div>
 
@@ -2224,24 +2395,16 @@ export default function NewOrderClient({
                     <div
                       key={o.id}
                       style={{
+                        border: '1px solid #e7dfd3',
+                        borderRadius: 10,
+                        padding: '8px 10px',
                         display: 'flex',
-                        flexDirection: 'column',
-                        gap: 4,
+                        gap: 8,
+                        alignItems: 'center',
                         // 🐛 فیکس ۵۰-هـ-ح: سرریز افقی — grid-item نباید min-width:auto بماند
                         minWidth: 0,
                       }}
                     >
-                      <div
-                        style={{
-                          border: '1px solid #e7dfd3',
-                          borderRadius: 10,
-                          padding: '8px 10px',
-                          display: 'flex',
-                          gap: 8,
-                          alignItems: 'center',
-                          minWidth: 0,
-                        }}
-                      >
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
                           <strong style={{ fontSize: 13.5 }}>
@@ -2562,8 +2725,34 @@ export default function NewOrderClient({
                         >
                           🔁
                         </button>
-                        {/* 🎯 پچ ۵۰-هـ-ف: دکمهٔ 💳 فشرده از ردیف حذف شد — نوار پرداخت
-                            واضح زیر کارت جای آن را گرفته */}
+                        {/* 🎯 پچ ۵۰-هـ-گ: 💳 فشرده در ردیف — برای سفارش لغوشده
+                            یا تسویه‌شده غیرفعال */}
+                        <button
+                          type="button"
+                          title={
+                            o.status === 'cancelled'
+                              ? 'سفارش لغو شده — پرداخت غیرفعال'
+                              : st.remaining <= 0
+                                ? 'تسویه شده — پرداخت غیرفعال'
+                                : 'پرداخت / تسویه — تک‌روشی یا ترکیبی 🧩'
+                          }
+                          disabled={o.status === 'cancelled' || st.remaining <= 0}
+                          onClick={() => setPayModalOrder(o)}
+                          style={{
+                            ...smallBtn,
+                            flexShrink: 0,
+                            fontSize: 13,
+                            padding: '6px 8px',
+                            opacity:
+                              o.status === 'cancelled' || st.remaining <= 0 ? 0.45 : 1,
+                            cursor:
+                              o.status === 'cancelled' || st.remaining <= 0
+                                ? 'not-allowed'
+                                : 'pointer',
+                          }}
+                        >
+                          💳
+                        </button>
                         <button
                           type="button"
                           disabled={!isOrderEditable(o)}
@@ -2581,59 +2770,6 @@ export default function NewOrderClient({
                           ✏️
                         </button>
                       </div>
-                      </div>
-                      {/* 🎯 پچ ۵۰-هـ-ف: نوار پرداخت واضح زیر هر سفارش — برای
-                          سفارش لغوشده/تسویه‌شده فعال نیست */}
-                      {o.status === 'cancelled' ? (
-                        <div
-                          style={{
-                            fontSize: 11.5,
-                            color: '#9b3c32',
-                            background: '#fdecec',
-                            borderRadius: 8,
-                            padding: '6px 10px',
-                            textAlign: 'center',
-                          }}
-                        >
-                          🚫 سفارش لغو شده — امکان پرداخت ندارد
-                        </div>
-                      ) : st.remaining <= 0 ? (
-                        <div
-                          style={{
-                            fontSize: 11.5,
-                            fontWeight: 700,
-                            color: '#3f7d5c',
-                            background: '#e5f0e6',
-                            borderRadius: 8,
-                            padding: '6px 10px',
-                            textAlign: 'center',
-                          }}
-                        >
-                          ✅ تسویه شده — {fmt(st.paid)} تومان پرداخت ثبت شده است
-                        </div>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => setPayModalOrder(o)}
-                          style={{
-                            display: 'block',
-                            width: '100%',
-                            padding: '8px 10px',
-                            borderRadius: 8,
-                            border: 'none',
-                            background: '#2d5d3e',
-                            color: '#fff',
-                            fontWeight: 700,
-                            fontSize: 13,
-                            cursor: 'pointer',
-                            font: 'inherit',
-                            textAlign: 'center',
-                          }}
-                        >
-                          💳 پرداخت / تسویه این سفارش — مانده:{' '}
-                          {fmt(st.remaining)} تومان 🧩
-                        </button>
-                      )}
                     </div>
                     )
                   })}
