@@ -155,8 +155,16 @@ export default function OrderPage({
           setError(data.error || 'سفارش پیدا نشد')
         } else {
           setOrder(data.order as Order)
+          const o = data.order as Order
           // 🎯 پچ ۳۹b: در پرداخت جزئی، انتخاب روش تسویهٔ باقی‌مانده مستقیم باز شود
-          if ((data.order as Order)?.payment_status === 'partial') setShowChangeMethod(true)
+          // 🎯 پچ ۵۰-هـ-ژ: سفارشِ بازِ حضوریِ تسویه‌نشده هم مستقیم انتخابِ روش باز شود
+          const openUnpaidInPlace =
+            (o?.payment_method === 'cash' || o?.payment_method === 'card') &&
+            (!o?.payment_status ||
+              o?.payment_status === 'unpaid' ||
+              o?.payment_status === 'failed') &&
+            ['pending', 'confirmed', 'preparing', 'ready'].includes(o?.status || '')
+          if (o?.payment_status === 'partial' || openUnpaidInPlace) setShowChangeMethod(true)
         }
       } catch {
         setError('خطا در ارتباط با سرور')
@@ -465,6 +473,14 @@ export default function OrderPage({
   const needsTransferReceipt = isTransfer && (isUnpaid || isPendingReview || isFailed || isPartial)
   const needsWalletPayment = isWallet && (isUnpaid || isFailed || isPartial)
 
+  // 🎯 پچ ۵۰-هـ-ژ: سفارشِ بازِ حضوریِ تسویه‌نشده (cash/card) — مشتری از پنل خودش
+  // باید بتواند با همهٔ روش‌ها تسویه کند (سناریو: اپراتور سفارش را می‌بندد و
+  // مشتری بعداً کارت‌به‌کارت/کیف‌پول/درگاه پرداخت می‌کند)
+  const isOpenInPlaceUnpaid =
+    (isCash || isCard) &&
+    (isUnpaid || isFailed) &&
+    ['pending', 'confirmed', 'preparing', 'ready'].includes(order.status)
+
   // ✅ رسید (عکس یا متن) ارسال شده و منتظر تعیین‌تکلیف مدیر هستیم
   const receiptSubmitted =
     isTransfer && isPendingReview && !!(order.payment_receipt_url || order.payment_note)
@@ -498,7 +514,12 @@ export default function OrderPage({
     !isPaid &&
     order.status !== 'delivered' &&
     paymentSettings?.payment_enabled === true &&
-    (needsOnlinePayment || needsTransferReceipt || isFailed || needsWalletPayment || isPartial)
+    (needsOnlinePayment ||
+      needsTransferReceipt ||
+      isFailed ||
+      needsWalletPayment ||
+      isPartial ||
+      isOpenInPlaceUnpaid)
 
   const shouldShowBanner = !bannerDismissed && !isCancelled && (isPaid || isCash || isCard)
 
@@ -536,6 +557,9 @@ export default function OrderPage({
   } else if (isPartial) {
     badgeType = 'pending'
     badgeText = '🧩 پرداخت جزئی — باقی‌مانده پرداخت نشده'
+  } else if (isOpenInPlaceUnpaid) {
+    badgeType = 'unpaid'
+    badgeText = '⏱ پرداخت نشده — قابل تسویه از همین صفحه'
   } else if (isCash || isCard) {
     badgeType = 'in-place'
     badgeText = '💵 پرداخت در محل (نقدی / کارت‌خوان)'
@@ -756,7 +780,9 @@ export default function OrderPage({
           ) : (
             <>
               <p className="order-payment-section-desc">
-                {receiptSubmitted
+                {isOpenInPlaceUnpaid
+                  ? 'این سفارش با «پرداخت در محل» ثبت شده و هنوز تسویه نشده. اگر می‌خواهی همین حالا پرداخت کنی، روش دلخواهت را انتخاب کن.'
+                  : receiptSubmitted
                   ? '🏦 رسید شما دریافت شد. پس از بررسی مدیر، وضعیت پرداخت به‌روزرسانی می‌شود.'
                   : needsTransferReceipt
                     ? isPartial
