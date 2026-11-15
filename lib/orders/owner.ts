@@ -26,41 +26,48 @@ export async function getDeviceHashes(): Promise<string[]> {
 
 // 🎯 پچ ۵۰-هـ-ز: زنجیرهٔ شناسایی شمارهٔ مشتریِ دستگاه — همان منطق پنل مشتری:
 // ۱) آخرین سفارشِ دستگاه  ۲) ردیف customers وصل‌شده به دستگاه  ۳) عضو سازمانیِ دستگاه
+// 🎯 پچ ۵۰-هـ-ژ: هر سه کوئری «موازی» اجرا می‌شوند (سرعت پنل مشتری و همهٔ روت‌های
+// پرداخت) و نتیجه بر اساس اولویت انتخاب می‌شود
 export async function getDeviceCustomerPhone(
   db: SupabaseClient,
   hashes: string[]
 ): Promise<string> {
   if (hashes.length === 0) return ''
 
-  const { data: anchor } = await db
-    .from('orders')
-    .select('customer_phone')
-    .in('device_id_hash', hashes)
-    .not('customer_phone', 'is', null)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-  const fromOrder = String((anchor as any)?.customer_phone ?? '').trim()
-  if (fromOrder) return fromOrder
+  const [anchorRes, custRes, orgRes] = await Promise.all([
+    db
+      .from('orders')
+      .select('customer_phone')
+      .in('device_id_hash', hashes)
+      .not('customer_phone', 'is', null)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    db
+      .from('customers')
+      .select('phone')
+      .in('device_id_hash', hashes)
+      .not('phone', 'is', null)
+      .limit(1)
+      .maybeSingle(),
+    db
+      .from('organization_members')
+      .select('metadata')
+      .in('device_id_hash', hashes)
+      .eq('is_registered', true)
+      .limit(1)
+      .maybeSingle(),
+  ])
 
-  const { data: custRow } = await db
-    .from('customers')
-    .select('phone')
-    .in('device_id_hash', hashes)
-    .not('phone', 'is', null)
-    .limit(1)
-    .maybeSingle()
-  const fromCust = String((custRow as any)?.phone ?? '').trim()
-  if (fromCust) return fromCust
+  if (anchorRes.error) console.error('[owner] anchor phone:', anchorRes.error.message)
+  if (custRes.error) console.error('[owner] customers phone:', custRes.error.message)
+  if (orgRes.error) console.error('[owner] org member phone:', orgRes.error.message)
 
-  const { data: orgRow } = await db
-    .from('organization_members')
-    .select('metadata')
-    .in('device_id_hash', hashes)
-    .eq('is_registered', true)
-    .limit(1)
-    .maybeSingle()
-  return String((orgRow as any)?.metadata?._phone ?? '').trim()
+  return (
+    String((anchorRes.data as any)?.customer_phone ?? '').trim() ||
+    String((custRes.data as any)?.phone ?? '').trim() ||
+    String((orgRes.data as any)?.metadata?._phone ?? '').trim()
+  )
 }
 
 // 🎯 پچ ۵۰-هـ-ز: سفارش در دسترس این دستگاه/مشتری است؟

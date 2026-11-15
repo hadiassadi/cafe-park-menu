@@ -475,19 +475,23 @@ export default function MyOrdersClient() {
 
   // ✅ فیلتر کردن سفارش‌ها بر اساس تب فعال
     // ✅ بدهی = تحویل‌شده و تسویه‌نشده
-  const debtOrders = orders.filter(
-    (o) => o.status === 'delivered' && o.payment_status !== 'paid'
-  )
+    // 🎯 پچ ۵۰-هـ-ژ: سفارشِ بازِ تسویه‌نشده هم بدهی است (حضوریِ باز، رسیدِ در
+    // انتظار، آنلاینِ پرداخت‌نشده) تا مشتری از تب بدهی هم به تسویه برسد
+  const OPEN_ORDER_STATUSES = ['pending', 'confirmed', 'preparing', 'ready']
+  const isUnsettledOrder = (o: Order) =>
+    o.payment_status !== 'paid' &&
+    (o.status === 'delivered' || OPEN_ORDER_STATUSES.includes(o.status))
+  const debtOrders = orders.filter(isUnsettledOrder)
   const debtTotal = debtOrders.reduce(
   (sum, o) => sum + Math.max(0, o.subtotal - (o.paid_amount ?? 0)),
   0
 )
   const filteredOrders = orders.filter((o) => {
     if (activeTab === 'open') {
-      return ['pending', 'confirmed', 'preparing', 'ready'].includes(o.status)
+      return OPEN_ORDER_STATUSES.includes(o.status)
     }
     if (activeTab === 'debt') {
-      return o.status === 'delivered' && o.payment_status !== 'paid'
+      return isUnsettledOrder(o)
     }
     return ['delivered', 'cancelled'].includes(o.status)
   })
