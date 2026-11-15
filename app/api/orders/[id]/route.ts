@@ -38,6 +38,8 @@ const CUSTOMER_COLUMNS = [
   'payment_ref_id',
   'payment_receipt_url',
   'payment_note',
+  // 🎯 پچ ۵۰-هـ-ن: برای پرداخت ترکیبی — باقی‌مانده = subtotal − paid_amount
+  'paid_amount',
 ].join(',')
 
 export async function GET(
