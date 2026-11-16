@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 // ─────────────────────────────────────────────
 // 🎯 پچ ۵۰-هـ-وِی — پنل «پرداخت ترکیبی» ادمین، نسخهٔ فشرده
@@ -48,6 +48,54 @@ export default function AdminSplitPayment({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [doneParts, setDoneParts] = useState<MethodKey[]>([])
+
+  // 🎯 پچ ۵۰-هـ-س: لینک پرداخت درگاه برای سفارش حضوری — مبلغ دلخواه/مانده
+  const [payLink, setPayLink] = useState<{ url: string; amount: number } | null>(null)
+  const [linkBusy, setLinkBusy] = useState(false)
+  const [linkError, setLinkError] = useState<string | null>(null)
+  const [copied, setCopied] = useState(false)
+  const [linkPhone, setLinkPhone] = useState('')
+
+  // تغییر مبلغ درگاه → لینک قبلی (که برای مبلغ قدیمی ساخته شده) نامعتبر است
+  useEffect(() => {
+    setPayLink(null)
+    setCopied(false)
+    setLinkError(null)
+  }, [amounts.online])
+
+  async function createPayLink(amount: number) {
+    setLinkError(null)
+    setCopied(false)
+    setLinkBusy(true)
+    try {
+      const res = await fetch(`/api/admin/orders/${orderId}/pay-link`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount }),
+      })
+      const d = await res.json().catch(() => null)
+      if (!res.ok || d?.error || !d?.paymentUrl) {
+        setLinkError(d?.error || 'ساخت لینک پرداخت ناموفق بود')
+        return
+      }
+      setPayLink({ url: d.paymentUrl, amount })
+    } catch {
+      setLinkError('خطا در ارتباط با سرور')
+    } finally {
+      setLinkBusy(false)
+    }
+  }
+
+  function copyLink() {
+    if (!payLink) return
+    navigator.clipboard
+      ?.writeText(payLink.url)
+      .then(() => {
+        setCopied(true)
+        setTimeout(() => setCopied(false), 2000)
+      })
+      .catch(() => {})
+  }
 
   const allocated = useMemo(
     () => selected.reduce((s, k) => s + (amounts[k] ?? 0), 0),
@@ -262,58 +310,156 @@ export default function AdminSplitPayment({
       {selected.map((k) => {
         const m = METHODS.find((x) => x.key === k)!
         return (
-          <div
-            key={k}
-            style={{
-              display: 'flex',
-              gap: 5,
-              alignItems: 'center',
-              marginBottom: 6,
-              flexWrap: 'wrap',
-            }}
-          >
-            <span style={{ fontSize: 12, fontWeight: 600, minWidth: 96 }}>
-              {m.icon} {m.label}
-            </span>
-            <input
-              value={
-                amounts[k] !== undefined && amounts[k] !== null
-                  ? String(amounts[k])
-                  : ''
-              }
-              onChange={(e) => setAmount(k, e.target.value)}
-              placeholder={locked === k ? String(remaining) : 'مبلغ (تومان)'}
-              inputMode="numeric"
-              disabled={busy}
-              style={inputStyle}
-            />
-            <button
-              type="button"
-              style={miniBtn}
-              onClick={() => assignAll(k)}
-              disabled={busy}
-              title="کل باقی‌مانده با این روش — بقیهٔ روش‌ها غیرفعال می‌شوند"
+          <div key={k} style={{ marginBottom: 6 }}>
+            <div
+              style={{
+                display: 'flex',
+                gap: 5,
+                alignItems: 'center',
+                flexWrap: 'wrap',
+              }}
             >
-              کل مبلغ
-            </button>
-            <button
-              type="button"
-              style={miniBtn}
-              onClick={() => fillRest(k)}
-              disabled={busy}
-              title="بقیهٔ مبلغِ تخصیص‌نشده"
-            >
-              باقی
-            </button>
-            <button
-              type="button"
-              style={{ ...miniBtn, border: 'none', background: 'none' }}
-              onClick={() => clearRow(k)}
-              disabled={busy}
-              aria-label="حذف روش"
-            >
-              ✕
-            </button>
+              <span style={{ fontSize: 12, fontWeight: 600, minWidth: 96 }}>
+                {m.icon} {m.label}
+              </span>
+              <input
+                value={
+                  amounts[k] !== undefined && amounts[k] !== null
+                    ? String(amounts[k])
+                    : ''
+                }
+                onChange={(e) => setAmount(k, e.target.value)}
+                placeholder={locked === k ? String(remaining) : 'مبلغ (تومان)'}
+                inputMode="numeric"
+                disabled={busy}
+                style={inputStyle}
+              />
+              <button
+                type="button"
+                style={miniBtn}
+                onClick={() => assignAll(k)}
+                disabled={busy}
+                title="کل باقی‌مانده با این روش — بقیهٔ روش‌ها غیرفعال می‌شوند"
+              >
+                کل مبلغ
+              </button>
+              <button
+                type="button"
+                style={miniBtn}
+                onClick={() => fillRest(k)}
+                disabled={busy}
+                title="بقیهٔ مبلغِ تخصیص‌نشده"
+              >
+                باقی
+              </button>
+              <button
+                type="button"
+                style={{ ...miniBtn, border: 'none', background: 'none' }}
+                onClick={() => clearRow(k)}
+                disabled={busy}
+                aria-label="حذف روش"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* 🎯 پچ ۵۰-هـ-س: زیر ردیف درگاه — ساخت لینک پرداخت + شمارهٔ مشتری */}
+            {k === 'online' && (amounts.online ?? 0) >= MIN_PART && (
+              <div
+                style={{
+                  marginTop: 6,
+                  padding: 8,
+                  borderRadius: 8,
+                  background: '#fff',
+                  border: '1px dashed #d8cfc0',
+                }}
+              >
+                {!payLink ? (
+                  <>
+                    <button
+                      type="button"
+                      style={miniBtn}
+                      disabled={linkBusy}
+                      onClick={() => createPayLink(amounts.online!)}
+                    >
+                      {linkBusy ? '⏳ در حال ساخت…' : '🔗 ساخت لینک پرداخت برای این مبلغ'}
+                    </button>
+                    <div style={{ fontSize: 11, color: '#8a8378', marginTop: 4 }}>
+                      لینک زرین‌پال برای مبلغ اعلامی ساخته می‌شود (ردیف «در انتظار»
+                      روی دفتر)؛ بعد از پرداخت مشتری همان لحظه تأیید می‌شود و در
+                      آینده در پیام‌های مالی مشتری قابل نمایش است.
+                    </div>
+                    {linkError && (
+                      <div style={{ fontSize: 11.5, color: '#9b3c32', marginTop: 4 }}>
+                        ❌ {linkError}
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <div
+                      style={{
+                        display: 'flex',
+                        gap: 5,
+                        alignItems: 'center',
+                        flexWrap: 'wrap',
+                      }}
+                    >
+                      <input
+                        readOnly
+                        value={payLink.url}
+                        onFocus={(e) => e.currentTarget.select()}
+                        style={{
+                          ...inputStyle,
+                          flex: 2,
+                          minWidth: 170,
+                          fontSize: 11.5,
+                        }}
+                      />
+                      <button type="button" style={miniBtn} onClick={copyLink}>
+                        {copied ? '✓ کپی شد' : '📋 کپی'}
+                      </button>
+                    </div>
+                    <div
+                      style={{
+                        display: 'flex',
+                        gap: 5,
+                        alignItems: 'center',
+                        flexWrap: 'wrap',
+                        marginTop: 5,
+                      }}
+                    >
+                      <input
+                        value={linkPhone}
+                        onChange={(e) =>
+                          setLinkPhone(
+                            toEnDigits(e.target.value).replace(/[^\d+]/g, '')
+                          )
+                        }
+                        placeholder="شمارهٔ تلفن مشتری برای ارسال لینک"
+                        inputMode="tel"
+                        dir="ltr"
+                        style={{ ...inputStyle, flex: 1, minWidth: 130, fontSize: 12 }}
+                      />
+                      <button
+                        type="button"
+                        style={{ ...miniBtn, opacity: 0.5, cursor: 'not-allowed' }}
+                        disabled
+                        title="تا راه‌اندازی بخش پیامک و پیام‌های مالی پنل مشتریان غیرفعال است"
+                      >
+                        📤 ارسال لینک
+                      </button>
+                    </div>
+                    <div style={{ fontSize: 11, color: '#8a8378', marginTop: 4 }}>
+                      📤 ارسال لینک بعد از راه‌اندازی بخش پیامک و پیام‌های مالی
+                      مشتریان فعال می‌شود — فعلاً لینک را کپی کن و هرطور لازم است
+                      برای مشتری بفرست. (لینک برای مبلغ {fa(payLink.amount)} تومان
+                      ساخته شده)
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
           </div>
         )
       })}
