@@ -15379,16 +15379,17 @@ a.cat {
   flex: 1;
   overflow-y: auto;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
-  gap: 8px;
+  /* 🎯 پچ ۵۰-هـ-م: تایل‌های بزرگ‌تر — صفحهٔ ویندوز جا دارد و خوانایی بهتر است */
+  grid-template-columns: repeat(auto-fill, minmax(152px, 1fr));
+  gap: 10px;
   align-content: start;
   padding-top: 2px;
 }
 
 /* 🎯 پچ ۵۰-هـ-خ: نمای متنی فشرده — کارت‌های کوتاه بدون عکس برای منوی شلوغ */
 .pos-grid-text {
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  gap: 6px;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 7px;
 }
 
 .pos-cart-lines {
@@ -15420,7 +15421,7 @@ a.cat {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-weight: 700;
-  font-size: 13px;
+  font-size: 14.5px;
 }
 
 .pos-step {
@@ -15431,22 +15432,24 @@ a.cat {
 }
 
 .pos-step button {
-  width: 26px;
-  height: 26px;
+  /* 🎯 پچ ۵۰-هـ-م: دکمه‌های +/− بزرگ‌تر برای لمس راحت */
+  width: 30px;
+  height: 30px;
   border: 1px solid #d9cfc0;
   background: #ffffff;
   border-radius: 8px;
   cursor: pointer;
   font: inherit;
+  font-size: 15px;
   line-height: 1;
   padding: 0;
 }
 
 .pos-qty {
-  min-width: 22px;
+  min-width: 26px;
   text-align: center;
   font-weight: 700;
-  font-size: 13px;
+  font-size: 15px;
 }
 
 /* تب‌های دسته‌ها — ردیف افقی قابل اسکرول بالای گرید */
@@ -15464,10 +15467,11 @@ a.cat {
   border: 1px solid #d9cfc0;
   background: #ffffff;
   border-radius: 999px;
-  padding: 5px 12px;
+  /* 🎯 پچ ۵۰-هـ-م: چیپ دسته بزرگ‌تر و خواناتر */
+  padding: 7px 16px;
   cursor: pointer;
   font: inherit;
-  font-size: 13px;
+  font-size: 14px;
   white-space: nowrap;
 }
 
@@ -15480,8 +15484,22 @@ a.cat {
   .pos-body {
     grid-template-columns: 1fr;
   }
+  /* 🎯 پچ ۵۰-هـ-م: موبایل — تایل‌های لمسی بزرگ‌تر، دسته‌ها به‌جای اسکرول می‌شکنند */
   .pos-menu-grid {
     max-height: 58vh;
+    grid-template-columns: repeat(auto-fill, minmax(142px, 1fr));
+    gap: 10px;
+  }
+  .pos-grid-text {
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  }
+  .pos-tab-row {
+    flex-wrap: wrap;
+    overflow-x: visible;
+  }
+  .pos-tab {
+    padding: 7px 14px;
+    font-size: 13.5px;
   }
   .pos-cart-lines {
     max-height: 40vh;

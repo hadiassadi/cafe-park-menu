@@ -154,7 +154,14 @@ const NEXT_LABEL: Record<string, string> = {
   ready: '🎉 تحویل شد',
 }
 
-type Filter = 'all' | 'pending' | 'active' | 'done' | 'unpaid'
+type Filter =
+  | 'all'
+  | 'pending'
+  | 'preparing'
+  | 'ready'
+  | 'active'
+  | 'done'
+  | 'unpaid'
 const UNPAID_FILTER_STATUSES = ['unpaid', 'failed', 'partial', 'pending_review']
 
 function needsPaymentFollowUp(o: Order): boolean {
@@ -377,6 +384,9 @@ export default function OrdersManager({
     const activeOrders = orders.filter((o) => !o.deleted_at)
     return {
       pending: activeOrders.filter((o) => o.status === 'pending').length,
+      // 🎯 پچ ۵۰-هـ-م: شمارش آماده‌سازی/آمادهٔ تحویل برای تب‌های جدید
+      preparing: activeOrders.filter((o) => o.status === 'preparing').length,
+      ready: activeOrders.filter((o) => o.status === 'ready').length,
       active: activeOrders.filter((o) =>
         ['confirmed', 'preparing', 'ready'].includes(o.status)
       ).length,
@@ -389,6 +399,14 @@ export default function OrdersManager({
     }
   }, [orders])
 
+  // 🎯 پچ ۵۰-هـ-م: ورود با ?filter= از چیپ‌های وضعیت صفحهٔ POS
+  useEffect(() => {
+    try {
+      const f = new URLSearchParams(window.location.search).get('filter')
+      if (f === 'preparing' || f === 'ready') setFilter(f)
+    } catch {}
+  }, [])
+
   const filteredOrders = useMemo(() => {
     const source = trashMode
       ? orders.filter((o) => !!o.deleted_at)
@@ -399,6 +417,12 @@ export default function OrdersManager({
     if (!trashMode) {
       if (filter === 'pending') {
         result = result.filter((o) => o.status === 'pending')
+      } else if (filter === 'preparing') {
+        // 🎯 پچ ۵۰-هـ-م: از چیپ «در آماده‌سازی» صفحهٔ POS
+        result = result.filter((o) => o.status === 'preparing')
+      } else if (filter === 'ready') {
+        // 🎯 پچ ۵۰-هـ-م: از چیپ «آمادهٔ تحویل» صفحهٔ POS
+        result = result.filter((o) => o.status === 'ready')
       } else if (filter === 'active') {
         result = result.filter((o) =>
           ['confirmed', 'preparing', 'ready'].includes(o.status)
@@ -1061,6 +1085,31 @@ export default function OrdersManager({
                 {formatPrice(counts.active)}
               </span>
               <span className="stat-tab-label">در جریان</span>
+            </button>
+
+            {/* 🎯 پچ ۵۰-هـ-م: تب‌های آماده‌سازی / آمادهٔ تحویل (از چیپ‌های POS هم می‌آیند) */}
+            <button
+              type="button"
+              className={`stat-tab ${filter === 'preparing' ? 'active' : ''}`}
+              onClick={() => setFilter('preparing')}
+            >
+              <span className="stat-tab-icon">🔥</span>
+              <span className="stat-tab-count">
+                {formatPrice(counts.preparing)}
+              </span>
+              <span className="stat-tab-label">در آماده‌سازی</span>
+            </button>
+
+            <button
+              type="button"
+              className={`stat-tab ${filter === 'ready' ? 'active' : ''}`}
+              onClick={() => setFilter('ready')}
+            >
+              <span className="stat-tab-icon">🍽️</span>
+              <span className="stat-tab-count">
+                {formatPrice(counts.ready)}
+              </span>
+              <span className="stat-tab-label">آمادهٔ تحویل</span>
             </button>
 
             <button
