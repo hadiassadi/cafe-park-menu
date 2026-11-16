@@ -653,6 +653,11 @@ export default function NewOrderClient({
   // 🎯 پچ ۵۰-هـ-وِی: پرداخت با دکمهٔ ردیفی + مودال — پنل ترکیبی (AdminSplitPayment)
   // پچ ۵۰-هـ-او: stateهای payMethodSel/payAmount/payBusy/payMsg حذف شدند
   const [payModalOrder, setPayModalOrder] = useState<PosOrderRow | null>(null)
+  // 🎯 پچ ۵۰-هـ-ن: انتخاب روش پرداخت قبل از ساخت سفارش («پرداخت و ثبت»)
+  const [payChoose, setPayChoose] = useState(false)
+  const [payChooseBusy, setPayChooseBusy] = useState<
+    'cash' | 'card' | 'online' | 'split' | null
+  >(null)
   useEffect(() => {
     try {
       const saved = window.localStorage.getItem('pos_menu_view')
@@ -695,7 +700,8 @@ export default function NewOrderClient({
   }, [])
 
   // 🎯 پچ ۵۰-هـ-ب: جستجوی صوتی — Chrome/Edge با fa-IR؛ بدون پشتیبانی مرورگر، دکمه پنهان می‌ماند
-  const [listening, setListening] = useState(false)
+  // 🎯 پچ ۵۰-هـ-ن: فقط میکروفونِ در حال ضبط قرمز می‌شود (listeningFor per-field)
+  const [listeningFor, setListeningFor] = useState<string | null>(null)
   const [speechOk, setSpeechOk] = useState(false)
   const recogRef = useRef<SpeechRecognitionLike | null>(null)
   useEffect(() => {
@@ -706,17 +712,17 @@ export default function NewOrderClient({
     if (w.SpeechRecognition || w.webkitSpeechRecognition) setSpeechOk(true)
   }, [])
 
-  // 🎯 پچ ۵۰-هـ-م: جستجوی صوتی عمومی — محصول/نام مشتری/شماره/جستجوی عضو
-  function startVoice(onText: (t: string) => void) {
+  // 🎯 پچ ۵۰-هـ-ن: جستجوی صوتی عمومی با هدف مشخص — فقط دکمهٔ همان هدف قرمز می‌شود
+  function startVoice(target: string, onText: (t: string) => void) {
     const w = window as unknown as {
       SpeechRecognition?: new () => SpeechRecognitionLike
       webkitSpeechRecognition?: new () => SpeechRecognitionLike
     }
     const SR = w.SpeechRecognition || w.webkitSpeechRecognition
     if (!SR) return
-    if (listening) {
+    if (listeningFor !== null) {
       recogRef.current?.stop()
-      setListening(false)
+      setListeningFor(null)
       return
     }
     const r = new SR()
@@ -727,14 +733,14 @@ export default function NewOrderClient({
       const txt = e.results?.[0]?.[0]?.transcript ?? ''
       if (txt) onText(txt)
     }
-    r.onend = () => setListening(false)
-    r.onerror = () => setListening(false)
+    r.onend = () => setListeningFor(null)
+    r.onerror = () => setListeningFor(null)
     recogRef.current = r
     try {
       r.start()
-      setListening(true)
+      setListeningFor(target)
     } catch {
-      setListening(false)
+      setListeningFor(null)
     }
   }
 
@@ -1363,14 +1369,21 @@ export default function NewOrderClient({
     }
   }, [printJob])
 
-  async function submit(thenPay = false) {
+  // 🎯 پچ ۵۰-هـ-ن: ساخت سفارش — بدون ریست فرم؛ ردیف ساخته‌شده برمی‌گردد.
+  // جدا شدن از submit تا جریان «پرداخت و ثبت» بتواند بعد از ساخت، پرداخت را
+  // همان لحظه ثبت کند (سفارشِ بدون پرداخت از مسیر پرداخت خارج نمی‌شود)
+  async function createOrder(): Promise<PosOrderRow | null> {
     setError('')
-    if (lines.length === 0) return setError('هیچ آیتمی انتخاب نشده است')
-    if (discountVal > eligibleBase)
-      return setError(
+    if (lines.length === 0) {
+      setError('هیچ آیتمی انتخاب نشده است')
+      return null
+    }
+    if (discountVal > eligibleBase) {
+      setError(
         'تخفیف نمی‌تواند بیشتر از اقلام مشمول تخفیف (' + fmt(eligibleBase) + ' تومان) باشد'
       )
-    setBusy(true)
+      return null
+    }
     try {
       // 🎯 پچ ۵۰-هـ-و: منبع تخفیف در حالت ویرایش از کد ثبت‌شدهٔ فاکتور می‌آید
       const discountSource = editing
@@ -1429,32 +1442,92 @@ export default function NewOrderClient({
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
         setError(data.error || (editing ? 'ثبت ویرایش ناموفق بود' : 'ثبت سفارش ناموفق بود'))
-      } else {
-        setDone(data.order?.order_number ?? 0)
-        loadTodayStats()
-        setEditing(null)
-        setSupplementFor(null)
-        setLines([])
-        setGuestName('')
-        setGuestPhone('')
-        setSelectedTable('')
-        setNote('')
-        setDiscount('')
-        setDiscountAuto(null)
-        clearMember()
-        // 🎯 پچ ۵۰-هـ-گ: لیست تازه + باز شدن مودال پرداخت مشترک برای فاکتور جدید
-        // (اگر فیلتر تاریخ سفارش تازه را نیاورد، ردیف خام پاسخ سرور استفاده می‌شود)
-        const list = await loadOrders()
-        if (thenPay && data.order?.id) {
-          const created =
-            (list ?? []).find((x) => x.id === data.order.id) ?? data.order
-          if (created) setPayModalOrder(created)
-        }
+        return null
       }
+      setEditing(null)
+      return (data.order as PosOrderRow | undefined) ?? null
     } catch {
       setError('خطای ارتباط با سرور')
-    } finally {
+      return null
+    }
+  }
+
+  // ریست فرم پس از ثبت موفق سفارش
+  function resetFormAfterCreate(orderNo: number | null) {
+    setDone(orderNo)
+    loadTodayStats()
+    setSupplementFor(null)
+    setLines([])
+    setGuestName('')
+    setGuestPhone('')
+    setSelectedTable('')
+    setNote('')
+    setDiscount('')
+    setDiscountAuto(null)
+    clearMember()
+  }
+
+  // 🎯 پچ ۵۰-هـ-ن: «ثبت سفارش» — بدون پرداخت (همان رفتار قبل)
+  async function submit() {
+    setBusy(true)
+    const created = await createOrder()
+    if (!created) {
       setBusy(false)
+      return
+    }
+    await loadOrders()
+    resetFormAfterCreate(created.order_number ?? null)
+    setBusy(false)
+  }
+
+  // 🎯 پچ ۵۰-هـ-ن: «💳 پرداخت و ثبت» — اول روش انتخاب می‌شود (مودال payChoose)،
+  // بعد سفارش ساخته می‌شود؛ نقدی/کارت‌خوان همان لحظه پرداختشان ثبت می‌شود و
+  // فاکتورِ تسویه‌شده وارد لیست می‌شود. بستن مودال انتخاب = هیچ سفارشی ساخته نمی‌شود.
+  async function payRegister(method: 'cash' | 'card' | 'online' | 'split') {
+    setPayChooseBusy(method)
+    setError('')
+    try {
+      const created = await createOrder()
+      if (!created) return
+      const list = await loadOrders()
+      const row: PosOrderRow =
+        (list ?? []).find((x) => x.id === created.id) ?? created
+      const remaining = Math.max(0, settlementOf(row).remaining)
+
+      if (method === 'cash' || method === 'card') {
+        if (remaining >= 1000) {
+          const res = await fetch(`/api/admin/orders/${row.id}/payment`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ method, amount: remaining }),
+          })
+          const d = await res.json().catch(() => null)
+          await loadOrders()
+          resetFormAfterCreate(row.order_number ?? null)
+          setPayChoose(false)
+          if (!res.ok || d?.error) {
+            setError(
+              'سفارش ثبت شد ولی ثبت پرداخت ناموفق بود' +
+                (d?.error ? ': ' + d.error : '') +
+                ' — از مودال پرداختِ ردیف همان سفارش تسویه کنید.'
+            )
+          }
+          return
+        }
+        // ماندهٔ کمتر از حداقل → مودال پرداخت مشترک باز می‌شود
+        resetFormAfterCreate(row.order_number ?? null)
+        setPayChoose(false)
+        setPayModalOrder(row)
+        return
+      }
+
+      // درگاه آنلاین / ترکیبی: سفارش ساخته می‌شود و مودال پرداخت مشترک
+      // (همان پنل ادمین با کل مبلغ/باقی/قفل) باز می‌شود
+      resetFormAfterCreate(row.order_number ?? null)
+      setPayChoose(false)
+      setPayModalOrder(row)
+    } finally {
+      setPayChooseBusy(null)
     }
   }
 
@@ -1632,17 +1705,7 @@ export default function NewOrderClient({
               value={guestName}
               onChange={(e) => setGuestName(e.target.value)}
             />
-            {/* 🎯 پچ ۵۰-هـ-م: ورود صوتی نام مشتری */}
-            {speechOk && (
-              <button
-                type="button"
-                title="ورود صوتی — نام مشتری را بگویید"
-                style={micBtnStyle(listening)}
-                onClick={() => startVoice(setGuestName)}
-              >
-                🎤
-              </button>
-            )}
+            {/* 🎯 پچ ۵۰-هـ-ن: میکروفون مهمان حذف شد — جستجوی صوتی فقط برای عضو */}
             <input
               style={{ ...input, flex: '1 1 150px', width: 'auto' }}
               placeholder="شمارهٔ تماس (اختیاری — برای پیامک)"
@@ -1650,17 +1713,6 @@ export default function NewOrderClient({
               value={guestPhone}
               onChange={(e) => setGuestPhone(e.target.value)}
             />
-            {/* 🎯 پچ ۵۰-هـ-م: ورود صوتی شماره — رقم‌ها/واژه‌های عددی به رقم تبدیل می‌شوند */}
-            {speechOk && (
-              <button
-                type="button"
-                title="ورود صوتی شماره — رقم‌ها را بگویید"
-                style={micBtnStyle(listening)}
-                onClick={() => startVoice((t) => setGuestPhone(voiceToDigits(t)))}
-              >
-                🎤
-              </button>
-            )}
             <button
               type="button"
               style={{ ...smallBtn, flexShrink: 0, whiteSpace: 'nowrap' }}
@@ -1682,19 +1734,24 @@ export default function NewOrderClient({
               value={memberQuery}
               onChange={(e) => setMemberQuery(e.target.value)}
             />
-            {/* 🎯 پچ ۵۰-هـ-م: جستجوی صوتی عضو */}
+            {/* 🎯 پچ ۵۰-هـ-م: جستجوی صوتی عضو — گفتارِ شماره هم به رقم تبدیل می‌شود */}
             {speechOk && (
               <button
                 type="button"
                 title="جستجوی صوتی عضو — نام یا شماره را بگویید"
                 style={{
-                  ...micBtnStyle(listening),
+                  ...micBtnStyle(listeningFor === 'member'),
                   position: 'absolute',
                   left: 44,
                   top: 5,
                   padding: '2px 10px',
                 }}
-                onClick={() => startVoice(setMemberQuery)}
+                onClick={() =>
+                  startVoice('member', (t) => {
+                    const d = voiceToDigits(t)
+                    setMemberQuery(d.length >= 10 ? d : t)
+                  })
+                }
               >
                 🎤
               </button>
@@ -1841,16 +1898,8 @@ export default function NewOrderClient({
               <button
                 type="button"
                 title="جستجوی صوتی — اسم محصول را بگو"
-                style={{
-                  ...smallBtn,
-                  flexShrink: 0,
-                  padding: '0 12px',
-                  fontSize: 15,
-                  color: listening ? '#fff' : '#6b4f3a',
-                  background: listening ? '#c0392b' : '#fff',
-                  borderColor: listening ? '#c0392b' : '#e3ddd2',
-                }}
-                onClick={() => startVoice(setSearch)}
+                style={micBtnStyle(listeningFor === 'product')}
+                onClick={() => startVoice('product', setSearch)}
               >
                 🎤
               </button>
@@ -1889,7 +1938,7 @@ export default function NewOrderClient({
             </button>
           </div>
         </div>
-        {listening && (
+        {listeningFor === 'product' && (
           <small
             style={{ color: '#c0392b', fontSize: 11, display: 'block', marginTop: 4 }}
           >
@@ -2289,12 +2338,12 @@ export default function NewOrderClient({
 
           {error && <p className="danger" style={{ marginTop: 8 }}>{error}</p>}
 
-          {/* 🎯 پچ ۵۰-هـ-گ: «💳 پرداخت و ثبت» کنار «ثبت سفارش» — سفارش ثبت و
-              مودال پرداخت مشترک برای فاکتور جاری باز می‌شود */}
+          {/* 🎯 پچ ۵۰-هـ-ن: «💳 پرداخت و ثبت» — اول انتخاب روش پرداخت (مودال)،
+              بعد ساخت سفارش؛ نقدی/کارت‌خوان همان لحظه تسویه می‌شوند */}
           {editing ? (
             <button
               type="button"
-              onClick={() => submit(false)}
+              onClick={() => submit()}
               disabled={busy || lines.length === 0}
               style={{
                 marginTop: 10,
@@ -2324,7 +2373,7 @@ export default function NewOrderClient({
             >
               <button
                 type="button"
-                onClick={() => submit(true)}
+                onClick={() => setPayChoose(true)}
                 disabled={busy || lines.length === 0}
                 style={{
                   flex: 1.15,
@@ -2343,7 +2392,7 @@ export default function NewOrderClient({
               </button>
               <button
                 type="button"
-                onClick={() => submit(false)}
+                onClick={() => submit()}
                 disabled={busy || lines.length === 0}
                 style={{
                   flex: 1,
@@ -3013,6 +3062,82 @@ export default function NewOrderClient({
       )}
 
       {/* 🎯 پچ ۵۰-هـ-وِی: مودال پرداخت سفارش — تک‌روشی یا ترکیبی 🧩 */}
+      {/* 🎯 پچ ۵۰-هـ-ن: انتخاب روش پرداخت قبل از ثبت — سفارش بدون پرداخت ثبت نمی‌شود */}
+      {payChoose && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.45)',
+            zIndex: 1000,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 16,
+          }}
+          onClick={() => {
+            if (!payChooseBusy) setPayChoose(false)
+          }}
+        >
+          <div
+            style={{
+              background: '#fff',
+              color: '#333',
+              borderRadius: 14,
+              padding: 16,
+              maxWidth: 380,
+              width: '100%',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 style={{ margin: '0 0 4px' }}>💳 روش پرداخت را انتخاب کنید</h3>
+            <p style={{ margin: '0 0 12px', color: '#766f64', fontSize: 12.5 }}>
+              سفارش بعد از انتخاب روش ساخته می‌شود. نقدی/کارت‌خوان: پرداخت همان
+              لحظه ثبت و فاکتورِ تسویه‌شده وارد لیست می‌شود. درگاه/ترکیبی: مودال
+              پرداخت سفارش تازه باز می‌شود.
+            </p>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              {(
+                [
+                  ['cash', '💵 نقدی'],
+                  ['card', '💳 کارت‌خوان'],
+                  ['online', '🌐 درگاه آنلاین'],
+                  ['split', '🧩 ترکیبی (چند روش)'],
+                ] as const
+              ).map(([m, label]) => (
+                <button
+                  key={m}
+                  type="button"
+                  disabled={payChooseBusy !== null}
+                  onClick={() => payRegister(m)}
+                  style={{
+                    flex: '1 1 45%',
+                    padding: 12,
+                    borderRadius: 10,
+                    border: '1px solid #e3ddd2',
+                    background: '#fff',
+                    font: 'inherit',
+                    fontWeight: 700,
+                    cursor: payChooseBusy ? 'wait' : 'pointer',
+                    opacity: payChooseBusy && payChooseBusy !== m ? 0.4 : 1,
+                  }}
+                >
+                  {payChooseBusy === m ? '⏳ در حال ثبت…' : label}
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              style={{ ...smallBtn, marginTop: 10, width: '100%' }}
+              disabled={payChooseBusy !== null}
+              onClick={() => setPayChoose(false)}
+            >
+              انصراف — بدون ثبت سفارش
+            </button>
+          </div>
+        </div>
+      )}
+
       {payModalOrder &&
         (() => {
           const kids = ordersList.filter(

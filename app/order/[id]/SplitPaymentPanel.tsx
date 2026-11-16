@@ -4,9 +4,9 @@ import { useMemo, useState } from 'react'
 import UploadReceipt from './UploadReceipt'
 
 // ─────────────────────────────────────────────
-// 🎯 پچ ۵۰-هـ-ن — پنل «پرداخت ترکیبی»
-// مشتری مبلغ باقی‌مانده را بین روش‌ها تقسیم می‌کند (تیک + مبلغ دلخواه) یا کل
-// مبلغ را با یک روش می‌پردازد. همه‌جا از یک جا: سفارشِ باز و بدهی.
+// 🎯 پچ ۵۰-هـ-ن — پنل «پرداخت ترکیبی» مشتری با همان فرمت پنل ادمین:
+// چیپ‌های فشردهٔ تیک‌دار روش‌ها + باکس مبلغ + «کل مبلغ»/«باقی».
+// «کل مبلغ» روی یک روش، بقیه را قفل می‌کند (🔒) — مثل AdminSplitPayment.
 // اجرا: نقدی (اعلام) → کیف پول → درگاه (انتقال آخر، چون صفحه را ترک می‌کند)
 // کارت‌به‌کارت مستقل است: رسید همان ردیف ارسال و تأیید مدیر می‌شود.
 // ─────────────────────────────────────────────
@@ -32,11 +32,18 @@ const MIN_PART = 1_000 // حداقل مبلغ هر بخش (تومان)
 
 const fa = (n: number) => n.toLocaleString('fa-IR')
 
-const METHOD_META: Record<MethodKey, { icon: string; label: string; hint: string }> = {
-  wallet: { icon: '👛', label: 'کیف پول', hint: 'پرداخت فوری از موجودی' },
-  online: { icon: '💳', label: 'درگاه آنلاین', hint: 'زرین‌پال — پرداخت فوری' },
-  transfer: { icon: '🏦', label: 'کارت‌به‌کارت', hint: 'واریز + رسید؛ تأیید توسط کافه' },
-  cash: { icon: '💵', label: 'نقدی در محل', hint: 'هنگام تحویل/مراجعه، نقدی یا کارت‌خوان' },
+const METHODS: Array<{ key: MethodKey; icon: string; label: string }> = [
+  { key: 'wallet', icon: '👛', label: 'کیف پول' },
+  { key: 'online', icon: '💳', label: 'درگاه آنلاین' },
+  { key: 'transfer', icon: '🏦', label: 'کارت‌به‌کارت' },
+  { key: 'cash', icon: '💵', label: 'نقدی در محل' },
+]
+
+const METHOD_HINT: Record<MethodKey, string> = {
+  wallet: 'پرداخت فوری از موجودی',
+  online: 'زرین‌پال — پرداخت فوری',
+  transfer: 'واریز + رسید؛ تأیید توسط کافه',
+  cash: 'هنگام تحویل/مراجعه، نقدی یا کارت‌خوان',
 }
 
 function toEnDigits(s: string): string {
@@ -52,6 +59,46 @@ const STEP_LABEL: Record<string, string> = {
   online: '💳 بخش درگاه ثبت شد — در حال انتقال به درگاه…',
 }
 
+/* 🎯 پچ ۵۰-هـ-ن: استایل مشترک با پنل ادمین (AdminSplitPayment) */
+const chipBase: React.CSSProperties = {
+  fontSize: 12.5,
+  padding: '5px 12px',
+  borderRadius: 999,
+  border: '1px solid #e3ddd2',
+  background: '#fff',
+  color: '#4b443b',
+  cursor: 'pointer',
+  font: 'inherit',
+  whiteSpace: 'nowrap',
+  fontWeight: 600,
+}
+
+const inputStyle: React.CSSProperties = {
+  flex: 1,
+  minWidth: 120,
+  fontSize: 13,
+  padding: '6px 10px',
+  borderRadius: 8,
+  border: '1px solid #e3ddd2',
+  font: 'inherit',
+  color: '#4b443b',
+  background: '#fff',
+  direction: 'ltr',
+  textAlign: 'left',
+}
+
+const miniBtn: React.CSSProperties = {
+  fontSize: 11.5,
+  padding: '4px 9px',
+  borderRadius: 8,
+  border: '1px solid #e3ddd2',
+  background: '#fff',
+  color: '#4b443b',
+  cursor: 'pointer',
+  font: 'inherit',
+  whiteSpace: 'nowrap',
+}
+
 export default function SplitPaymentPanel({
   orderId,
   remaining,
@@ -60,24 +107,6 @@ export default function SplitPaymentPanel({
   onDone,
   onBack,
 }: Props) {
-  const [amounts, setAmounts] = useState<Record<MethodKey, number | null>>({
-    wallet: null,
-    online: null,
-    transfer: null,
-    cash: null,
-  })
-  const [raws, setRaws] = useState<Record<MethodKey, string>>({
-    wallet: '',
-    online: '',
-    transfer: '',
-    cash: '',
-  })
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [doneSteps, setDoneSteps] = useState<string[]>([])
-  const [gatewayUrl, setGatewayUrl] = useState<string | null>(null)
-  const [receiptSent, setReceiptSent] = useState(false)
-
   const walletOk = walletBalance != null && walletBalance > 0
 
   const visibleRows = useMemo<MethodKey[]>(() => {
@@ -89,55 +118,92 @@ export default function SplitPaymentPanel({
     return rows
   }, [walletOk, settings.online, settings.transfer, settings.cash])
 
-  const allocated = (Object.keys(amounts) as MethodKey[]).reduce(
-    (s, m) => s + (amounts[m] ?? 0),
-    0
-  )
+  // پیش‌فرض: همهٔ روش‌های موجود تیک‌خورده‌اند (null = هنوز دستکاری نشده)
+  const [selected, setSelected] = useState<MethodKey[] | null>(null)
+  const sel = selected ?? visibleRows
+  const [amounts, setAmounts] = useState<Partial<Record<MethodKey, number>>>({})
+  const [raws, setRaws] = useState<Partial<Record<MethodKey, string>>>({})
+  const [locked, setLocked] = useState<MethodKey | null>(null) // «کل مبلغ»
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [doneSteps, setDoneSteps] = useState<string[]>([])
+  const [gatewayUrl, setGatewayUrl] = useState<string | null>(null)
+  const [receiptSent, setReceiptSent] = useState(false)
 
-  // 🎯 پچ ۵۰-هـ-م: ردیفی که «کل مبلغ» را گرفته — بقیهٔ ردیف‌ها (ورودی و دکمه‌ها)
-  // قفل می‌شوند تا مثل پنل ادمین، تخصیصِ دوگانه/بیش‌ازحد واضح و کنترل‌شده باشد
-  const fullRow =
-    visibleRows.find((m) => (amounts[m] ?? 0) === remaining) ?? null
+  const allocated = sel.reduce((s, k) => s + (amounts[k] ?? 0), 0)
+  const overLimit = allocated > remaining
+
+  function toggleMethod(key: MethodKey) {
+    if (busy) return
+    setError(null)
+    if (sel.includes(key)) {
+      if (locked === key) setLocked(null)
+      setAmounts((a) => {
+        const n = { ...a }
+        delete n[key]
+        return n
+      })
+      setRaws((r) => {
+        const n = { ...r }
+        delete n[key]
+        return n
+      })
+      setSelected((s) => (s ?? visibleRows).filter((k) => k !== key))
+    } else {
+      setSelected((s) => [...(s ?? visibleRows), key])
+    }
+  }
+
+  function capFor(key: MethodKey, v: number): number {
+    let out = Math.min(v, remaining)
+    if (key === 'wallet' && walletBalance != null) out = Math.min(out, walletBalance)
+    return out
+  }
 
   function setAmount(key: MethodKey, raw: string) {
     const digits = toEnDigits(raw).replace(/[^\d]/g, '')
     setRaws((r) => ({ ...r, [key]: digits }))
     const n = parseInt(digits, 10)
-    let capped: number | null = Number.isFinite(n) && n > 0 ? n : null
-    if (capped !== null) {
-      if (capped > remaining) capped = remaining
-      if (key === 'wallet' && walletBalance != null && capped > walletBalance) {
-        capped = walletBalance
-      }
-    }
-    setAmounts((a) => ({ ...a, [key]: capped }))
+    const v = Number.isFinite(n) && n > 0 ? capFor(key, n) : undefined
+    setAmounts((a) => ({ ...a, [key]: v }))
     setError(null)
+    // مبلغِ ردیفِ قفل‌شده دستی از «کل» کمتر شد → قفل بی‌معناست و باز می‌شود
+    if (locked === key && (v ?? 0) < remaining) setLocked(null)
   }
 
+  /** «کل مبلغ» با این روش: مبلغ کامل می‌شود و بقیهٔ روش‌ها قفل می‌شوند */
   function assignAll(key: MethodKey) {
-    // «کل مبلغ با همین روش»: این ردیف = کل باقی‌مانده، بقیه خالی
-    let v = remaining
-    if (key === 'wallet' && walletBalance != null && v > walletBalance) v = walletBalance
-    if (v < MIN_PART) return
-    setAmounts({ wallet: null, online: null, transfer: null, cash: null, [key]: v })
-    setRaws({ wallet: '', online: '', transfer: '', cash: '', [key]: String(v) })
+    if (remaining < MIN_PART) return
     setError(null)
+    setLocked(key)
+    setSelected(visibleRows.filter((k) => k === key))
+    const v = capFor(key, remaining)
+    setAmounts({ [key]: v })
+    setRaws({ [key]: String(v) })
   }
 
-  function clearRow(key: MethodKey) {
-    setAmounts((a) => ({ ...a, [key]: null }))
-    setRaws((r) => ({ ...r, [key]: '' }))
-    setError(null)
-  }
-
-  // 🎯 پچ ۵۰-هـ-م: «باقی» مثل پنل ادمین — پر کردن مبلغِ هنوز تخصیص‌نیافته
+  /** «باقی» — پر کردن مبلغِ هنوز تخصیص‌نیافته در این ردیف */
   function fillRest(key: MethodKey) {
     const rest = remaining - (allocated - (amounts[key] ?? 0))
     if (rest < MIN_PART) return
-    let v = rest
-    if (key === 'wallet' && walletBalance != null && v > walletBalance) v = walletBalance
+    const v = capFor(key, rest)
     if (v < MIN_PART) return
     setAmount(key, String(v))
+  }
+
+  function clearRow(key: MethodKey) {
+    if (locked === key) setLocked(null)
+    setAmounts((a) => {
+      const n = { ...a }
+      delete n[key]
+      return n
+    })
+    setRaws((r) => {
+      const n = { ...r }
+      delete n[key]
+      return n
+    })
+    setError(null)
   }
 
   async function postJson(url: string, payload: Record<string, unknown>) {
@@ -155,7 +221,7 @@ export default function SplitPaymentPanel({
     setError(null)
 
     if (remaining <= 0) return
-    const parts = visibleRows.filter((m) => (amounts[m] ?? 0) >= MIN_PART)
+    const parts = sel.filter((m) => (amounts[m] ?? 0) >= MIN_PART)
     if (parts.length === 0) {
       setError(`مبلغ هر بخش باید حداقل ${fa(MIN_PART)} تومان باشد.`)
       return
@@ -179,22 +245,25 @@ export default function SplitPaymentPanel({
     setBusy(true)
     try {
       // ۱) اعلام نقدی در محل (فقط یادداشت — تسویهٔ واقعی با اپراتور)
-      if ((amounts.cash ?? 0) >= MIN_PART) {
-        await postJson('/api/payment/cash-note', { orderId, amount: amounts.cash })
+      const cashAmt = amounts.cash ?? 0
+      if (cashAmt >= MIN_PART) {
+        await postJson('/api/payment/cash-note', { orderId, amount: cashAmt })
         setDoneSteps((d) => [...d, 'cash'])
       }
 
       // ۲) کیف پول — فوری
-      if ((amounts.wallet ?? 0) >= MIN_PART) {
-        await postJson('/api/payment/wallet', { orderId, amount: amounts.wallet })
+      const walletAmt = amounts.wallet ?? 0
+      if (walletAmt >= MIN_PART) {
+        await postJson('/api/payment/wallet', { orderId, amount: walletAmt })
         setDoneSteps((d) => [...d, 'wallet'])
       }
 
       // ۳) درگاه — آخرین مرحله چون صفحه را ترک می‌کند
-      if ((amounts.online ?? 0) >= MIN_PART) {
+      const onlineAmt = amounts.online ?? 0
+      if (onlineAmt >= MIN_PART) {
         const data = await postJson('/api/payment/request', {
           orderId,
-          amount: amounts.online,
+          amount: onlineAmt,
         })
         setDoneSteps((d) => [...d, 'online'])
         setGatewayUrl(data.paymentUrl ?? null)
@@ -213,16 +282,13 @@ export default function SplitPaymentPanel({
     }
   }
 
-  const overLimit = allocated > remaining
-  const leftover = Math.max(0, remaining - allocated)
-
   return (
     <div className="order-payment-section" style={{ marginTop: '12px' }}>
       <div className="order-payment-section-title">🧩 پرداخت ترکیبی</div>
       <p className="order-payment-section-desc">
-        مبلغ باقی‌مانده ({fa(remaining)} تومان) را بین روش‌ها تقسیم کن، یا با دکمهٔ
-        «کل مبلغ» همه را با یک روش پرداخت کن. باقی‌ماندهٔ پرداخت‌نشده به‌عنوان بدهی
-        روی سفارش می‌ماند.
+        روش‌ها را تیک بزن (چند روش = تقسیم مبلغ) و مبلغ هر بخش را وارد کن.
+        دکمهٔ «کل مبلغ» همه را با یک روش می‌پردازد و بقیه را قفل می‌کند؛
+        باقی‌ماندهٔ پرداخت‌نشده به‌عنوان بدهی روی سفارش می‌ماند.
       </p>
 
       {doneSteps.length > 0 && (
@@ -237,138 +303,155 @@ export default function SplitPaymentPanel({
         <div className="checkout-error" style={{ marginBottom: '12px' }}>❌ {error}</div>
       )}
 
-      {visibleRows.map((m) => {
-        const meta = METHOD_META[m]
-        const val = amounts[m] ?? 0
-        const capHint =
-          m === 'wallet' && walletBalance != null
-            ? `موجودی: ${fa(walletBalance)} تومان`
-            : meta.hint
-        // 🎯 پچ ۵۰-هـ-م: ردیف‌های غیر از «کل مبلغ» قفل می‌شوند
-        const isLockedRow = fullRow !== null && fullRow !== m
-        const restForMe = Math.max(0, remaining - (allocated - val))
-        return (
-          <div
-            key={m}
-            style={{
-              border: '1px solid #e5e0d8',
-              borderRadius: '10px',
-              padding: '10px 12px',
-              marginBottom: '10px',
-              background: val >= MIN_PART ? '#faf7f2' : '#fff',
-              opacity: isLockedRow ? 0.55 : 1,
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontSize: '20px' }}>{meta.icon}</span>
-              <div style={{ flex: 1 }}>
-                <strong style={{ fontSize: '14px' }}>
-                  {meta.label}
-                  {isLockedRow ? ' 🔒' : ''}
-                </strong>
-                <div style={{ fontSize: '11px', color: '#8a8378' }}>
-                  {isLockedRow
-                    ? 'یک ردیف «کل مبلغ» دارد — برای آزادسازی ✕ همان ردیف یا کم کردن مبلغش'
-                    : capHint}
-                </div>
-              </div>
-              <button
-                type="button"
-                className="order-payment-btn secondary"
-                style={{ padding: '4px 10px', fontSize: '12px' }}
-                onClick={() => assignAll(m)}
-                disabled={busy || isLockedRow}
-                title="کل باقی‌مانده با همین روش — بقیهٔ ردیف‌ها قفل می‌شوند"
-              >
-                کل مبلغ
-              </button>
-              <button
-                type="button"
-                className="order-payment-btn secondary"
-                style={{ padding: '4px 10px', fontSize: '12px' }}
-                onClick={() => fillRest(m)}
-                disabled={busy || isLockedRow || restForMe < MIN_PART}
-                title="پر کردن مبلغِ هنوز تخصیص‌نیافته"
-              >
-                باقی
-              </button>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px' }}>
-              <input
-                type="text"
-                inputMode="numeric"
-                value={raws[m]}
-                onChange={(e) => setAmount(m, e.target.value)}
-                placeholder={`مبلغ (تومان) — حداکثر ${fa(m === 'wallet' && walletBalance != null ? Math.min(walletBalance, remaining) : remaining)}`}
-                disabled={busy || isLockedRow}
+      {/* ── چیپ‌های فشردهٔ روش‌ها — مثل پنل ادمین ── */}
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+        {METHODS.filter((m) => visibleRows.includes(m.key)).map((m) => {
+          const isSel = sel.includes(m.key)
+          const disabled = busy || (locked !== null && !isSel)
+          return (
+            <button
+              key={m.key}
+              type="button"
+              disabled={disabled}
+              onClick={() => toggleMethod(m.key)}
+              style={{
+                ...chipBase,
+                ...(isSel
+                  ? { background: '#2d5d3e', borderColor: '#2d5d3e', color: '#fff' }
+                  : {}),
+                ...(disabled ? { opacity: 0.4, cursor: 'not-allowed' } : {}),
+              }}
+            >
+              {isSel ? '✓ ' : ''}
+              {m.icon} {m.label}
+              {!isSel && locked !== null ? ' 🔒' : ''}
+            </button>
+          )
+        })}
+      </div>
+
+      {/* ── باکس مبلغ فقط برای روش‌های تیک‌خورده ── */}
+      {visibleRows
+        .filter((m) => sel.includes(m))
+        .map((m) => {
+          const meta = METHODS.find((x) => x.key === m)!
+          const val = amounts[m] ?? 0
+          const isLockedRow = locked !== null && locked !== m
+          const restForMe = Math.max(0, remaining - (allocated - val))
+          const capHint =
+            m === 'wallet' && walletBalance != null
+              ? `موجودی: ${fa(walletBalance)} تومان`
+              : METHOD_HINT[m]
+          return (
+            <div
+              key={m}
+              style={{
+                border: '1px solid #e5e0d8',
+                borderRadius: 10,
+                padding: '8px 10px',
+                marginBottom: 8,
+                background: val >= MIN_PART ? '#faf7f2' : '#fff',
+                opacity: isLockedRow ? 0.55 : 1,
+              }}
+            >
+              <div
                 style={{
-                  flex: 1,
-                  padding: '8px 10px',
-                  borderRadius: '8px',
-                  border: '1px solid #ddd6ca',
-                  fontSize: '13px',
-                  textAlign: 'left',
-                  direction: 'ltr',
+                  display: 'flex',
+                  gap: 6,
+                  alignItems: 'center',
+                  flexWrap: 'wrap',
                 }}
-              />
-              {val > 0 && (
+              >
+                <span style={{ fontSize: 12.5, fontWeight: 700, minWidth: 108 }}>
+                  {meta.icon} {meta.label}
+                  {isLockedRow ? ' 🔒' : ''}
+                </span>
+                <input
+                  value={raws[m] ?? ''}
+                  onChange={(e) => setAmount(m, e.target.value)}
+                  placeholder={locked === m ? String(remaining) : 'مبلغ (تومان)'}
+                  inputMode="numeric"
+                  disabled={busy || isLockedRow}
+                  style={inputStyle}
+                />
                 <button
                   type="button"
+                  style={miniBtn}
+                  onClick={() => assignAll(m)}
+                  disabled={busy || isLockedRow}
+                  title="کل باقی‌مانده با این روش — بقیهٔ روش‌ها قفل می‌شوند"
+                >
+                  کل مبلغ
+                </button>
+                <button
+                  type="button"
+                  style={miniBtn}
+                  onClick={() => fillRest(m)}
+                  disabled={busy || isLockedRow || restForMe < MIN_PART}
+                  title="پر کردن مبلغِ هنوز تخصیص‌نیافته"
+                >
+                  باقی
+                </button>
+                <button
+                  type="button"
+                  style={{ ...miniBtn, border: 'none', background: 'none' }}
                   onClick={() => clearRow(m)}
                   disabled={busy || isLockedRow}
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px' }}
-                  aria-label="پاک کردن"
+                  aria-label="حذف روش"
                 >
                   ✕
                 </button>
+              </div>
+              <div style={{ fontSize: 11, color: '#8a8378', marginTop: 4 }}>{capHint}</div>
+
+              {m === 'cash' && val >= MIN_PART && (
+                <div style={{ fontSize: 12, color: '#8a5a00', marginTop: 6 }}>
+                  این بخش هنگام تحویل/مراجعه نقدی پرداخت می‌شود و پس از دریافت، کافه تأیید می‌کند.
+                </div>
+              )}
+
+              {m === 'transfer' && val >= MIN_PART && !receiptSent && (
+                <div style={{ marginTop: 10 }}>
+                  <p className="order-payment-section-desc" style={{ marginBottom: 6 }}>
+                    🏦 مبلغ {fa(val)} تومان را واریز کن و رسید را بفرست:
+                  </p>
+                  <UploadReceipt
+                    orderId={orderId}
+                    amount={val}
+                    onSuccess={() => {
+                      setReceiptSent(true)
+                      setDoneSteps((d) => [...d, 'transfer'])
+                      onDone()
+                    }}
+                  />
+                </div>
               )}
             </div>
+          )
+        })}
 
-            {m === 'cash' && val >= MIN_PART && (
-              <div style={{ fontSize: '12px', color: '#8a5a00', marginTop: '6px' }}>
-                این بخش هنگام تحویل/مراجعه نقدی پرداخت می‌شود و پس از دریافت، کافه تأیید می‌کند.
-              </div>
-            )}
-
-            {m === 'transfer' && val >= MIN_PART && !receiptSent && (
-              <div style={{ marginTop: '10px' }}>
-                <p className="order-payment-section-desc" style={{ marginBottom: '6px' }}>
-                  🏦 مبلغ {fa(val)} تومان را واریز کن و رسید را بفرست:
-                </p>
-                <UploadReceipt
-                  orderId={orderId}
-                  amount={val}
-                  onSuccess={() => {
-                    setReceiptSent(true)
-                    setDoneSteps((d) => [...d, 'transfer'])
-                    onDone()
-                  }}
-                />
-              </div>
-            )}
-          </div>
-        )
-      })}
-
+      {/* ── نوار مانده — مثل ادمین ── */}
       <div
         style={{
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
-          padding: '10px 12px',
-          borderRadius: '10px',
-          background: overLimit ? '#fdecec' : '#f4f1ea',
-          fontSize: '13px',
-          fontWeight: 'bold',
+          gap: 8,
+          flexWrap: 'wrap',
+          fontSize: 12.5,
+          fontWeight: 700,
+          padding: '6px 10px',
+          borderRadius: 8,
+          background: overLimit ? '#fdecec' : '#f1ede4',
+          color: overLimit ? '#9b3c32' : '#4b443b',
+          marginBottom: 8,
         }}
       >
         <span>مجموع تخصیص‌یافته: {fa(allocated)} تومان</span>
-        <span style={{ color: overLimit ? '#c0392b' : '#6b6459' }}>
+        <span>
           {overLimit
             ? 'بیشتر از باقی‌مانده!'
-            : leftover > 0
-              ? `باقی‌ماندهٔ بدون تخصیص: ${fa(leftover)} تومان`
-              : 'کل مبلغ پوشش داده شد ✓'}
+            : `باقی‌ماندهٔ بدون تخصیص: ${fa(Math.max(0, remaining - allocated))} تومان`}
         </span>
       </div>
 
