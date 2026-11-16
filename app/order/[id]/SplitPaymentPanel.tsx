@@ -94,6 +94,11 @@ export default function SplitPaymentPanel({
     0
   )
 
+  // 🎯 پچ ۵۰-هـ-م: ردیفی که «کل مبلغ» را گرفته — بقیهٔ ردیف‌ها (ورودی و دکمه‌ها)
+  // قفل می‌شوند تا مثل پنل ادمین، تخصیصِ دوگانه/بیش‌ازحد واضح و کنترل‌شده باشد
+  const fullRow =
+    visibleRows.find((m) => (amounts[m] ?? 0) === remaining) ?? null
+
   function setAmount(key: MethodKey, raw: string) {
     const digits = toEnDigits(raw).replace(/[^\d]/g, '')
     setRaws((r) => ({ ...r, [key]: digits }))
@@ -123,6 +128,16 @@ export default function SplitPaymentPanel({
     setAmounts((a) => ({ ...a, [key]: null }))
     setRaws((r) => ({ ...r, [key]: '' }))
     setError(null)
+  }
+
+  // 🎯 پچ ۵۰-هـ-م: «باقی» مثل پنل ادمین — پر کردن مبلغِ هنوز تخصیص‌نیافته
+  function fillRest(key: MethodKey) {
+    const rest = remaining - (allocated - (amounts[key] ?? 0))
+    if (rest < MIN_PART) return
+    let v = rest
+    if (key === 'wallet' && walletBalance != null && v > walletBalance) v = walletBalance
+    if (v < MIN_PART) return
+    setAmount(key, String(v))
   }
 
   async function postJson(url: string, payload: Record<string, unknown>) {
@@ -229,6 +244,9 @@ export default function SplitPaymentPanel({
           m === 'wallet' && walletBalance != null
             ? `موجودی: ${fa(walletBalance)} تومان`
             : meta.hint
+        // 🎯 پچ ۵۰-هـ-م: ردیف‌های غیر از «کل مبلغ» قفل می‌شوند
+        const isLockedRow = fullRow !== null && fullRow !== m
+        const restForMe = Math.max(0, remaining - (allocated - val))
         return (
           <div
             key={m}
@@ -238,22 +256,41 @@ export default function SplitPaymentPanel({
               padding: '10px 12px',
               marginBottom: '10px',
               background: val >= MIN_PART ? '#faf7f2' : '#fff',
+              opacity: isLockedRow ? 0.55 : 1,
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <span style={{ fontSize: '20px' }}>{meta.icon}</span>
               <div style={{ flex: 1 }}>
-                <strong style={{ fontSize: '14px' }}>{meta.label}</strong>
-                <div style={{ fontSize: '11px', color: '#8a8378' }}>{capHint}</div>
+                <strong style={{ fontSize: '14px' }}>
+                  {meta.label}
+                  {isLockedRow ? ' 🔒' : ''}
+                </strong>
+                <div style={{ fontSize: '11px', color: '#8a8378' }}>
+                  {isLockedRow
+                    ? 'یک ردیف «کل مبلغ» دارد — برای آزادسازی ✕ همان ردیف یا کم کردن مبلغش'
+                    : capHint}
+                </div>
               </div>
               <button
                 type="button"
                 className="order-payment-btn secondary"
                 style={{ padding: '4px 10px', fontSize: '12px' }}
                 onClick={() => assignAll(m)}
-                disabled={busy}
+                disabled={busy || isLockedRow}
+                title="کل باقی‌مانده با همین روش — بقیهٔ ردیف‌ها قفل می‌شوند"
               >
                 کل مبلغ
+              </button>
+              <button
+                type="button"
+                className="order-payment-btn secondary"
+                style={{ padding: '4px 10px', fontSize: '12px' }}
+                onClick={() => fillRest(m)}
+                disabled={busy || isLockedRow || restForMe < MIN_PART}
+                title="پر کردن مبلغِ هنوز تخصیص‌نیافته"
+              >
+                باقی
               </button>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px' }}>
@@ -263,7 +300,7 @@ export default function SplitPaymentPanel({
                 value={raws[m]}
                 onChange={(e) => setAmount(m, e.target.value)}
                 placeholder={`مبلغ (تومان) — حداکثر ${fa(m === 'wallet' && walletBalance != null ? Math.min(walletBalance, remaining) : remaining)}`}
-                disabled={busy}
+                disabled={busy || isLockedRow}
                 style={{
                   flex: 1,
                   padding: '8px 10px',
@@ -278,7 +315,7 @@ export default function SplitPaymentPanel({
                 <button
                   type="button"
                   onClick={() => clearRow(m)}
-                  disabled={busy}
+                  disabled={busy || isLockedRow}
                   style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px' }}
                   aria-label="پاک کردن"
                 >

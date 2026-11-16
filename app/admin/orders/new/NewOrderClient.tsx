@@ -216,6 +216,7 @@ const input: React.CSSProperties = {
   boxSizing: 'border-box',
 }
 const smallBtn: React.CSSProperties = {
+
   border: '1px solid #d9cfc0',
   background: '#fff',
   borderRadius: 8,
@@ -235,16 +236,53 @@ interface SpeechRecognitionLike {
   onerror: (() => void) | null
 }
 
+// 🎯 پچ ۵۰-هـ-م: تبدیل گفتارِ شمارهٔ تلفن به رقم — اعداد فارسی/عربی + واژه‌ها
+const FA_NUM_WORDS: Record<string, string> = {
+  صفر: '0',
+  یک: '1',
+  دو: '2',
+  سه: '3',
+  چهار: '4',
+  پنج: '5',
+  شش: '6',
+  هفت: '7',
+  هشت: '8',
+  نه: '9',
+}
+function voiceToDigits(s: string): string {
+  const norm = s
+    .replace(/[۰-۹]/g, (d) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d)))
+    .replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
+  return norm
+    .split(/\s+/)
+    .map((w) => FA_NUM_WORDS[w] ?? w)
+    .join('')
+    .replace(/\D/g, '')
+    .slice(0, 11)
+}
+
+// 🎯 پچ ۵۰-هـ-م: استایل مشترک دکمهٔ میکروفون (ضبط = قرمز)
+const micBtnStyle = (listening: boolean): React.CSSProperties => ({
+  ...smallBtn,
+  flexShrink: 0,
+  padding: '0 12px',
+  fontSize: 15,
+  color: listening ? '#fff' : '#6b4f3a',
+  background: listening ? '#c0392b' : '#fff',
+  borderColor: listening ? '#c0392b' : '#e3ddd2',
+})
+
 // 🎯 پچ ۵۰-هـ-ب: تایل فشرده اما لمس‌پذیر — پس‌زمینه با کلاس .pos-tile تا دارک‌مود کار کند
 const tile: React.CSSProperties = {
   border: '1px solid #e7dfd3',
   borderRadius: 10,
-  padding: '8px 6px',
+  /* 🎯 پچ ۵۰-هـ-م: تایل بزرگ‌تر — لمس و خوانایی راحت‌تر */
+  padding: '10px 8px',
   display: 'flex',
   flexDirection: 'column',
   alignItems: 'center',
   justifyContent: 'center',
-  gap: 4,
+  gap: 5,
   cursor: 'pointer',
   font: 'inherit',
   textAlign: 'center',
@@ -551,6 +589,17 @@ export default function NewOrderClient({
   const [invite, setInvite] = useState<{ token: string; expires_at: string } | null>(null)
   const [inviteBusy, setInviteBusy] = useState(false)
   const [inviteCopied, setInviteCopied] = useState(false)
+  // 🎯 پچ ۵۰-هـ-م: مودال دعوت با لیست کدهای بلااستفاده — ساخت کد فقط با دکمهٔ کاربر
+  const [inviteModal, setInviteModal] = useState(false)
+  const [inviteList, setInviteList] = useState<
+    Array<{
+      token: string
+      expires_at: string
+      used_at: string | null
+      is_active: boolean | null
+    }>
+  >([])
+  const [inviteListBusy, setInviteListBusy] = useState(false)
 
   // 🎯 پچ ۵۰-هـ-د: پیام‌های آماده — یکبار تعریف، روی هر ردیف (کافه و غذا)
   const [quickNotes, setQuickNotes] = useState<string[]>([])
@@ -657,7 +706,8 @@ export default function NewOrderClient({
     if (w.SpeechRecognition || w.webkitSpeechRecognition) setSpeechOk(true)
   }, [])
 
-  function toggleVoice() {
+  // 🎯 پچ ۵۰-هـ-م: جستجوی صوتی عمومی — محصول/نام مشتری/شماره/جستجوی عضو
+  function startVoice(onText: (t: string) => void) {
     const w = window as unknown as {
       SpeechRecognition?: new () => SpeechRecognitionLike
       webkitSpeechRecognition?: new () => SpeechRecognitionLike
@@ -675,7 +725,7 @@ export default function NewOrderClient({
     r.maxAlternatives = 1
     r.onresult = (e) => {
       const txt = e.results?.[0]?.[0]?.transcript ?? ''
-      if (txt) setSearch(txt)
+      if (txt) onText(txt)
     }
     r.onend = () => setListening(false)
     r.onerror = () => setListening(false)
@@ -873,8 +923,47 @@ export default function NewOrderClient({
     setDiscount(amt > 0 ? String(amt) : '')
   }, [discountAuto, eligibleBase, memberPct])
 
-  // 🎯 پچ ۵۰-هـ: دعوت‌نامهٔ عضویت برای مهمان — همان API پنل کیف پول
-  async function createInvite() {
+  // 🎯 پچ ۵۰-هـ-م: باز کردن مودال دعوت — اول لیست کدهای بلااستفاده؛
+  // کد جدید فقط با دکمهٔ «ساخت کد جدید» ساخته می‌شود (نه خودکار)
+  async function openInviteModal() {
+    setInviteModal(true)
+    setSmsMsg(null)
+    await loadInvites()
+  }
+
+  async function loadInvites() {
+    setInviteListBusy(true)
+    try {
+      const res = await fetch('/api/admin/wallet/invites', { cache: 'no-store' })
+      const data = await res.json().catch(() => null)
+      if (res.ok && Array.isArray(data?.invites)) {
+        const now = Date.now()
+        const unused = (
+          data.invites as Array<{
+            token: string
+            expires_at: string
+            used_at: string | null
+            is_active: boolean | null
+          }>
+        ).filter(
+          (x) =>
+            !x.used_at && x.is_active !== false && new Date(x.expires_at).getTime() > now
+        )
+        setInviteList(unused)
+        // انتخاب: اگر انتخاب فعلی هنوز بلااستفاده است بماند؛ وگرنه اولین کد
+        setInvite((cur) =>
+          cur && unused.some((x) => x.token === cur.token)
+            ? cur
+            : (unused[0] ?? null)
+        )
+      }
+    } catch {
+    } finally {
+      setInviteListBusy(false)
+    }
+  }
+
+  async function createNewInvite() {
     setInviteBusy(true)
     setError('')
     try {
@@ -883,6 +972,7 @@ export default function NewOrderClient({
       if (res.ok && data?.invite?.token) {
         setInvite(data.invite)
         setInviteCopied(false)
+        await loadInvites()
       } else {
         setError(data.error || 'ساخت دعوت‌نامه ناموفق بود')
       }
@@ -893,11 +983,12 @@ export default function NewOrderClient({
     }
   }
 
-  const inviteUrl = invite
-    ? (typeof window !== 'undefined' ? window.location.origin : '') +
-      '/register/' +
-      invite.token
-    : ''
+  // 🎯 پچ ۵۰-هـ-م: ساخت لینک هر کد (لیست مودال هم از همین استفاده می‌کند)
+  const invUrl = (token: string) =>
+    (typeof window !== 'undefined' ? window.location.origin : '') +
+    '/register/' +
+    token
+  const inviteUrl = invite ? invUrl(invite.token) : ''
 
   function copyInvite() {
     try {
@@ -1414,9 +1505,28 @@ export default function NewOrderClient({
           flexShrink: 0,
         }}
       >
-        <span style={badge('#fdf0e0', '#9a5b1f')}>🔥 در آماده‌سازی: {fmt(livePreparing)}</span>
-        <span style={badge('#e5f0e6', '#2d5d3e')}>✅ آمادهٔ تحویل: {fmt(liveReady)}</span>
-        <span style={badge('#e8f0f6', '#4a7c9b')}>📱 در انتظار تأیید آنلاین: {fmt(livePendingOnline)}</span>
+        {/* 🎯 پچ ۵۰-هـ-م: چیپ‌های وضعیت — کلیک = پرش به تب همان وضعیت در پنل سفارش‌ها */}
+        <a
+          href="/admin/orders?filter=preparing"
+          title="نمایش سفارش‌های در آماده‌سازی در پنل سفارش‌ها"
+          style={{ textDecoration: 'none' }}
+        >
+          <span style={badge('#fdf0e0', '#9a5b1f')}>🔥 در آماده‌سازی: {fmt(livePreparing)}</span>
+        </a>
+        <a
+          href="/admin/orders?filter=ready"
+          title="نمایش سفارش‌های آمادهٔ تحویل در پنل سفارش‌ها"
+          style={{ textDecoration: 'none' }}
+        >
+          <span style={badge('#e5f0e6', '#2d5d3e')}>✅ آمادهٔ تحویل: {fmt(liveReady)}</span>
+        </a>
+        <a
+          href="/admin/orders?filter=pending"
+          title="نمایش سفارش‌های در انتظار تأیید در پنل سفارش‌ها"
+          style={{ textDecoration: 'none' }}
+        >
+          <span style={badge('#e8f0f6', '#4a7c9b')}>📱 در انتظار تأیید آنلاین: {fmt(livePendingOnline)}</span>
+        </a>
         <button
           type="button"
           style={smallBtn}
@@ -1522,6 +1632,17 @@ export default function NewOrderClient({
               value={guestName}
               onChange={(e) => setGuestName(e.target.value)}
             />
+            {/* 🎯 پچ ۵۰-هـ-م: ورود صوتی نام مشتری */}
+            {speechOk && (
+              <button
+                type="button"
+                title="ورود صوتی — نام مشتری را بگویید"
+                style={micBtnStyle(listening)}
+                onClick={() => startVoice(setGuestName)}
+              >
+                🎤
+              </button>
+            )}
             <input
               style={{ ...input, flex: '1 1 150px', width: 'auto' }}
               placeholder="شمارهٔ تماس (اختیاری — برای پیامک)"
@@ -1529,10 +1650,21 @@ export default function NewOrderClient({
               value={guestPhone}
               onChange={(e) => setGuestPhone(e.target.value)}
             />
+            {/* 🎯 پچ ۵۰-هـ-م: ورود صوتی شماره — رقم‌ها/واژه‌های عددی به رقم تبدیل می‌شوند */}
+            {speechOk && (
+              <button
+                type="button"
+                title="ورود صوتی شماره — رقم‌ها را بگویید"
+                style={micBtnStyle(listening)}
+                onClick={() => startVoice((t) => setGuestPhone(voiceToDigits(t)))}
+              >
+                🎤
+              </button>
+            )}
             <button
               type="button"
               style={{ ...smallBtn, flexShrink: 0, whiteSpace: 'nowrap' }}
-              onClick={createInvite}
+              onClick={openInviteModal}
               disabled={inviteBusy}
               title="ساخت لینک و QR دعوت به عضویت"
             >
@@ -1550,6 +1682,23 @@ export default function NewOrderClient({
               value={memberQuery}
               onChange={(e) => setMemberQuery(e.target.value)}
             />
+            {/* 🎯 پچ ۵۰-هـ-م: جستجوی صوتی عضو */}
+            {speechOk && (
+              <button
+                type="button"
+                title="جستجوی صوتی عضو — نام یا شماره را بگویید"
+                style={{
+                  ...micBtnStyle(listening),
+                  position: 'absolute',
+                  left: 44,
+                  top: 5,
+                  padding: '2px 10px',
+                }}
+                onClick={() => startVoice(setMemberQuery)}
+              >
+                🎤
+              </button>
+            )}
             {memberSearching && (
               <small style={{ position: 'absolute', left: 12, top: 10, color: '#766f64' }}>
                 ⏳
@@ -1701,7 +1850,7 @@ export default function NewOrderClient({
                   background: listening ? '#c0392b' : '#fff',
                   borderColor: listening ? '#c0392b' : '#e3ddd2',
                 }}
-                onClick={toggleVoice}
+                onClick={() => startVoice(setSearch)}
               >
                 🎤
               </button>
@@ -1821,7 +1970,7 @@ export default function NewOrderClient({
                           alignItems: 'center',
                           justifyContent: 'space-between',
                           gap: 8,
-                          padding: '9px 10px',
+                          padding: '11px 12px',
                         }
                       : { ...tile, borderRight: '4px solid ' + meta.color }
                   }
@@ -3138,8 +3287,9 @@ export default function NewOrderClient({
         </div>
       )}
 
-      {/* 🎯 پچ ۵۰-هـ: مودال دعوت‌نامهٔ عضویت — لینک + QR برای اسکن با گوشی مشتری */}
-      {invite && (
+      {/* 🎯 پچ ۵۰-هـ: مودال دعوت‌نامهٔ عضویت — لینک + QR برای اسکن با گوشی مشتری
+          🎯 پچ ۵۰-هـ-م: اول لیست کدهای بلااستفاده؛ ساخت کد جدید فقط با دکمه */}
+      {inviteModal && (
         <div
           style={{
             position: 'fixed',
@@ -3151,7 +3301,10 @@ export default function NewOrderClient({
             justifyContent: 'center',
             padding: 16,
           }}
-          onClick={() => setInvite(null)}
+          onClick={() => {
+            setInviteModal(false)
+            setInvite(null)
+          }}
         >
           <div
             style={{
@@ -3167,8 +3320,115 @@ export default function NewOrderClient({
           >
             <h3 style={{ margin: '0 0 6px' }}>🔗 دعوت‌نامهٔ عضویت</h3>
             <p style={{ margin: '0 0 10px', color: '#766f64', fontSize: 13 }}>
-              مشتری با گوشی‌اش QR را اسکن کند یا لینک را باز کند (۷ روز اعتبار).
+              کد بلااستفاده را انتخاب کنید (QR و لینک پایین می‌آید) یا کد جدید بسازید —
+              کدها ۷ روز اعتبار دارند.
             </p>
+
+            {/* 🎯 پچ ۵۰-هـ-م: لیست کدهای بلااستفاده — کپی لینک یا انتخاب برای QR */}
+            <div
+              style={{
+                maxHeight: 170,
+                overflowY: 'auto',
+                border: '1px solid #e7dfd3',
+                borderRadius: 10,
+                marginBottom: 10,
+                textAlign: 'right',
+              }}
+            >
+              {inviteListBusy ? (
+                <div style={{ padding: 10, fontSize: 12.5, color: '#766f64' }}>
+                  ⏳ در حال دریافت کدها…
+                </div>
+              ) : inviteList.length === 0 ? (
+                <div style={{ padding: 10, fontSize: 12.5, color: '#766f64' }}>
+                  کد بلااستفاده‌ای نیست — دکمهٔ پایین را بزنید تا یک کد ساخته شود.
+                </div>
+              ) : (
+                inviteList.map((x) => {
+                  const sel = invite?.token === x.token
+                  return (
+                    <div
+                      key={x.token}
+                      style={{
+                        display: 'flex',
+                        gap: 6,
+                        alignItems: 'center',
+                        padding: '7px 9px',
+                        borderBottom: '1px solid #f0e9dd',
+                        background: sel ? '#f7f3eb' : '#fff',
+                      }}
+                    >
+                      <code
+                        dir="ltr"
+                        style={{ flex: 1, fontSize: 11.5, wordBreak: 'break-all' }}
+                      >
+                        {x.token}
+                      </code>
+                      <small style={{ fontSize: 10.5, color: '#8a8378', flexShrink: 0 }}>
+                        تا {new Date(x.expires_at).toLocaleDateString('fa-IR')}
+                      </small>
+                      <button
+                        type="button"
+                        title="کپی لینک این کد"
+                        style={{
+                          ...smallBtn,
+                          fontSize: 11,
+                          padding: '3px 8px',
+                          flexShrink: 0,
+                        }}
+                        onClick={() => {
+                          try {
+                            navigator.clipboard.writeText(invUrl(x.token))
+                          } catch {}
+                        }}
+                      >
+                        کپی
+                      </button>
+                      <button
+                        type="button"
+                        title="نمایش QR و لینک این کد در پایین"
+                        style={{
+                          ...smallBtn,
+                          fontSize: 11,
+                          padding: '3px 8px',
+                          flexShrink: 0,
+                          ...(sel ? { background: '#6b4f3a', color: '#fff' } : {}),
+                        }}
+                        onClick={() => {
+                          setInvite({ token: x.token, expires_at: x.expires_at })
+                          setInviteCopied(false)
+                        }}
+                      >
+                        {sel ? '✓' : 'QR'}
+                      </button>
+                    </div>
+                  )
+                })
+              )}
+            </div>
+
+            <button
+              type="button"
+              disabled={inviteBusy}
+              onClick={createNewInvite}
+              style={{
+                width: '100%',
+                padding: 9,
+                border: '1px dashed #b08c5a',
+                borderRadius: 10,
+                background: '#fdf9f2',
+                color: '#6b4f3a',
+                font: 'inherit',
+                fontWeight: 700,
+                cursor: inviteBusy ? 'wait' : 'pointer',
+                marginBottom: 10,
+              }}
+            >
+              {inviteBusy ? '⏳ در حال ساخت…' : '➕ ساخت کد دعوت جدید'}
+            </button>
+
+            {invite && (
+              <>
             <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 10 }}>
               <QRCodeSVG value={inviteUrl} size={150} />
             </div>
@@ -3262,6 +3522,8 @@ export default function NewOrderClient({
                 </small>
               )}
             </div>
+              </>
+            )}
           </div>
         </div>
       )}
