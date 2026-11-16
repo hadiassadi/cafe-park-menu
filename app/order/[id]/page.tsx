@@ -145,6 +145,20 @@ export default function OrderPage({
     } catch {}
   }, [])
 
+  // 🎯 پچ ۵۰-هـ-ل: سفارشِ ساخته‌شده با روش ترکیبی — بعد از لود سفارش، چیپ‌های
+  // انتخاب روش به‌عنوان UI پیش‌فرض بخش پرداخت باز باشد (split حالت پیش‌فرض ندارد)
+  // (گارد رسیدِ در انتظار تأیید داخل خود بلوک چیپ‌ها انجام می‌شود)
+  useEffect(() => {
+    if (
+      order &&
+      order.payment_method === 'split' &&
+      order.payment_status !== 'paid' &&
+      !splitMode
+    ) {
+      setShowChangeMethod(true)
+    }
+  }, [order, splitMode])
+
   const [paymentSettings, setPaymentSettings] = useState<{
     payment_enabled: boolean
     payment_online_enabled: boolean
@@ -551,6 +565,9 @@ export default function OrderPage({
       needsWalletPayment ||
       isPartial ||
       isOpenInPlaceUnpaid ||
+      // 🎯 پچ ۵۰-هـ-ل: سفارشِ ساخته‌شده با روش ترکیبی (checkout 🧩) — بخش پرداخت
+      // نمایش داده شود (قبلاً برای split هیچ شرطی نبود و کل بخش حذف می‌شد)
+      order.payment_method === 'split' ||
       // 🎯 پچ ۵۰-هـ-ن: رسیدِ ترکیبی روی سفارشِ حضوری → در انتظار تأیید
       (isPendingReview && !isTransfer))
 

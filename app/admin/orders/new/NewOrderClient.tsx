@@ -972,12 +972,20 @@ export default function NewOrderClient({
 
   // 🎯 پچ ۵۰-هـ-و: سفارش‌های امروز + ورود به حالت ویرایش
   // 🎯 پچ ۵۰-هـ-او: لیست سفارش‌ها با بازهٔ تاریخ و صفحه‌بندی سرورسمت (۱۰ در صفحه)
+  // 🎯 پچ ۵۰-هـ-ل: فیلتر/صفحهٔ جاری در ref — پولر ۶۰ ثانیه‌ای و هر فراخوانِ
+  // با closure کهنه، لیستِ فیلترشده را با لیست روزانه overwrite نکند
+  const listPageRef = useRef(listPage)
+  const listFromRef = useRef(listFrom)
+  const listToRef = useRef(listTo)
+  listPageRef.current = listPage
+  listFromRef.current = listFrom
+  listToRef.current = listTo
   async function loadOrders(opts?: { page?: number; from?: string; to?: string }) {
     setOrdersLoading(true)
     setOrdersErr('')
-    const page = opts?.page ?? listPage
-    const from = opts?.from ?? listFrom
-    const to = opts?.to ?? listTo
+    const page = opts?.page ?? listPageRef.current
+    const from = opts?.from ?? listFromRef.current
+    const to = opts?.to ?? listToRef.current
     const params = new URLSearchParams({ page: String(page), pageSize: '10' })
     if (from) params.set('from', from)
     if (to) params.set('to', to)
@@ -2489,6 +2497,22 @@ export default function NewOrderClient({
                               }}
                             >
                               💳 مانده {fmt(st.remaining)}
+                            </span>
+                          )}
+                          {/* 🎯 پچ ۵۰-هـ-ل: لیبل قرمز «تسویه نشده» برای سفارش‌های
+                              بدون هیچ پرداختی — دیده‌شدن فوری در لیست */}
+                          {st.state === 'none' && o.status !== 'cancelled' && (
+                            <span
+                              style={{
+                                fontSize: 10.5,
+                                fontWeight: 700,
+                                color: '#9b3c32',
+                                background: '#fdecec',
+                                borderRadius: 6,
+                                padding: '1px 6px',
+                              }}
+                            >
+                              💳 تسویه نشده
                             </span>
                           )}
                           {parentNum != null && (
