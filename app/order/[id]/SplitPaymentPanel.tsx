@@ -129,6 +129,11 @@ export default function SplitPaymentPanel({
   const [doneSteps, setDoneSteps] = useState<string[]>([])
   const [gatewayUrl, setGatewayUrl] = useState<string | null>(null)
   const [receiptSent, setReceiptSent] = useState(false)
+  // 🎯 پچ ۵۰-هـ-س: دکمهٔ «نهایی کردن سفارش» — بررسی تسویه و پیام متناسب
+  const [finalizing, setFinalizing] = useState(false)
+  const [finalizeMsg, setFinalizeMsg] = useState<{ ok: boolean; text: string } | null>(
+    null
+  )
 
   const allocated = sel.reduce((s, k) => s + (amounts[k] ?? 0), 0)
   const overLimit = allocated > remaining
@@ -279,6 +284,35 @@ export default function SplitPaymentPanel({
       setError(e instanceof Error ? e.message : 'خطا در پرداخت')
     } finally {
       setBusy(false)
+    }
+  }
+
+  /**
+   * 🎯 پچ ۵۰-هـ-س: نهایی‌کردن سفارش — سرور بررسی می‌کند آیا فاکتور تسویه شده
+   * (یا باقی‌مانده با «پرداخت در محل» اعلام شده)؛ پیام متناسب نمایش داده می‌شود
+   * و در صورت نهایی‌شدن، وضعیت سفارش رفرش می‌شود.
+   */
+  async function handleFinalize() {
+    setError(null)
+    setFinalizeMsg(null)
+    setFinalizing(true)
+    try {
+      const res = await fetch('/api/orders/finalize-split', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderId }),
+      })
+      const data = await res.json().catch(() => null)
+      if (!res.ok) {
+        setError(data?.error || 'بررسی نهایی‌سازی ناموفق بود')
+        return
+      }
+      setFinalizeMsg({ ok: !!data.finalized, text: data.message || '' })
+      if (data.finalized) onDone()
+    } catch {
+      setError('خطا در ارتباط با سرور')
+    } finally {
+      setFinalizing(false)
     }
   }
 
@@ -470,6 +504,38 @@ export default function SplitPaymentPanel({
           >
             {busy ? '...' : '🧩 ثبت و پرداخت ترکیبی'}
           </button>
+
+          {/* 🎯 پچ ۵۰-هـ-س: نهایی‌کردن سفارش — بررسی تسویه + پیام متناسب */}
+          <button
+            type="button"
+            className="order-payment-btn primary"
+            style={{ marginTop: '8px', width: '100%' }}
+            onClick={handleFinalize}
+            disabled={busy || finalizing || remaining <= 0}
+          >
+            {finalizing ? '...' : '✅ نهایی کردن سفارش و ارسال به کافه'}
+          </button>
+          <p className="order-payment-section-desc" style={{ marginTop: 6 }}>
+            بعد از پرداخت بخش‌ها (یا اعلام «پرداخت در محل» برای باقی‌مانده) این
+            دکمه را بزن؛ اگر مبلغ فاکتور کامل نشده باشد پیام راهنما می‌بینی.
+          </p>
+          {finalizeMsg && (
+            <div
+              style={{
+                marginTop: 8,
+                padding: 10,
+                borderRadius: 8,
+                fontSize: 13,
+                fontWeight: 600,
+                background: finalizeMsg.ok ? '#eef7f0' : '#fdf6e3',
+                color: finalizeMsg.ok ? '#2d5d3e' : '#8a5a00',
+                border: `1px solid ${finalizeMsg.ok ? '#cfe4d6' : '#ead9b0'}`,
+              }}
+            >
+              {finalizeMsg.text}
+            </div>
+          )}
+
           {onBack && (
             <button
               type="button"
