@@ -60,6 +60,8 @@ type Order = {
   status: string
   created_at: string
   customer_confirmed?: boolean
+  // 🎯 پچ ۵۰-هـ-ص: جمع اعلام‌های «پرداخت در محل» از payment_note (سرور محاسبه می‌کند)
+  cash_pledge_total?: number
   cancellation_reason_label: string | null
   cancellation_note: string | null
   cancelled_by: string | null
@@ -131,6 +133,8 @@ export default function OrderPage({
   const [paying, setPaying] = useState(false)
   const [paymentError, setPaymentError] = useState<string | null>(null)
   const [paymentSuccess, setPaymentSuccess] = useState<string | null>(null)
+  // 🎯 پچ ۵۰-هـ-ص: اگر مشتری بعد از نهایی‌شدنِ «پرداخت در محل» بخواهد همین حالا پرداخت کند
+  const [pledgePayOverride, setPledgePayOverride] = useState(false)
   const [showChangeMethod, setShowChangeMethod] = useState(false)
   const [debtReceiptSent, setDebtReceiptSent] = useState(false)
   // 🎯 پچ ۵۰-هـ-ن: حالت پرداخت ترکیبی (تقسیم مبلغ بین روش‌ها)
@@ -526,6 +530,15 @@ export default function OrderPage({
     Math.round(order.subtotal - Number(order.paid_amount ?? 0))
   )
 
+  // 🎯 پچ ۵۰-هـ-ص: نهایی‌شدهٔ «پرداخت در محل» — اعلام نقدی کل مانده + تأیید مشتری:
+  // سفارش وارد جریان کافه شده (confirmed) و حلقهٔ پرداخت نباید ادامه یابد
+  const cashPledgeTotal = Number(order.cash_pledge_total ?? 0)
+  const splitFinalizedInPlace =
+    order.customer_confirmed === true &&
+    remainingAmount > 0 &&
+    cashPledgeTotal >= remainingAmount &&
+    ['pending', 'confirmed', 'preparing', 'ready'].includes(order.status)
+
   // ✅ رسید (عکس یا متن) ارسال شده و منتظر تعیین‌تکلیف مدیر هستیم
   const receiptSubmitted =
     isTransfer && isPendingReview && !!(order.payment_receipt_url || order.payment_note)
@@ -555,6 +568,7 @@ export default function OrderPage({
     walletBalance >= order.subtotal
 
   const showPaymentSection =
+    (!splitFinalizedInPlace || pledgePayOverride) &&
     !isCancelled &&
     !isPaid &&
     order.status !== 'delivered' &&
@@ -819,6 +833,30 @@ export default function OrderPage({
         </div>
       )}
 
+
+      {/* 🎯 پچ ۵۰-هـ-ص: سفارشِ نهایی‌شده با «پرداخت در محل» — به‌جای ادامهٔ حلقهٔ پرداخت */}
+      {splitFinalizedInPlace && !pledgePayOverride && (
+        <div
+          className="order-payment-section"
+          style={{ borderColor: '#cfe4d6', background: '#eef7f0' }}
+        >
+          <div className="order-payment-section-title">
+            ✅ سفارش نهایی شد و برای کافه ارسال شد
+          </div>
+          <p className="order-payment-section-desc">
+            مبلغ {formatPrice(remainingAmount)} تومان به‌صورت «پرداخت در محل»
+            اعلام شده و هنگام تحویل/مراجعه نقدی یا با کارت‌خوان پرداخت می‌شود.
+            وضعیت سفارش را از همین صفحه دنبال کن.
+          </p>
+          <button
+            type="button"
+            className="order-payment-btn secondary"
+            onClick={() => setPledgePayOverride(true)}
+          >
+            💳 می‌خوام همین حالا پرداخت کنم
+          </button>
+        </div>
+      )}
 
       {showPaymentSection && (
         <div className="order-payment-section">
