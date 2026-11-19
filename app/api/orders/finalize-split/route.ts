@@ -28,11 +28,13 @@ function faToEn(s: string): string {
     .replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
 }
 
-/** جمع «اعلام نقدی در محل: X تومان»های ثبت‌شده در یادداشت پرداخت */
+/** جمع «اعلام نقدی در محل: X تومان»های ثبت‌شده در یادداشت پرداخت
+ * 🎯 پچ ۵۰-هـ-ش: پارس مقاوم — همه‌چیز بین «اعلام نقدی در محل:» و «تومان»
+ * گرفته می‌شود و هر رقم (فارسی/عربی/انگلیسی، با هر جداکننده) استخراج می‌شود. */
 function parseCashPledges(note: string | null | undefined): number {
   if (!note) return 0
   let total = 0
-  const re = /اعلام نقدی در محل:\s*([۰-۹0-9,٬\s]+)\s*تومان/g
+  const re = /اعلام نقدی در محل:\s*([^:]*?)\s*تومان/g
   let m: RegExpExecArray | null
   while ((m = re.exec(note)) !== null) {
     const n = parseInt(faToEn(m[1]).replace(/[^\d]/g, ''), 10)
