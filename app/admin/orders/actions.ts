@@ -314,7 +314,7 @@ export async function updatePaymentStatus(
   method?: 'cash' | 'card' | 'online' | 'transfer'
 ): Promise<{ success?: boolean; error?: string }> {
   try {
-    await assertAdmin()
+    const userId = await assertAdminId()
 
     if (!orderId || typeof orderId !== 'string') {
       return { error: 'شناسه سفارش مشخص نیست' }
@@ -330,6 +330,17 @@ export async function updatePaymentStatus(
     }
 
     const db = createAdminDb()
+
+    // 🎯 پچ ۵۲: قفل تسویه فوری/تایید رسید بدون شیفت باز + نشتی اتریبیوشن بسته شد
+    const { data: openShift } = await db
+      .from('shifts')
+      .select('id')
+      .eq('opened_by', userId)
+      .is('closed_at', null)
+      .maybeSingle()
+    if (!openShift) {
+      return { error: '⏱ اول شیفت کاری‌ات را باز کن (چیپ شیفت در بالای صفحه)' }
+    }
 
     const { data: order, error: orderErr } = await db
       .from('orders')
@@ -362,7 +373,7 @@ export async function updatePaymentStatus(
 
     const payMethod = method ?? (order.payment_method as string | null) ?? 'cash'
 
-    const { error: addErr } = await db.rpc('add_order_payment', {
+    const { data: payRowId, error: addErr } = await db.rpc('add_order_payment', {
       p_order_id: orderId,
       p_method: payMethod,
       p_amount: remaining,
@@ -374,6 +385,18 @@ export async function updatePaymentStatus(
     if (addErr) {
       console.error('[updatePaymentStatus] add_order_payment:', addErr)
       return { error: paymentErrorMessage(addErr.message) }
+    }
+
+    // 🎯 پچ ۵۲: ردیف دفتری که اینجا ساخته شد هم مهر اپراتور/شیفت بخورد
+    // (قبلاً این مسیر بدون اتریبیوشن ردیف می‌ساخت — همان نشتی گزارش شیفت)
+    if (payRowId) {
+      const { error: stampErr } = await db
+        .from('order_payments')
+        .update({ operator_id: userId, shift_id: openShift.id })
+        .eq('id', payRowId)
+      if (stampErr) {
+        console.error('[updatePaymentStatus] stamp:', stampErr)
+      }
     }
 
     // فیلدهای جانبی سفارش (روش، زمان تأیید، یادداشت)

@@ -128,6 +128,20 @@ export async function POST(
       )
     }
 
+    // 🎯 پچ ۵۲: قفل تسویه بدون شیفت باز — برای همهٔ کاربران ادمین
+    const { data: openShiftLock } = await db
+      .from('shifts')
+      .select('id')
+      .eq('opened_by', auth.userId)
+      .is('closed_at', null)
+      .maybeSingle()
+    if (!openShiftLock) {
+      return NextResponse.json(
+        { error: '⏱ اول شیفت کاری‌ات را باز کن (چیپ شیفت در بالای صفحه)' },
+        { status: 403 }
+      )
+    }
+
     // ثبت پرداخت — همان RPC پنل مدیریت
     const { error: payErr } = await db.rpc('add_order_payment', {
       p_order_id: id,

@@ -7,9 +7,11 @@ import { supabaseAdmin } from '@/lib/supabase/server'
 export const dynamic = 'force-dynamic'
 
 // 🎯 پچ ۵۱: شیفت کاری اپراتور — باز/بستن + جمع‌های زنده و مغایرت
-//  GET   → شیفت بازِ من + جمع‌های لحظه‌ای (مبنای چیپ POS و پیش‌نمایش بستن)
-//  POST  → باز کردن شیفت (با تنخواه افتتاحیه)
-//  PATCH → بستن شیفت (با شمارش واقعی نقدی → مغایرت خودکار)
+// 🎯 پچ ۵۲: گردش کامل شیفت — تحویل صندوق از شیفت قبلی، ساعات کاری مجاز،
+//            سفارش‌های بازِ مانده هنگام بستن، نام نمایشی لحظهٔ ثبت
+//  GET   → شیفت بازِ من + جمع‌های لحظه‌ای + شیفت قبلی (مبنای تحویل) + ساعات کاری من
+//  POST  → باز کردن شیفت (تنخواه/تحویل) — خارج از ساعات کاری مجاز رد می‌شود
+//  PATCH → بستن شیفت (شمارش واقعی نقدی → مغایرت خودکار)
 
 type ShiftTotals = {
   cash: number
@@ -67,6 +69,103 @@ async function myOpenShift(
   return data
 }
 
+// تعداد سفارش‌های بازِ مانده (تسویه‌نشده) — پول صندوق نیستند ولی ثبت می‌شوند
+async function openOrdersCount(
+  db: ReturnType<typeof supabaseAdmin>,
+  shiftId: string
+): Promise<number> {
+  const { count } = await db
+    .from('orders')
+    .select('id', { count: 'exact', head: true })
+    .eq('shift_id', shiftId)
+    .neq('status', 'cancelled')
+    .neq('payment_status', 'paid')
+  return count ?? 0
+}
+
+// نام نمایشی کاربر (متابدیتا یا ایمیل) — اسنپ‌شات برای مودال تحویل
+async function userName(
+  db: ReturnType<typeof supabaseAdmin>,
+  userId: string
+): Promise<string> {
+  try {
+    const { data } = await db.auth.admin.getUserById(userId)
+    const u: any = data?.user
+    return (
+      (typeof u?.user_metadata?.full_name === 'string' &&
+        u.user_metadata.full_name.trim()) ||
+      u?.email ||
+      'کاربر'
+    )
+  } catch {
+    return 'کاربر'
+  }
+}
+
+function nowTehranHM(): string {
+  return new Intl.DateTimeFormat('en-GB', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+    timeZone: 'Asia/Tehran',
+  }).format(new Date())
+}
+
+// بازهٔ ثابت روزانه؛ پشتیبانی از شیفت شبانه (مثلاً ۲۲:۰۰ تا ۰۶:۰۰)
+function withinWindow(now: string, start: string, end: string): boolean {
+  const re = /^\d{2}:\d{2}$/
+  if (!re.test(start) || !re.test(end)) return true
+  if (start <= end) return now >= start && now <= end
+  return now >= start || now <= end
+}
+
+async function myWindow(
+  db: ReturnType<typeof supabaseAdmin>,
+  userId: string
+): Promise<{ start: string; end: string } | null> {
+  const { data } = await db
+    .from('admin_operator_profiles')
+    .select('shift_start_time, shift_end_time')
+    .eq('user_id', userId)
+    .maybeSingle()
+  if (!data?.shift_start_time || !data?.shift_end_time) return null
+  return { start: data.shift_start_time, end: data.shift_end_time }
+}
+
+// آخرین شیفت بسته‌شده (هر کاربری) — مبنای «تحویل صندوق» برای شیفت بعدی
+async function previousClosedShift(
+  db: ReturnType<typeof supabaseAdmin>
+) {
+  const { data } = await db
+    .from('shifts')
+    .select(
+      'id, opened_by, opened_by_name, opened_at, closed_at, opening_float, counted_cash, expected_cash, approved_by, closing_open_orders'
+    )
+    .not('closed_at', 'is', null)
+    .order('closed_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (!data) return null
+  const announced =
+    data.counted_cash !== null && data.counted_cash !== undefined
+      ? Number(data.counted_cash)
+      : data.expected_cash !== null && data.expected_cash !== undefined
+        ? Number(data.expected_cash)
+        : Number(data.opening_float)
+  return {
+    id: data.id as string,
+    opened_by: data.opened_by as string,
+    opened_by_name: (data.opened_by_name as string) || 'کاربر',
+    closed_at: data.closed_at as string,
+    announced,
+    approved: Boolean(data.approved_by),
+    closing_open_orders:
+      data.closing_open_orders === null || data.closing_open_orders === undefined
+        ? null
+        : Number(data.closing_open_orders),
+  }
+}
+
 export async function GET(req: NextRequest) {
   const auth = await requireAdminUser()
   if (auth.denied) return auth.denied
@@ -76,21 +175,31 @@ export async function GET(req: NextRequest) {
 
   try {
     const db = supabaseAdmin()
-    const cur = await myOpenShift(db, auth.userId)
+    const [cur, prev, win] = await Promise.all([
+      myOpenShift(db, auth.userId),
+      previousClosedShift(db),
+      myWindow(db, auth.userId),
+    ])
     if (!cur) {
       return NextResponse.json(
-        { current: null },
+        { current: null, previous: prev, window: win },
         { headers: { 'Cache-Control': 'no-store' } }
       )
     }
-    const totals = await shiftTotals(db, cur.id)
+    const [totals, openOrders] = await Promise.all([
+      shiftTotals(db, cur.id),
+      openOrdersCount(db, cur.id),
+    ])
     return NextResponse.json(
       {
         current: {
           ...cur,
           expected_cash: Number(cur.opening_float) + totals.cash,
           totals,
+          open_orders: openOrders,
         },
+        previous: prev,
+        window: win,
       },
       { headers: { 'Cache-Control': 'no-store' } }
     )
@@ -116,12 +225,24 @@ export async function POST(req: NextRequest) {
       openingFloat > MAX_FLOAT
     ) {
       return NextResponse.json(
-        { error: 'مبلغ تنخواه افتتاحیه نامعتبر است' },
+        { error: 'مبلغ تنخواه/تحویل نامعتبر است' },
         { status: 400 }
       )
     }
 
     const db = supabaseAdmin()
+
+    // 🎯 پچ ۵۲: ساعات کاری مجاز — اگر مدیر برای این کاربر بازه تعریف کرده باشد
+    const win = await myWindow(db, auth.userId)
+    if (win && !withinWindow(nowTehranHM(), win.start, win.end)) {
+      return NextResponse.json(
+        {
+          error: `⏱ ساعات کاری تو از ${win.start} تا ${win.end} است — باز کردن شیفت الان ممکن نیست`,
+        },
+        { status: 403 }
+      )
+    }
+
     const existing = await myOpenShift(db, auth.userId)
     if (existing) {
       return NextResponse.json(
@@ -130,9 +251,53 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    // 🎯 پچ ۵۲: تحویل صندوق از شیفت قبلی (اختیاری)
+    const prevShiftId =
+      typeof body?.previous_shift_id === 'string' && body.previous_shift_id
+        ? body.previous_shift_id
+        : null
+    const handoverAccepted = body?.handover_accepted === true
+    const handoverNote =
+      typeof body?.handover_note === 'string' && body.handover_note.trim()
+        ? body.handover_note.trim().slice(0, 200)
+        : null
+    let handover: Record<string, any> = {}
+    if (prevShiftId) {
+      const { data: prevRow } = await db
+        .from('shifts')
+        .select('id, closed_at, counted_cash, expected_cash, opening_float')
+        .eq('id', prevShiftId)
+        .maybeSingle()
+      if (!prevRow?.closed_at) {
+        return NextResponse.json(
+          { error: 'شیفت مبدا تحویل باز یا پیدا نشد' },
+          { status: 400 }
+        )
+      }
+      const announced =
+        prevRow.counted_cash !== null && prevRow.counted_cash !== undefined
+          ? Number(prevRow.counted_cash)
+          : prevRow.expected_cash !== null && prevRow.expected_cash !== undefined
+            ? Number(prevRow.expected_cash)
+            : Number(prevRow.opening_float)
+      handover = {
+        handover_from_shift_id: prevRow.id,
+        handover_expected: announced,
+        handover_actual: openingFloat,
+        handover_accepted: handoverAccepted,
+        handover_note: handoverNote,
+      }
+    }
+
+    const myName = await userName(db, auth.userId)
     const { data: shift, error } = await db
       .from('shifts')
-      .insert({ opened_by: auth.userId, opening_float: openingFloat })
+      .insert({
+        opened_by: auth.userId,
+        opened_by_name: myName,
+        opening_float: openingFloat,
+        ...handover,
+      })
       .select('*')
       .single()
     if (error) {
@@ -183,19 +348,25 @@ export async function PATCH(req: NextRequest) {
       )
     }
 
-    const totals = await shiftTotals(db, cur.id)
+    const [totals, openOrders] = await Promise.all([
+      shiftTotals(db, cur.id),
+      openOrdersCount(db, cur.id),
+    ])
     const expectedCash = Number(cur.opening_float) + totals.cash
     const discrepancy = counted === null ? null : counted - expectedCash
 
+    const myName = await userName(db, auth.userId)
     const { data: closed, error } = await db
       .from('shifts')
       .update({
         closed_at: new Date().toISOString(),
         closed_by: auth.userId,
+        closed_by_name: myName,
         counted_cash: counted,
         expected_cash: expectedCash,
         discrepancy,
         closing_totals: totals,
+        closing_open_orders: openOrders,
         closing_note: note,
       })
       .eq('id', cur.id)
@@ -206,7 +377,12 @@ export async function PATCH(req: NextRequest) {
       console.error('[admin shifts] close:', error)
       return NextResponse.json({ error: error.message }, { status: 400 })
     }
-    return NextResponse.json({ shift: closed, totals, expected_cash: expectedCash })
+    return NextResponse.json({
+      shift: closed,
+      totals,
+      expected_cash: expectedCash,
+      open_orders: openOrders,
+    })
   } catch (err) {
     console.error('[admin shifts] PATCH unexpected:', err)
     return NextResponse.json({ error: 'خطای سرور' }, { status: 500 })

@@ -184,6 +184,7 @@ if (tableNo !== null) {
     }
 
     // ---------- ثبت سفارش ----------
+    // 🎯 پچ ۵۲: قفل عملیات بدون شیفت باز — برای همهٔ کاربران ادمین (شامل مدیر)
     // 🎯 پچ ۵۱: شناسنامهٔ عملیات — اپراتور ثبت‌کننده + شیفت بازِ همان کاربر
     const { data: openShift } = await db
       .from('shifts')
@@ -191,6 +192,9 @@ if (tableNo !== null) {
       .eq('opened_by', auth.userId)
       .is('closed_at', null)
       .maybeSingle()
+    if (!openShift) {
+      return bad('⏱ اول شیفت کاری‌ات را باز کن (چیپ شیفت در بالای صفحه)', 403)
+    }
     const now = new Date().toISOString()
     let order: any = null
     let orderErr: any = null

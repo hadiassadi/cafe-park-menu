@@ -123,24 +123,31 @@ export default async function OrdersPage() {
   }))
 
   // 🎯 پچ ۵۱: نقشهٔ اپراتورها (نام + کد) — برای نشانِ ثبت‌کننده روی سفارش‌ها
+  // 🎯 پچ ۵۲: نام نمایشی اپراتور مقدم بر ایمیل است
   let operatorsMap: Record<string, { name: string; code?: string | null }> = {}
   try {
     const [usersRes, profilesRes] = await Promise.all([
       db.auth.admin.listUsers({ perPage: 500 }),
-      db.from('admin_operator_profiles').select('user_id, code'),
+      db
+        .from('admin_operator_profiles')
+        .select('user_id, code, display_name'),
     ])
-    const codeByUser: Record<string, string> = {}
+    const profileByUser: Record<string, { code?: string; display_name?: string }> = {}
     for (const p of profilesRes.data ?? []) {
-      codeByUser[(p as any).user_id] = (p as any).code
+      profileByUser[(p as any).user_id] = {
+        code: (p as any).code,
+        display_name: (p as any).display_name,
+      }
     }
     for (const u of usersRes.data?.users ?? []) {
       const meta = (u as any).user_metadata ?? {}
       operatorsMap[u.id] = {
         name:
+          profileByUser[u.id]?.display_name?.trim() ||
           (typeof meta.full_name === 'string' && meta.full_name.trim()) ||
           u.email ||
           'کاربر',
-        code: codeByUser[u.id] ?? null,
+        code: profileByUser[u.id]?.code ?? null,
       }
     }
   } catch (e) {
