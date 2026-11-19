@@ -356,12 +356,24 @@ export async function PATCH(req: NextRequest) {
     const discrepancy = counted === null ? null : counted - expectedCash
 
     const myName = await userName(db, auth.userId)
+
+    // 🎯 پچ ۵۲-ب: شیفت «صاحب» بدون نیاز به تایید — هنگام بستن خودکار تایید می‌شود
+    const { data: profRole } = await db
+      .from('admin_operator_profiles')
+      .select('role')
+      .eq('user_id', auth.userId)
+      .maybeSingle()
+    const isOwner = profRole?.role === 'owner'
+
     const { data: closed, error } = await db
       .from('shifts')
       .update({
         closed_at: new Date().toISOString(),
         closed_by: auth.userId,
         closed_by_name: myName,
+        ...(isOwner
+          ? { approved_by: auth.userId, approved_at: new Date().toISOString() }
+          : {}),
         counted_cash: counted,
         expected_cash: expectedCash,
         discrepancy,

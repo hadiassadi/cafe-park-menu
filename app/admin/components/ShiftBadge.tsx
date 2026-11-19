@@ -72,7 +72,9 @@ export default function ShiftBadge({
   const [modal, setModal] = useState<null | 'open' | 'close'>(null)
   const [prompted, setPrompted] = useState(false)
   const [openingFloat, setOpeningFloat] = useState('')
-  const [handoverMode, setHandoverMode] = useState<'accept' | 'mismatch'>('accept')
+  const [handoverMode, setHandoverMode] = useState<'accept' | 'mismatch' | 'none'>(
+    'accept'
+  )
   const [handoverActual, setHandoverActual] = useState('')
   const [counted, setCounted] = useState('')
   const [note, setNote] = useState('')
@@ -112,18 +114,25 @@ export default function ShiftBadge({
     setBusy(true)
     setError(null)
     try {
+      // 🎯 پچ ۵۲-ب: «بدون تحویل» = تنخواه دستی، بدون گره تحویل به شیفت قبلی
       const effFloat = previous
         ? handoverMode === 'accept'
           ? previous.announced
-          : parseAmount(handoverActual)
+          : handoverMode === 'mismatch'
+            ? parseAmount(handoverActual)
+            : parseAmount(openingFloat)
         : parseAmount(openingFloat)
       const r = await fetch('/api/admin/shifts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           opening_float: effFloat,
-          previous_shift_id: previous?.id ?? null,
-          handover_accepted: previous ? handoverMode === 'accept' : undefined,
+          previous_shift_id:
+            previous && handoverMode !== 'none' ? previous.id : null,
+          handover_accepted:
+            previous && handoverMode !== 'none'
+              ? handoverMode === 'accept'
+              : undefined,
           handover_note:
             previous && handoverMode === 'mismatch' ? handoverNote_() : null,
         }),
@@ -322,9 +331,9 @@ export default function ShiftBadge({
                     disabled={busy}
                     style={{
                       flex: 1,
-                      padding: '8px 6px',
+                      padding: '8px 4px',
                       borderRadius: 8,
-                      fontSize: 12.5,
+                      fontSize: 11.5,
                       fontWeight: 700,
                       cursor: 'pointer',
                       font: 'inherit',
@@ -342,9 +351,9 @@ export default function ShiftBadge({
                     disabled={busy}
                     style={{
                       flex: 1,
-                      padding: '8px 6px',
+                      padding: '8px 4px',
                       borderRadius: 8,
-                      fontSize: 12.5,
+                      fontSize: 11.5,
                       fontWeight: 700,
                       cursor: 'pointer',
                       font: 'inherit',
@@ -356,12 +365,32 @@ export default function ShiftBadge({
                   >
                     ⚠ مبلغ مغایرت دارد
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => setHandoverMode('none')}
+                    disabled={busy}
+                    style={{
+                      flex: 1,
+                      padding: '8px 4px',
+                      borderRadius: 8,
+                      fontSize: 11.5,
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      font: 'inherit',
+                      border:
+                        '1px solid ' + (handoverMode === 'none' ? '#9a6b3f' : '#d8d0c4'),
+                      background: handoverMode === 'none' ? '#fff4d9' : '#fff',
+                      color: handoverMode === 'none' ? '#9a6b3f' : '#4b443b',
+                    }}
+                  >
+                    ⏭ بدون تحویل
+                  </button>
                 </div>
                 {handoverMode === 'accept' ? (
                   <div style={{ fontSize: 13, color: '#2d5d3e', fontWeight: 800 }}>
                     مبلغ تحویل: {fa(previous.announced)} تومان
                   </div>
-                ) : (
+                ) : handoverMode === 'mismatch' ? (
                   <>
                     <label style={{ fontSize: 12.5, fontWeight: 700, display: 'block', marginBottom: 6 }}>
                       مبلغ واقعی که الان در صندوق شمردی (تومان):
@@ -379,6 +408,26 @@ export default function ShiftBadge({
                     <small style={{ fontSize: 11.5, color: '#8a8378', display: 'block', marginTop: 4 }}>
                       اختلاف با اعلامیِ {fa(previous.announced)} به‌عنوان مغایرت تحویل
                       در گزارش مدیر ثبت می‌شود.
+                    </small>
+                  </>
+                ) : (
+                  <>
+                    <label style={{ fontSize: 12.5, fontWeight: 700, display: 'block', marginBottom: 6 }}>
+                      تنخواه دستی صندوق (تومان):
+                    </label>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      dir="ltr"
+                      placeholder="0"
+                      value={openingFloat}
+                      onChange={(e) => setOpeningFloat(e.target.value)}
+                      disabled={busy}
+                      style={inputStyle}
+                    />
+                    <small style={{ fontSize: 11.5, color: '#8a8378', display: 'block', marginTop: 4 }}>
+                      🎯 پچ ۵۲-ب: بدون گره تحویل — شیفت قبلی را نادیده می‌گیری و
+                      عددی که خودت می‌گذاری مبنا می‌شود.
                     </small>
                   </>
                 )}
