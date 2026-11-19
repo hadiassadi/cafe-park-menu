@@ -48,18 +48,8 @@ export async function saveOperatorProfile(formData: FormData): Promise<void> {
       : 'operator'
 
     const db = supabaseAdmin()
-    if (
-      !displayName &&
-      !code &&
-      !TIME_RE.test(start) &&
-      !TIME_RE.test(end) &&
-      role === 'operator'
-    ) {
-      // همه خالی و نقش پیش‌فرض = برداشتن پروفایل
-      await db.from('admin_operator_profiles').delete().eq('user_id', userId)
-      revalidatePath('/admin/shifts')
-      return
-    }
+    // 🎯 پچ ۵۲-ج: ذخیرهٔ فرم خالی دیگر پروفایل را پاک نمی‌کند — فقط به پیش‌فرض برمی‌گردد
+    // (قبلاً یک ذخیرهٔ خالی، کد و نام صاحب را پاک می‌کرد — ریسک پاک‌شدن تصادفی)
     const { error } = await db.from('admin_operator_profiles').upsert({
       user_id: userId,
       display_name: displayName || null,
