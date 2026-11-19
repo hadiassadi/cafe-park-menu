@@ -91,7 +91,7 @@ export default async function ShiftsPage({
     const { data } = await db
       .from('admin_operator_profiles')
       .select(
-        'user_id, code, display_name, shift_start_time, shift_end_time'
+        'user_id, code, display_name, shift_start_time, shift_end_time, role'
       )
     profilesRows = data ?? []
   } catch (e) {
@@ -213,6 +213,11 @@ export default async function ShiftsPage({
                 <input type="hidden" name="user_id" value={u.id} />
                 <span style={{ fontSize: 13, fontWeight: 700, minWidth: 180, flex: 1 }}>
                   👤 {u.name}
+                  {p?.role === 'owner'
+                    ? ' 👑 صاحب'
+                    : p?.role === 'manager'
+                      ? ' 🎖 مدیر'
+                      : ''}
                   {p?.code ? ` — کد فعلی: ${p.code}` : ''}
                 </span>
                 <input
@@ -227,6 +232,16 @@ export default async function ShiftsPage({
                   placeholder="کد"
                   style={{ ...inputStyle, width: 70 }}
                 />
+                <select
+                  name="role"
+                  defaultValue={p?.role ?? 'operator'}
+                  title="نقش — صاحب: شیفتش بدون نیاز به تایید"
+                  style={{ ...inputStyle, width: 120 }}
+                >
+                  <option value="owner">👑 صاحب</option>
+                  <option value="manager">🎖 مدیر</option>
+                  <option value="operator">اپراتور</option>
+                </select>
                 <input
                   type="time"
                   name="shift_start_time"
@@ -394,6 +409,11 @@ export default async function ShiftsPage({
                       ? '✅'
                       : '🟡'}{' '}
                   {nameById[s.opened_by] ?? s.opened_by_name ?? 'کاربر'}
+                  {profileByUser[s.opened_by]?.role === 'owner'
+                    ? ' 👑'
+                    : profileByUser[s.opened_by]?.role === 'manager'
+                      ? ' 🎖'
+                      : ''}
                   {profileByUser[s.opened_by]?.code
                     ? ` (کد ${profileByUser[s.opened_by].code})`
                     : ''}
@@ -407,7 +427,9 @@ export default async function ShiftsPage({
               {!isOpen && (
                 <div style={{ fontSize: 12, marginTop: 4, color: s.approved_by ? '#4a7fa5' : '#9a6b3f' }}>
                   {s.approved_by
-                    ? `گزارش بستن تایید شد توسط ${nameById[s.approved_by] ?? 'مدیر'}`
+                    ? s.approved_by === s.opened_by
+                      ? '👑 شیفت صاحب — بدون نیاز به تایید ✓'
+                      : `گزارش بستن تایید شد توسط ${nameById[s.approved_by] ?? 'مدیر'}`
                     : 'گزارش بستن در انتظار تایید مدیر'}
                 </div>
               )}

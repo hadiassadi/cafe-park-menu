@@ -42,10 +42,20 @@ export async function saveOperatorProfile(formData: FormData): Promise<void> {
       .slice(0, 6)
     const start = String(formData.get('shift_start_time') ?? '').trim()
     const end = String(formData.get('shift_end_time') ?? '').trim()
+    const roleRaw = String(formData.get('role') ?? 'operator')
+    const role = ['owner', 'manager', 'operator'].includes(roleRaw)
+      ? roleRaw
+      : 'operator'
 
     const db = supabaseAdmin()
-    if (!displayName && !code && !TIME_RE.test(start) && !TIME_RE.test(end)) {
-      // همه خالی = برداشتن پروفایل
+    if (
+      !displayName &&
+      !code &&
+      !TIME_RE.test(start) &&
+      !TIME_RE.test(end) &&
+      role === 'operator'
+    ) {
+      // همه خالی و نقش پیش‌فرض = برداشتن پروفایل
       await db.from('admin_operator_profiles').delete().eq('user_id', userId)
       revalidatePath('/admin/shifts')
       return
@@ -56,6 +66,7 @@ export async function saveOperatorProfile(formData: FormData): Promise<void> {
       code: code || null,
       shift_start_time: TIME_RE.test(start) ? start : null,
       shift_end_time: TIME_RE.test(end) ? end : null,
+      role,
       updated_at: new Date().toISOString(),
     })
     // کد تکراری → index یکتا رد می‌کند
@@ -148,12 +159,25 @@ export async function forceCloseShift(formData: FormData): Promise<void> {
     }
 
     const myName = await userName(db, userId)
+
+    // 🎯 پچ ۵۲-ب: اگر شیفتِ بسته‌شده مال «صاحب» است، بدون تایید ثبت می‌شود
+    const { data: ownerProf } = await db
+      .from('admin_operator_profiles')
+      .select('role')
+      .eq('user_id', s.opened_by)
+      .maybeSingle()
+    const ownerAuto =
+      ownerProf?.role === 'owner'
+        ? { approved_by: userId, approved_at: new Date().toISOString() }
+        : {}
+
     const { error } = await db
       .from('shifts')
       .update({
         closed_at: new Date().toISOString(),
         closed_by: userId,
         closed_by_name: myName,
+        ...ownerAuto,
         counted_cash: null,
         expected_cash: Number(s.opening_float) + totals.cash,
         discrepancy: null,
