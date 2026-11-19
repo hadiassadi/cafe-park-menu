@@ -5,6 +5,7 @@ import type { CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
 import { QRCodeSVG } from 'qrcode.react'
 import AdminSplitPayment from '@/app/admin/components/AdminSplitPayment'
+import ShiftBadge from '@/app/admin/components/ShiftBadge'
 import type { Category, Product } from '@/lib/menu-types'
 import {
   toJalaali,
@@ -1645,6 +1646,8 @@ export default function NewOrderClient({
             </span>
           )}
         </div>
+        {/* 🎯 پچ ۵۱: شیفت کاری — باز کردن با تنخواه / بستن با مغایرت‌گیری */}
+        <ShiftBadge />
       </div>
       <p className="pos-root-sub">
         اول مشتری، بعد میز، بعد محصولات — همه‌چیز در یک صفحه.

@@ -14,6 +14,7 @@ import { formatPersianDate } from '@/lib/format-date'
 import { useStepUp } from '@/lib/admin/use-step-up'
 import StepUpModal from '../components/StepUpModal'
 import AdminSplitPayment from '@/app/admin/components/AdminSplitPayment'
+import ShiftBadge from '@/app/admin/components/ShiftBadge'
 
 const formatPrice = (price: number) =>
   new Intl.NumberFormat('fa-IR').format(price)
@@ -64,6 +65,9 @@ type Order = {
   items: OrderItem[]
   subtotal: number
   paid_amount?: number
+  // 🎯 پچ ۵۱: شناسنامهٔ عملیات — اپراتور ثبت‌کننده و شیفت کاری
+  operator_id?: string | null
+  shift_id?: string | null
   // 🎯 پچ ۵۰-هـ-ف: ردیف‌های دفتر پرداخت (برای نمایش شفافِ پرداخت ترکیبی)
   order_payments?: Array<{
     method: string | null
@@ -207,9 +211,12 @@ type CancelReason = {
 export default function OrdersManager({
   orders: initialOrders,
   allowDeleteOrders,
+  operatorsMap,
 }: {
   orders: Order[]
   allowDeleteOrders: boolean
+  // 🎯 پچ ۵۱: نقشهٔ اپراتورها (نام + کد) — از صفحهٔ سرور می‌آید
+  operatorsMap?: Record<string, { name: string; code?: string | null }>
 }) {
   const [orders, setOrders] = useState<Order[]>(initialOrders)
   const [filter, setFilter] = useState<Filter>('pending')
@@ -968,6 +975,8 @@ export default function OrdersManager({
                   : 'سفارش جدیدی در انتظار تأیید نیست'}
             </p>
           </div>
+          {/* 🎯 پچ ۵۱: شیفت کاری — باز کردن با تنخواه / بستن با مغایرت‌گیری */}
+          <ShiftBadge />
           {trashMode ? (
             <button
               type="button"
@@ -1145,6 +1154,27 @@ export default function OrdersManager({
                   <span className="order-id">
                     سفارش #{formatPrice(order.order_number)}
                   </span>
+                  {/* 🎯 پچ ۵۱: ثبت‌کنندهٔ سفارش — معلوم است کدام اپراتور ثبت کرده */}
+                  {order.operator_id && operatorsMap?.[order.operator_id] && (
+                    <span
+                      style={{
+                        fontSize: 11,
+                        fontWeight: 700,
+                        color: '#6b4f3a',
+                        background: '#f6f1e9',
+                        borderRadius: 999,
+                        padding: '2px 8px',
+                        whiteSpace: 'nowrap',
+                      }}
+                      title="اپراتور ثبت‌کنندهٔ سفارش"
+                    >
+                      👤{' '}
+                      {operatorsMap[order.operator_id].name}
+                      {operatorsMap[order.operator_id].code
+                        ? ` (کد ${operatorsMap[order.operator_id].code})`
+                        : ''}
+                    </span>
+                  )}
                   <span
                     className="order-time"
                     title={formatPersianDate(order.created_at)}
