@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import UploadReceipt from './UploadReceipt'
 
 // ─────────────────────────────────────────────
@@ -135,6 +135,12 @@ export default function SplitPaymentPanel({
     null
   )
 
+  // 🎯 پچ ۵۰-هـ-ش: تغییر مبلغ بخش نقدی بعد از اعلام → اعلام قبلی باطل می‌شود
+  // (مبلغ جدید موقع ثبت/نهایی‌کردن دوباره اعلام می‌شود)
+  useEffect(() => {
+    setDoneSteps((d) => (d.includes('cash') ? d.filter((x) => x !== 'cash') : d))
+  }, [amounts.cash])
+
   const allocated = sel.reduce((s, k) => s + (amounts[k] ?? 0), 0)
   const overLimit = allocated > remaining
 
@@ -222,80 +228,80 @@ export default function SplitPaymentPanel({
     return data
   }
 
-  async function handleSubmit() {
+  /**
+   * 🎯 پچ ۵۰-هـ-ش: اعتبارسنجی و اجرای بخش‌های اعلام‌شده (اعلام نقدی، کیف پول،
+   * درگاه) — بدون بررسی نهایی. اگر بخش درگاه باشد صفحه به زرین‌پال منتقل می‌شود
+   * و 'redirected' برمی‌گردد. گام‌های قبلاً انجام‌شده (doneSteps) تکرار نمی‌شوند.
+   */
+  async function processParts(): Promise<'redirected' | 'done' | 'invalid'> {
     setError(null)
 
-    if (remaining <= 0) return
+    if (remaining <= 0) return 'invalid'
     const parts = sel.filter((m) => (amounts[m] ?? 0) >= MIN_PART)
     if (parts.length === 0) {
       setError(`مبلغ هر بخش باید حداقل ${fa(MIN_PART)} تومان باشد.`)
-      return
+      return 'invalid'
     }
     if (allocated > remaining) {
       setError('مجموع بخش‌ها بیشتر از باقی‌مانده است.')
-      return
+      return 'invalid'
     }
 
     // کارت‌به‌کارت داخل خود ردیف ارسال می‌شود؛ اینجا فقط wallet/cash/online
     const payable = parts.filter((m) => m !== 'transfer')
-    if (payable.length === 0) {
+    if (payable.length === 0 && !receiptSent) {
       setError('مبلغ کارت‌به‌کارت را وارد کن و رسید را در همان ردیف بفرست.')
-      return
+      return 'invalid'
     }
     if (parts.includes('transfer') && !receiptSent) {
       setError('برای بخش کارت‌به‌کارت، رسید را در همان ردیف ارسال کن (یا مبلغش را خالی بگذار).')
-      return
+      return 'invalid'
     }
 
-    setBusy(true)
     try {
       // ۱) اعلام نقدی در محل (فقط یادداشت — تسویهٔ واقعی با اپراتور)
       const cashAmt = amounts.cash ?? 0
-      if (cashAmt >= MIN_PART) {
+      if (cashAmt >= MIN_PART && !doneSteps.includes('cash')) {
         await postJson('/api/payment/cash-note', { orderId, amount: cashAmt })
-        setDoneSteps((d) => [...d, 'cash'])
+        setDoneSteps((d) => (d.includes('cash') ? d : [...d, 'cash']))
       }
 
       // ۲) کیف پول — فوری
       const walletAmt = amounts.wallet ?? 0
-      if (walletAmt >= MIN_PART) {
+      if (walletAmt >= MIN_PART && !doneSteps.includes('wallet')) {
         await postJson('/api/payment/wallet', { orderId, amount: walletAmt })
-        setDoneSteps((d) => [...d, 'wallet'])
+        setDoneSteps((d) => (d.includes('wallet') ? d : [...d, 'wallet']))
       }
 
       // ۳) درگاه — آخرین مرحله چون صفحه را ترک می‌کند
       const onlineAmt = amounts.online ?? 0
-      if (onlineAmt >= MIN_PART) {
+      if (onlineAmt >= MIN_PART && !doneSteps.includes('online')) {
         const data = await postJson('/api/payment/request', {
           orderId,
           amount: onlineAmt,
         })
-        setDoneSteps((d) => [...d, 'online'])
+        setDoneSteps((d) => (d.includes('online') ? d : [...d, 'online']))
         setGatewayUrl(data.paymentUrl ?? null)
         onDone()
         if (data.paymentUrl) {
           setTimeout(() => window.location.assign(data.paymentUrl), 900)
         }
-        return
+        return 'redirected'
       }
 
-      onDone()
+      return 'done'
     } catch (e) {
       setError(e instanceof Error ? e.message : 'خطا در پرداخت')
-    } finally {
-      setBusy(false)
+      return 'invalid'
     }
   }
 
   /**
-   * 🎯 پچ ۵۰-هـ-س: نهایی‌کردن سفارش — سرور بررسی می‌کند آیا فاکتور تسویه شده
-   * (یا باقی‌مانده با «پرداخت در محل» اعلام شده)؛ پیام متناسب نمایش داده می‌شود
-   * و در صورت نهایی‌شدن، وضعیت سفارش رفرش می‌شود.
+   * 🎯 پچ ۵۰-هـ-ش: بررسی تسویه و نهایی‌سازی — سرور چک می‌کند فاکتور کامل
+   * تسویه شده یا باقی‌مانده با «پرداخت در محل» پوشش داده شده؛ پیام متناسب
+   * نمایش داده می‌شود و در صورت نهایی‌شدن، وضعیت سفارش رفرش می‌شود.
    */
-  async function handleFinalize() {
-    setError(null)
-    setFinalizeMsg(null)
-    setFinalizing(true)
+  async function runFinalizeCheck() {
     try {
       const res = await fetch('/api/orders/finalize-split', {
         method: 'POST',
@@ -311,6 +317,38 @@ export default function SplitPaymentPanel({
       if (data.finalized) onDone()
     } catch {
       setError('خطا در ارتباط با سرور')
+    }
+  }
+
+  /**
+   * 🎯 پچ ۵۰-هـ-ش: «ثبت و پرداخت ترکیبی» بعد از ثبت بخش‌ها (وقتی انتقال به
+   * درگاه در کار نیست) خودش تسویه را بررسی و سفارش را نهایی می‌کند — مثلاً
+   * «کل مبلغ» نقدی در محل → سفارش همین‌جا تأیید و برای مدیر ارسال می‌شود.
+   */
+  async function handleSubmit() {
+    setBusy(true)
+    try {
+      const r = await processParts()
+      if (r !== 'done') return
+      await runFinalizeCheck()
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  /**
+   * 🎯 پچ ۵۰-هـ-ش: دکمهٔ «نهایی کردن سفارش و ارسال به کافه» — اول بخش‌های
+   * تیک‌خورده را اعلام/پرداخت می‌کند (بدون نیاز به زدن دکمهٔ ثبت به‌صورت جدا)،
+   * بعد تسویه را بررسی و سفارش را نهایی می‌کند. بدون تخصیص، فقط بررسی می‌کند.
+   */
+  async function handleFinalize() {
+    setFinalizeMsg(null)
+    setFinalizing(true)
+    try {
+      const hasAlloc = sel.some((m) => (amounts[m] ?? 0) >= MIN_PART)
+      const r = hasAlloc ? await processParts() : 'done'
+      if (r !== 'done') return
+      await runFinalizeCheck()
     } finally {
       setFinalizing(false)
     }
@@ -516,8 +554,10 @@ export default function SplitPaymentPanel({
             {finalizing ? '...' : '✅ نهایی کردن سفارش و ارسال به کافه'}
           </button>
           <p className="order-payment-section-desc" style={{ marginTop: 6 }}>
-            بعد از پرداخت بخش‌ها (یا اعلام «پرداخت در محل» برای باقی‌مانده) این
-            دکمه را بزن؛ اگر مبلغ فاکتور کامل نشده باشد پیام راهنما می‌بینی.
+            هر دو دکمه بخش‌های تیک‌خورده را پرداخت/اعلام می‌کنند؛ «ارسال به کافه»
+            بعدش تسویه را بررسی می‌کند: اگر مبلغ کامل شده باشد (یا باقی‌مانده
+            «پرداخت در محل» اعلام شده باشد) سفارش نهایی و برای کافه ارسال
+            می‌شود، وگرنه پیام راهنما می‌بینی.
           </p>
           {finalizeMsg && (
             <div
