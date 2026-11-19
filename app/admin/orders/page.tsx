@@ -31,8 +31,11 @@ export default async function OrdersPage() {
     db
       .from('orders')
       .select('*')
+      // 🎯 پچ ۵۰-هـ-ع: سفارش‌های نهایی‌شدهٔ مشتری (customer_confirmed) و
+      // پرداخت‌های ترکیبیِ partial هم به پنل مدیر بیایند — قبلاً split+unpaid
+      // فیلتر می‌شد و «پرداخت در محل» ترکیبی اصلاً دیده نمی‌شد
       .or(
-        'payment_method.in.(cash,card),payment_method.is.null,payment_status.eq.paid,and(payment_status.eq.pending_review,or(payment_receipt_url.not.is.null,payment_note.not.is.null))'
+        'payment_method.in.(cash,card),payment_method.is.null,payment_status.eq.paid,payment_status.eq.partial,customer_confirmed.eq.true,and(payment_status.eq.pending_review,or(payment_receipt_url.not.is.null,payment_note.not.is.null))'
       )
       .order('created_at', { ascending: false })
       .limit(200),

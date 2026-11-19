@@ -79,6 +79,8 @@ type Order = {
   takeaway_fee_total?: number | null
   status: string
   created_at: string
+  // 🎯 پچ ۵۰-هـ-ع: نهایی‌شدن سفارش توسط مشتری (پرداخت ترکیبی/در محل)
+  customer_confirmed?: boolean
   cancellation_reason_id: string | null
   cancellation_reason_label: string | null
   cancellation_note: string | null
@@ -383,7 +385,14 @@ export default function OrdersManager({
   const counts = useMemo(() => {
     const activeOrders = orders.filter((o) => !o.deleted_at)
     return {
-      pending: activeOrders.filter((o) => o.status === 'pending').length,
+      // 🎯 پچ ۵۰-هـ-ع: نهایی‌شده‌های مشتری (پرداخت در محل ترکیبی) هم شمرده می‌شوند
+      pending: activeOrders.filter(
+        (o) =>
+          o.status === 'pending' ||
+          (o.status === 'confirmed' &&
+            o.customer_confirmed === true &&
+            o.payment_status !== 'paid')
+      ).length,
       // 🎯 پچ ۵۰-هـ-م: شمارش آماده‌سازی/آمادهٔ تحویل برای تب‌های جدید
       preparing: activeOrders.filter((o) => o.status === 'preparing').length,
       ready: activeOrders.filter((o) => o.status === 'ready').length,
@@ -416,7 +425,15 @@ export default function OrdersManager({
 
     if (!trashMode) {
       if (filter === 'pending') {
-        result = result.filter((o) => o.status === 'pending')
+        // 🎯 پچ ۵۰-هـ-ع: سفارش‌های نهایی‌شدهٔ مشتری (تأیید مشتری + تسویه‌نشده)
+        // هم در تب «در انتظار» می‌آیند تا مدیر آن‌ها را از دست ندهد
+        result = result.filter(
+          (o) =>
+            o.status === 'pending' ||
+            (o.status === 'confirmed' &&
+              o.customer_confirmed === true &&
+              o.payment_status !== 'paid')
+        )
       } else if (filter === 'preparing') {
         // 🎯 پچ ۵۰-هـ-م: از چیپ «در آماده‌سازی» صفحهٔ POS
         result = result.filter((o) => o.status === 'preparing')
@@ -1225,6 +1242,25 @@ export default function OrdersManager({
                   </div>
                 </div>
 
+                  {/* 🎯 پچ ۵۰-هـ-ع: سفارش نهایی‌شدهٔ مشتری — آمادهٔ شروع آماده‌سازی */}
+                  {order.customer_confirmed &&
+                    order.status === 'confirmed' &&
+                    order.payment_status !== 'paid' && (
+                      <div
+                        style={{
+                          marginTop: '6px',
+                          fontSize: '12px',
+                          fontWeight: 700,
+                          color: '#2d5d3e',
+                          background: '#eef7f0',
+                          border: '1px solid #cfe4d6',
+                          padding: '4px 8px',
+                          borderRadius: '6px',
+                        }}
+                      >
+                        ✅ مشتری سفارش را نهایی کرد — آمادهٔ شروع آماده‌سازی
+                      </div>
+                    )}
                 <div
                   className={`order-payment-badge-inline ${order.payment_status || 'unpaid'}`}
                 >
