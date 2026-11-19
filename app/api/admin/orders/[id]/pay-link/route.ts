@@ -127,6 +127,22 @@ export async function POST(
       return NextResponse.json({ error: paymentErrorMessage(addErr?.message) }, { status: 400 })
     }
 
+    // 🎯 پچ ۵۲: مهر اپراتور/شیفت روی ردیف لینک پرداخت — چه کسی لینک را صادر کرد
+    try {
+      const { data: openShift } = await db
+        .from('shifts')
+        .select('id')
+        .eq('opened_by', auth.userId)
+        .is('closed_at', null)
+        .maybeSingle()
+      await db.from('order_payments').update({
+        operator_id: auth.userId,
+        ...(openShift?.id ? { shift_id: openShift.id } : {}),
+      }).eq('id', paymentId)
+    } catch (stampErr) {
+      console.error('[admin/pay-link] stamp:', stampErr)
+    }
+
     const failPayment = async (reason: string) => {
       const { error } = await db.rpc('set_order_payment_status', {
         p_payment_id: paymentId,

@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { supabaseBrowser } from '@/lib/supabase/client'
 import AdminThemeToggle from './components/AdminThemeToggle'
 import NewOrderAlert from './components/NewOrderAlert'
+import ShiftGate from './components/ShiftGate'
 import { useOrderNotifications } from '@/lib/use-order-notifications'
 import { useDocumentTitle } from '@/lib/use-document-title'
 
@@ -313,6 +314,9 @@ export default function AdminLayout({
           aria-hidden="true"
         />
       )}
+
+      {/* 🎯 پچ ۵۲: دروازهٔ شیفت — بدون شیفت باز، مودال باز کردن/تحویل خودکار می‌آید */}
+      <ShiftGate />
 
       {/* ═══════════ هدر موبایل (فقط < 768px) ═══════════ */}
       <header className="admin-mobile-header">
