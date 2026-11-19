@@ -8,6 +8,7 @@ import {
   deviceOwnsOrderRow,
   UUID_RE,
 } from '@/lib/orders/owner'
+import { parseCashPledges } from '@/lib/orders/cash-pledge'
 
 export const dynamic = 'force-dynamic'
 
@@ -119,6 +120,9 @@ export async function GET(
           ...(data as any),
           paid_amount: paidAmount,
           refund_pending: refundPending,
+          // 🎯 پچ ۵۰-هـ-ص: جمع اعلام‌های «پرداخت در محل» پرداخت ترکیبی — برای
+          // بنر «سفارش نهایی شد و برای کافه ارسال شد» در صفحهٔ مشتری
+          cash_pledge_total: parseCashPledges((data as any).payment_note),
         },
       },
       { headers: { 'Cache-Control': 'no-store' } }

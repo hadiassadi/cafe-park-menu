@@ -8,6 +8,8 @@ import {
   deviceOwnsOrderRow,
   UUID_RE,
 } from '@/lib/orders/owner'
+import { parseCashPledges } from '@/lib/orders/cash-pledge'
+import { sendPushToOrder } from '@/lib/push/send-push'
 
 export const dynamic = 'force-dynamic'
 
@@ -17,31 +19,11 @@ export const dynamic = 'force-dynamic'
  * دکمهٔ «نهایی کردن سفارش» را می‌زند؛ سرور بررسی می‌کند:
  *   ۱) ماندهٔ واقعی = subtotal − (confirmed + pending_review)
  *   ۲) مجموع اعلام‌های نقدیِ ثبت‌شده در payment_note
- * اگر مانده صفر باشد یا اعلام نقدی آن را پوشش دهد → برای سفارشِ
- * در وضعیت pending پرچم customer_confirmed = true (ارسال/تأیید به مدیر)
+ * اگر مانده صفر باشد یا اعلام نقدی آن را پوشش دهد → نهایی‌سازی واقعی:
+ * customer_confirmed = true و سفارشِ pending به confirmed می‌رود (ورود به
+ * جریان کافه/لیست فعال + پوش «تأیید شد» برای مشتری — مثل autoConfirmed ادمین)
  * و پیام متناسب برمی‌گردد؛ در غیر این صورت مانده + راهنمای روش‌ها.
  */
-
-function faToEn(s: string): string {
-  return s
-    .replace(/[۰-۹]/g, (d) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d)))
-    .replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
-}
-
-/** جمع «اعلام نقدی در محل: X تومان»های ثبت‌شده در یادداشت پرداخت
- * 🎯 پچ ۵۰-هـ-ش: پارس مقاوم — همه‌چیز بین «اعلام نقدی در محل:» و «تومان»
- * گرفته می‌شود و هر رقم (فارسی/عربی/انگلیسی، با هر جداکننده) استخراج می‌شود. */
-function parseCashPledges(note: string | null | undefined): number {
-  if (!note) return 0
-  let total = 0
-  const re = /اعلام نقدی در محل:\s*([^:]*?)\s*تومان/g
-  let m: RegExpExecArray | null
-  while ((m = re.exec(note)) !== null) {
-    const n = parseInt(faToEn(m[1]).replace(/[^\d]/g, ''), 10)
-    if (Number.isFinite(n) && n > 0) total += n
-  }
-  return total
-}
 
 export async function POST(req: NextRequest) {
   try {
@@ -95,17 +77,34 @@ export async function POST(req: NextRequest) {
     const pledgedCash = parseCashPledges(order.payment_note)
     const fa = (n: number) => n.toLocaleString('fa-IR')
 
-    // نهایی‌سازی = customer_confirmed (فقط برای سفارشِ در انتظار تأیید مشتری)
+    // نهایی‌سازی واقعی — 🎯 پچ ۵۰-هـ-ص: مثل «تأیید پرداخت» ادمین (actions.ts
+    // autoConfirmed)، سفارشِ در انتظار از pending به confirmed می‌رود تا واقعاً
+    // وارد جریان کافه شود (لیست فعال POS + پنل مدیر) و مشتری هم پوش دریافت کند.
     const finalize = async () => {
-      if (order.status === 'pending' && !order.customer_confirmed) {
-        const { error: updErr } = await db
+      let changed = false
+      if (!order.customer_confirmed || order.status === 'pending') {
+        const updates: Record<string, unknown> = { customer_confirmed: true }
+        if (order.status === 'pending') {
+          updates.status = 'confirmed'
+          updates.confirmed_at = new Date().toISOString()
+        }
+        const { data: upd, error: updErr } = await db
           .from('orders')
-          .update({ customer_confirmed: true })
+          .update(updates)
           .eq('id', order.id)
-          .eq('status', 'pending')
           .is('deleted_at', null)
+          .select('id')
         if (updErr) {
-          console.error('[orders/finalize-split] confirm:', updErr)
+          console.error('[orders/finalize-split] finalize:', updErr)
+        }
+        changed = (upd?.length ?? 0) > 0
+      }
+      if (changed) {
+        // نوتیفیکیشن مشتری: «سفارش تأیید شد» — بهترین تلاش، خطا نادیده
+        try {
+          await sendPushToOrder(order.id, 'confirmed')
+        } catch (e) {
+          console.error('[orders/finalize-split] push:', e)
         }
       }
     }
