@@ -661,81 +661,26 @@ export default function OrdersManager({
     setSettleMethod('cash')
   }
 
-  async function confirmSettle() {
+  // 🎯 پچ ۵۰-و-ب: ثبت پرداخت حالا در پنل مشترک AdminSplitPayment انجام می‌شود
+  // (همهٔ روش‌ها + انتخاب صندوق نقدی/کارت‌خوان روی دفتر)؛ این تابع فقط بعد از
+  // ثبت موفق، «تسویه و تحویل» را کامل می‌کند و لیست را تازه می‌کند
+  async function completeSettleAfterPayment() {
     if (!settleOrder) return
-    setSettling(true)
-    setLoading(true)
-
-    try {
-      const payRes = await updatePaymentStatus(
-        settleOrder.id,
-        'paid',
-        settleNote.trim() || 'تسویه در محل',
-        // 🎯 پچ ۵۰-هـ-او: حالت split از مسیر confirmSettle رد نمی‌شود (دکمه مخفی)
-        settleMethod === 'split' ? 'cash' : settleMethod
+    if (settleAndDeliver) {
+      const statusRes = await updateOrderStatus(
+        (() => {
+          const fd = new FormData()
+          fd.append('id', settleOrder.id)
+          fd.append('status', 'delivered')
+          return fd
+        })()
       )
-
-      if (payRes.error) {
-        alert('❌ خطا در ثبت پرداخت: ' + payRes.error)
-        return
+      if (statusRes?.error) {
+        alert('❌ خطا در تغییر وضعیت: ' + statusRes.error)
       }
-
-      let newStatus = settleOrder.status
-      if (settleAndDeliver) {
-        const statusRes = await updateOrderStatus(
-          (() => {
-            const fd = new FormData()
-            fd.append('id', settleOrder.id)
-            fd.append('status', 'delivered')
-            return fd
-          })()
-        )
-        if (statusRes?.error) {
-          alert('❌ خطا در تغییر وضعیت: ' + statusRes.error)
-        } else {
-          newStatus = 'delivered'
-        }
-      }
-
-        const remaining =
-          Math.max(0, settleOrder.subtotal - (settleOrder.paid_amount ?? 0))
-        const updated = {
-        ...settleOrder,
-        payment_status: 'paid',
-        payment_method: settleMethod,
-        payment_note: settleNote.trim() || settleOrder.payment_note,
-        paid_amount: settleOrder.subtotal,
-        status: newStatus,
-        // 🎯 پچ ۵۰-هـ-ف: ردیف تازهٔ تسویه در دفتر نمایشی هم دیده شود
-        order_payments:
-          remaining > 0
-            ? [
-                ...(settleOrder.order_payments ?? []),
-                {
-                  method: settleMethod === 'split' ? 'cash' : settleMethod,
-                  amount: remaining,
-                  status: 'confirmed',
-                  created_at: new Date().toISOString(),
-                },
-              ]
-            : settleOrder.order_payments ?? [],
-      }
-
-
-      setOrders((prev) =>
-        prev.map((o) => (o.id === settleOrder.id ? updated : o))
-      )
-      if (selectedOrder?.id === settleOrder.id) {
-        setSelectedOrder(updated)
-      }
-
-      closeSettleModal()
-    } catch {
-      alert('❌ خطای غیرمنتظره در تسویه')
-    } finally {
-      setSettling(false)
-      setLoading(false)
     }
+    closeSettleModal()
+    router.refresh()
   }
 
   async function confirmDeliverWithoutPayment() {
@@ -1985,108 +1930,51 @@ export default function OrdersManager({
                 </div>
               )}
 
-              <div style={{ marginBottom: '16px' }}>
-                <label
-                  style={{
-                    fontSize: '13px',
-                    fontWeight: 700,
-                    display: 'block',
-                    marginBottom: '8px',
-                  }}
-                >
-                  نحوه پرداخت:
-                </label>
-                {/* 🎯 پچ ۵۰-هـ-وِی: چیپ‌های فشرده به‌جای دکمه‌های بزرگ ردیفی */}
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                  {(
-                    [
-                      ['cash', '💵', 'نقدی'],
-                      ['card', '💳', 'کارت‌خوان'],
-                      ['online', '🌐', 'درگاه'],
-                      ['transfer', '🏦', 'کارت‌به‌کارت'],
-                      ['split', '🧩', 'ترکیبی'],
-                    ] as const
-                  ).map(([key, icon, label]) => (
-                    <button
-                      key={key}
-                      type="button"
-                      onClick={() => setSettleMethod(key)}
-                      style={{
-                        fontSize: 12.5,
-                        padding: '6px 12px',
-                        borderRadius: 999,
-                        border: `1px solid ${settleMethod === key ? '#2d5d3e' : '#d8d0c4'}`,
-                        background: settleMethod === key ? '#2d5d3e' : '#fff',
-                        color: settleMethod === key ? '#fff' : '#4b443b',
-                        cursor: 'pointer',
-                        font: 'inherit',
-                        fontWeight: 600,
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      {settleMethod === key ? '✓ ' : ''}
-                      {icon} {label}
-                    </button>
-                  ))}
-                </div>
-                {settleMethod !== 'split' && (
-                  <div style={{ fontSize: 11.5, color: '#766f64', marginTop: 6 }}>
-                    کل باقی‌مانده با این روش ثبت می‌شود؛ برای تقسیم مبلغ، «🧩 ترکیبی» را
-                    انتخاب کن.
-                  </div>
-                )}
-              </div>
-
-            {settleMethod !== 'split' && (
-              <div
-                className="field"
-                style={{ marginBottom: '16px' }}
+            {/* 🎯 پچ ۵۰-و-ب: یادداشت اختیاری تسویه — همیشه در دسترس */}
+            <div className="field" style={{ marginBottom: '16px' }}>
+              <label
+                style={{
+                  fontSize: '13px',
+                  fontWeight: '700',
+                  display: 'block',
+                  marginBottom: '8px',
+                }}
               >
-                <label
-                  style={{
-                    fontSize: '13px',
-                    fontWeight: 700,
-                    display: 'block',
-                    marginBottom: '8px',
-                  }}
-                >
-                  یادداشت (اختیاری):
-                </label>
-                <textarea
-                  value={settleNote}
-                  onChange={(e) => setSettleNote(e.target.value)}
-                  placeholder="مثلاً: کارت‌خوان بانک ملت، دستگاه ۲..."
-                  rows={3}
-                  disabled={settling}
-                  style={{
-                    width: '100%',
-                    padding: '12px',
-                    borderRadius: '10px',
-                    border: '1px solid #d8d0c4',
-                    fontFamily: 'inherit',
-                    resize: 'vertical',
-                  }}
-                />
-              </div>
-            )}
+                یادداشت (اختیاری):
+              </label>
+              <textarea
+                value={settleNote}
+                onChange={(e) => setSettleNote(e.target.value)}
+                placeholder="مثلاً: کارت‌خوان بانک ملت، دستگاه ۲..."
+                rows={3}
+                disabled={settling}
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  borderRadius: '10px',
+                  border: '1px solid #d8d0c4',
+                  fontFamily: 'inherit',
+                  resize: 'vertical',
+                }}
+              />
+            </div>
 
-            {settleMethod === 'split' && (
-              // 🎯 پچ ۵۰-هـ-او: پنل پرداخت ترکیبی — هر بخش همان‌جا روی دفتر ثبت می‌شود
-              <div style={{ marginBottom: '16px' }}>
-                <AdminSplitPayment
-                  orderId={settleOrder.id}
-                  remaining={Math.max(
-                    0,
-                    settleOrder.subtotal - (settleOrder.paid_amount ?? 0)
-                  )}
-                  onDone={() => {
-                    closeSettleModal()
-                    router.refresh()
-                  }}
-                  onCancel={() => setSettleMethod('cash')}
-                />
-              </div>
-            )}
+            {/* 🎯 پچ ۵۰-و-ب: مودال تسویهٔ مشترک — همان پنل POS برای همهٔ روش‌ها؛
+                روش ذخیره‌شدهٔ سفارش پیش‌فرض تیک می‌خورد (کل باقی‌مانده) و
+                چیپ‌های صندوق نقدی/کارت‌خوان (حتی تک‌گزینه) زیر ردیف می‌آیند */}
+            <div style={{ marginBottom: '16px' }}>
+              <AdminSplitPayment
+                orderId={settleOrder.id}
+                remaining={Math.max(
+                  0,
+                  settleOrder.subtotal - (settleOrder.paid_amount ?? 0)
+                )}
+                initialMethod={settleMethod !== 'split' ? settleMethod : undefined}
+                note={settleNote}
+                onDone={completeSettleAfterPayment}
+                onCancel={closeSettleModal}
+              />
+            </div>
 
             {settleMethod !== 'split' && settleAndDeliver && (
                 <>
@@ -2131,21 +2019,8 @@ export default function OrdersManager({
               >
                 انصراف
               </button>
-              {/* 🎯 پچ ۵۰-هـ-او: در حالت ترکیبی، ثبت از داخل پنل انجام می‌شود */}
-              {settleMethod !== 'split' && (
-                <button
-                  type="button"
-                  className="btn primary-btn"
-                  onClick={confirmSettle}
-                  disabled={settling}
-                >
-                  {settling
-                    ? '...'
-                    : settleAndDeliver
-                      ? '✅ تسویه و تحویل'
-                      : '✅ ثبت تسویه'}
-                </button>
-              )}
+              {/* 🎯 پچ ۵۰-و-ب: ثبت پرداخت از داخل پنل مشترک AdminSplitPayment
+                  انجام می‌شود؛ «تسویه و تحویل» هم همان‌جا بعد از ثبت کامل می‌شود */}
             </div>
           </div>
         </div>

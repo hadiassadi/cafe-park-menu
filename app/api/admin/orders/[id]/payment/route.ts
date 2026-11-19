@@ -77,6 +77,8 @@ export async function POST(
         .select('id')
         .eq('id', deviceId)
         .eq('is_active', true)
+        // 🎯 ۵۰-و-ب: فقط حساب‌هایی که تیک «کارتخوان» دارند قابل انتخاب‌اند
+        .eq('is_card_reader', true)
         .maybeSingle()
       if (!dev) {
         return NextResponse.json(
@@ -85,6 +87,12 @@ export async function POST(
         )
       }
     }
+
+    // 🎯 پچ ۵۰-و-ب: یادداشت اختیاری تسویه — پیش‌فرض مثل قبل
+    const payNote =
+      typeof body?.note === 'string' && body.note.trim()
+        ? body.note.trim().slice(0, 200)
+        : 'ثبت از POS'
 
     // سفارش: فقط زنده‌ها
     const { data: order, error: orderErr } = await db
@@ -127,7 +135,7 @@ export async function POST(
       p_amount: amount,
       p_created_by: 'admin',
       p_status: 'confirmed',
-      p_note: 'ثبت از POS',
+      p_note: payNote,
     })
     if (payErr) {
       console.error('[admin orders payment] rpc:', payErr)

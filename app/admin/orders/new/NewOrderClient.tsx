@@ -658,7 +658,12 @@ export default function NewOrderClient({
   const [payModalOrder, setPayModalOrder] = useState<PosOrderRow | null>(null)
   // 🎯 پچ ۵۰-و-الف: صندوق‌های نقدی/کارت‌خوان‌های فعال + انتخاب در تسویهٔ فوری
   const [instruments, setInstruments] = useState<{
-    registers: Array<{ id: string; name: string; location?: string | null }>
+    registers: Array<{
+      id: string
+      name: string
+      location?: string | null
+      is_mine?: boolean
+    }>
     devices: Array<{ id: string; name: string; label?: string | null }>
   }>({ registers: [], devices: [] })
   const [payChoice, setPayChoice] = useState<{
@@ -1517,19 +1522,27 @@ export default function NewOrderClient({
     setBusy(false)
   }
 
-  // 🎯 پچ ۵۰-و-الف: اگر بیش از یک صندوق/دستگاه فعال است، اول انتخاب می‌آید
+  // 🎯 پچ ۵۰-و-ب: صندوق/کارت‌خوان همیشه انتخاب می‌آید (حتی تک‌گزینه)؛
+  // پیش‌فرض نقدی = صندوقِ مالکِ همین اپراتور (⭐)، وگرنه اولین صندوق فعال
+  function myRegisterId(): string | undefined {
+    return (
+      instruments.registers.find((r) => r.is_mine)?.id ??
+      instruments.registers[0]?.id
+    )
+  }
+
   function startPayChoice(m: 'cash' | 'card' | 'online' | 'split') {
-    if (m === 'cash' && instruments.registers.length > 1) {
-      setPayChoice({ method: 'cash', regId: instruments.registers[0].id })
+    if (m === 'cash' && instruments.registers.length > 0) {
+      setPayChoice({ method: 'cash', regId: myRegisterId() })
       return
     }
-    if (m === 'card' && instruments.devices.length > 1) {
+    if (m === 'card' && instruments.devices.length > 0) {
       setPayChoice({ method: 'card', devId: instruments.devices[0].id })
       return
     }
     payRegister(
       m,
-      m === 'cash' ? instruments.registers[0]?.id : undefined,
+      m === 'cash' ? myRegisterId() : undefined,
       m === 'card' ? instruments.devices[0]?.id : undefined
     )
   }

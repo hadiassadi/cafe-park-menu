@@ -14,7 +14,16 @@ import { useEffect, useMemo, useState } from 'react'
 type MethodKey = 'cash' | 'card' | 'online' | 'transfer'
 
 // 🎯 پچ ۵۰-و-الف: صندوق‌های نقدی / کارتخوان‌های فعال (زیرساخت پرداخت POS)
-type Instrument = { id: string; name: string; location?: string | null; label?: string | null }
+// 🎯 پچ ۵۰-و-ب: is_mine = صندوقِ مالکِ همین اپراتور · bank_name/card_last4 = حساب بانکی
+type Instrument = {
+  id: string
+  name: string
+  location?: string | null
+  label?: string | null
+  is_mine?: boolean
+  bank_name?: string | null
+  card_last4?: string | null
+}
 
 const METHODS: Array<{ key: MethodKey; icon: string; label: string }> = [
   { key: 'cash', icon: '💵', label: 'نقدی' },
@@ -37,6 +46,9 @@ type Props = {
   remaining: number
   onDone: () => void
   onCancel?: () => void
+  // 🎯 پچ ۵۰-و-ب: مودال تسویهٔ مشترک — روشِ پیش‌فرض (کل باقی‌مانده) + یادداشت
+  initialMethod?: MethodKey | null
+  note?: string
 }
 
 export default function AdminSplitPayment({
@@ -44,15 +56,23 @@ export default function AdminSplitPayment({
   remaining,
   onDone,
   onCancel,
+  initialMethod,
+  note,
 }: Props) {
-  const [selected, setSelected] = useState<MethodKey[]>([])
-  const [amounts, setAmounts] = useState<Partial<Record<MethodKey, number>>>({})
-  const [locked, setLocked] = useState<MethodKey | null>(null) // «کل مبلغ»
+  // 🎯 ۵۰-و-ب: روشِ پیش‌فرض همان «کل مبلغ» تیک می‌خورد (مثل رفتار قبلی تسویهٔ تک‌روشی)
+  const preTick =
+    !!initialMethod && remaining > 0 ? ([initialMethod] as MethodKey[]) : []
+  const [selected, setSelected] = useState<MethodKey[]>(preTick)
+  const [amounts, setAmounts] = useState<Partial<Record<MethodKey, number>>>(
+    preTick.length ? { [initialMethod as MethodKey]: remaining } : {}
+  )
+  const [locked, setLocked] = useState<MethodKey | null>(preTick[0] ?? null) // «کل مبلغ»
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [doneParts, setDoneParts] = useState<MethodKey[]>([])
 
   // 🎯 پچ ۵۰-و-الف: صندوق/دستگاه انتخابی هر روش — پیش‌فرض = اولین فعال
+  // 🎯 پچ ۵۰-و-ب: اگر صندوقِ خود اپراتور تعریف شده باشد، همان پیش‌فرض است
   const [instruments, setInstruments] = useState<{
     registers: Instrument[]
     devices: Instrument[]
@@ -69,7 +89,9 @@ export default function AdminSplitPayment({
         const registers: Instrument[] = Array.isArray(d.registers) ? d.registers : []
         const devices: Instrument[] = Array.isArray(d.devices) ? d.devices : []
         setInstruments({ registers, devices })
-        setCashRegisterId((cur) => cur ?? registers[0]?.id)
+        setCashRegisterId(
+          (cur) => cur ?? registers.find((r) => r.is_mine)?.id ?? registers[0]?.id
+        )
         setCardDeviceId((cur) => cur ?? devices[0]?.id)
       })
       .catch(() => {})
@@ -210,9 +232,11 @@ export default function AdminSplitPayment({
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           // 🎯 پچ ۵۰-و-الف: صندوق نقدی / کارت‌خوان انتخابی همراه ردیف ثبت می‌شود
+          // 🎯 پچ ۵۰-و-ب: یادداشت اختیاری تسویه
           body: JSON.stringify({
             method: p.k,
             amount: p.amount,
+            ...(note && note.trim() ? { note: note.trim().slice(0, 200) } : {}),
             ...(p.k === 'cash' && cashRegisterId
               ? { register_id: cashRegisterId }
               : {}),
@@ -400,9 +424,11 @@ export default function AdminSplitPayment({
               </button>
             </div>
 
-            {/* 🎯 پچ ۵۰-و-الف: انتخاب صندوق نقدی / کارت‌خوان — وقتی بیش از یکی فعال است */}
-            {k === 'cash' && instruments.registers.length > 1 && (
-              <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 6 }}>
+            {/* 🎯 پچ ۵۰-و-ب: انتخاب صندوق نقدی — همیشه دیده می‌شود (حتی تک‌صندوق)؛
+                صندوقِ مالکِ اپراتور با ⭐ پیش‌فرض است */}
+            {k === 'cash' && instruments.registers.length > 0 && (
+              <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 6, alignItems: 'center' }}>
+                <span style={{ fontSize: 11.5, color: '#8a8378' }}>صندوق:</span>
                 {instruments.registers.map((r) => (
                   <button
                     key={r.id}
@@ -417,13 +443,15 @@ export default function AdminSplitPayment({
                     onClick={() => setCashRegisterId(r.id)}
                     title={r.location || undefined}
                   >
+                    {r.is_mine ? '⭐ ' : ''}
                     🧰 {r.name}
                   </button>
                 ))}
               </div>
             )}
-            {k === 'card' && instruments.devices.length > 1 && (
-              <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 6 }}>
+            {k === 'card' && instruments.devices.length > 0 && (
+              <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 6, alignItems: 'center' }}>
+                <span style={{ fontSize: 11.5, color: '#8a8378' }}>کارت‌خوان:</span>
                 {instruments.devices.map((d) => (
                   <button
                     key={d.id}
@@ -436,9 +464,14 @@ export default function AdminSplitPayment({
                     }}
                     disabled={busy}
                     onClick={() => setCardDeviceId(d.id)}
-                    title={d.label || undefined}
+                    title={
+                      [d.bank_name, d.card_last4 ? 'کارت ' + d.card_last4 : null, d.label]
+                        .filter(Boolean)
+                        .join(' · ') || undefined
+                    }
                   >
                     📟 {d.name}
+                    {d.bank_name ? ` (${d.bank_name})` : ''}
                   </button>
                 ))}
               </div>

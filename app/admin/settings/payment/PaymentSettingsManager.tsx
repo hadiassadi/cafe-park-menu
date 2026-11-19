@@ -6,11 +6,13 @@ import {
   getPaymentSettings,
   updatePaymentSettings,
   listPaymentInstruments,
+  listAdminUsers,
   createCashRegister,
   updateCashRegister,
   createPosDevice,
   updatePosDevice,
   type PaymentInstrument,
+  type AdminUserOption,
   type PaymentSettings,
 } from './actions'
 
@@ -20,19 +22,307 @@ const GATEWAY_OPTIONS = [
   { value: 'nextpay', label: 'نکست‌پی', icon: '💳' },
 ]
 
-// ─── 🎯 پچ ۵۰-و-الف: مدیریت صندوق‌های نقدی و کارتخوان‌ها ───
-function InstrumentSection({
-  kind,
+// ─── 🎯 پچ ۵۰-و-الف/ب: مدیریت صندوق‌های نقدی و حساب‌های بانکی ───
+
+function OwnerSelect({
+  users,
+  value,
+  onChange,
 }: {
-  kind: 'cash_registers' | 'pos_devices'
+  users: AdminUserOption[]
+  value: string
+  onChange: (v: string) => void
 }) {
-  const isRegister = kind === 'cash_registers'
+  return (
+    <div className="field">
+      <label>مالک صندوق</label>
+      <select value={value} onChange={(e) => onChange(e.target.value)}>
+        <option value="">مشترک — همهٔ اپراتورها</option>
+        {users.map((u) => (
+          <option key={u.id} value={u.id}>
+            {u.name}
+            {u.email ? ` (${u.email})` : ''}
+          </option>
+        ))}
+      </select>
+      <small>
+        در تسویهٔ نقدی، صندوقِ مالکِ همان اپراتور به‌صورت پیش‌فرض انتخاب می‌شود؛
+        صندوق بدون مالک برای همه دیده می‌شود.
+      </small>
+    </div>
+  )
+}
+
+function CashRegisterSection() {
   const [items, setItems] = useState<PaymentInstrument[]>([])
+  const [users, setUsers] = useState<AdminUserOption[]>([])
   const [loading, setLoading] = useState(true)
-  const [name, setName] = useState('')
-  const [extra, setExtra] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // افزودن
+  const [name, setName] = useState('')
+  const [location, setLocation] = useState('')
+  const [owner, setOwner] = useState('')
+  // ویرایش
+  const [editId, setEditId] = useState<string | null>(null)
+  const [eName, setEName] = useState('')
+  const [eLocation, setELocation] = useState('')
+  const [eOwner, setEOwner] = useState('')
+
+  async function reload() {
+    const [res, ures] = await Promise.all([
+      listPaymentInstruments(),
+      listAdminUsers(),
+    ])
+    if (res.error) {
+      setError(res.error)
+    } else {
+      setError(null)
+      setItems(res.registers ?? [])
+    }
+    if (ures.users) setUsers(ures.users)
+    setLoading(false)
+  }
+
+  useEffect(() => {
+    reload()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  async function run(fn: () => Promise<{ success?: boolean; error?: string }>) {
+    setBusy(true)
+    setError(null)
+    const res = await fn()
+    if (res.error) setError(res.error)
+    await reload()
+    setBusy(false)
+  }
+
+  function startEdit(it: PaymentInstrument) {
+    setEditId(it.id)
+    setEName(it.name)
+    setELocation(it.location ?? '')
+    setEOwner(it.owner_id ?? '')
+  }
+
+  const ownerName = (oid: string | null) =>
+    oid ? (users.find((u) => u.id === oid)?.name ?? '—') : 'مشترک'
+
+  return (
+    <section className="admin-card payment-section">
+      <div className="payment-section-header-static">
+        <div className="payment-section-icon">🧰</div>
+        <div>
+          <h2 className="payment-section-title">صندوق‌های نقدی</h2>
+          <p className="payment-section-hint">
+            در تسویهٔ نقدی POS انتخاب می‌شود — مجموع صندوق‌ها = موجودی کل نقدی
+            (مبنای بستن شیفت و مغایرت‌گیری)
+          </p>
+        </div>
+      </div>
+
+      {loading ? (
+        <p className="empty-admin">⏳ در حال بارگذاری...</p>
+      ) : (
+        <>
+          {error && <div className="admin-error">❌ {error}</div>}
+          {items.length === 0 && (
+            <p className="empty-admin">
+              هنوز صندوقی نساخته‌ای — اولین را اضافه کن (برای هر اپراتور می‌توانی
+              صندوق جداگانه با مالک بسازی).
+            </p>
+          )}
+          {items.map((it) => (
+            <div key={it.id}>
+              <div
+                className="payment-toggle-row"
+                style={{ alignItems: 'center' }}
+              >
+                <div className="payment-toggle-info">
+                  <strong>
+                    🧰 {it.name}{' '}
+                    {!it.is_active && (
+                      <span style={{ color: '#9b3c32', fontSize: 12 }}>
+                        (غیرفعال)
+                      </span>
+                    )}
+                  </strong>
+                  <small>
+                    {it.location || '—'} · مالک: {ownerName(it.owner_id)}
+                  </small>
+                </div>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <button
+                    type="button"
+                    className="btn"
+                    style={{ fontSize: 12 }}
+                    disabled={busy}
+                    onClick={() =>
+                      editId === it.id ? setEditId(null) : startEdit(it)
+                    }
+                  >
+                    {editId === it.id ? 'بستن' : '✏️ ویرایش'}
+                  </button>
+                  <button
+                    type="button"
+                    className={`auto-switch ${it.is_active ? 'on' : 'off'}`}
+                    disabled={busy}
+                    onClick={() =>
+                      run(() =>
+                        updateCashRegister(it.id, { is_active: !it.is_active })
+                      )
+                    }
+                    title={it.is_active ? 'غیرفعال کردن' : 'فعال کردن'}
+                  >
+                    <span className="auto-switch-track">
+                      <span className="auto-switch-thumb" />
+                    </span>
+                  </button>
+                </div>
+              </div>
+
+              {editId === it.id && (
+                <div
+                  style={{
+                    border: '1px dashed #d8cfc0',
+                    borderRadius: 8,
+                    padding: 10,
+                    marginTop: 6,
+                    marginBottom: 6,
+                    background: '#fff',
+                  }}
+                >
+                  <div className="form-grid" style={{ alignItems: 'end' }}>
+                    <div className="field">
+                      <label>نام صندوق</label>
+                      <input
+                        type="text"
+                        value={eName}
+                        onChange={(e) => setEName(e.target.value)}
+                        disabled={busy}
+                      />
+                    </div>
+                    <div className="field">
+                      <label>محل استقرار</label>
+                      <input
+                        type="text"
+                        placeholder="مثلاً: کانتر جلو"
+                        value={eLocation}
+                        onChange={(e) => setELocation(e.target.value)}
+                        disabled={busy}
+                      />
+                    </div>
+                    <OwnerSelect users={users} value={eOwner} onChange={setEOwner} />
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                    <button
+                      type="button"
+                      className="btn primary-btn"
+                      disabled={busy || !eName.trim()}
+                      onClick={async () => {
+                        await run(() =>
+                          updateCashRegister(it.id, {
+                            name: eName,
+                            location: eLocation || null,
+                            owner_id: eOwner || null,
+                          })
+                        )
+                        setEditId(null)
+                      }}
+                    >
+                      💾 ذخیره
+                    </button>
+                    <button
+                      type="button"
+                      className="btn"
+                      onClick={() => setEditId(null)}
+                    >
+                      انصراف
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+
+          <div
+            style={{
+              borderTop: '1px dashed #e3ddd2',
+              marginTop: 12,
+              paddingTop: 12,
+            }}
+          >
+            <div className="form-grid" style={{ alignItems: 'end' }}>
+              <div className="field">
+                <label>نام صندوق جدید</label>
+                <input
+                  type="text"
+                  placeholder="مثلاً: صندوق بار"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  disabled={busy}
+                />
+              </div>
+              <div className="field">
+                <label>محل استقرار (اختیاری)</label>
+                <input
+                  type="text"
+                  placeholder="مثلاً: کانتر جلو"
+                  value={location}
+                  onChange={(e) => setLocation(e.target.value)}
+                  disabled={busy}
+                />
+              </div>
+              <OwnerSelect users={users} value={owner} onChange={setOwner} />
+            </div>
+            <button
+              type="button"
+              className="btn"
+              style={{ marginTop: 10 }}
+              disabled={busy || !name.trim()}
+              onClick={async () => {
+                const n = name
+                const l = location
+                const o = owner
+                setName('')
+                setLocation('')
+                setOwner('')
+                await run(() => createCashRegister(n, l || null, o || null))
+              }}
+            >
+              ➕ افزودن صندوق
+            </button>
+          </div>
+        </>
+      )}
+    </section>
+  )
+}
+
+function BankAccountSection() {
+  const [items, setItems] = useState<PaymentInstrument[]>([])
+  const [loading, setLoading] = useState(true)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  // افزودن
+  const [name, setName] = useState('')
+  const [bank, setBank] = useState('')
+  const [iban, setIban] = useState('')
+  const [accountNo, setAccountNo] = useState('')
+  const [cardNo, setCardNo] = useState('')
+  const [label, setLabel] = useState('')
+  const [asReader, setAsReader] = useState(true)
+  // ویرایش
+  const [editId, setEditId] = useState<string | null>(null)
+  const [e, setE] = useState({
+    name: '',
+    bank_name: '',
+    iban: '',
+    account_number: '',
+    card_number: '',
+    label: '',
+    is_card_reader: true,
+  })
 
   async function reload() {
     const res = await listPaymentInstruments()
@@ -40,7 +330,7 @@ function InstrumentSection({
       setError(res.error)
     } else {
       setError(null)
-      setItems((isRegister ? res.registers : res.devices) ?? [])
+      setItems(res.devices ?? [])
     }
     setLoading(false)
   }
@@ -59,18 +349,39 @@ function InstrumentSection({
     setBusy(false)
   }
 
+  function startEdit(it: PaymentInstrument) {
+    setEditId(it.id)
+    setE({
+      name: it.name,
+      bank_name: it.bank_name ?? '',
+      iban: it.iban ?? '',
+      account_number: it.account_number ?? '',
+      card_number: it.card_number ?? '',
+      label: it.label ?? '',
+      is_card_reader: it.is_card_reader,
+    })
+  }
+
+  const summary = (it: PaymentInstrument) =>
+    [
+      it.bank_name,
+      it.iban ? 'شبا: ' + it.iban : null,
+      it.account_number ? 'حساب: ' + it.account_number : null,
+      it.card_number ? 'کارت: ' + it.card_number : null,
+      it.label,
+    ]
+      .filter(Boolean)
+      .join(' · ') || '—'
+
   return (
     <section className="admin-card payment-section">
       <div className="payment-section-header-static">
-        <div className="payment-section-icon">{isRegister ? '🧰' : '📟'}</div>
+        <div className="payment-section-icon">🏦</div>
         <div>
-          <h2 className="payment-section-title">
-            {isRegister ? 'صندوق‌های نقدی' : 'کارتخوان‌ها'}
-          </h2>
+          <h2 className="payment-section-title">حساب‌های بانکی و کارتخوان‌ها</h2>
           <p className="payment-section-hint">
-            {isRegister
-              ? 'هنگام ثبت پرداخت نقدی در POS، صندوق انتخاب می‌شود (مبنای گزارش شیفت)'
-              : 'هنگام ثبت پرداخت با کارت‌خوان، دستگاه انتخاب می‌شود'}
+            مشخصات کامل هر حساب (شبا / حساب / کارت)؛ فقط حساب‌هایی که تیک
+            «کارتخوان» دارند در زمان تسویه به کاربران نمایش داده می‌شوند
           </p>
         </div>
       </div>
@@ -81,93 +392,349 @@ function InstrumentSection({
         <>
           {error && <div className="admin-error">❌ {error}</div>}
           {items.length === 0 && (
-            <p className="empty-admin">
-              هنوز موردی نساخته‌ای — اولین را اضافه کن.
-            </p>
+            <p className="empty-admin">هنوز حسابی نساخته‌ای — اولین را اضافه کن.</p>
           )}
           {items.map((it) => (
-            <div
-              key={it.id}
-              className="payment-toggle-row"
-              style={{ alignItems: 'center' }}
-            >
-              <div className="payment-toggle-info">
-                <strong>
-                  {isRegister ? '🧰' : '📟'} {it.name}{' '}
-                  {!it.is_active && (
-                    <span style={{ color: '#9b3c32', fontSize: 12 }}>
-                      (غیرفعال)
-                    </span>
-                  )}
-                </strong>
-                <small>
-                  {(isRegister ? it.location : it.label) || '—'}
-                </small>
-              </div>
-              <button
-                type="button"
-                className={`auto-switch ${it.is_active ? 'on' : 'off'}`}
-                disabled={busy}
-                onClick={() =>
-                  run(() =>
-                    isRegister
-                      ? updateCashRegister(it.id, { is_active: !it.is_active })
-                      : updatePosDevice(it.id, { is_active: !it.is_active })
-                  )
-                }
-                title={it.is_active ? 'غیرفعال کردن' : 'فعال کردن'}
+            <div key={it.id}>
+              <div
+                className="payment-toggle-row"
+                style={{ alignItems: 'center' }}
               >
-                <span className="auto-switch-track">
-                  <span className="auto-switch-thumb" />
-                </span>
-              </button>
+                <div className="payment-toggle-info">
+                  <strong>
+                    🏦 {it.name}{' '}
+                    {!it.is_active && (
+                      <span style={{ color: '#9b3c32', fontSize: 12 }}>
+                        (غیرفعال)
+                      </span>
+                    )}
+                  </strong>
+                  <small>{summary(it)}</small>
+                </div>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <button
+                    type="button"
+                    style={{
+                      fontSize: 12,
+                      padding: '4px 10px',
+                      borderRadius: 999,
+                      border: '1px solid ' + (it.is_card_reader ? '#2d5d3e' : '#e3ddd2'),
+                      background: it.is_card_reader ? '#2d5d3e' : '#fff',
+                      color: it.is_card_reader ? '#fff' : '#4b443b',
+                      cursor: 'pointer',
+                      font: 'inherit',
+                      fontWeight: 600,
+                      whiteSpace: 'nowrap',
+                    }}
+                    disabled={busy}
+                    onClick={() =>
+                      run(() =>
+                        updatePosDevice(it.id, {
+                          is_card_reader: !it.is_card_reader,
+                        })
+                      )
+                    }
+                    title="تیک کارتخوان: در تسویه به‌عنوان کارت‌خوان نمایش داده شود"
+                  >
+                    {it.is_card_reader ? '✓ ' : ''}📟 کارتخوان
+                  </button>
+                  <button
+                    type="button"
+                    className="btn"
+                    style={{ fontSize: 12 }}
+                    disabled={busy}
+                    onClick={() =>
+                      editId === it.id ? setEditId(null) : startEdit(it)
+                    }
+                  >
+                    {editId === it.id ? 'بستن' : '✏️ ویرایش'}
+                  </button>
+                  <button
+                    type="button"
+                    className={`auto-switch ${it.is_active ? 'on' : 'off'}`}
+                    disabled={busy}
+                    onClick={() =>
+                      run(() =>
+                        updatePosDevice(it.id, { is_active: !it.is_active })
+                      )
+                    }
+                    title={it.is_active ? 'غیرفعال کردن' : 'فعال کردن'}
+                  >
+                    <span className="auto-switch-track">
+                      <span className="auto-switch-thumb" />
+                    </span>
+                  </button>
+                </div>
+              </div>
+
+              {editId === it.id && (
+                <div
+                  style={{
+                    border: '1px dashed #d8cfc0',
+                    borderRadius: 8,
+                    padding: 10,
+                    marginTop: 6,
+                    marginBottom: 6,
+                    background: '#fff',
+                  }}
+                >
+                  <div className="form-grid" style={{ alignItems: 'end' }}>
+                    <div className="field">
+                      <label>نام حساب</label>
+                      <input
+                        type="text"
+                        value={e.name}
+                        onChange={(ev) => setE({ ...e, name: ev.target.value })}
+                        disabled={busy}
+                      />
+                    </div>
+                    <div className="field">
+                      <label>نام بانک</label>
+                      <input
+                        type="text"
+                        placeholder="مثلاً: بانک ملت"
+                        value={e.bank_name}
+                        onChange={(ev) =>
+                          setE({ ...e, bank_name: ev.target.value })
+                        }
+                        disabled={busy}
+                      />
+                    </div>
+                    <div className="field">
+                      <label>شبا</label>
+                      <input
+                        type="text"
+                        dir="ltr"
+                        placeholder="IR062960000000100000000001"
+                        value={e.iban}
+                        onChange={(ev) => setE({ ...e, iban: ev.target.value })}
+                        disabled={busy}
+                      />
+                    </div>
+                    <div className="field">
+                      <label>شماره حساب</label>
+                      <input
+                        type="text"
+                        dir="ltr"
+                        value={e.account_number}
+                        onChange={(ev) =>
+                          setE({ ...e, account_number: ev.target.value })
+                        }
+                        disabled={busy}
+                      />
+                    </div>
+                    <div className="field">
+                      <label>شماره کارت</label>
+                      <input
+                        type="text"
+                        dir="ltr"
+                        placeholder="6037-9912-XXXX-XXXX"
+                        value={e.card_number}
+                        onChange={(ev) =>
+                          setE({ ...e, card_number: ev.target.value })
+                        }
+                        disabled={busy}
+                      />
+                    </div>
+                    <div className="field">
+                      <label>برچسب (اختیاری)</label>
+                      <input
+                        type="text"
+                        placeholder="مثلاً: کارت‌خوان کانتر"
+                        value={e.label}
+                        onChange={(ev) => setE({ ...e, label: ev.target.value })}
+                        disabled={busy}
+                      />
+                    </div>
+                  </div>
+                  <div
+                    style={{
+                      display: 'flex',
+                      gap: 8,
+                      marginTop: 10,
+                      alignItems: 'center',
+                    }}
+                  >
+                    <button
+                      type="button"
+                      style={{
+                        fontSize: 12.5,
+                        padding: '6px 12px',
+                        borderRadius: 999,
+                        border: '1px solid ' + (e.is_card_reader ? '#2d5d3e' : '#e3ddd2'),
+                        background: e.is_card_reader ? '#2d5d3e' : '#fff',
+                        color: e.is_card_reader ? '#fff' : '#4b443b',
+                        cursor: 'pointer',
+                        font: 'inherit',
+                        fontWeight: 600,
+                      }}
+                      disabled={busy}
+                      onClick={() => setE({ ...e, is_card_reader: !e.is_card_reader })}
+                    >
+                      {e.is_card_reader ? '✓ ' : ''}📟 نمایش به‌عنوان کارت‌خوان در تسویه
+                    </button>
+                    <span style={{ flex: 1 }} />
+                    <button
+                      type="button"
+                      className="btn primary-btn"
+                      disabled={busy || !e.name.trim()}
+                      onClick={async () => {
+                        await run(() =>
+                          updatePosDevice(it.id, {
+                            name: e.name,
+                            bank_name: e.bank_name || null,
+                            iban: e.iban || null,
+                            account_number: e.account_number || null,
+                            card_number: e.card_number || null,
+                            label: e.label || null,
+                            is_card_reader: e.is_card_reader,
+                          })
+                        )
+                        setEditId(null)
+                      }}
+                    >
+                      💾 ذخیره
+                    </button>
+                    <button
+                      type="button"
+                      className="btn"
+                      onClick={() => setEditId(null)}
+                    >
+                      انصراف
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           ))}
 
           <div
-            className="form-grid"
-            style={{ marginTop: '12px', alignItems: 'end' }}
-          >
-            <div className="field">
-              <label>{isRegister ? 'نام صندوق جدید' : 'نام دستگاه جدید'}</label>
-              <input
-                type="text"
-                placeholder={isRegister ? 'مثلاً: صندوق بار' : 'مثلاً: کارت‌خوان ۱'}
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                disabled={busy}
-              />
-            </div>
-            <div className="field">
-              <label>{isRegister ? 'محل استقرار (اختیاری)' : 'برچسب (اختیاری)'}</label>
-              <input
-                type="text"
-                placeholder={isRegister ? 'مثلاً: کانتر جلو' : 'مثلاً: بانک ملت'}
-                value={extra}
-                onChange={(e) => setExtra(e.target.value)}
-                disabled={busy}
-              />
-            </div>
-          </div>
-          <button
-            type="button"
-            className="btn"
-            style={{ marginTop: '10px' }}
-            disabled={busy || !name.trim()}
-            onClick={async () => {
-              const n = name
-              const x = extra
-              setName('')
-              setExtra('')
-              await run(() =>
-                isRegister
-                  ? createCashRegister(n, x || null)
-                  : createPosDevice(n, x || null)
-              )
+            style={{
+              borderTop: '1px dashed #e3ddd2',
+              marginTop: 12,
+              paddingTop: 12,
             }}
           >
-            ➕ افزودن
-          </button>
+            <div className="form-grid" style={{ alignItems: 'end' }}>
+              <div className="field">
+                <label>نام حساب جدید</label>
+                <input
+                  type="text"
+                  placeholder="مثلاً: حساب ملت — کانتر"
+                  value={name}
+                  onChange={(ev) => setName(ev.target.value)}
+                  disabled={busy}
+                />
+              </div>
+              <div className="field">
+                <label>نام بانک</label>
+                <input
+                  type="text"
+                  placeholder="مثلاً: بانک ملت"
+                  value={bank}
+                  onChange={(ev) => setBank(ev.target.value)}
+                  disabled={busy}
+                />
+              </div>
+              <div className="field">
+                <label>شبا</label>
+                <input
+                  type="text"
+                  dir="ltr"
+                  placeholder="IR062960000000100000000001"
+                  value={iban}
+                  onChange={(ev) => setIban(ev.target.value)}
+                  disabled={busy}
+                />
+              </div>
+              <div className="field">
+                <label>شماره حساب</label>
+                <input
+                  type="text"
+                  dir="ltr"
+                  value={accountNo}
+                  onChange={(ev) => setAccountNo(ev.target.value)}
+                  disabled={busy}
+                />
+              </div>
+              <div className="field">
+                <label>شماره کارت</label>
+                <input
+                  type="text"
+                  dir="ltr"
+                  placeholder="6037-9912-XXXX-XXXX"
+                  value={cardNo}
+                  onChange={(ev) => setCardNo(ev.target.value)}
+                  disabled={busy}
+                />
+              </div>
+              <div className="field">
+                <label>برچسب (اختیاری)</label>
+                <input
+                  type="text"
+                  placeholder="مثلاً: کارت‌خوان کانتر"
+                  value={label}
+                  onChange={(ev) => setLabel(ev.target.value)}
+                  disabled={busy}
+                />
+              </div>
+            </div>
+            <div
+              style={{
+                display: 'flex',
+                gap: 10,
+                marginTop: 10,
+                alignItems: 'center',
+              }}
+            >
+              <button
+                type="button"
+                style={{
+                  fontSize: 12.5,
+                  padding: '6px 12px',
+                  borderRadius: 999,
+                  border: '1px solid ' + (asReader ? '#2d5d3e' : '#e3ddd2'),
+                  background: asReader ? '#2d5d3e' : '#fff',
+                  color: asReader ? '#fff' : '#4b443b',
+                  cursor: 'pointer',
+                  font: 'inherit',
+                  fontWeight: 600,
+                }}
+                disabled={busy}
+                onClick={() => setAsReader(!asReader)}
+              >
+                {asReader ? '✓ ' : ''}📟 نمایش به‌عنوان کارت‌خوان در تسویه
+              </button>
+              <span style={{ flex: 1 }} />
+              <button
+                type="button"
+                className="btn"
+                disabled={busy || !name.trim()}
+                onClick={async () => {
+                  const n = name
+                  const payload = {
+                    name: n,
+                    bank_name: bank || null,
+                    iban: iban || null,
+                    account_number: accountNo || null,
+                    card_number: cardNo || null,
+                    label: label || null,
+                    is_card_reader: asReader,
+                  }
+                  setName('')
+                  setBank('')
+                  setIban('')
+                  setAccountNo('')
+                  setCardNo('')
+                  setLabel('')
+                  setAsReader(true)
+                  await run(() => createPosDevice(payload))
+                }}
+              >
+                ➕ افزودن حساب
+              </button>
+            </div>
+          </div>
         </>
       )}
     </section>
@@ -440,9 +1007,9 @@ export default function PaymentSettingsManager() {
         </>
       )}
 
-      {/* 🎯 پچ ۵۰-و-الف: صندوق‌ها و کارتخوان‌ها — مستقل از کلید سیستم پرداخت */}
-      <InstrumentSection kind="cash_registers" />
-      <InstrumentSection kind="pos_devices" />
+      {/* 🎯 پچ ۵۰-و-الف/ب: صندوق‌ها و حساب‌های بانکی — مستقل از کلید سیستم پرداخت */}
+      <CashRegisterSection />
+      <BankAccountSection />
 
       <div className="payment-save-bar">
         <button type="button" className="btn primary-btn" onClick={handleSave} disabled={saving}>
