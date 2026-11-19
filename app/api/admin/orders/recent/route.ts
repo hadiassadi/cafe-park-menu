@@ -74,7 +74,7 @@ export async function GET(req: NextRequest) {
     // 🐛 فیکس ۵۰-هـ-خ: ستون paid_amount روی orders وجود ندارد (منبع پرداخت‌ها
     // جدول order_payments است) — سه‌لایه: کامل + پرداخت‌ها → کامل → مینیمال
     const FULL_COLS = `id, order_number, created_at, customer_name, customer_phone, table_number,
-       source, status, payment_status, payment_method, subtotal, manual_discount,
+       source, device_id_hash, customer_confirmed, status, payment_status, payment_method, subtotal, manual_discount,
        coupon_code, coupon_discount, is_test, items`
     const LEGACY_COLS = `id, order_number, created_at, customer_name, customer_phone, table_number,
        source, status, payment_status, subtotal, coupon_code, coupon_discount, is_test, items`

@@ -83,6 +83,9 @@ type PosOrderRow = {
   customer_phone: string | null
   table_number: number | null
   source: string | null
+  // 🎯 پچ ۵۰-هـ-ع: تشخیص سفارش پنل مشتری + نهایی‌شدن توسط مشتری
+  device_id_hash?: string | null
+  customer_confirmed?: boolean
   status: string
   payment_status?: string | null
   payment_method?: string | null
@@ -1303,8 +1306,18 @@ export default function NewOrderClient({
   // بوق سفارش آنلاین جدید — مقایسهٔ تعداد «در انتظار تأیید» با دفعات قبل
   const livePreparing = ordersList.filter((o) => o.status === 'preparing').length
   const liveReady = ordersList.filter((o) => o.status === 'ready').length
+  // 🎯 پچ ۵۰-هـ-ع: بوق/بج «سفارش آنلاین جدید» — هم در انتظارِ تأیید مشتری،
+  // هم نهایی‌شده‌های مشتری (تأیید مشتری + هنوز تسویه‌نشده). تشخیص سفارش پنل
+  // مشتری: source غیرِ admin یا داشتن هشِ دستگاه (سفارش POS هش دستگاه ندارد)
+  const isCustomerPanelOrder = (o: PosOrderRow) =>
+    o.source !== 'admin' || !!o.device_id_hash
   const livePendingOnline = ordersList.filter(
-    (o) => o.source !== 'admin' && o.status === 'pending'
+    (o) =>
+      isCustomerPanelOrder(o) &&
+      (o.status === 'pending' ||
+        (o.status === 'confirmed' &&
+          o.customer_confirmed === true &&
+          o.payment_status !== 'paid'))
   ).length
   useEffect(() => {
     if (lastPendingRef.current === null) {
@@ -1595,10 +1608,10 @@ export default function NewOrderClient({
         </a>
         <a
           href="/admin/orders?filter=pending"
-          title="نمایش سفارش‌های در انتظار تأیید در پنل سفارش‌ها"
+          title="نمایش سفارش‌های جدید و نهایی‌شدهٔ مشتریان در پنل سفارش‌ها"
           style={{ textDecoration: 'none' }}
         >
-          <span style={badge('#e8f0f6', '#4a7c9b')}>📱 در انتظار تأیید آنلاین: {fmt(livePendingOnline)}</span>
+          <span style={badge('#e8f0f6', '#4a7c9b')}>📱 سفارش آنلاین جدید: {fmt(livePendingOnline)}</span>
         </a>
         <button
           type="button"
