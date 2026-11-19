@@ -184,6 +184,13 @@ if (tableNo !== null) {
     }
 
     // ---------- ثبت سفارش ----------
+    // 🎯 پچ ۵۱: شناسنامهٔ عملیات — اپراتور ثبت‌کننده + شیفت بازِ همان کاربر
+    const { data: openShift } = await db
+      .from('shifts')
+      .select('id')
+      .eq('opened_by', auth.userId)
+      .is('closed_at', null)
+      .maybeSingle()
     const now = new Date().toISOString()
     let order: any = null
     let orderErr: any = null
@@ -234,6 +241,9 @@ if (tableNo !== null) {
 	  is_test: isTest,
       }
       if (parentOrderId && allowParent) insertPayload.parent_order_id = parentOrderId
+      // 🎯 پچ ۵۱: شناسنامهٔ عملیات روی خود سفارش (بدون شیفت باز = null — خراب نمی‌شود)
+      insertPayload.operator_id = auth.userId
+      insertPayload.shift_id = openShift?.id ?? null
 
       const res = await db
         .from('orders')

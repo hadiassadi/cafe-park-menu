@@ -122,10 +122,39 @@ export default async function OrdersPage() {
     amount: Number(r.amount),
   }))
 
+  // 🎯 پچ ۵۱: نقشهٔ اپراتورها (نام + کد) — برای نشانِ ثبت‌کننده روی سفارش‌ها
+  let operatorsMap: Record<string, { name: string; code?: string | null }> = {}
+  try {
+    const [usersRes, profilesRes] = await Promise.all([
+      db.auth.admin.listUsers({ perPage: 500 }),
+      db.from('admin_operator_profiles').select('user_id, code'),
+    ])
+    const codeByUser: Record<string, string> = {}
+    for (const p of profilesRes.data ?? []) {
+      codeByUser[(p as any).user_id] = (p as any).code
+    }
+    for (const u of usersRes.data?.users ?? []) {
+      const meta = (u as any).user_metadata ?? {}
+      operatorsMap[u.id] = {
+        name:
+          (typeof meta.full_name === 'string' && meta.full_name.trim()) ||
+          u.email ||
+          'کاربر',
+        code: codeByUser[u.id] ?? null,
+      }
+    }
+  } catch (e) {
+    console.error('[orders page] operators map:', e)
+  }
+
   return (
     <main className="admin">
       <PendingRefundsBanner refunds={pendingRefunds} />
-      <OrdersManager orders={orders} allowDeleteOrders={allowDeleteOrders} />
+      <OrdersManager
+        orders={orders}
+        allowDeleteOrders={allowDeleteOrders}
+        operatorsMap={operatorsMap}
+      />
 
     </main>
   )

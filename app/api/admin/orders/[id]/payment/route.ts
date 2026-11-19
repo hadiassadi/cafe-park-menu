@@ -144,30 +144,38 @@ export async function POST(
 
     // 🎯 پچ ۵۰-و-الف: اتصال صندوق/دستگاه به ردیف تازهٔ دفتر (RPC فیلد ندارد) —
     // آخرین ردیف confirmed همان روش/مبلغ؛ خطا فقط لاگ می‌شود، پرداخت خراب نمی‌شود
-    if (registerId || deviceId) {
-      try {
-        const { data: lastPay } = await db
+    // 🎯 پچ ۵۱: شناسنامهٔ ردیف دفتر — اپراتور + شیفت بازِ همان اپراتور
+    // (همیشه ثبت می‌شود، حتی وقتی صندوق/دستگاه انتخاب نشده)
+    try {
+      const { data: openShift } = await db
+        .from('shifts')
+        .select('id')
+        .eq('opened_by', auth.userId)
+        .is('closed_at', null)
+        .maybeSingle()
+      const { data: lastPay } = await db
+        .from('order_payments')
+        .select('id')
+        .eq('order_id', id)
+        .eq('method', method)
+        .eq('amount', amount)
+        .eq('status', 'confirmed')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      if (lastPay?.id) {
+        await db
           .from('order_payments')
-          .select('id')
-          .eq('order_id', id)
-          .eq('method', method)
-          .eq('amount', amount)
-          .eq('status', 'confirmed')
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle()
-        if (lastPay?.id) {
-          await db
-            .from('order_payments')
-            .update({
-              ...(registerId ? { register_id: registerId } : {}),
-              ...(deviceId ? { device_id: deviceId } : {}),
-            })
-            .eq('id', lastPay.id)
-        }
-      } catch (attachErr) {
-        console.error('[admin orders payment] attach instrument:', attachErr)
+          .update({
+            operator_id: auth.userId,
+            ...(openShift?.id ? { shift_id: openShift.id } : {}),
+            ...(registerId ? { register_id: registerId } : {}),
+            ...(deviceId ? { device_id: deviceId } : {}),
+          })
+          .eq('id', lastPay.id)
       }
+    } catch (attachErr) {
+      console.error('[admin orders payment] attach instrument:', attachErr)
     }
 
     // روش پرداخت سفارش را هم به‌روز کن (فیلدهای جانبی مثل پنل مدیریت)
