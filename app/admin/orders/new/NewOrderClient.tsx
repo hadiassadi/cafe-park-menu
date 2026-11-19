@@ -656,6 +656,16 @@ export default function NewOrderClient({
   // 🎯 پچ ۵۰-هـ-وِی: پرداخت با دکمهٔ ردیفی + مودال — پنل ترکیبی (AdminSplitPayment)
   // پچ ۵۰-هـ-او: stateهای payMethodSel/payAmount/payBusy/payMsg حذف شدند
   const [payModalOrder, setPayModalOrder] = useState<PosOrderRow | null>(null)
+  // 🎯 پچ ۵۰-و-الف: صندوق‌های نقدی/کارت‌خوان‌های فعال + انتخاب در تسویهٔ فوری
+  const [instruments, setInstruments] = useState<{
+    registers: Array<{ id: string; name: string; location?: string | null }>
+    devices: Array<{ id: string; name: string; label?: string | null }>
+  }>({ registers: [], devices: [] })
+  const [payChoice, setPayChoice] = useState<{
+    method: 'cash' | 'card'
+    regId?: string
+    devId?: string
+  } | null>(null)
   // 🎯 پچ ۵۰-هـ-ن: انتخاب روش پرداخت قبل از ساخت سفارش («پرداخت و ثبت»)
   const [payChoose, setPayChoose] = useState(false)
   const [payChooseBusy, setPayChooseBusy] = useState<
@@ -1465,6 +1475,20 @@ export default function NewOrderClient({
     }
   }
 
+  // 🎯 پچ ۵۰-و-الف: صندوق‌ها و کارت‌خوان‌های فعال — برای انتخاب در تسویهٔ فوری
+  useEffect(() => {
+    fetch('/api/admin/payment-instruments', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!d) return
+        setInstruments({
+          registers: Array.isArray(d.registers) ? d.registers : [],
+          devices: Array.isArray(d.devices) ? d.devices : [],
+        })
+      })
+      .catch(() => {})
+  }, [])
+
   // ریست فرم پس از ثبت موفق سفارش
   function resetFormAfterCreate(orderNo: number | null) {
     setDone(orderNo)
@@ -1493,10 +1517,31 @@ export default function NewOrderClient({
     setBusy(false)
   }
 
+  // 🎯 پچ ۵۰-و-الف: اگر بیش از یک صندوق/دستگاه فعال است، اول انتخاب می‌آید
+  function startPayChoice(m: 'cash' | 'card' | 'online' | 'split') {
+    if (m === 'cash' && instruments.registers.length > 1) {
+      setPayChoice({ method: 'cash', regId: instruments.registers[0].id })
+      return
+    }
+    if (m === 'card' && instruments.devices.length > 1) {
+      setPayChoice({ method: 'card', devId: instruments.devices[0].id })
+      return
+    }
+    payRegister(
+      m,
+      m === 'cash' ? instruments.registers[0]?.id : undefined,
+      m === 'card' ? instruments.devices[0]?.id : undefined
+    )
+  }
+
   // 🎯 پچ ۵۰-هـ-ن: «💳 پرداخت و ثبت» — اول روش انتخاب می‌شود (مودال payChoose)،
   // بعد سفارش ساخته می‌شود؛ نقدی/کارت‌خوان همان لحظه پرداختشان ثبت می‌شود و
   // فاکتورِ تسویه‌شده وارد لیست می‌شود. بستن مودال انتخاب = هیچ سفارشی ساخته نمی‌شود.
-  async function payRegister(method: 'cash' | 'card' | 'online' | 'split') {
+  async function payRegister(
+    method: 'cash' | 'card' | 'online' | 'split',
+    registerId?: string,
+    deviceId?: string
+  ) {
     setPayChooseBusy(method)
     setError('')
     try {
@@ -1512,12 +1557,21 @@ export default function NewOrderClient({
           const res = await fetch(`/api/admin/orders/${row.id}/payment`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ method, amount: remaining }),
+            body: JSON.stringify({
+              method,
+              amount: remaining,
+              // 🎯 پچ ۵۰-و-الف: صندوق/دستگاه انتخابی در تسویهٔ فوری
+              ...(method === 'cash' && registerId
+                ? { register_id: registerId }
+                : {}),
+              ...(method === 'card' && deviceId ? { device_id: deviceId } : {}),
+            }),
           })
           const d = await res.json().catch(() => null)
           await loadOrders()
           resetFormAfterCreate(row.order_number ?? null)
           setPayChoose(false)
+          setPayChoice(null)
           if (!res.ok || d?.error) {
             setError(
               'سفارش ثبت شد ولی ثبت پرداخت ناموفق بود' +
@@ -1530,6 +1584,7 @@ export default function NewOrderClient({
         // ماندهٔ کمتر از حداقل → مودال پرداخت مشترک باز می‌شود
         resetFormAfterCreate(row.order_number ?? null)
         setPayChoose(false)
+        setPayChoice(null)
         setPayModalOrder(row)
         return
       }
@@ -1538,6 +1593,7 @@ export default function NewOrderClient({
       // (همان پنل ادمین با کل مبلغ/باقی/قفل) باز می‌شود
       resetFormAfterCreate(row.order_number ?? null)
       setPayChoose(false)
+      setPayChoice(null)
       setPayModalOrder(row)
     } finally {
       setPayChooseBusy(null)
@@ -3089,7 +3145,10 @@ export default function NewOrderClient({
             padding: 16,
           }}
           onClick={() => {
-            if (!payChooseBusy) setPayChoose(false)
+            if (!payChooseBusy) {
+              setPayChoose(false)
+              setPayChoice(null)
+            }
           }}
         >
           <div
@@ -3122,7 +3181,7 @@ export default function NewOrderClient({
                   key={m}
                   type="button"
                   disabled={payChooseBusy !== null}
-                  onClick={() => payRegister(m)}
+                  onClick={() => startPayChoice(m)}
                   style={{
                     flex: '1 1 45%',
                     padding: 12,
@@ -3139,11 +3198,86 @@ export default function NewOrderClient({
                 </button>
               ))}
             </div>
+
+            {/* 🎯 پچ ۵۰-و-الف: انتخاب صندوق نقدی / کارت‌خوان وقتی بیش از یکی فعال است */}
+            {payChoice && (
+              <>
+                <div style={{ marginTop: 10, fontSize: 12.5, fontWeight: 700 }}>
+                  {payChoice.method === 'cash' ? '🧰 صندوق نقدی:' : '📟 کارت‌خوان:'}
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
+                  {(payChoice.method === 'cash'
+                    ? instruments.registers
+                    : instruments.devices
+                  ).map((it) => {
+                    const active =
+                      (payChoice.method === 'cash' ? payChoice.regId : payChoice.devId) ===
+                      it.id
+                    return (
+                      <button
+                        key={it.id}
+                        type="button"
+                        style={{
+                          padding: '6px 12px',
+                          borderRadius: 999,
+                          border: '1px solid #e3ddd2',
+                          background: active ? '#6b4f3a' : '#fff',
+                          color: active ? '#fff' : '#4b443b',
+                          font: 'inherit',
+                          fontWeight: 700,
+                          fontSize: 12.5,
+                          cursor: 'pointer',
+                        }}
+                        onClick={() =>
+                          setPayChoice((pc) =>
+                            pc
+                              ? pc.method === 'cash'
+                                ? { ...pc, regId: it.id }
+                                : { ...pc, devId: it.id }
+                              : pc
+                          )
+                        }
+                      >
+                        {payChoice.method === 'cash' ? '🧰' : '📟'} {it.name}
+                      </button>
+                    )
+                  })}
+                </div>
+                <button
+                  type="button"
+                  disabled={payChooseBusy !== null}
+                  onClick={() =>
+                    payRegister(
+                      payChoice.method,
+                      payChoice.method === 'cash' ? payChoice.regId : undefined,
+                      payChoice.method === 'card' ? payChoice.devId : undefined
+                    )
+                  }
+                  style={{
+                    marginTop: 10,
+                    width: '100%',
+                    padding: 12,
+                    borderRadius: 10,
+                    border: 'none',
+                    background: '#2d5d3e',
+                    color: '#fff',
+                    font: 'inherit',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                  }}
+                >
+                  {payChooseBusy ? '⏳ در حال ثبت…' : '✅ تأیید و ثبت سفارش'}
+                </button>
+              </>
+            )}
             <button
               type="button"
               style={{ ...smallBtn, marginTop: 10, width: '100%' }}
               disabled={payChooseBusy !== null}
-              onClick={() => setPayChoose(false)}
+              onClick={() => {
+                setPayChoose(false)
+                setPayChoice(null)
+              }}
             >
               انصراف — بدون ثبت سفارش
             </button>

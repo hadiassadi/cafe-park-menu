@@ -109,3 +109,181 @@ export async function updatePaymentSettings(
     return { error: err?.message || 'خطای غیرمنتظره' }
   }
 }
+
+// ─── 🎯 پچ ۵۰-و-الف: صندوق‌های نقدی + کارتخوان‌ها (زیرساخت پرداخت POS) ───
+
+export type PaymentInstrument = {
+  id: string
+  name: string
+  location: string | null
+  label: string | null
+  is_active: boolean
+}
+
+function cleanName(v: unknown): string | null {
+  if (typeof v !== 'string') return null
+  const s = v.trim().slice(0, 60)
+  return s.length > 0 ? s : null
+}
+
+export async function listPaymentInstruments(): Promise<{
+  registers?: PaymentInstrument[]
+  devices?: PaymentInstrument[]
+  error?: string
+}> {
+  try {
+    await assertAdmin()
+    const db = createAdminDb()
+    const [regs, devs] = await Promise.all([
+      db
+        .from('cash_registers')
+        .select('id, name, location, is_active')
+        .order('is_active', { ascending: false })
+        .order('created_at', { ascending: true }),
+      db
+        .from('pos_devices')
+        .select('id, name, label, is_active')
+        .order('is_active', { ascending: false })
+        .order('created_at', { ascending: true }),
+    ])
+    if (regs.error) {
+      console.error('[listPaymentInstruments] registers:', regs.error)
+      return { error: regs.error.message }
+    }
+    if (devs.error) {
+      console.error('[listPaymentInstruments] devices:', devs.error)
+      return { error: devs.error.message }
+    }
+    return {
+      registers: (regs.data ?? []) as unknown as PaymentInstrument[],
+      devices: (devs.data ?? []) as unknown as PaymentInstrument[],
+    }
+  } catch (err: any) {
+    console.error('[listPaymentInstruments] unexpected:', err)
+    return { error: err?.message || 'خطای غیرمنتظره' }
+  }
+}
+
+export async function createCashRegister(
+  name: string,
+  location: string | null
+): Promise<{ success?: boolean; error?: string }> {
+  try {
+    await assertAdmin()
+    const clean = cleanName(name)
+    if (!clean) return { error: 'نام صندوق را وارد کنید' }
+    const db = createAdminDb()
+    const { error } = await db.from('cash_registers').insert({
+      name: clean,
+      location:
+        typeof location === 'string' && location.trim()
+          ? location.trim().slice(0, 80)
+          : null,
+    })
+    if (error) {
+      console.error('[createCashRegister]', error)
+      return { error: error.message }
+    }
+    revalidatePath('/admin/settings/payment')
+    return { success: true }
+  } catch (err: any) {
+    console.error('[createCashRegister] unexpected:', err)
+    return { error: err?.message || 'خطای غیرمنتظره' }
+  }
+}
+
+export async function updateCashRegister(
+  id: string,
+  changes: { name?: string; location?: string | null; is_active?: boolean }
+): Promise<{ success?: boolean; error?: string }> {
+  try {
+    await assertAdmin()
+    const upd: Record<string, unknown> = {}
+    const n = changes.name === undefined ? null : cleanName(changes.name)
+    if (n === null && changes.name !== undefined) {
+      return { error: 'نام صندوق را وارد کنید' }
+    }
+    if (n) upd.name = n
+    if (changes.location !== undefined) {
+      upd.location =
+        typeof changes.location === 'string' && changes.location.trim()
+          ? changes.location.trim().slice(0, 80)
+          : null
+    }
+    if (typeof changes.is_active === 'boolean') upd.is_active = changes.is_active
+    if (Object.keys(upd).length === 0) return { error: 'تغییری ارسال نشده است' }
+    const db = createAdminDb()
+    const { error } = await db.from('cash_registers').update(upd).eq('id', id)
+    if (error) {
+      console.error('[updateCashRegister]', error)
+      return { error: error.message }
+    }
+    revalidatePath('/admin/settings/payment')
+    return { success: true }
+  } catch (err: any) {
+    console.error('[updateCashRegister] unexpected:', err)
+    return { error: err?.message || 'خطای غیرمنتظره' }
+  }
+}
+
+export async function createPosDevice(
+  name: string,
+  label: string | null
+): Promise<{ success?: boolean; error?: string }> {
+  try {
+    await assertAdmin()
+    const clean = cleanName(name)
+    if (!clean) return { error: 'نام دستگاه را وارد کنید' }
+    const db = createAdminDb()
+    const { error } = await db.from('pos_devices').insert({
+      name: clean,
+      label:
+        typeof label === 'string' && label.trim()
+          ? label.trim().slice(0, 80)
+          : null,
+    })
+    if (error) {
+      console.error('[createPosDevice]', error)
+      return { error: error.message }
+    }
+    revalidatePath('/admin/settings/payment')
+    return { success: true }
+  } catch (err: any) {
+    console.error('[createPosDevice] unexpected:', err)
+    return { error: err?.message || 'خطای غیرمنتظره' }
+  }
+}
+
+export async function updatePosDevice(
+  id: string,
+  changes: { name?: string; label?: string | null; is_active?: boolean }
+): Promise<{ success?: boolean; error?: string }> {
+  try {
+    await assertAdmin()
+    const upd: Record<string, unknown> = {}
+    const n = changes.name === undefined ? null : cleanName(changes.name)
+    if (n === null && changes.name !== undefined) {
+      return { error: 'نام دستگاه را وارد کنید' }
+    }
+    if (n) upd.name = n
+    if (changes.label !== undefined) {
+      upd.label =
+        typeof changes.label === 'string' && changes.label.trim()
+          ? changes.label.trim().slice(0, 80)
+          : null
+    }
+    if (typeof changes.is_active === 'boolean') upd.is_active = changes.is_active
+    if (Object.keys(upd).length === 0) return { error: 'تغییری ارسال نشده است' }
+    const db = createAdminDb()
+    const { error } = await db.from('pos_devices').update(upd).eq('id', id)
+    if (error) {
+      console.error('[updatePosDevice]', error)
+      return { error: error.message }
+    }
+    revalidatePath('/admin/settings/payment')
+    return { success: true }
+  } catch (err: any) {
+    console.error('[updatePosDevice] unexpected:', err)
+    return { error: err?.message || 'خطای غیرمنتظره' }
+  }
+}

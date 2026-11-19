@@ -5,6 +5,12 @@ import Link from 'next/link'
 import {
   getPaymentSettings,
   updatePaymentSettings,
+  listPaymentInstruments,
+  createCashRegister,
+  updateCashRegister,
+  createPosDevice,
+  updatePosDevice,
+  type PaymentInstrument,
   type PaymentSettings,
 } from './actions'
 
@@ -13,6 +19,160 @@ const GATEWAY_OPTIONS = [
   { value: 'idpay', label: 'آیدی‌پی', icon: '💳' },
   { value: 'nextpay', label: 'نکست‌پی', icon: '💳' },
 ]
+
+// ─── 🎯 پچ ۵۰-و-الف: مدیریت صندوق‌های نقدی و کارتخوان‌ها ───
+function InstrumentSection({
+  kind,
+}: {
+  kind: 'cash_registers' | 'pos_devices'
+}) {
+  const isRegister = kind === 'cash_registers'
+  const [items, setItems] = useState<PaymentInstrument[]>([])
+  const [loading, setLoading] = useState(true)
+  const [name, setName] = useState('')
+  const [extra, setExtra] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function reload() {
+    const res = await listPaymentInstruments()
+    if (res.error) {
+      setError(res.error)
+    } else {
+      setError(null)
+      setItems((isRegister ? res.registers : res.devices) ?? [])
+    }
+    setLoading(false)
+  }
+
+  useEffect(() => {
+    reload()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  async function run(fn: () => Promise<{ success?: boolean; error?: string }>) {
+    setBusy(true)
+    setError(null)
+    const res = await fn()
+    if (res.error) setError(res.error)
+    await reload()
+    setBusy(false)
+  }
+
+  return (
+    <section className="admin-card payment-section">
+      <div className="payment-section-header-static">
+        <div className="payment-section-icon">{isRegister ? '🧰' : '📟'}</div>
+        <div>
+          <h2 className="payment-section-title">
+            {isRegister ? 'صندوق‌های نقدی' : 'کارتخوان‌ها'}
+          </h2>
+          <p className="payment-section-hint">
+            {isRegister
+              ? 'هنگام ثبت پرداخت نقدی در POS، صندوق انتخاب می‌شود (مبنای گزارش شیفت)'
+              : 'هنگام ثبت پرداخت با کارت‌خوان، دستگاه انتخاب می‌شود'}
+          </p>
+        </div>
+      </div>
+
+      {loading ? (
+        <p className="empty-admin">⏳ در حال بارگذاری...</p>
+      ) : (
+        <>
+          {error && <div className="admin-error">❌ {error}</div>}
+          {items.length === 0 && (
+            <p className="empty-admin">
+              هنوز موردی نساخته‌ای — اولین را اضافه کن.
+            </p>
+          )}
+          {items.map((it) => (
+            <div
+              key={it.id}
+              className="payment-toggle-row"
+              style={{ alignItems: 'center' }}
+            >
+              <div className="payment-toggle-info">
+                <strong>
+                  {isRegister ? '🧰' : '📟'} {it.name}{' '}
+                  {!it.is_active && (
+                    <span style={{ color: '#9b3c32', fontSize: 12 }}>
+                      (غیرفعال)
+                    </span>
+                  )}
+                </strong>
+                <small>
+                  {(isRegister ? it.location : it.label) || '—'}
+                </small>
+              </div>
+              <button
+                type="button"
+                className={`auto-switch ${it.is_active ? 'on' : 'off'}`}
+                disabled={busy}
+                onClick={() =>
+                  run(() =>
+                    isRegister
+                      ? updateCashRegister(it.id, { is_active: !it.is_active })
+                      : updatePosDevice(it.id, { is_active: !it.is_active })
+                  )
+                }
+                title={it.is_active ? 'غیرفعال کردن' : 'فعال کردن'}
+              >
+                <span className="auto-switch-track">
+                  <span className="auto-switch-thumb" />
+                </span>
+              </button>
+            </div>
+          ))}
+
+          <div
+            className="form-grid"
+            style={{ marginTop: '12px', alignItems: 'end' }}
+          >
+            <div className="field">
+              <label>{isRegister ? 'نام صندوق جدید' : 'نام دستگاه جدید'}</label>
+              <input
+                type="text"
+                placeholder={isRegister ? 'مثلاً: صندوق بار' : 'مثلاً: کارت‌خوان ۱'}
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                disabled={busy}
+              />
+            </div>
+            <div className="field">
+              <label>{isRegister ? 'محل استقرار (اختیاری)' : 'برچسب (اختیاری)'}</label>
+              <input
+                type="text"
+                placeholder={isRegister ? 'مثلاً: کانتر جلو' : 'مثلاً: بانک ملت'}
+                value={extra}
+                onChange={(e) => setExtra(e.target.value)}
+                disabled={busy}
+              />
+            </div>
+          </div>
+          <button
+            type="button"
+            className="btn"
+            style={{ marginTop: '10px' }}
+            disabled={busy || !name.trim()}
+            onClick={async () => {
+              const n = name
+              const x = extra
+              setName('')
+              setExtra('')
+              await run(() =>
+                isRegister
+                  ? createCashRegister(n, x || null)
+                  : createPosDevice(n, x || null)
+              )
+            }}
+          >
+            ➕ افزودن
+          </button>
+        </>
+      )}
+    </section>
+  )
+}
 
 export default function PaymentSettingsManager() {
   const [settings, setSettings] = useState<PaymentSettings | null>(null)
@@ -279,6 +439,10 @@ export default function PaymentSettingsManager() {
           )}
         </>
       )}
+
+      {/* 🎯 پچ ۵۰-و-الف: صندوق‌ها و کارتخوان‌ها — مستقل از کلید سیستم پرداخت */}
+      <InstrumentSection kind="cash_registers" />
+      <InstrumentSection kind="pos_devices" />
 
       <div className="payment-save-bar">
         <button type="button" className="btn primary-btn" onClick={handleSave} disabled={saving}>

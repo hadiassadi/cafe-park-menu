@@ -45,7 +45,46 @@ export async function POST(
       return NextResponse.json({ error: 'مبلغ پرداخت نامعتبر است' }, { status: 400 })
     }
 
+    // 🎯 پچ ۵۰-و-الف: صندوق نقدی / کارتخوان انتخابی (اختیاری) — باید فعال باشد
+    const registerId =
+      typeof body?.register_id === 'string' && UUID_RE.test(body.register_id)
+        ? body.register_id
+        : null
+    const deviceId =
+      typeof body?.device_id === 'string' && UUID_RE.test(body.device_id)
+        ? body.device_id
+        : null
+
     const db = supabaseAdmin()
+
+    if (registerId) {
+      const { data: reg } = await db
+        .from('cash_registers')
+        .select('id')
+        .eq('id', registerId)
+        .eq('is_active', true)
+        .maybeSingle()
+      if (!reg) {
+        return NextResponse.json(
+          { error: 'صندوق انتخابی معتبر نیست' },
+          { status: 400 }
+        )
+      }
+    }
+    if (deviceId) {
+      const { data: dev } = await db
+        .from('pos_devices')
+        .select('id')
+        .eq('id', deviceId)
+        .eq('is_active', true)
+        .maybeSingle()
+      if (!dev) {
+        return NextResponse.json(
+          { error: 'کارت‌خوان انتخابی معتبر نیست' },
+          { status: 400 }
+        )
+      }
+    }
 
     // سفارش: فقط زنده‌ها
     const { data: order, error: orderErr } = await db
@@ -93,6 +132,34 @@ export async function POST(
     if (payErr) {
       console.error('[admin orders payment] rpc:', payErr)
       return NextResponse.json({ error: paymentErrorMessage(payErr.message) }, { status: 400 })
+    }
+
+    // 🎯 پچ ۵۰-و-الف: اتصال صندوق/دستگاه به ردیف تازهٔ دفتر (RPC فیلد ندارد) —
+    // آخرین ردیف confirmed همان روش/مبلغ؛ خطا فقط لاگ می‌شود، پرداخت خراب نمی‌شود
+    if (registerId || deviceId) {
+      try {
+        const { data: lastPay } = await db
+          .from('order_payments')
+          .select('id')
+          .eq('order_id', id)
+          .eq('method', method)
+          .eq('amount', amount)
+          .eq('status', 'confirmed')
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+        if (lastPay?.id) {
+          await db
+            .from('order_payments')
+            .update({
+              ...(registerId ? { register_id: registerId } : {}),
+              ...(deviceId ? { device_id: deviceId } : {}),
+            })
+            .eq('id', lastPay.id)
+        }
+      } catch (attachErr) {
+        console.error('[admin orders payment] attach instrument:', attachErr)
+      }
     }
 
     // روش پرداخت سفارش را هم به‌روز کن (فیلدهای جانبی مثل پنل مدیریت)

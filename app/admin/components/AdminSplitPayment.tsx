@@ -13,6 +13,9 @@ import { useEffect, useMemo, useState } from 'react'
 
 type MethodKey = 'cash' | 'card' | 'online' | 'transfer'
 
+// 🎯 پچ ۵۰-و-الف: صندوق‌های نقدی / کارتخوان‌های فعال (زیرساخت پرداخت POS)
+type Instrument = { id: string; name: string; location?: string | null; label?: string | null }
+
 const METHODS: Array<{ key: MethodKey; icon: string; label: string }> = [
   { key: 'cash', icon: '💵', label: 'نقدی' },
   { key: 'card', icon: '💳', label: 'کارت‌خوان' },
@@ -48,6 +51,32 @@ export default function AdminSplitPayment({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [doneParts, setDoneParts] = useState<MethodKey[]>([])
+
+  // 🎯 پچ ۵۰-و-الف: صندوق/دستگاه انتخابی هر روش — پیش‌فرض = اولین فعال
+  const [instruments, setInstruments] = useState<{
+    registers: Instrument[]
+    devices: Instrument[]
+  }>({ registers: [], devices: [] })
+  const [cashRegisterId, setCashRegisterId] = useState<string | undefined>()
+  const [cardDeviceId, setCardDeviceId] = useState<string | undefined>()
+
+  useEffect(() => {
+    let alive = true
+    fetch('/api/admin/payment-instruments', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!alive || !d) return
+        const registers: Instrument[] = Array.isArray(d.registers) ? d.registers : []
+        const devices: Instrument[] = Array.isArray(d.devices) ? d.devices : []
+        setInstruments({ registers, devices })
+        setCashRegisterId((cur) => cur ?? registers[0]?.id)
+        setCardDeviceId((cur) => cur ?? devices[0]?.id)
+      })
+      .catch(() => {})
+    return () => {
+      alive = false
+    }
+  }, [])
 
   // 🎯 پچ ۵۰-هـ-س: لینک پرداخت درگاه برای سفارش حضوری — مبلغ دلخواه/مانده
   const [payLink, setPayLink] = useState<{ url: string; amount: number } | null>(null)
@@ -180,7 +209,15 @@ export default function AdminSplitPayment({
         const res = await fetch(`/api/admin/orders/${orderId}/payment`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ method: p.k, amount: p.amount }),
+          // 🎯 پچ ۵۰-و-الف: صندوق نقدی / کارت‌خوان انتخابی همراه ردیف ثبت می‌شود
+          body: JSON.stringify({
+            method: p.k,
+            amount: p.amount,
+            ...(p.k === 'cash' && cashRegisterId
+              ? { register_id: cashRegisterId }
+              : {}),
+            ...(p.k === 'card' && cardDeviceId ? { device_id: cardDeviceId } : {}),
+          }),
         })
         const d = await res.json().catch(() => null)
         if (!res.ok || d?.error) {
@@ -362,6 +399,50 @@ export default function AdminSplitPayment({
                 ✕
               </button>
             </div>
+
+            {/* 🎯 پچ ۵۰-و-الف: انتخاب صندوق نقدی / کارت‌خوان — وقتی بیش از یکی فعال است */}
+            {k === 'cash' && instruments.registers.length > 1 && (
+              <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 6 }}>
+                {instruments.registers.map((r) => (
+                  <button
+                    key={r.id}
+                    type="button"
+                    style={{
+                      ...chipBase,
+                      ...(cashRegisterId === r.id
+                        ? { background: '#6b4f3a', borderColor: '#6b4f3a', color: '#fff' }
+                        : {}),
+                    }}
+                    disabled={busy}
+                    onClick={() => setCashRegisterId(r.id)}
+                    title={r.location || undefined}
+                  >
+                    🧰 {r.name}
+                  </button>
+                ))}
+              </div>
+            )}
+            {k === 'card' && instruments.devices.length > 1 && (
+              <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 6 }}>
+                {instruments.devices.map((d) => (
+                  <button
+                    key={d.id}
+                    type="button"
+                    style={{
+                      ...chipBase,
+                      ...(cardDeviceId === d.id
+                        ? { background: '#6b4f3a', borderColor: '#6b4f3a', color: '#fff' }
+                        : {}),
+                    }}
+                    disabled={busy}
+                    onClick={() => setCardDeviceId(d.id)}
+                    title={d.label || undefined}
+                  >
+                    📟 {d.name}
+                  </button>
+                ))}
+              </div>
+            )}
 
             {/* 🎯 پچ ۵۰-هـ-س: زیر ردیف درگاه — ساخت لینک پرداخت + شمارهٔ مشتری */}
             {k === 'online' && (amounts.online ?? 0) >= MIN_PART && (
