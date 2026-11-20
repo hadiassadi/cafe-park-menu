@@ -364,6 +364,85 @@ function PanelUserPasswordForm({
   )
 }
 
+// ── فرم نقش ردیف جدول (پچ ۵۸): خطا و موفقیت را زیر ردیف نشان می‌دهد ──
+// قبلاً فرم خام server-action بود و شکست ثبت نقش بی‌صدا از نظر پنهان می‌ماند
+function RoleForm({ u, onPw }: { u: PanelUser; onPw: () => void }) {
+  const [err, setErr] = useState('')
+  const [saved, setSaved] = useState(false)
+  const [pending, startTransition] = useTransition()
+
+  const submit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    const fd = new FormData(e.currentTarget)
+    setErr('')
+    setSaved(false)
+    startTransition(async () => {
+      const res = await setOperatorRole(fd)
+      if (res?.error) setErr(res.error)
+      else {
+        setSaved(true)
+        setTimeout(() => setSaved(false), 2500)
+      }
+    })
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+      <form onSubmit={submit} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+        <input type="hidden" name="user_id" value={u.user_id} />
+        <input type="hidden" name="email" value={u.email} />
+        <select
+          name="role"
+          defaultValue={u.role}
+          style={{ ...inputStyle, padding: '4px 8px', fontSize: 12 }}
+        >
+          {Object.entries(OP_ROLE_LABEL).map(([k, v]) => (
+            <option key={k} value={k}>
+              {v}
+            </option>
+          ))}
+          <option value="none">بدون دسترسی</option>
+        </select>
+        <button
+          type="submit"
+          disabled={pending}
+          className="btn"
+          style={{ fontSize: 11.5, opacity: pending ? 0.6 : 1 }}
+          title="ذخیرهٔ نقش"
+        >
+          💾
+        </button>
+        <button
+          type="button"
+          className="btn"
+          style={{ fontSize: 11.5 }}
+          title="تغییر/تنظیم رمز ورود"
+          onClick={onPw}
+        >
+          🔑
+        </button>
+      </form>
+      {err && (
+        <span
+          style={{
+            fontSize: 10.5,
+            color: '#9b3c32',
+            fontWeight: 700,
+            maxWidth: 280,
+          }}
+        >
+          ⚠️ {err}
+        </span>
+      )}
+      {saved && !err && (
+        <span style={{ fontSize: 10.5, color: '#2d5d3e', fontWeight: 700 }}>
+          ✓ ذخیره شد
+        </span>
+      )}
+    </div>
+  )
+}
+
 export default function UsersClient({
   staff,
   panelUsers,
@@ -605,7 +684,8 @@ export default function UsersClient({
           بسازی همان‌جا رمز می‌گیرد و می‌تواند وارد شود؛ کاربرِ بدون نقش و خارج از
           فهرست مدیران env اجازهٔ ورود پنل ندارد. مالک: همهٔ بخش‌ها + تایید خودکار
           بستن شیفت · مدیر و صندوق‌دار: محدودتر. پنجرهٔ شیفت از صفحهٔ «شیفت‌ها»
-          تنظیم می‌شود.
+          تنظیم می‌شود. اگر ثبت نقش خطا داد، جزئیاتش زیر همان ردیف می‌آید —
+          رایج‌ترین علت، اجرانشدن SQL پچ ۵۸ (قید قدیمی نقش‌ها) است.
         </div>
         <div style={{ overflowX: 'auto' }}>
           <table
@@ -681,46 +761,7 @@ export default function UsersClient({
                     {u.display_name}
                   </td>
                   <td style={{ padding: '6px 8px' }}>
-                    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                      <form
-                        action={async (fd) => {
-                          await setOperatorRole(fd)
-                        }}
-                        style={{ display: 'flex', gap: 6, alignItems: 'center' }}
-                      >
-                        <input type="hidden" name="user_id" value={u.user_id} />
-                        <input type="hidden" name="email" value={u.email} />
-                        <select
-                          name="role"
-                          defaultValue={u.role}
-                          style={{ ...inputStyle, padding: '4px 8px', fontSize: 12 }}
-                        >
-                          {Object.entries(OP_ROLE_LABEL).map(([k, v]) => (
-                            <option key={k} value={k}>
-                              {v}
-                            </option>
-                          ))}
-                          <option value="none">بدون دسترسی</option>
-                        </select>
-                        <button
-                          type="submit"
-                          className="btn"
-                          style={{ fontSize: 11.5 }}
-                          title="ذخیرهٔ نقش"
-                        >
-                          💾
-                        </button>
-                      </form>
-                      <button
-                        type="button"
-                        className="btn"
-                        style={{ fontSize: 11.5 }}
-                        title="تغییر/تنظیم رمز ورود"
-                        onClick={() => setPwModal(u)}
-                      >
-                        🔑
-                      </button>
-                    </div>
+                    <RoleForm u={u} onPw={() => setPwModal(u)} />
                   </td>
                   <td style={{ padding: '6px 8px', color: '#8a8378', fontSize: 11.5 }}>
                     {u.shift_start && u.shift_end

@@ -5,8 +5,8 @@ import { createServerClient } from '@supabase/ssr'
 import { supabaseAdmin } from '@/lib/supabase/server'
 
 export type AdminCheck =
-  | { denied: NextResponse; userId?: undefined }
-  | { denied: null; userId: string }
+  | { denied: NextResponse; userId?: undefined; email?: undefined }
+  | { denied: null; userId: string; email: string }
 
 export async function requireAdminUser(): Promise<AdminCheck> {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -44,7 +44,7 @@ export async function requireAdminUser(): Promise<AdminCheck> {
 
   const email = (user.email || '').toLowerCase()
   if (email && allowed.includes(email)) {
-    return { denied: null, userId: user.id }
+    return { denied: null, userId: user.id, email }
   }
 
   // 🎯 پچ ۵۷: کاربری که مالک از صفحهٔ «کاربران و دسترسی» برایش نقش ثبت کرده
@@ -59,7 +59,7 @@ export async function requireAdminUser(): Promise<AdminCheck> {
     return { denied: NextResponse.json({ error: 'Forbidden' }, { status: 403 }) }
   }
 
-  return { denied: null, userId: user.id }
+  return { denied: null, userId: user.id, email }
 }
 
 export async function requireAdmin(): Promise<NextResponse | null> {

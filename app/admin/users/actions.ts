@@ -171,7 +171,7 @@ export async function setOperatorRole(fd: FormData): Promise<Res> {
         .eq('user_id', user_id)
       if (error) {
         console.error('[setOperatorRole] delete:', error.message)
-        return { error: 'حذف دسترسی انجام نشد' }
+        return { error: `حذف دسترسی انجام نشد — ${error.message}` }
       }
       revalidatePath('/admin/users')
       return {}
@@ -192,7 +192,7 @@ export async function setOperatorRole(fd: FormData): Promise<Res> {
         .eq('user_id', user_id)
       if (error) {
         console.error('[setOperatorRole] update:', error.message)
-        return { error: 'ثبت نقش انجام نشد' }
+        return { error: `ثبت نقش انجام نشد — ${error.message}` }
       }
     } else {
       // پروفایل اپراتوری هنوز ساخته نشده — با نقش انتخابی می‌سازیم
@@ -205,7 +205,9 @@ export async function setOperatorRole(fd: FormData): Promise<Res> {
         })
       if (error) {
         console.error('[setOperatorRole] insert:', error.message)
-        return { error: 'ساخت پروفایل اپراتوری انجام نشد' }
+        // 🎯 پچ ۵۸: جزئیات خطا نمایش داده می‌شود — رایج‌ترین علت: قید CHECK قدیمی
+        // نقش‌ها (پچ ۵۲-ب فقط owner/manager/operator را می‌پذیرفت) — SQL پچ ۵۸ لازم است
+        return { error: `ثبت نقش انجام نشد — ${error.message}` }
       }
     }
     revalidatePath('/admin/users')
@@ -246,8 +248,13 @@ export async function createPanelUser(fd: FormData): Promise<Res> {
     if (createErr || !created?.user) {
       console.error('[createPanelUser]', createErr?.message)
       if (/already|registered|duplicate|been/i.test(createErr?.message || ''))
-        return { error: 'این ایمیل قبلاً ثبت شده است' }
-      return { error: 'ساخت کاربر انجام نشد' }
+        return {
+          error:
+            'این ایمیل قبلاً ثبت شده است — اگر کاربرش را در لیست می‌بینی، فقط نقشش را از جدول ثبت کن',
+        }
+      return {
+        error: `ساخت کاربر انجام نشد — ${createErr?.message || 'خطای ناشناخته'}`,
+      }
     }
 
     const { error: profErr } = await db
@@ -255,9 +262,10 @@ export async function createPanelUser(fd: FormData): Promise<Res> {
       .insert({ user_id: created.user.id, role, display_name })
     if (profErr) {
       console.error('[createPanelUser] profile:', profErr.message)
+      // 🎯 پچ ۵۸: کاربر auth ساخته شده — زامبی نمی‌ماند: از جدول (با تیک نمایش
+      // همه) نقشش را ثبت کن؛ اگر SQL پچ ۵۸ اجرا نشده باشد، جزئیات همان‌جا می‌آید
       return {
-        error:
-          'کاربر ساخته شد ولی ثبت نقش انجام نشد — از جدول، نقش را دوباره ثبت کن',
+        error: `کاربر ساخته شد ولی ثبت نقش انجام نشد — ${profErr.message} — از جدول، نقش را دوباره ثبت کن`,
       }
     }
     revalidatePath('/admin/users')
@@ -283,7 +291,7 @@ export async function setPanelUserPassword(fd: FormData): Promise<Res> {
     })
     if (error) {
       console.error('[setPanelUserPassword]', error.message)
-      return { error: 'تغییر رمز انجام نشد' }
+      return { error: `تغییر رمز انجام نشد — ${error.message}` }
     }
     revalidatePath('/admin/users')
     return {}
