@@ -23,6 +23,7 @@ const MENU_GROUPS = [
       { href: '/admin/shifts', label: 'شیفت‌ها', icon: '⏱' },
       { href: '/admin/accounting', label: 'حسابداری', icon: '🧮' },
       { href: '/admin/customers', label: 'مشتریان', icon: '👥' },
+      { href: '/admin/users', label: 'کاربران و دسترسی', icon: '🔐' },
     ],
   },
   {
