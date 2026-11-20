@@ -2,6 +2,7 @@ import 'server-only'
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
+import { supabaseAdmin } from '@/lib/supabase/server'
 
 export type AdminCheck =
   | { denied: NextResponse; userId?: undefined }
@@ -20,12 +21,8 @@ export async function requireAdminUser(): Promise<AdminCheck> {
     .split(',')
     .map((e) => e.trim().toLowerCase())
     .filter(Boolean)
-
   if (allowed.length === 0) {
-    console.error('[requireAdmin] ADMIN_EMAILS is not set')
-    return {
-      denied: NextResponse.json({ error: 'Server misconfigured' }, { status: 500 }),
-    }
+    console.warn('[requireAdmin] ADMIN_EMAILS is empty — فقط کاربران با پروفایل اپراتوری وارد می‌شوند')
   }
 
   const cookieStore = await cookies()
@@ -46,7 +43,19 @@ export async function requireAdminUser(): Promise<AdminCheck> {
   }
 
   const email = (user.email || '').toLowerCase()
-  if (!email || !allowed.includes(email)) {
+  if (email && allowed.includes(email)) {
+    return { denied: null, userId: user.id }
+  }
+
+  // 🎯 پچ ۵۷: کاربری که مالک از صفحهٔ «کاربران و دسترسی» برایش نقش ثبت کرده
+  // (پروفایل اپراتوری دارد) مجاز به ورود پنل است — بدون نیاز به ADMIN_EMAILS.
+  // مشتریانِ کیف پول (OTP) پروفایل ندارند و همچنان رد می‌شوند.
+  const { data: prof } = await supabaseAdmin()
+    .from('admin_operator_profiles')
+    .select('user_id')
+    .eq('user_id', user.id)
+    .maybeSingle()
+  if (!prof) {
     return { denied: NextResponse.json({ error: 'Forbidden' }, { status: 403 }) }
   }
 
