@@ -28,8 +28,16 @@ export async function getOperatorRole(): Promise<{
     .eq('user_id', auth.userId)
     .maybeSingle()
   const role = data?.role as OpRole | undefined
-  if (!role || !OP_ROLES.includes(role)) return { userId: auth.userId, role: 'staff' }
-  return { userId: auth.userId, role }
+  if (role && OP_ROLES.includes(role)) return { userId: auth.userId, role }
+
+  // 🎯 پچ ۵۸ — بیمهٔ نقش: کاربرِ ADMIN_EMAILS بدون پروفایل یا با نقش قدیمی
+  // (مثل operatorِ پچ ۵۲) هرگز از مالک پایین‌تر نمی‌آید؛ بقیه سخت‌گیرانه staff
+  const adminEmails = (process.env.ADMIN_EMAILS || '')
+    .split(',')
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean)
+  const isEnvAdmin = adminEmails.includes(auth.email || '')
+  return { userId: auth.userId, role: isEnvAdmin ? 'owner' : 'staff' }
 }
 
 // گارد صفحات سرور — بدون اجازه: به ورود یا داشبورد می‌رود
