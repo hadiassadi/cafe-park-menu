@@ -1,5 +1,4 @@
-import { redirect } from 'next/navigation'
-import { requireAdminUser } from '@/lib/admin/require-admin'
+import { requirePagePath } from '@/lib/admin/roles'
 import { supabaseAdmin } from '@/lib/supabase/server'
 import UsersClient, {
   PanelUser,
@@ -8,14 +7,12 @@ import UsersClient, {
 
 export const dynamic = 'force-dynamic'
 
-// 🎯 پچ ۵۵ — فاز ۴-الف: «کاربران و دسترسی» — این صفحه برخلاف بقیه صفحات پنل
-// گارد سمت سرور دارد (نمونهٔ الگوی فاز ۴-ب برای سایر صفحات):
+// 🎯 پچ ۵۵ + ۵۶ — «کاربران و دسترسی»:
 // کارکنان کافه از staff_members + کاربران پنل از auth (سرویس‌کلید) + نقش‌ها از
-// admin_operator_profiles
+// admin_operator_profiles. گارد نقش: فقط مالک (پچ ۵۶)
 
 export default async function UsersPage() {
-  const auth = await requireAdminUser()
-  if (auth.denied) redirect('/admin/login')
+  const me = await requirePagePath('/admin/users')
 
   const db = supabaseAdmin()
   const [staffRes, profRes] = await Promise.all([
@@ -64,7 +61,7 @@ export default async function UsersPage() {
       shift_start: p?.shift_start_time ?? null,
       shift_end: p?.shift_end_time ?? null,
       last_sign_in: u.last_sign_in,
-      is_me: u.id === auth.userId,
+      is_me: u.id === me.userId,
     }
   })
   // مالک‌ها اول، بعد بقیه بر اساس ایمیل
