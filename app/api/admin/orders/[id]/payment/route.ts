@@ -163,7 +163,9 @@ export async function POST(
 
     // 🎯 پچ ۵۲-د: آپدیت جانبی سفارش + پیدا کردن ردیف تازهٔ دفتر در یک موج
     // (شیفت باز از موج اول می‌آید — قبلاً همین کوئری برای بار دوم زده می‌شد)
-    const [updRes, lastPayRes] = await Promise.all([
+    // 🎯 پچ ۵۳: سند خودکار فروش در دفتر خزانه — بدهکار حساب خزانهٔ روش پرداخت /
+    // بستانکار «درآمد فروش»؛ نام/کد اپراتور و شیفت داخل RPC حل می‌شود (۱ رفت‌وبرگشت)
+    const [updRes, lastPayRes, glRes] = await Promise.all([
       // روش پرداخت سفارش را هم به‌روز کن (فیلدهای جانبی مثل پنل مدیریت)
       db
         .from('orders')
@@ -183,11 +185,26 @@ export async function POST(
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle(),
+      db.rpc('gl_post_auto_sale', {
+        p_order_id: id,
+        p_amount: amount,
+        p_method: method,
+        p_operator_id: auth.userId,
+        ...(registerId ? { p_register_id: registerId } : {}),
+        ...(deviceId ? { p_device_id: deviceId } : {}),
+      }),
     ])
     if (updRes.error) {
       console.error(
         '[admin orders payment] side update:',
         (updRes as any).error?.message
+      )
+    }
+    if (glRes.error) {
+      // سند خزانه نشد — پرداخت سالم است، فقط لاگ (در صفحهٔ خزانه با همگام‌سازی قابل پیگیری نیست؛ دستی ثبت کن)
+      console.error(
+        '[admin orders payment] gl post:',
+        (glRes as any).error?.message
       )
     }
 
