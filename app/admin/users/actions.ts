@@ -150,6 +150,15 @@ export async function deleteStaffMember(fd: FormData): Promise<Res> {
   }
 }
 
+// 🎯 پچ ۵۸-ب: تشخیص خطای قید CHECK قدیمی نقش‌ها (23514) — پیام راهنمای عملی
+// علت: پچ ۵۲-ب نقش را فقط ('owner','manager','operator') می‌پذیرفت؛ تا وقتی
+// SQL پچ ۵۸-ب اجرا نشده باشد، ثبت cashier/staff همین خطا را می‌دهد
+function roleCheckHint(msg: string): string | null {
+  return /check constraint|violates check|23514/i.test(msg)
+    ? 'قید قدیمی نقش‌ها هنوز روی دیتابیس فعال است — فایل patch-58b-role-check-force.sql را کامل در Supabase SQL Editor اجرا کن و دوباره تلاش کن'
+    : null
+}
+
 // نقش کاربر پنل — مبنای سطح دسترسی در پچ ۵۶
 // (مالک: همه چیز + تایید خودکار بستن شیفت؛ مدیر/صندوق‌دار: محدودتر)
 // نقش «none» = برداشتن دسترسی پنل (حذف پروفایل اپراتوری)
@@ -192,6 +201,8 @@ export async function setOperatorRole(fd: FormData): Promise<Res> {
         .eq('user_id', user_id)
       if (error) {
         console.error('[setOperatorRole] update:', error.message)
+        const hint = roleCheckHint(error.message)
+        if (hint) return { error: hint }
         return { error: `ثبت نقش انجام نشد — ${error.message}` }
       }
     } else {
@@ -205,8 +216,8 @@ export async function setOperatorRole(fd: FormData): Promise<Res> {
         })
       if (error) {
         console.error('[setOperatorRole] insert:', error.message)
-        // 🎯 پچ ۵۸: جزئیات خطا نمایش داده می‌شود — رایج‌ترین علت: قید CHECK قدیمی
-        // نقش‌ها (پچ ۵۲-ب فقط owner/manager/operator را می‌پذیرفت) — SQL پچ ۵۸ لازم است
+        const hint = roleCheckHint(error.message)
+        if (hint) return { error: hint }
         return { error: `ثبت نقش انجام نشد — ${error.message}` }
       }
     }
@@ -262,8 +273,13 @@ export async function createPanelUser(fd: FormData): Promise<Res> {
       .insert({ user_id: created.user.id, role, display_name })
     if (profErr) {
       console.error('[createPanelUser] profile:', profErr.message)
+      const hint = roleCheckHint(profErr.message)
+      if (hint)
+        return {
+          error: `${hint} — کاربر auth با همان ایمیل و رمز ساخته شده؛ بعد از اجرای SQL فقط نقشش را از جدول ثبت کن (تیک «نمایش همهٔ کاربران»)`,
+        }
       // 🎯 پچ ۵۸: کاربر auth ساخته شده — زامبی نمی‌ماند: از جدول (با تیک نمایش
-      // همه) نقشش را ثبت کن؛ اگر SQL پچ ۵۸ اجرا نشده باشد، جزئیات همان‌جا می‌آید
+      // همه) نقشش را ثبت کن؛ جزئیات خطای دیتابیس هم همان‌جا می‌آید
       return {
         error: `کاربر ساخته شد ولی ثبت نقش انجام نشد — ${profErr.message} — از جدول، نقش را دوباره ثبت کن`,
       }
