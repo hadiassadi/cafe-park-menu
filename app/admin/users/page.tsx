@@ -7,12 +7,18 @@ import UsersClient, {
 
 export const dynamic = 'force-dynamic'
 
-// 🎯 پچ ۵۵ + ۵۶ — «کاربران و دسترسی»:
+// 🎯 پچ ۵۵ + ۵۶ + ۵۷ — «کاربران و دسترسی»:
 // کارکنان کافه از staff_members + کاربران پنل از auth (سرویس‌کلید) + نقش‌ها از
-// admin_operator_profiles. گارد نقش: فقط مالک (پچ ۵۶)
+// admin_operator_profiles. گارد نقش: فقط مالک (پچ ۵۶).
+// پچ ۵۷: پرچم «مدیر env» (ایمیل در ADMIN_EMAILS) تا کاربران پنل از مشتریان
+// OTP جدا دیده شوند — لیست پیش‌فرض فقط مدیرهای env و کاربران دارای نقش است.
 
 export default async function UsersPage() {
   const me = await requirePagePath('/admin/users')
+  const adminEmails = (process.env.ADMIN_EMAILS || '')
+    .split(',')
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean)
 
   const db = supabaseAdmin()
   const [staffRes, profRes] = await Promise.all([
@@ -58,6 +64,7 @@ export default async function UsersPage() {
       display_name: p?.display_name?.trim() || u.email.split('@')[0],
       role: p?.role ?? 'staff',
       has_profile: !!p,
+      is_admin_email: adminEmails.includes(u.email.toLowerCase()),
       shift_start: p?.shift_start_time ?? null,
       shift_end: p?.shift_end_time ?? null,
       last_sign_in: u.last_sign_in,
@@ -67,7 +74,8 @@ export default async function UsersPage() {
   // مالک‌ها اول، بعد بقیه بر اساس ایمیل
   panelUsers.sort(
     (a, b) =>
-      (a.role === 'owner' ? 0 : 1) - (b.role === 'owner' ? 0 : 1) ||
+      (a.role === 'owner' && a.has_profile ? 0 : 1) -
+        (b.role === 'owner' && b.has_profile ? 0 : 1) ||
       a.email.localeCompare(b.email)
   )
 

@@ -9,12 +9,15 @@ import { toEnDigits } from '@/lib/wallet/charge'
 // 🎯 پچ ۵۵ — فاز ۴-الف: کاربران و دسترسی
 //   createStaffMember / updateStaffMember: فهرست کارکنان (staff_members)
 //   toggleStaffMember / deleteStaffMember
-//   setOperatorRole: نقش کاربر پنل (مالک/مدیر/صندوق‌دار/کارمند)
-//   — اعمال نقش‌ها روی دسترسی بخش‌ها در پچ ۵۶ (فاز ۴-ب)
+//   setOperatorRole: نقش کاربر پنل (مالک/مدیر/صندوق‌دار/کارمند/بدون دسترسی)
+// 🎯 پچ ۵۷ — ساخت کاربر پنل از خود پنل:
+//   createPanelUser: ایمیل+رمز از مودال (بدون پنل Supabase و بدون تغییر env)
+//   setPanelUserPassword: تغییر/تنظیم رمز کاربر پنل
 // ─────────────────────────────────────────────
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 const STAFF_ROLES = [
   'owner',
@@ -149,6 +152,7 @@ export async function deleteStaffMember(fd: FormData): Promise<Res> {
 
 // نقش کاربر پنل — مبنای سطح دسترسی در پچ ۵۶
 // (مالک: همه چیز + تایید خودکار بستن شیفت؛ مدیر/صندوق‌دار: محدودتر)
+// نقش «none» = برداشتن دسترسی پنل (حذف پروفایل اپراتوری)
 export async function setOperatorRole(fd: FormData): Promise<Res> {
   try {
     await assertPathAccess('/admin/users')
@@ -157,6 +161,22 @@ export async function setOperatorRole(fd: FormData): Promise<Res> {
     const email = String(fd.get('email') ?? '').trim().toLowerCase()
     if (!UUID_RE.test(user_id)) return { error: 'کاربر نامعتبر است' }
     const role = String(fd.get('role') ?? '')
+
+    if (role === 'none') {
+      // 🎯 پچ ۵۷: برگرداندن اشتباه — کاربر بدون پروفایل دیگر وارد پنل نمی‌شود
+      // (اگر ایمیلش در ADMIN_EMAILS باشد، دسترسی env با نقش پیش‌فرض کارمند می‌ماند)
+      const { error } = await db
+        .from('admin_operator_profiles')
+        .delete()
+        .eq('user_id', user_id)
+      if (error) {
+        console.error('[setOperatorRole] delete:', error.message)
+        return { error: 'حذف دسترسی انجام نشد' }
+      }
+      revalidatePath('/admin/users')
+      return {}
+    }
+
     if (!OP_ROLES.includes(role as any))
       return { error: 'نقش نامعتبر است' }
 
@@ -192,6 +212,83 @@ export async function setOperatorRole(fd: FormData): Promise<Res> {
     return {}
   } catch (err: any) {
     console.error('[setOperatorRole] unexpected:', err)
+    return { error: err?.message || 'خطای سرور' }
+  }
+}
+
+// 🎯 پچ ۵۷: کاربر پنل جدید از خود پنل — ایمیل + رمز (حداقل ۸ کاراکتر) + نقش.
+// با سرویس‌کلید ساخته می‌شود (ایمیل تأیید‌شده)، پروفایل اپراتوری همان‌جا ثبت
+// می‌شود و کاربر از /admin/login با همین ایمیل و رمز وارد می‌شود.
+export async function createPanelUser(fd: FormData): Promise<Res> {
+  try {
+    await assertPathAccess('/admin/users')
+    const db = supabaseAdmin()
+    const email = String(fd.get('email') ?? '').trim().toLowerCase()
+    const password = String(fd.get('password') ?? '')
+    const display_name =
+      cleanName(fd.get('display_name')) ||
+      email.split('@')[0].slice(0, 40) ||
+      'اپراتور'
+    const role = String(fd.get('role') ?? 'staff')
+    if (!EMAIL_RE.test(email)) return { error: 'ایمیل نامعتبر است' }
+    if (password.length < 8)
+      return { error: 'رمز عبور باید حداقل ۸ کاراکتر باشد' }
+    if (!OP_ROLES.includes(role as any))
+      return { error: 'نقش نامعتبر است' }
+
+    const { data: created, error: createErr } = await db.auth.admin.createUser(
+      {
+        email,
+        password,
+        email_confirm: true,
+      }
+    )
+    if (createErr || !created?.user) {
+      console.error('[createPanelUser]', createErr?.message)
+      if (/already|registered|duplicate|been/i.test(createErr?.message || ''))
+        return { error: 'این ایمیل قبلاً ثبت شده است' }
+      return { error: 'ساخت کاربر انجام نشد' }
+    }
+
+    const { error: profErr } = await db
+      .from('admin_operator_profiles')
+      .insert({ user_id: created.user.id, role, display_name })
+    if (profErr) {
+      console.error('[createPanelUser] profile:', profErr.message)
+      return {
+        error:
+          'کاربر ساخته شد ولی ثبت نقش انجام نشد — از جدول، نقش را دوباره ثبت کن',
+      }
+    }
+    revalidatePath('/admin/users')
+    return {}
+  } catch (err: any) {
+    console.error('[createPanelUser] unexpected:', err)
+    return { error: err?.message || 'خطای سرور' }
+  }
+}
+
+// 🎯 پچ ۵۷: تغییر/تنظیم رمز کاربر پنل (فراموشی رمز یا اولین ورود کارمند)
+export async function setPanelUserPassword(fd: FormData): Promise<Res> {
+  try {
+    await assertPathAccess('/admin/users')
+    const db = supabaseAdmin()
+    const user_id = String(fd.get('user_id') ?? '')
+    const password = String(fd.get('password') ?? '')
+    if (!UUID_RE.test(user_id)) return { error: 'کاربر نامعتبر است' }
+    if (password.length < 8)
+      return { error: 'رمز عبور باید حداقل ۸ کاراکتر باشد' }
+    const { error } = await db.auth.admin.updateUserById(user_id, {
+      password,
+    })
+    if (error) {
+      console.error('[setPanelUserPassword]', error.message)
+      return { error: 'تغییر رمز انجام نشد' }
+    }
+    revalidatePath('/admin/users')
+    return {}
+  } catch (err: any) {
+    console.error('[setPanelUserPassword] unexpected:', err)
     return { error: err?.message || 'خطای سرور' }
   }
 }

@@ -2,9 +2,11 @@
 
 import { useState, useTransition } from 'react'
 import {
+  createPanelUser,
   createStaffMember,
   deleteStaffMember,
   setOperatorRole,
+  setPanelUserPassword,
   toggleStaffMember,
   updateStaffMember,
 } from '@/app/admin/users/actions'
@@ -13,7 +15,9 @@ import AdminModal from './AdminModal'
 // 🎯 پچ ۵۵ — فاز ۴-الف: «🔐 کاربران و دسترسی»
 // بخش ۱ — کارکنان کافه: CRUD کامل روی staff_members (نقش، موبایل، یادداشت)
 // بخش ۲ — کاربران پنل: نقش هر کاربر پنل (مالک/مدیر/صندوق‌دار/کارمند) + پنجرهٔ شیفت
-// اعمال نقش‌ها روی منو و گاردها در پچ ۵۶ (فاز ۴-ب) وصل می‌شود
+// 🎯 پچ ۵۶: نقش‌ها روی منو و گاردها اعمال شد
+// 🎯 پچ ۵۷: ساخت کاربر پنل با ایمیل+رمز از همین‌جا، تغییر رمز، گزینهٔ «بدون
+// دسترسی» و جداکردن مشتریان OTP از لیست پیش‌فرض
 
 export type StaffRow = {
   id: number
@@ -31,6 +35,7 @@ export type PanelUser = {
   display_name: string
   role: string
   has_profile: boolean
+  is_admin_email: boolean
   shift_start: string | null
   shift_end: string | null
   last_sign_in: string | null
@@ -199,6 +204,166 @@ function StaffForm({
   )
 }
 
+// ── فرم کاربر پنل جدید (پچ ۵۷): ایمیل + رمز + نقش — بدون پنل Supabase ──
+function PanelUserForm({ onDone }: { onDone: () => void }) {
+  const [err, setErr] = useState('')
+  const [pending, startTransition] = useTransition()
+
+  const submit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    const fd = new FormData(e.currentTarget)
+    setErr('')
+    startTransition(async () => {
+      const res = await createPanelUser(fd)
+      if (res?.error) setErr(res.error)
+      else onDone()
+    })
+  }
+
+  return (
+    <form onSubmit={submit} style={{ display: 'grid', gap: 10 }}>
+      <div>
+        <label style={{ fontSize: 12, fontWeight: 700, display: 'block', marginBottom: 4 }}>
+          ایمیل ورود *
+        </label>
+        <input
+          name="email"
+          type="email"
+          dir="ltr"
+          placeholder="cashier@cafepark.ir"
+          style={{ ...inputStyle, width: '100%', textAlign: 'left' }}
+          required
+        />
+      </div>
+      <div>
+        <label style={{ fontSize: 12, fontWeight: 700, display: 'block', marginBottom: 4 }}>
+          رمز عبور * (حداقل ۸ کاراکتر)
+        </label>
+        <input
+          name="password"
+          type="password"
+          autoComplete="new-password"
+          minLength={8}
+          dir="ltr"
+          placeholder="********"
+          style={{ ...inputStyle, width: '100%', textAlign: 'left' }}
+          required
+        />
+      </div>
+      <div>
+        <label style={{ fontSize: 12, fontWeight: 700, display: 'block', marginBottom: 4 }}>
+          نام نمایشی
+        </label>
+        <input
+          name="display_name"
+          placeholder="مثلاً سارا محمدی"
+          style={{ ...inputStyle, width: '100%' }}
+        />
+      </div>
+      <div>
+        <label style={{ fontSize: 12, fontWeight: 700, display: 'block', marginBottom: 4 }}>
+          نقش دسترسی
+        </label>
+        <select name="role" defaultValue="staff" style={{ ...inputStyle, width: '100%' }}>
+          {Object.entries(OP_ROLE_LABEL).map(([k, v]) => (
+            <option key={k} value={k}>
+              {v}
+            </option>
+          ))}
+        </select>
+      </div>
+      <p style={{ fontSize: 11.5, color: '#8a8378', margin: 0 }}>
+        بعد از ثبت، این کاربر با همین ایمیل و رمز از صفحهٔ ورود پنل (/admin/login)
+        وارد می‌شود — نیازی به پنل Supabase یا تغییر متغیرهای محیطی نیست.
+      </p>
+      {err && (
+        <p style={{ fontSize: 12.5, color: '#9b3c32', fontWeight: 700 }}>
+          ⚠️ {err}
+        </p>
+      )}
+      <button
+        type="submit"
+        disabled={pending}
+        className="btn"
+        style={{
+          fontSize: 12.5,
+          background: '#2d5d3e',
+          color: '#fff',
+          borderColor: '#2d5d3e',
+          opacity: pending ? 0.6 : 1,
+        }}
+      >
+        {pending ? '⏳ در حال ساخت…' : '➕ ساخت کاربر پنل'}
+      </button>
+    </form>
+  )
+}
+
+// ── فرم تغییر/تنظیم رمز کاربر پنل (پچ ۵۷) ──
+function PanelUserPasswordForm({
+  user,
+  onDone,
+}: {
+  user: PanelUser
+  onDone: () => void
+}) {
+  const [err, setErr] = useState('')
+  const [pending, startTransition] = useTransition()
+
+  const submit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    const fd = new FormData(e.currentTarget)
+    setErr('')
+    startTransition(async () => {
+      const res = await setPanelUserPassword(fd)
+      if (res?.error) setErr(res.error)
+      else onDone()
+    })
+  }
+
+  return (
+    <form onSubmit={submit} style={{ display: 'grid', gap: 10 }}>
+      <input type="hidden" name="user_id" value={user.user_id} />
+      <p style={{ fontSize: 12, color: '#6b6355', margin: 0 }}>
+        رمز جدید برای <b dir="ltr">{user.email}</b> — رمز قبلی باطل می‌شود.
+      </p>
+      <div>
+        <label style={{ fontSize: 12, fontWeight: 700, display: 'block', marginBottom: 4 }}>
+          رمز عبور جدید * (حداقل ۸ کاراکتر)
+        </label>
+        <input
+          name="password"
+          type="password"
+          autoComplete="new-password"
+          minLength={8}
+          dir="ltr"
+          style={{ ...inputStyle, width: '100%', textAlign: 'left' }}
+          required
+        />
+      </div>
+      {err && (
+        <p style={{ fontSize: 12.5, color: '#9b3c32', fontWeight: 700 }}>
+          ⚠️ {err}
+        </p>
+      )}
+      <button
+        type="submit"
+        disabled={pending}
+        className="btn"
+        style={{
+          fontSize: 12.5,
+          background: '#2d5d3e',
+          color: '#fff',
+          borderColor: '#2d5d3e',
+          opacity: pending ? 0.6 : 1,
+        }}
+      >
+        {pending ? '⏳ در حال ثبت…' : '🔑 ثبت رمز جدید'}
+      </button>
+    </form>
+  )
+}
+
 export default function UsersClient({
   staff,
   panelUsers,
@@ -209,6 +374,15 @@ export default function UsersClient({
   const [modal, setModal] = useState<{ mode: 'new' | 'edit'; row: StaffRow | null } | null>(
     null
   )
+  // 🎯 پچ ۵۷: ساخت کاربر پنل + تغییر رمز + نمایش همهٔ کاربران auth
+  const [panelModal, setPanelModal] = useState(false)
+  const [pwModal, setPwModal] = useState<PanelUser | null>(null)
+  const [showAllUsers, setShowAllUsers] = useState(false)
+
+  // لیست پیش‌فرض: فقط مدیرهای env و کاربران دارای نقش — مشتریان OTP پنهان‌اند
+  const visiblePanelUsers = showAllUsers
+    ? panelUsers
+    : panelUsers.filter((u) => u.is_admin_email || u.has_profile)
 
   const activeCount = staff.filter((s) => s.is_active).length
   const byRole: Record<string, number> = {}
@@ -220,9 +394,9 @@ export default function UsersClient({
         🔐 کاربران و دسترسی
       </h1>
       <p className="admin-page-sub" style={{ marginBottom: 14 }}>
-        بخش اول فهرست کارکنان کافه است (منابع انسانی)؛ بخش دوم کاربرانی است که به
-        پنل وارد می‌شوند و نقش هرکدام سطح دسترسی‌اش را تعیین می‌کند — اعمال نقش‌ها
-        روی منو و گاردها در پچ بعدی فعال می‌شود.
+        بخش اول فهرست کارکنان کافه است (منابع انسانی)؛ بخش دوم کاربران پنل است —
+        ساخت کاربر با ایمیل و رمز از همین‌جا، تعیین نقش دسترسی و تغییر رمز. نقش‌ها
+        روی منو و گاردها اعمال می‌شوند.
       </p>
 
       {/* ── بخش ۱: کارکنان کافه ── */}
@@ -371,13 +545,68 @@ export default function UsersClient({
 
       {/* ── بخش ۲: کاربران پنل ── */}
       <section className="admin-card" style={{ padding: 12 }}>
-        <div style={{ fontSize: 12.5, fontWeight: 800, color: '#766f64', marginBottom: 4 }}>
-          🖥 کاربران پنل ({fa(panelUsers.length)}) — نقش تعیین‌کنندهٔ دسترسی است
+        <div
+          style={{
+            display: 'flex',
+            gap: 8,
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            marginBottom: 4,
+          }}
+        >
+          <div style={{ fontSize: 12.5, fontWeight: 800, color: '#766f64' }}>
+            🖥 کاربران پنل ({fa(visiblePanelUsers.length)} از{' '}
+            {fa(panelUsers.length)}) — نقش تعیین‌کنندهٔ دسترسی است
+          </div>
+          <label
+            style={{
+              fontSize: 11.5,
+              color: '#8a8378',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 5,
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={showAllUsers}
+              onChange={(e) => setShowAllUsers(e.target.checked)}
+            />
+            نمایش همهٔ کاربران (شامل مشتریان کیف پول)
+          </label>
+          <button
+            onClick={() => setPanelModal(true)}
+            className="btn"
+            style={{
+              fontSize: 12.5,
+              background: '#2d5d3e',
+              color: '#fff',
+              borderColor: '#2d5d3e',
+              marginInlineStart: 'auto',
+            }}
+          >
+            ➕ کاربر پنل جدید
+          </button>
         </div>
-        <p style={{ fontSize: 11.5, color: '#8a8378', marginBottom: 10 }}>
-          مالک: همهٔ بخش‌ها + تایید خودکار بستن شیفت · مدیر و صندوق‌دار: محدودتر
-          (اعمال در پچ بعدی). پنجرهٔ شیفت از صفحهٔ «شیفت‌ها» تنظیم می‌شود.
-        </p>
+        <div
+          style={{
+            fontSize: 11.5,
+            background: '#f4efe6',
+            border: '1px solid #e5ddcf',
+            borderRadius: 10,
+            padding: '8px 10px',
+            marginBottom: 10,
+            lineHeight: 1.9,
+            color: '#6b6355',
+          }}
+        >
+          ورود پنل با ایمیل و رمز است (آدرس{' '}
+          <span dir="ltr">/admin/login</span>). کاربری که با «➕ کاربر پنل جدید»
+          بسازی همان‌جا رمز می‌گیرد و می‌تواند وارد شود؛ کاربرِ بدون نقش و خارج از
+          فهرست مدیران env اجازهٔ ورود پنل ندارد. مالک: همهٔ بخش‌ها + تایید خودکار
+          بستن شیفت · مدیر و صندوق‌دار: محدودتر. پنجرهٔ شیفت از صفحهٔ «شیفت‌ها»
+          تنظیم می‌شود.
+        </div>
         <div style={{ overflowX: 'auto' }}>
           <table
             style={{
@@ -397,7 +626,7 @@ export default function UsersClient({
               </tr>
             </thead>
             <tbody>
-              {panelUsers.map((u) => (
+              {visiblePanelUsers.map((u) => (
                 <tr key={u.user_id} style={{ borderTop: '1px solid #f1ebdf' }}>
                   <td style={{ padding: '6px 8px' }}>
                     <span dir="ltr" style={{ fontFamily: 'monospace', fontSize: 12 }}>
@@ -418,18 +647,33 @@ export default function UsersClient({
                         (شما)
                       </span>
                     )}
-                    {!u.has_profile && (
+                    {u.is_admin_email && (
                       <span
                         style={{
                           fontSize: 10.5,
-                          color: '#9a6b3f',
-                          background: '#fff4d9',
+                          fontWeight: 700,
+                          color: '#4a7fa5',
+                          background: '#e8f0f8',
                           borderRadius: 999,
                           padding: '1px 7px',
                           marginInlineStart: 6,
                         }}
                       >
-                        بدون پروفایل
+                        مدیر env
+                      </span>
+                    )}
+                    {!u.has_profile && !u.is_admin_email && (
+                      <span
+                        style={{
+                          fontSize: 10.5,
+                          color: '#766f64',
+                          background: '#f1ebdf',
+                          borderRadius: 999,
+                          padding: '1px 7px',
+                          marginInlineStart: 6,
+                        }}
+                      >
+                        بدون دسترسی پنل
                       </span>
                     )}
                   </td>
@@ -437,25 +681,46 @@ export default function UsersClient({
                     {u.display_name}
                   </td>
                   <td style={{ padding: '6px 8px' }}>
-                    <form
-                      action={async (fd) => {
-                        await setOperatorRole(fd)
-                      }}
-                      style={{ display: 'flex', gap: 6, alignItems: 'center' }}
-                    >
-                      <input type="hidden" name="user_id" value={u.user_id} />
-                      <input type="hidden" name="email" value={u.email} />
-                      <select name="role" defaultValue={u.role} style={{ ...inputStyle, padding: '4px 8px', fontSize: 12 }}>
-                        {Object.entries(OP_ROLE_LABEL).map(([k, v]) => (
-                          <option key={k} value={k}>
-                            {v}
-                          </option>
-                        ))}
-                      </select>
-                      <button type="submit" className="btn" style={{ fontSize: 11.5 }}>
-                        💾
+                    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                      <form
+                        action={async (fd) => {
+                          await setOperatorRole(fd)
+                        }}
+                        style={{ display: 'flex', gap: 6, alignItems: 'center' }}
+                      >
+                        <input type="hidden" name="user_id" value={u.user_id} />
+                        <input type="hidden" name="email" value={u.email} />
+                        <select
+                          name="role"
+                          defaultValue={u.role}
+                          style={{ ...inputStyle, padding: '4px 8px', fontSize: 12 }}
+                        >
+                          {Object.entries(OP_ROLE_LABEL).map(([k, v]) => (
+                            <option key={k} value={k}>
+                              {v}
+                            </option>
+                          ))}
+                          <option value="none">بدون دسترسی</option>
+                        </select>
+                        <button
+                          type="submit"
+                          className="btn"
+                          style={{ fontSize: 11.5 }}
+                          title="ذخیرهٔ نقش"
+                        >
+                          💾
+                        </button>
+                      </form>
+                      <button
+                        type="button"
+                        className="btn"
+                        style={{ fontSize: 11.5 }}
+                        title="تغییر/تنظیم رمز ورود"
+                        onClick={() => setPwModal(u)}
+                      >
+                        🔑
                       </button>
-                    </form>
+                    </div>
                   </td>
                   <td style={{ padding: '6px 8px', color: '#8a8378', fontSize: 11.5 }}>
                     {u.shift_start && u.shift_end
@@ -481,6 +746,26 @@ export default function UsersClient({
           onClose={() => setModal(null)}
         >
           <StaffForm initial={modal.row} onDone={() => setModal(null)} />
+        </AdminModal>
+      )}
+
+      {/* 🎯 پچ ۵۷: مودال کاربر پنل جدید */}
+      {panelModal && (
+        <AdminModal
+          title="🖥 کاربر پنل جدید"
+          onClose={() => setPanelModal(false)}
+        >
+          <PanelUserForm onDone={() => setPanelModal(false)} />
+        </AdminModal>
+      )}
+
+      {/* 🎯 پچ ۵۷: مودال تغییر/تنظیم رمز */}
+      {pwModal && (
+        <AdminModal
+          title={`🔑 تغییر رمز — ${pwModal.email}`}
+          onClose={() => setPwModal(null)}
+        >
+          <PanelUserPasswordForm user={pwModal} onDone={() => setPwModal(null)} />
         </AdminModal>
       )}
     </div>
