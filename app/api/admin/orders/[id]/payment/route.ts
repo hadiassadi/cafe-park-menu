@@ -57,66 +57,78 @@ export async function POST(
 
     const db = supabaseAdmin()
 
-    if (registerId) {
-      const { data: reg } = await db
-        .from('cash_registers')
-        .select('id')
-        .eq('id', registerId)
-        .eq('is_active', true)
-        .maybeSingle()
-      if (!reg) {
-        return NextResponse.json(
-          { error: 'صندوق انتخابی معتبر نیست' },
-          { status: 400 }
-        )
-      }
-    }
-    if (deviceId) {
-      const { data: dev } = await db
-        .from('pos_devices')
-        .select('id')
-        .eq('id', deviceId)
-        .eq('is_active', true)
-        // 🎯 ۵۰-و-ب: فقط حساب‌هایی که تیک «کارتخوان» دارند قابل انتخاب‌اند
-        .eq('is_card_reader', true)
-        .maybeSingle()
-      if (!dev) {
-        return NextResponse.json(
-          { error: 'کارت‌خوان انتخابی معتبر نیست' },
-          { status: 400 }
-        )
-      }
-    }
-
     // 🎯 پچ ۵۰-و-ب: یادداشت اختیاری تسویه — پیش‌فرض مثل قبل
     const payNote =
       typeof body?.note === 'string' && body.note.trim()
         ? body.note.trim().slice(0, 200)
         : 'ثبت از POS'
 
-    // سفارش: فقط زنده‌ها
-    const { data: order, error: orderErr } = await db
-      .from('orders')
-      .select('id, subtotal, status, payment_method')
-      .eq('id', id)
-      .maybeSingle()
-    if (orderErr || !order) {
+    // 🎯 پچ ۵۲-د: همهٔ خواندنی‌های مستقل در یک موج (Promise.all) — قبلاً ۵
+    // رفت‌وبرگشت پشت‌سرهم به Supabase بود که تأیید تسویه را چندثانیه‌ای می‌کرد
+    const [regRes, devRes, orderRes, paysRes, openShiftRes] = await Promise.all([
+      registerId
+        ? db
+            .from('cash_registers')
+            .select('id')
+            .eq('id', registerId)
+            .eq('is_active', true)
+            .maybeSingle()
+        : Promise.resolve({ data: null } as any),
+      deviceId
+        ? db
+            .from('pos_devices')
+            .select('id')
+            .eq('id', deviceId)
+            .eq('is_active', true)
+            // 🎯 ۵۰-و-ب: فقط حساب‌هایی که تیک «کارتخوان» دارند قابل انتخاب‌اند
+            .eq('is_card_reader', true)
+            .maybeSingle()
+        : Promise.resolve({ data: null } as any),
+      // سفارش: فقط زنده‌ها
+      db
+        .from('orders')
+        .select('id, subtotal, status, payment_method')
+        .eq('id', id)
+        .maybeSingle(),
+      // باقی‌مانده = مبلغ − پرداخت‌های تأییدشده
+      db
+        .from('order_payments')
+        .select('amount')
+        .eq('order_id', id)
+        .eq('status', 'confirmed'),
+      // 🎯 پچ ۵۲: قفل تسویه بدون شیفت باز — برای همهٔ کاربران ادمین
+      db
+        .from('shifts')
+        .select('id')
+        .eq('opened_by', auth.userId)
+        .is('closed_at', null)
+        .maybeSingle(),
+    ])
+
+    if (registerId && !regRes.data) {
+      return NextResponse.json(
+        { error: 'صندوق انتخابی معتبر نیست' },
+        { status: 400 }
+      )
+    }
+    if (deviceId && !devRes.data) {
+      return NextResponse.json(
+        { error: 'کارت‌خوان انتخابی معتبر نیست' },
+        { status: 400 }
+      )
+    }
+    const order = orderRes.data
+    if (orderRes.error || !order) {
       return NextResponse.json({ error: 'سفارش پیدا نشد' }, { status: 404 })
     }
     if ((order as any).status === 'cancelled') {
       return NextResponse.json({ error: 'این سفارش لغو شده است' }, { status: 400 })
     }
-
-    // باقی‌مانده = مبلغ − پرداخت‌های تأییدشده
-    const { data: pays, error: paysErr } = await db
-      .from('order_payments')
-      .select('amount')
-      .eq('order_id', id)
-      .eq('status', 'confirmed')
-    if (paysErr) {
+    if (paysRes.error) {
       return NextResponse.json({ error: 'خطا در خواندن پرداخت‌ها' }, { status: 500 })
     }
-    const paid = (pays ?? []).reduce((s, r) => s + Number((r as any).amount), 0)
+    const pays = paysRes.data ?? []
+    const paid = pays.reduce((s, r) => s + Number((r as any).amount), 0)
     const remaining = Math.max(0, Math.round(Number((order as any).subtotal) - paid))
     if (remaining <= 0) {
       return NextResponse.json({ error: 'این فاکتور قبلاً تسویه شده است' }, { status: 400 })
@@ -127,20 +139,13 @@ export async function POST(
         { status: 400 }
       )
     }
-
-    // 🎯 پچ ۵۲: قفل تسویه بدون شیفت باز — برای همهٔ کاربران ادمین
-    const { data: openShiftLock } = await db
-      .from('shifts')
-      .select('id')
-      .eq('opened_by', auth.userId)
-      .is('closed_at', null)
-      .maybeSingle()
-    if (!openShiftLock) {
+    if (!openShiftRes.data) {
       return NextResponse.json(
         { error: '⏱ اول شیفت کاری‌ات را باز کن (چیپ شیفت در بالای صفحه)' },
         { status: 403 }
       )
     }
+    const openShiftId = (openShiftRes.data as any).id as string
 
     // ثبت پرداخت — همان RPC پنل مدیریت
     const { error: payErr } = await db.rpc('add_order_payment', {
@@ -156,18 +161,19 @@ export async function POST(
       return NextResponse.json({ error: paymentErrorMessage(payErr.message) }, { status: 400 })
     }
 
-    // 🎯 پچ ۵۰-و-الف: اتصال صندوق/دستگاه به ردیف تازهٔ دفتر (RPC فیلد ندارد) —
-    // آخرین ردیف confirmed همان روش/مبلغ؛ خطا فقط لاگ می‌شود، پرداخت خراب نمی‌شود
-    // 🎯 پچ ۵۱: شناسنامهٔ ردیف دفتر — اپراتور + شیفت بازِ همان اپراتور
-    // (همیشه ثبت می‌شود، حتی وقتی صندوق/دستگاه انتخاب نشده)
-    try {
-      const { data: openShift } = await db
-        .from('shifts')
-        .select('id')
-        .eq('opened_by', auth.userId)
-        .is('closed_at', null)
-        .maybeSingle()
-      const { data: lastPay } = await db
+    // 🎯 پچ ۵۲-د: آپدیت جانبی سفارش + پیدا کردن ردیف تازهٔ دفتر در یک موج
+    // (شیفت باز از موج اول می‌آید — قبلاً همین کوئری برای بار دوم زده می‌شد)
+    const [updRes, lastPayRes] = await Promise.all([
+      // روش پرداخت سفارش را هم به‌روز کن (فیلدهای جانبی مثل پنل مدیریت)
+      db
+        .from('orders')
+        .update({
+          payment_method: method,
+          payment_verified_at: new Date().toISOString(),
+        })
+        .eq('id', id),
+      // آخرین ردیف confirmed همان روش/مبلغ
+      db
         .from('order_payments')
         .select('id')
         .eq('order_id', id)
@@ -176,32 +182,30 @@ export async function POST(
         .eq('status', 'confirmed')
         .order('created_at', { ascending: false })
         .limit(1)
-        .maybeSingle()
-      if (lastPay?.id) {
-        await db
-          .from('order_payments')
-          .update({
-            operator_id: auth.userId,
-            ...(openShift?.id ? { shift_id: openShift.id } : {}),
-            ...(registerId ? { register_id: registerId } : {}),
-            ...(deviceId ? { device_id: deviceId } : {}),
-          })
-          .eq('id', lastPay.id)
-      }
-    } catch (attachErr) {
-      console.error('[admin orders payment] attach instrument:', attachErr)
+        .maybeSingle(),
+    ])
+    if (updRes.error) {
+      console.error(
+        '[admin orders payment] side update:',
+        (updRes as any).error?.message
+      )
     }
 
-    // روش پرداخت سفارش را هم به‌روز کن (فیلدهای جانبی مثل پنل مدیریت)
-    const { error: updErr } = await db
-      .from('orders')
-      .update({
-        payment_method: method,
-        payment_verified_at: new Date().toISOString(),
-      })
-      .eq('id', id)
-    if (updErr) {
-      console.error('[admin orders payment] side update:', updErr)
+    // 🎯 پچ ۵۰-و-الف: اتصال صندوق/دستگاه به ردیف تازهٔ دفتر (RPC فیلد ندارد) —
+    // خطا فقط لاگ می‌شود، پرداخت خراب نمی‌شود
+    // 🎯 پچ ۵۱: شناسنامهٔ ردیف دفتر — اپراتور + شیفت بازِ همان اپراتور
+    // (همیشه ثبت می‌شود، حتی وقتی صندوق/دستگاه انتخاب نشده)
+    const lastPay = (lastPayRes?.data as any) ?? null
+    if (lastPay?.id) {
+      await db
+        .from('order_payments')
+        .update({
+          operator_id: auth.userId,
+          ...(openShiftId ? { shift_id: openShiftId } : {}),
+          ...(registerId ? { register_id: registerId } : {}),
+          ...(deviceId ? { device_id: deviceId } : {}),
+        })
+        .eq('id', lastPay.id)
     }
 
     return NextResponse.json({

@@ -113,6 +113,11 @@ export default async function ShiftsPage({
     users.map((u) => [u.id, u.name])
   )
 
+  // 🎯 پچ ۵۲-د: بینندهٔ «صاحب» دکمهٔ تایید را روی همهٔ شیفت‌های در انتظار می‌بیند —
+  // حتی شیفتِ خودش (بقیه همچنان چهارچشم: شیفت خودشان را نمی‌توانند تایید کنند)
+  const isOwnerViewer =
+    currentUserId != null && profileByUser[currentUserId]?.role === 'owner'
+
   // شیفت‌ها با فیلتر
   let q = db
     .from('shifts')
@@ -377,7 +382,9 @@ export default async function ShiftsPage({
             ? handoverFromById[s.handover_from_shift_id]
             : null
           const canApprove =
-            isOpen === false && !s.approved_by && s.opened_by !== currentUserId
+            isOpen === false &&
+            !s.approved_by &&
+            (s.opened_by !== currentUserId || isOwnerViewer)
           const canForceClose = isOpen && s.opened_by !== currentUserId
           return (
             <div

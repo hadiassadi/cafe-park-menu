@@ -79,10 +79,19 @@ export async function approveShift(formData: FormData): Promise<void> {
       .eq('id', shiftId)
       .maybeSingle()
     if (!s?.closed_at || s.approved_by) return
+    // 🎯 پچ ۵۲-د: استثنای صاحب — چهارچشم برای اپراتور/مدیر است؛ «صاحب» می‌تواند
+    // شیفت خودش (و هر کاربر دیگری) را تایید کند تا تاریخچهٔ معلق نماند
     if (s.opened_by === userId) {
-      // چهارچشم: شیفتت را خودت نمی‌توانی تایید کنی
-      console.error('[approveShift] owner cannot approve own shift')
-      return
+      const { data: myProf } = await db
+        .from('admin_operator_profiles')
+        .select('role')
+        .eq('user_id', userId)
+        .maybeSingle()
+      if (myProf?.role !== 'owner') {
+        // چهارچشم: شیفتت را خودت نمی‌توانی تایید کنی
+        console.error('[approveShift] owner cannot approve own shift')
+        return
+      }
     }
     const { error } = await db
       .from('shifts')
