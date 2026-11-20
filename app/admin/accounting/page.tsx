@@ -2,14 +2,25 @@ import { supabaseAdmin } from '@/lib/supabase/server'
 import TreasuryClient, {
   EntryRow,
 } from '@/app/admin/components/TreasuryClient'
+import {
+  computeAccountingReport,
+  reportRange,
+} from '@/lib/accounting/reports'
 
 export const dynamic = 'force-dynamic'
 
-// 🎯 پچ ۵۳-ب — خزانه و حسابداری: این صفحه فقط داده می‌خواند؛
-// همهٔ UI (تب‌ها، جدول اسناد با ستون بدهکار/بستانکار، مودال ثبت سند چندردیفه)
-// در TreasuryClient است. مانده = بدهکار − بستانکار (view: gl_account_balances)
+// 🎯 پچ ۵۳-ب/ج/۵۴ — حسابداری: این صفحه فقط داده می‌خواند؛
+// همهٔ UI (تب‌ها، جدول اسناد با ستون بدهکار/بستانکار، مودال ثبت سند چندردیفه،
+// مودال دفتر معین، تب گزارش‌ها) در TreasuryClient است. مانده = بدهکار − بستانکار
 
-type SP = { acc?: string; from?: string; to?: string; kind?: string }
+type SP = {
+  acc?: string
+  from?: string
+  to?: string
+  kind?: string
+  rfrom?: string
+  rto?: string
+}
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -79,6 +90,10 @@ export default async function TreasuryPage({
   if (sp.to) q = q.lte('entry_date', `${sp.to}T23:59:59`)
   const { data: entries } = await q
 
+  // گزارش‌ها (پچ ۵۴): بازهٔ پیش‌فرض = اول ماه جاری تا امروز
+  const range = reportRange(sp.rfrom, sp.rto)
+  const report = await computeAccountingReport(range.from, range.to)
+
   return (
     <TreasuryClient
       treasuries={treasuries}
@@ -88,6 +103,7 @@ export default async function TreasuryPage({
       totalTreasury={totalTreasury}
       entries={(entries ?? []) as unknown as EntryRow[]}
       filters={sp}
+      report={report}
     />
   )
 }

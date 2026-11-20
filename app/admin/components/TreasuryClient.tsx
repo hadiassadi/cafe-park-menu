@@ -10,12 +10,11 @@ import {
 import AdminModal from './AdminModal'
 import AccountLedgerModal from './AccountLedgerModal'
 import TreasuryJournalEditor, { Acc, accLabel } from './TreasuryJournalEditor'
+import type { AccountingReport } from '@/lib/accounting/reports'
 
-// 🎯 پچ ۵۳-ب/ج — پوستهٔ «حسابداری» با تب‌ها (الگوی فصل اول پارسیان):
-//   نوار کارت‌های خزانه (کلیک روی هر کارت → مودال مشترک «دفتر معین» با جستجوی
-//   همه‌ستونه و صفحه‌بندی ۱۰تایی) → تب «📒 اسناد روزنامه» و تب «🗂 حساب‌ها و سرفصل‌ها»
-//   ثبت سند = مودال مشترک با ادیتور چندردیفه بدهکار/بستانکار + توازن زنده
-//   جدول اسناد به سبک گزارش عملیات سپیدار/هلو: ستون‌های بدهکار و بستانکار
+// 🎯 پچ ۵۳-ب/ج + ۵۴ — پوستهٔ «حسابداری» با تب‌ها (الگوی فصل اول پارسیان):
+//   کارت‌های خزانه (کلیک → مودال مشترک «دفتر معین») → تب‌های «📒 اسناد روزنامه»
+//   «🗂 حساب‌ها و سرفصل‌ها» و «📊 گزارش‌ها» (تراز آزمایشی + سود و زیان + خروجی CSV)
 
 export type EntryLine = {
   side: string
@@ -74,6 +73,7 @@ export default function TreasuryClient({
   totalTreasury,
   entries,
   filters,
+  report,
 }: {
   treasuries: Acc[]
   incomes: Acc[]
@@ -82,8 +82,9 @@ export default function TreasuryClient({
   totalTreasury: number
   entries: EntryRow[]
   filters: { acc?: string; from?: string; to?: string; kind?: string }
+  report: AccountingReport
 }) {
-  const [tab, setTab] = useState<'entries' | 'accounts'>('entries')
+  const [tab, setTab] = useState<'entries' | 'accounts' | 'reports'>('entries')
   const [modalOpen, setModalOpen] = useState(false)
   const [ledgerAcc, setLedgerAcc] = useState<Acc | null>(null)
 
@@ -180,10 +181,13 @@ export default function TreasuryClient({
         {[
           { key: 'entries', label: '📒 اسناد روزنامه' },
           { key: 'accounts', label: '🗂 حساب‌ها و سرفصل‌ها' },
+          { key: 'reports', label: '📊 گزارش‌ها' },
         ].map((t) => (
           <button
             key={t.key}
-            onClick={() => setTab(t.key as 'entries' | 'accounts')}
+            onClick={() =>
+              setTab(t.key as 'entries' | 'accounts' | 'reports')
+            }
             style={{
               border: '1px solid ' + (tab === t.key ? '#2d5d3e' : '#d8d0c4'),
               background: tab === t.key ? '#e8f3ec' : '#fff',
@@ -656,6 +660,297 @@ export default function TreasuryClient({
                 ))}
               </div>
             ))}
+          </div>
+        </section>
+      )}
+
+      {/* تب گزارش‌ها — پچ ۵۴ */}
+      {tab === 'reports' && (
+        <section className="admin-card">
+          {/* بازهٔ گزارش */}
+          <form
+            method="get"
+            style={{
+              display: 'flex',
+              gap: 10,
+              flexWrap: 'wrap',
+              alignItems: 'end',
+              marginBottom: 16,
+            }}
+          >
+            <div>
+              <label
+                style={{
+                  fontSize: 12,
+                  fontWeight: 700,
+                  display: 'block',
+                  marginBottom: 4,
+                }}
+              >
+                از تاریخ
+              </label>
+              <input
+                type="date"
+                name="rfrom"
+                defaultValue={report.from}
+                style={inputStyle}
+              />
+            </div>
+            <div>
+              <label
+                style={{
+                  fontSize: 12,
+                  fontWeight: 700,
+                  display: 'block',
+                  marginBottom: 4,
+                }}
+              >
+                تا تاریخ
+              </label>
+              <input
+                type="date"
+                name="rto"
+                defaultValue={report.to}
+                style={inputStyle}
+              />
+            </div>
+            <button type="submit" className="btn" style={{ fontSize: 12 }}>
+              🔄 اجرای گزارش
+            </button>
+            <a
+              className="btn"
+              href={`/api/admin/gl/reports-csv?rfrom=${report.from}&rto=${report.to}`}
+              style={{ fontSize: 12 }}
+            >
+              ⬇️ خروجی CSV (اکسل)
+            </a>
+          </form>
+
+          {/* سود و زیان */}
+          <div
+            style={{
+              display: 'flex',
+              gap: 8,
+              flexWrap: 'wrap',
+              marginBottom: 16,
+            }}
+          >
+            <div
+              style={{
+                flex: '1 1 160px',
+                minWidth: 160,
+                border: '1px solid #e3ddd2',
+                borderRadius: 10,
+                padding: '9px 12px',
+                background: '#fff',
+              }}
+            >
+              <div style={{ fontSize: 11.5, color: '#766f64', fontWeight: 700 }}>
+                📥 درآمد کل
+              </div>
+              <div
+                style={{
+                  fontSize: 16,
+                  fontWeight: 800,
+                  marginTop: 3,
+                  color: '#2d5d3e',
+                }}
+              >
+                {fa(report.incomeNet)}
+              </div>
+            </div>
+            <div
+              style={{
+                flex: '1 1 160px',
+                minWidth: 160,
+                border: '1px solid #e3ddd2',
+                borderRadius: 10,
+                padding: '9px 12px',
+                background: '#fff',
+              }}
+            >
+              <div style={{ fontSize: 11.5, color: '#766f64', fontWeight: 700 }}>
+                📤 هزینهٔ کل
+              </div>
+              <div
+                style={{
+                  fontSize: 16,
+                  fontWeight: 800,
+                  marginTop: 3,
+                  color: '#9b3c32',
+                }}
+              >
+                {fa(report.expenseNet)}
+              </div>
+            </div>
+            <div
+              style={{
+                flex: '1 1 180px',
+                minWidth: 180,
+                border: '2px solid ' + (report.profit >= 0 ? '#2d5d3e' : '#9b3c32'),
+                borderRadius: 10,
+                padding: '9px 12px',
+                background: report.profit >= 0 ? '#e8f3ec' : '#fdeaea',
+              }}
+            >
+              <div style={{ fontSize: 11.5, fontWeight: 800, color: '#766f64' }}>
+                {report.profit >= 0 ? '📈 سود خالص' : '📉 زیان خالص'}
+              </div>
+              <div
+                style={{
+                  fontSize: 16,
+                  fontWeight: 800,
+                  marginTop: 3,
+                  color: report.profit >= 0 ? '#2d5d3e' : '#9b3c32',
+                }}
+              >
+                {fa(report.profit)}{' '}
+                <span style={{ fontSize: 10.5 }}>تومان</span>
+              </div>
+            </div>
+          </div>
+
+          {/* تراز آزمایشی — گردش و ماندهٔ همهٔ حساب‌ها در بازه */}
+          <div
+            style={{
+              fontSize: 12.5,
+              fontWeight: 800,
+              color: '#766f64',
+              marginBottom: 8,
+            }}
+          >
+            ⚖️ تراز آزمایشی — مانده = بدهکار − بستانکار (برای حساب‌های درآمد،
+            عدد منفی یعنی بستانکار)
+          </div>
+          <div style={{ overflowX: 'auto' }}>
+            <table
+              style={{
+                width: '100%',
+                borderCollapse: 'collapse',
+                minWidth: 520,
+                fontSize: 12.5,
+              }}
+            >
+              <thead>
+                <tr style={{ background: '#f4efe6' }}>
+                  <th style={{ ...cellTh, minWidth: 180 }}>حساب</th>
+                  <th
+                    style={{
+                      ...cellTh,
+                      textAlign: 'center',
+                      color: '#2d5d3e',
+                      width: 120,
+                    }}
+                  >
+                    گردش بدهکار
+                  </th>
+                  <th
+                    style={{
+                      ...cellTh,
+                      textAlign: 'center',
+                      color: '#9b3c32',
+                      width: 120,
+                    }}
+                  >
+                    گردش بستانکار
+                  </th>
+                  <th
+                    style={{ ...cellTh, textAlign: 'center', width: 120 }}
+                  >
+                    مانده دوره
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {report.rows.map((r) => (
+                  <tr
+                    key={r.account_id}
+                    style={{ borderTop: '1px solid #f1ebdf' }}
+                  >
+                    <td style={{ padding: '5px 8px', fontWeight: 600 }}>
+                      {accLabel({
+                        id: r.account_id,
+                        name: r.name,
+                        kind: r.kind,
+                        treasury_type: r.treasury_type,
+                      })}
+                    </td>
+                    <td
+                      style={{
+                        padding: '5px 8px',
+                        textAlign: 'center',
+                        color: '#2d5d3e',
+                        fontWeight: 700,
+                      }}
+                    >
+                      {r.turnD ? fa(r.turnD) : ''}
+                    </td>
+                    <td
+                      style={{
+                        padding: '5px 8px',
+                        textAlign: 'center',
+                        color: '#9b3c32',
+                        fontWeight: 700,
+                      }}
+                    >
+                      {r.turnC ? fa(r.turnC) : ''}
+                    </td>
+                    <td
+                      style={{
+                        padding: '5px 8px',
+                        textAlign: 'center',
+                        fontWeight: 700,
+                        color: r.bal < 0 ? '#9b3c32' : '#4b443b',
+                      }}
+                    >
+                      {fa(r.bal)}
+                    </td>
+                  </tr>
+                ))}
+                {report.rows.length === 0 && (
+                  <tr>
+                    <td
+                      colSpan={4}
+                      style={{ padding: 14, textAlign: 'center' }}
+                    >
+                      <span className="empty-admin">
+                        در این بازه گردشی ثبت نشده.
+                      </span>
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+              <tfoot>
+                <tr style={{ borderTop: '2px solid #d8d0c4' }}>
+                  <td style={{ padding: '5px 8px', fontWeight: 800 }}>جمع</td>
+                  <td
+                    style={{
+                      padding: '5px 8px',
+                      textAlign: 'center',
+                      fontWeight: 800,
+                      color: '#2d5d3e',
+                    }}
+                  >
+                    {fa(
+                      report.rows.reduce((s, r) => s + r.turnD, 0)
+                    )}
+                  </td>
+                  <td
+                    style={{
+                      padding: '5px 8px',
+                      textAlign: 'center',
+                      fontWeight: 800,
+                      color: '#9b3c32',
+                    }}
+                  >
+                    {fa(
+                      report.rows.reduce((s, r) => s + r.turnC, 0)
+                    )}
+                  </td>
+                  <td />
+                </tr>
+              </tfoot>
+            </table>
           </div>
         </section>
       )}
