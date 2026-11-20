@@ -48,67 +48,47 @@ async function myName(
   }
 }
 
-export async function createManualEntry(formData: FormData): Promise<void> {
+// 🎯 پچ ۵۳-ب: سند چندردیفه به سبک نرم‌افزارهای حسابداری (Xero/سپیدار) —
+// هر ردیف: حساب + شرح مخصوص + فقط یکی از بدهکار/بستانکار؛ سند باید متوازن باشد
+export async function createManualJournal(formData: FormData): Promise<void> {
   try {
     const userId = await assertAdminId()
-    const kind = String(formData.get('kind') ?? '')
-    const amount = parseAmount(formData.get('amount'))
-    const note = String(formData.get('note') ?? '').trim().slice(0, 200)
-    const treTo = String(formData.get('tre_to') ?? '')
-    const treFrom = String(formData.get('tre_from') ?? '')
-    const cat = String(formData.get('cat') ?? '')
-    if (!amount || amount > MAX_AMOUNT) return
+    const entryDesc = String(formData.get('entry_desc') ?? '')
+      .trim()
+      .slice(0, 200)
 
-    let debitAcc = '' // مقصد پول
-    let creditAcc = '' // مبدا پول
-    let desc = ''
-
-    if (kind === 'receive') {
-      if (!UUID_RE.test(treTo) || !UUID_RE.test(cat)) return
-      debitAcc = treTo
-      creditAcc = cat
-    } else if (kind === 'pay') {
-      if (!UUID_RE.test(treFrom) || !UUID_RE.test(cat)) return
-      debitAcc = cat
-      creditAcc = treFrom
-    } else if (kind === 'transfer') {
-      if (!UUID_RE.test(treFrom) || !UUID_RE.test(treTo)) return
-      if (treFrom === treTo) return
-      debitAcc = treTo
-      creditAcc = treFrom
-    } else {
-      return
+    // ردیف‌ها: line_acc_i / line_desc_i / line_debit_i / line_credit_i
+    type Row = { acc: string; desc: string; debit: number; credit: number }
+    const rows: Row[] = []
+    for (let i = 0; i < 40; i++) {
+      const acc = String(formData.get(`line_acc_${i}`) ?? '')
+      if (!UUID_RE.test(acc)) continue
+      const debit = parseAmount(formData.get(`line_debit_${i}`))
+      const credit = parseAmount(formData.get(`line_credit_${i}`))
+      const desc = String(formData.get(`line_desc_${i}`) ?? '')
+        .trim()
+        .slice(0, 200)
+      if (!debit && !credit) continue // ردیف خالی — رد
+      if (debit && credit) return // یک ردیف فقط یک طرف می‌تواند داشته باشد
+      rows.push({ acc, desc, debit, credit })
     }
+    if (rows.length < 2) return // سند حداقل دو قلم
+    const sumD = rows.reduce((s, r) => s + r.debit, 0)
+    const sumC = rows.reduce((s, r) => s + r.credit, 0)
+    if (sumD !== sumC || sumD > MAX_AMOUNT) return // عدم توازن یا مبلغ غیرمجاز
 
     const db = supabaseAdmin()
-    const ids = Array.from(new Set([debitAcc, creditAcc]))
+    const ids = Array.from(new Set(rows.map((r) => r.acc)))
     const { data: accs } = await db
       .from('gl_accounts')
-      .select('id, name, kind, treasury_type, is_active')
+      .select('id, is_active')
       .in('id', ids)
-    const byId: Record<string, any> = {}
-    for (const a of accs ?? []) byId[a.id] = a
-    const dAcc = byId[debitAcc]
-    const cAcc = byId[creditAcc]
-    if (!dAcc || !cAcc) return
-    // اعتبارسنجی نوع حساب‌ها: خزانه فقط خزانه، دستهٔ دریافت/پرداخت فقط درآمد/هزینه
-    if (kind === 'receive') {
-      if (dAcc.kind !== 'treasury' || cAcc.kind !== 'income') return
-    } else if (kind === 'pay') {
-      if (dAcc.kind !== 'expense' || cAcc.kind !== 'treasury') return
-    } else {
-      if (dAcc.kind !== 'treasury' || cAcc.kind !== 'treasury') return
-    }
-    if (!dAcc.is_active || !cAcc.is_active) return
+    const activeIds = new Set((accs ?? []).map((a: any) => a.id))
+    if (rows.some((r) => !activeIds.has(r.acc))) return // حساب نامعتبر/غیرفعال
 
-    if (kind === 'receive') {
-      desc = `دریافت ${amount.toLocaleString('fa-IR')} — ${cAcc.name}${note ? ' — ' + note : ''}`
-    } else if (kind === 'pay') {
-      desc = `پرداخت ${amount.toLocaleString('fa-IR')} — ${dAcc.name}${note ? ' — ' + note : ''}`
-    } else {
-      desc = `انتقال ${amount.toLocaleString('fa-IR')} — ${cAcc.name} → ${dAcc.name}${note ? ' — ' + note : ''}`
-    }
-
+    const desc =
+      entryDesc ||
+      `سند دستی — ${rows.length.toLocaleString('fa-IR')} قلم — جمع ${sumD.toLocaleString('fa-IR')}`
     const creator = await myName(db, userId)
     const { data: entry, error: entryErr } = await db
       .from('gl_entries')
@@ -121,22 +101,27 @@ export async function createManualEntry(formData: FormData): Promise<void> {
       .select('id')
       .single()
     if (entryErr || !entry) {
-      console.error('[createManualEntry] entry:', entryErr?.message)
+      console.error('[createManualJournal] entry:', entryErr?.message)
       return
     }
-    const { error: linesErr } = await db.from('gl_lines').insert([
-      { entry_id: entry.id, account_id: debitAcc, side: 'debit', amount },
-      { entry_id: entry.id, account_id: creditAcc, side: 'credit', amount },
-    ])
+    const { error: linesErr } = await db.from('gl_lines').insert(
+      rows.map((r) => ({
+        entry_id: entry.id,
+        account_id: r.acc,
+        side: r.debit ? 'debit' : 'credit',
+        amount: r.debit || r.credit,
+        description: r.desc || null,
+      }))
+    )
     if (linesErr) {
-      console.error('[createManualEntry] lines:', linesErr.message)
+      console.error('[createManualJournal] lines:', linesErr.message)
       // بدون اقلام، سند بی‌معناست — پاکش می‌کنیم
       await db.from('gl_entries').delete().eq('id', entry.id)
       return
     }
     revalidatePath('/admin/treasury')
   } catch (err) {
-    console.error('[createManualEntry] unexpected:', err)
+    console.error('[createManualJournal] unexpected:', err)
   }
 }
 
