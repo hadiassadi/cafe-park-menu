@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { createManualJournal } from '@/app/admin/treasury/actions'
+import { createManualJournal } from '@/app/admin/accounting/actions'
 import { toEnDigits } from '@/lib/wallet/charge'
 
 // 🎯 پچ ۵۳-ب — ادیتور سند حسابداری چندردیفه (داخل مودال مشترک):
