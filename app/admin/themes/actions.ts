@@ -1,5 +1,5 @@
 'use server'
-import { assertAdmin } from '@/lib/admin/assert-admin'
+import { assertPathAccess } from '@/lib/admin/roles'
 
 import * as fontkit from 'fontkit'
 import { supabaseServer } from '@/lib/supabase/server'
@@ -332,7 +332,7 @@ function getFinalFontSelection(metadata: FontMetadataItem[], family: string) {
 // ADD THEME
 // ==========================
 export async function addTheme(formData: FormData) {
-  await assertAdmin()
+  await assertPathAccess('/admin/themes')
   const db = await supabaseServer()
 
   const name = String(formData.get('name') || '').trim()
@@ -420,7 +420,7 @@ export async function addTheme(formData: FormData) {
 // UPDATE THEME
 // ==========================
 export async function updateTheme(formData: FormData) {
-  await assertAdmin()
+  await assertPathAccess('/admin/themes')
   const db = await supabaseServer()
 
   const id = String(formData.get('id') || '')
@@ -531,7 +531,7 @@ export async function updateTheme(formData: FormData) {
 // ACTIVATE THEME
 // ==========================
 export async function activateTheme(formData: FormData) {
-  await assertAdmin()
+  await assertPathAccess('/admin/themes')
   const db = await supabaseServer()
   const id = String(formData.get('id') || '')
 

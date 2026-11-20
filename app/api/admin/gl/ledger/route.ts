@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { assertAdminId } from '@/lib/admin/assert-admin'
+import { assertPathAccess } from '@/lib/admin/roles'
 import { supabaseAdmin } from '@/lib/supabase/server'
 import { toEnDigits } from '@/lib/wallet/charge'
 
@@ -41,7 +41,7 @@ function applyLedgerFilters(query: any, accId: string, q: string): any {
 
 export async function GET(req: NextRequest) {
   try {
-    await assertAdminId()
+    await assertPathAccess('/admin/accounting')
     const sp = req.nextUrl.searchParams
     const acc = sp.get('acc') ?? ''
     const page = Math.max(1, Math.min(500, Number(sp.get('page') ?? '1') || 1))

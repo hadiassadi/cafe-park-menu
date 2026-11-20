@@ -1,5 +1,5 @@
 'use server'
-import { assertAdmin } from '@/lib/admin/assert-admin'
+import { assertPathAccess } from '@/lib/admin/roles'
 
 import { supabaseServer, supabaseAdmin } from '@/lib/supabase/server'
 
@@ -51,7 +51,7 @@ async function listAllFiles(
 }
 
 export async function resetData(input: Input): Promise<Output> {
-  await assertAdmin()
+  await assertPathAccess('/admin/settings')
   // ۱) قفل محیطی
   if (process.env.ALLOW_DATA_RESET !== 'true') {
     return { ok: false, error: 'ریست داده‌ها در این محیط غیرفعال است.' }

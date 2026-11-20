@@ -6,12 +6,14 @@ import {
   computeAccountingReport,
   reportRange,
 } from '@/lib/accounting/reports'
+import { requirePagePath } from '@/lib/admin/roles'
 
 export const dynamic = 'force-dynamic'
 
-// 🎯 پچ ۵۳-ب/ج/۵۴ — حسابداری: این صفحه فقط داده می‌خواند؛
+// 🎯 پچ ۵۳-ب/ج/۵۴/۵۶ — حسابداری: این صفحه فقط داده می‌خواند؛
 // همهٔ UI (تب‌ها، جدول اسناد با ستون بدهکار/بستانکار، مودال ثبت سند چندردیفه،
 // مودال دفتر معین، تب گزارش‌ها) در TreasuryClient است. مانده = بدهکار − بستانکار
+// گارد نقش: فقط مالک (پچ ۵۶) — مدیر/صندوق‌دار به داشبورد برمی‌گردند
 
 type SP = {
   acc?: string
@@ -30,6 +32,7 @@ export default async function TreasuryPage({
 }: {
   searchParams: Promise<SP>
 }) {
+  await requirePagePath('/admin/accounting')
   const sp = await searchParams
   const db = supabaseAdmin()
 

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { assertAdminId } from '@/lib/admin/assert-admin'
+import { assertPathAccess } from '@/lib/admin/roles'
 import {
   computeAccountingReport,
   reportRange,
@@ -18,7 +18,7 @@ function esc(v: string | number): string {
 
 export async function GET(req: NextRequest) {
   try {
-    await assertAdminId()
+    await assertPathAccess('/admin/accounting')
     const sp = req.nextUrl.searchParams
     const { from, to } = reportRange(
       sp.get('rfrom') ?? undefined,

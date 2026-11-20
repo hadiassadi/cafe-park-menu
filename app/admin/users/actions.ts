@@ -1,6 +1,6 @@
 'use server'
 
-import { assertAdminId } from '@/lib/admin/assert-admin'
+import { assertPathAccess } from '@/lib/admin/roles'
 import { supabaseAdmin } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { toEnDigits } from '@/lib/wallet/charge'
@@ -42,7 +42,7 @@ function cleanPhone(v: FormDataEntryValue | null): string | null {
 // کارمند جدید فهرست کارکنان
 export async function createStaffMember(fd: FormData): Promise<Res> {
   try {
-    await assertAdminId()
+    await assertPathAccess('/admin/users')
     const db = supabaseAdmin()
     const full_name = cleanName(fd.get('full_name'))
     if (!full_name) return { error: 'نام کامل را وارد کن' }
@@ -71,7 +71,7 @@ export async function createStaffMember(fd: FormData): Promise<Res> {
 // ویرایش کارمند موجود
 export async function updateStaffMember(fd: FormData): Promise<Res> {
   try {
-    await assertAdminId()
+    await assertPathAccess('/admin/users')
     const db = supabaseAdmin()
     const id = Number(fd.get('id'))
     if (!Number.isInteger(id) || id <= 0)
@@ -104,7 +104,7 @@ export async function updateStaffMember(fd: FormData): Promise<Res> {
 // فعال/غیرفعال‌کردن کارمند (تاریخچه می‌ماند)
 export async function toggleStaffMember(fd: FormData): Promise<Res> {
   try {
-    await assertAdminId()
+    await assertPathAccess('/admin/users')
     const db = supabaseAdmin()
     const id = Number(fd.get('id'))
     if (!Number.isInteger(id) || id <= 0) return {}
@@ -130,7 +130,7 @@ export async function toggleStaffMember(fd: FormData): Promise<Res> {
 // حذف کامل کارمند — فقط وقتی هیچ ردی ندارد (فعلاً هیچ FKای به این جدول نیست)
 export async function deleteStaffMember(fd: FormData): Promise<Res> {
   try {
-    await assertAdminId()
+    await assertPathAccess('/admin/users')
     const db = supabaseAdmin()
     const id = Number(fd.get('id'))
     if (!Number.isInteger(id) || id <= 0) return {}
@@ -151,7 +151,7 @@ export async function deleteStaffMember(fd: FormData): Promise<Res> {
 // (مالک: همه چیز + تایید خودکار بستن شیفت؛ مدیر/صندوق‌دار: محدودتر)
 export async function setOperatorRole(fd: FormData): Promise<Res> {
   try {
-    await assertAdminId()
+    await assertPathAccess('/admin/users')
     const db = supabaseAdmin()
     const user_id = String(fd.get('user_id') ?? '')
     const email = String(fd.get('email') ?? '').trim().toLowerCase()

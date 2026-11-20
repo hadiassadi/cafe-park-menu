@@ -9,6 +9,10 @@ import NewOrderAlert from './components/NewOrderAlert'
 import ShiftGate from './components/ShiftGate'
 import { useOrderNotifications } from '@/lib/use-order-notifications'
 import { useDocumentTitle } from '@/lib/use-document-title'
+import {
+  OpRole,
+  roleAllowsPath,
+} from '@/lib/admin/role-matrix'
 
 // 🎯 پچ ۴۱ — منوی یکپارچه: یک منبع واحد برای سایدبار دسکتاپ و drawer موبایل
 // ۲۲ آیتم قبلاً فهرست تختِ شلوغ بود؛ حالا ۶ گروه منطقی با برچسب — دسترسی به همه بخش‌ها از یک ساختار واحد
@@ -88,6 +92,8 @@ export default function AdminLayout({
   const pathname = usePathname()
   const router = useRouter()
   const [checking, setChecking] = useState(true)
+  // 🎯 پچ ۵۶: نقش اپراتوری — مبنای فیلتر منو و گارد مسیر (تا پاسخ whoami همه چیز)
+  const [role, setRole] = useState<OpRole | null>(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
   // 🎯 پچ ۴۲: گروه‌های تاشو — undefined/open باز، false بسته؛ پس از mount از localStorage بازیابی می‌شود
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({})
@@ -249,6 +255,14 @@ export default function AdminLayout({
         }
         setChecking(false)
 
+        // 🎯 پچ ۵۶: نقش اپراتوری برای فیلتر منو و گارد مسیر
+        fetch('/api/admin/whoami', { cache: 'no-store' })
+          .then((r) => (r.ok ? r.json() : null))
+          .then((d) => {
+            if (mounted && d?.role) setRole(d.role as OpRole)
+          })
+          .catch(() => {})
+
         try {
           if ('Notification' in window && Notification.permission === 'default') {
             setTimeout(() => {
@@ -272,6 +286,25 @@ export default function AdminLayout({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // 🎯 پچ ۵۶: گارد نقش — اگر مسیر فعلی برای نقش مجاز نبود، به داشبورد برگرد
+  // (سمت سرور هم صفحات و APIهای حساس گارد دارند؛ این لایه UI است)
+  useEffect(() => {
+    if (checking || !role) return
+    if (pathname === '/admin/login' || pathname === '/admin') return
+    if (!roleAllowsPath(role, pathname)) router.replace('/admin')
+  }, [role, pathname, checking])
+
+  // 🎯 پچ ۵۶: منوی هر نقش — گروه خالی هم حذف می‌شود
+  const visibleGroups = (
+    role
+      ? MENU_GROUPS.map((g) => ({
+          key: g.key,
+          label: g.label,
+          items: g.items.filter((it) => roleAllowsPath(role, it.href)),
+        }))
+      : [...MENU_GROUPS.map((g) => ({ ...g, items: [...g.items] }))]
+  ).filter((g) => g.items.length > 0)
 
   if (pathname === '/admin/login') {
     return <main>{children}</main>
@@ -365,7 +398,7 @@ export default function AdminLayout({
         </div>
 
         <nav className="admin-nav">
-          {MENU_GROUPS.map((group) => {
+          {visibleGroups.map((group) => {
             const collapsed = openGroups[group.key] === false
             return (
               <div
@@ -470,7 +503,7 @@ export default function AdminLayout({
             </div>
 
             <nav className="admin-drawer-nav">
-              {MENU_GROUPS.map((group) => {
+              {visibleGroups.map((group) => {
                 const collapsed = openGroups[group.key] === false
                 return (
                   <div

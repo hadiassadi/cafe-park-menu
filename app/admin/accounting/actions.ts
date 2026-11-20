@@ -1,6 +1,6 @@
 'use server'
 
-import { assertAdminId } from '@/lib/admin/assert-admin'
+import { assertPathAccess } from '@/lib/admin/roles'
 import { supabaseAdmin } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { toEnDigits } from '@/lib/wallet/charge'
@@ -52,7 +52,7 @@ async function myName(
 // هر ردیف: حساب + شرح مخصوص + فقط یکی از بدهکار/بستانکار؛ سند باید متوازن باشد
 export async function createManualJournal(formData: FormData): Promise<void> {
   try {
-    const userId = await assertAdminId()
+    const { userId } = await assertPathAccess('/admin/accounting')
     const entryDesc = String(formData.get('entry_desc') ?? '')
       .trim()
       .slice(0, 200)
@@ -127,7 +127,7 @@ export async function createManualJournal(formData: FormData): Promise<void> {
 
 export async function deleteManualEntry(formData: FormData): Promise<void> {
   try {
-    await assertAdminId()
+    await assertPathAccess('/admin/accounting')
     const entryId = String(formData.get('entry_id') ?? '')
     if (!UUID_RE.test(entryId)) return
     const db = supabaseAdmin()
@@ -147,7 +147,7 @@ export async function deleteManualEntry(formData: FormData): Promise<void> {
 
 export async function createAccount(formData: FormData): Promise<void> {
   try {
-    await assertAdminId()
+    await assertPathAccess('/admin/accounting')
     const name = String(formData.get('name') ?? '')
       .trim()
       .slice(0, 40)
@@ -175,7 +175,7 @@ export async function createAccount(formData: FormData): Promise<void> {
 
 export async function deactivateAccount(formData: FormData): Promise<void> {
   try {
-    await assertAdminId()
+    await assertPathAccess('/admin/accounting')
     const id = String(formData.get('account_id') ?? '')
     if (!UUID_RE.test(id)) return
     const db = supabaseAdmin()
@@ -192,7 +192,7 @@ export async function deactivateAccount(formData: FormData): Promise<void> {
 
 export async function syncTreasuryAccounts(formData: FormData): Promise<void> {
   try {
-    await assertAdminId()
+    await assertPathAccess('/admin/accounting')
     const db = supabaseAdmin()
     const [regs, devs] = await Promise.all([
       db.from('cash_registers').select('id, name').eq('is_active', true),
