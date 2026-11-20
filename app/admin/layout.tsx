@@ -21,7 +21,7 @@ const MENU_GROUPS = [
       { href: '/admin/orders', label: 'سفارش‌ها', icon: '🛒' },
       { href: '/admin/orders/new', label: 'ثبت سفارش حضوری', icon: '➕' },
       { href: '/admin/shifts', label: 'شیفت‌ها', icon: '⏱' },
-      { href: '/admin/treasury', label: 'خزانه', icon: '💰' },
+      { href: '/admin/accounting', label: 'حسابداری', icon: '🧮' },
       { href: '/admin/customers', label: 'مشتریان', icon: '👥' },
     ],
   },

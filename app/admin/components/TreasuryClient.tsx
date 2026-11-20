@@ -6,13 +6,15 @@ import {
   deactivateAccount,
   deleteManualEntry,
   syncTreasuryAccounts,
-} from '@/app/admin/treasury/actions'
+} from '@/app/admin/accounting/actions'
 import AdminModal from './AdminModal'
+import AccountLedgerModal from './AccountLedgerModal'
 import TreasuryJournalEditor, { Acc, accLabel } from './TreasuryJournalEditor'
 
-// 🎯 پچ ۵۳-ب — پوستهٔ خزانه با تب‌ها:
-//   نوار مانده‌ها (همیشه بالا) → تب «📒 اسناد روزنامه» و تب «🗂 حساب‌ها و سرفصل‌ها»
-//   ثبت سند = مودال مشترک با ادیتور چندردیفه بدهکار/بستانکار
+// 🎯 پچ ۵۳-ب/ج — پوستهٔ «حسابداری» با تب‌ها (الگوی فصل اول پارسیان):
+//   نوار کارت‌های خزانه (کلیک روی هر کارت → مودال مشترک «دفتر معین» با جستجوی
+//   همه‌ستونه و صفحه‌بندی ۱۰تایی) → تب «📒 اسناد روزنامه» و تب «🗂 حساب‌ها و سرفصل‌ها»
+//   ثبت سند = مودال مشترک با ادیتور چندردیفه بدهکار/بستانکار + توازن زنده
 //   جدول اسناد به سبک گزارش عملیات سپیدار/هلو: ستون‌های بدهکار و بستانکار
 
 export type EntryLine = {
@@ -83,17 +85,19 @@ export default function TreasuryClient({
 }) {
   const [tab, setTab] = useState<'entries' | 'accounts'>('entries')
   const [modalOpen, setModalOpen] = useState(false)
+  const [ledgerAcc, setLedgerAcc] = useState<Acc | null>(null)
 
   const allActive = [...treasuries, ...incomes, ...expenses]
 
   return (
     <div>
       <h1 className="admin-page-title" style={{ marginBottom: 6 }}>
-        💰 خزانه و حسابداری
+        🧮 حسابداری
       </h1>
       <p className="admin-page-sub" style={{ marginBottom: 14 }}>
         هر سند دوطرفه است: پول از حسابی (بستانکار) به حساب دیگر (بدهکار) می‌رود.
         فروش‌های POS خودکار ثبت می‌شوند؛ هزینه‌ها و انتقال‌ها را با «➕ ثبت سند» وارد کن.
+        روی هر کارت خزانه کلیک کن تا «دفتر معین» همان حساب باز شود.
       </p>
 
       {/* نوار مانده‌ها — همیشه بالای تب‌ها */}
@@ -114,6 +118,8 @@ export default function TreasuryClient({
             return (
               <div
                 key={a.id}
+                onClick={() => setLedgerAcc(a)}
+                title="کلیک: دفتر معین — گردش و جستجو در این حساب"
                 style={{
                   flex: '1 1 130px',
                   minWidth: 130,
@@ -121,6 +127,7 @@ export default function TreasuryClient({
                   borderRadius: 10,
                   padding: '8px 11px',
                   background: '#fff',
+                  cursor: 'pointer',
                 }}
               >
                 <div style={{ fontSize: 11.5, color: '#766f64', fontWeight: 700 }}>
@@ -667,6 +674,15 @@ export default function TreasuryClient({
             onDone={() => setModalOpen(false)}
           />
         </AdminModal>
+      )}
+
+      {/* مودال مشترک دفتر معین — کلیک روی کارت خزانه */}
+      {ledgerAcc && (
+        <AccountLedgerModal
+          account={ledgerAcc}
+          balance={balances[ledgerAcc.id] ?? 0}
+          onClose={() => setLedgerAcc(null)}
+        />
       )}
     </div>
   )

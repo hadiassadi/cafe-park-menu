@@ -119,7 +119,7 @@ export async function createManualJournal(formData: FormData): Promise<void> {
       await db.from('gl_entries').delete().eq('id', entry.id)
       return
     }
-    revalidatePath('/admin/treasury')
+    revalidatePath('/admin/accounting')
   } catch (err) {
     console.error('[createManualJournal] unexpected:', err)
   }
@@ -139,7 +139,7 @@ export async function deleteManualEntry(formData: FormData): Promise<void> {
     if (!e || e.source !== 'manual') return // اسناد خودکار POS قابل حذف نیستند
     await db.from('gl_lines').delete().eq('entry_id', entryId)
     await db.from('gl_entries').delete().eq('id', entryId)
-    revalidatePath('/admin/treasury')
+    revalidatePath('/admin/accounting')
   } catch (err) {
     console.error('[deleteManualEntry] unexpected:', err)
   }
@@ -167,7 +167,7 @@ export async function createAccount(formData: FormData): Promise<void> {
     } else {
       return
     }
-    revalidatePath('/admin/treasury')
+    revalidatePath('/admin/accounting')
   } catch (err) {
     console.error('[createAccount] unexpected:', err)
   }
@@ -184,7 +184,7 @@ export async function deactivateAccount(formData: FormData): Promise<void> {
       .update({ is_active: false })
       .eq('id', id)
     if (error) console.error('[deactivateAccount]', error.message)
-    revalidatePath('/admin/treasury')
+    revalidatePath('/admin/accounting')
   } catch (err) {
     console.error('[deactivateAccount] unexpected:', err)
   }
@@ -229,7 +229,7 @@ export async function syncTreasuryAccounts(formData: FormData): Promise<void> {
         .upsert(rows, { onConflict: 'slug', ignoreDuplicates: true })
       if (error) console.error('[syncTreasuryAccounts]', error.message)
     }
-    revalidatePath('/admin/treasury')
+    revalidatePath('/admin/accounting')
   } catch (err) {
     console.error('[syncTreasuryAccounts] unexpected:', err)
   }
