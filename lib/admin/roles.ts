@@ -15,6 +15,7 @@ import { accessAllowsPath, sanitizeAllowedPaths } from './modules'
 
 export async function getOperatorRole(): Promise<{
   userId: string
+  email: string
   role: OpRole
   allowedPaths: string[] | null
 } | null> {
@@ -53,7 +54,9 @@ export async function getOperatorRole(): Promise<{
   // 🎯 پچ ۶۰: لیست دلخواه ماژول‌ها — خالی/null یعنی «پیش‌فرض نقش»
   // (مالک همیشه از accessAllowsPath عبور می‌کند، لیست برایش بی‌اثر است)
   const allowedPaths = sanitizeAllowedPaths(profRow?.allowed_paths)
-  return { userId: auth.userId, role: finalRole, allowedPaths }
+  // 🎯 پچ ۶۰-د: ایمیل هم برگردانده می‌شود — نشانگر «با چه کاربری وارد شده‌ای»
+  // در سایدبار از همین می‌آید تا اشتباه‌گرفتن نشست مالک/کارمند رخ ندهد
+  return { userId: auth.userId, email: auth.email, role: finalRole, allowedPaths }
 }
 
 // گارد صفحات سرور — بدون اجازه: به ورود یا داشبورد می‌رود
