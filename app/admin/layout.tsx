@@ -306,8 +306,9 @@ export default function AdminLayout({
   const menuAllows = (href: string) => {
     if (allowedPaths && allowedPaths.length > 0) {
       if (href === '/admin' || href === '/admin/login') return true
+      // 🎯 پچ ۶۰-و: تیک داشبورد ('/admin') فقط خود داشبورد — نه پیشوندِ کل /admin/*
       return allowedPaths.some(
-        (p) => href === p || href.startsWith(p + '/')
+        (p) => p !== '/admin' && (href === p || href.startsWith(p + '/'))
       )
     }
     if (!role) return true

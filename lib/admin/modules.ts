@@ -78,6 +78,11 @@ export function normalizeAllowedPaths(raw: unknown): string[] {
 // 🎯 تصمیم واحد گیت ماژولار — منو، صفحات، actionها و پروکسی همه از این استفاده می‌کنند:
 //   مالک → همه‌چیز؛ داشبورد و ورود → همیشه باز؛
 //   لیست دلخواهِ ثبت‌شده → ملاک نهایی؛ در غیر این صورت پیش‌فرض نقش
+//
+// 🎯 پچ ۶۰-و (فیکس بحرانی): تیکِ «داشبورد» (مسیر '/admin') فقط خودِ صفحهٔ داشبورد
+// را باز می‌کند، نه کل درخت /admin/* — چون چک پیشوندیِ startsWith('/admin/') روی
+// هر صفحهٔ دیگری هم true می‌داد و عملاً همهٔ ماژول‌ها را برای همه باز می‌کرد.
+// مسیر '/admin' داخل لیست پس از چکِ exactِ داشبورد، در تطبیق پیشوندی نادیده گرفته می‌شود.
 export function accessAllowsPath(
   role: OpRole,
   allowedPaths: string[] | null | undefined,
@@ -88,7 +93,8 @@ export function accessAllowsPath(
   if (role === 'owner') return true
   if (allowedPaths && allowedPaths.length > 0) {
     return allowedPaths.some(
-      (p) => clean === p || clean.startsWith(p + '/')
+      (p) =>
+        p !== '/admin' && (clean === p || clean.startsWith(p + '/'))
     )
   }
   return roleAllowsPath(role, clean)
