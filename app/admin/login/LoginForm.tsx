@@ -37,6 +37,28 @@ export default function LoginForm() {
       return
     }
 
+    // 🎯 پچ ۵۹-آ: بعد از ورود موفق، وضعیت دسترسی پنل را دقیق چک می‌کنیم تا
+    // دیگر کاربرِ بدون نقش «بی‌صدا» به همین صفحه برگردد — دلیل واقعی را می‌بیند
+    try {
+      const res = await fetch('/api/admin/session-check', { cache: 'no-store' })
+      const data = await res.json()
+      if (data?.authed && data?.hasProfile) {
+        router.push('/admin')
+        router.refresh()
+        return
+      }
+      if (data?.reason === 'no-profile') {
+        await supabaseBrowser().auth.signOut()
+        setError(
+          'رمز درست است ولی این حساب هنوز دسترسی پنل ندارد — نقشش را از صفحهٔ «کاربران و دسترسی» ثبت کن (تیک «نمایش همهٔ کاربران») و دوباره وارد شو.'
+        )
+        setLoading(false)
+        return
+      }
+    } catch {
+      // endpoint در دسترس نبود — مثل قبل ادامه بده
+    }
+
     router.push('/admin')
     router.refresh()
   }
