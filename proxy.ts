@@ -1,6 +1,13 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { createClient } from '@supabase/supabase-js'
+import { accessAllowsPath, sanitizeAllowedPaths } from './lib/admin/modules'
+import { OP_ROLES, OpRole } from './lib/admin/role-matrix'
+
+// 🎯 پچ ۵۹-ب/۵۹-ج: دروازهٔ ورود نقش‌ها را می‌شناسد (چک پروفایل با سرویس‌کلید —
+// مستقل از RLS؛ اگر سرویس‌کلید نبود، با نشست خود کاربر چک می‌شود)
+// 🎯 پچ ۶۰: گیت ماژولار — هر صفحهٔ /admin فقط با ماژولِ تیک‌شده در لیست دلخواه
+// کاربر یا پیش‌فرض نقشش باز می‌شود؛ داشبورد همیشه برای همهٔ کاربران پنل باز است
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
@@ -68,8 +75,7 @@ export async function proxy(request: NextRequest) {
       return NextResponse.redirect(loginUrl)
     }
 
-    // ─── گارد ادمین: فقط ایمیل‌های موجود در ADMIN_EMAILS مجازند ───
-    // (قبلاً هر کاربر لاگین‌شده‌ی سوپابیس از اینجا رد می‌شد)
+    // ─── گارد ادمین: ایمیل‌های env (مالک) یا کاربرانِ ثبت‌شده در جدول نقش‌ها ───
     const allowedAdmins = (process.env.ADMIN_EMAILS || '')
       .split(',')
       .map((e) => e.trim().toLowerCase())
@@ -77,38 +83,52 @@ export async function proxy(request: NextRequest) {
 
     const adminEmail = (data.user.email || '').toLowerCase()
     if (!allowedAdmins.includes(adminEmail)) {
-      // 🎯 پچ ۵۹-ب: علاوه بر env، کاربرانِ ثبت‌شده در جدول نقش‌ها (پچ ۵۶)
-      // هم از دروازهٔ ورود رد می‌شوند — صندوق‌دار/کارمند/مدیرِ ساخته‌شده از
-      // پنل قبلاً همین‌جا با ?denied=1 بیرون پرت می‌شد
-      // 🎯 پچ ۵۹-ج: چک پروفایل با سرویس‌کلید — مستقل از RLS و سیاست‌های جدول؛
-      // اگر سرویس‌کلید در دسترس نبود، با نشست خود کاربر چک می‌شود (نیازمند SQL ۵۹-ب)
       // fail-closed: نه در env باشد و نه پروفایل فعال داشته باشد → ممنوع
       const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-      let panelAllowed = false
+      let prof:
+        | {
+            role?: string | null
+            is_active?: boolean | null
+            allowed_paths?: unknown
+          }
+        | null = null
 
       if (serviceKey) {
+        // 🎯 پچ ۵۹-ج: چک پروفایل با سرویس‌کلید — مستقل از RLS و سیاست‌های جدول
         const adminDb = createClient(url, serviceKey, {
           auth: { persistSession: false, autoRefreshToken: false },
         })
-        const { data: prof } = await adminDb
+        const { data: p } = await adminDb
           .from('admin_operator_profiles')
-          .select('user_id')
+          .select('role, is_active, allowed_paths')
           .eq('user_id', data.user.id)
           .maybeSingle()
-        panelAllowed = !!prof
+        prof = p
       } else {
-        const { data: prof } = await supabase
+        // 🎯 پچ ۵۹-ب: بدون سرویس‌کلید — با نشست خود کاربر (نیازمند SQL ۵۹-ب)
+        const { data: p } = await supabase
           .from('admin_operator_profiles')
-          .select('user_id')
+          .select('role, is_active, allowed_paths')
           .eq('user_id', data.user.id)
           .maybeSingle()
-        panelAllowed = !!prof
+        prof = p
       }
 
-      if (!panelAllowed) {
+      if (!prof || prof.is_active === false) {
         return NextResponse.redirect(
           new URL('/admin/login?denied=1', request.url)
         )
+      }
+
+      // 🎯 پچ ۶۰: گیت ماژولار صفحات — لیست دلخواه اگر ثبت شده باشد، وگرنه
+      // پیش‌فرض نقش (ماتریس پچ ۵۶). داشبورد در accessAllowsPath همیشه باز است
+      const role: OpRole =
+        prof.role && OP_ROLES.includes(prof.role as OpRole)
+          ? (prof.role as OpRole)
+          : 'staff'
+      const allowedPaths = sanitizeAllowedPaths(prof.allowed_paths)
+      if (!accessAllowsPath(role, allowedPaths, pathname)) {
+        return NextResponse.redirect(new URL('/admin', request.url))
       }
     }
 
