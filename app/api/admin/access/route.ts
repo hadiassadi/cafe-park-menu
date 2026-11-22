@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase/server'
-import { requirePathAccess } from '@/lib/admin/roles'
+import { getOperatorRole, requirePathAccess } from '@/lib/admin/roles'
 import {
   ADMIN_MODULES,
+  accessAllowsPath,
   defaultPathsForRole,
   normalizeAllowedPaths,
   sanitizeAllowedPaths,
@@ -14,8 +15,9 @@ export const dynamic = 'force-dynamic'
 
 // 🎯 پچ ۶۰ — پشت‌صحنهٔ صفحهٔ «دسترسی ماژول‌ها»:
 //   GET: فهرست اپراتورها (+ایمیل از auth) + ماژول‌ها + پیش‌فرض هر نقش
-//   POST: ذخیرهٔ لیست دلخواه یک کاربر در admin_operator_profiles.allowed_paths
-// مجوز هر دو: requirePathAccess('/admin/access') — پیش‌فرض: مالک و مدیر
+//   POST: ذخیرهٔ لیست دلخواه (allowed_paths) و — از ۶۰-ج — تغییر نقش
+// مجوز: GET با requirePathAccess('/admin/access') — پیش‌فرض: مالک و مدیر
+// تغییر نقش فقط با مالک (تا مدیر نتواند خودش را مالک کند)
 
 type OperatorRow = Record<string, unknown>
 
@@ -66,8 +68,16 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const denied = await requirePathAccess('/admin/access')
-  if (denied) return denied
+  // 🎯 پچ ۶۰-ج: به‌جای requirePathAccess، خودِ getOperatorRole را می‌خوانیم
+  // تا تغییرِ نقش را فقط برای مالک ممکن کنیم
+  const me = await getOperatorRole()
+  if (!me)
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!accessAllowsPath(me.role, me.allowedPaths, '/admin/access'))
+    return NextResponse.json(
+      { error: 'دسترسی به این بخش ندارید' },
+      { status: 403 }
+    )
 
   const body = await request.json().catch(() => null)
   const userId = typeof body?.userId === 'string' ? body.userId.trim() : ''
@@ -78,11 +88,37 @@ export async function POST(request: Request) {
     )
   }
 
-  // فقط مسیرهای شناخته‌شدهٔ رجیستری + داشبورد همیشه داخل لیست
-  const allowedPaths = normalizeAllowedPaths(body?.allowedPaths)
+  const updates: Record<string, unknown> = {}
+
+  // لیست دلخواه — فقط مسیرهای شناخته‌شدهٔ رجیستری + داشبورد همیشه داخل لیست
+  if (Array.isArray(body?.allowedPaths)) {
+    updates.allowed_paths = normalizeAllowedPaths(body.allowedPaths)
+  }
+
+  // تغییر نقش — فقط مالک
+  if (typeof body?.role === 'string' && body.role) {
+    if (me.role !== 'owner') {
+      return NextResponse.json(
+        { error: 'تغییر نقش فقط با مالک ممکن است' },
+        { status: 403 }
+      )
+    }
+    if (!OP_ROLES.includes(body.role as OpRole)) {
+      return NextResponse.json({ error: 'نقش نامعتبر است' }, { status: 400 })
+    }
+    updates.role = body.role
+  }
+
+  if (Object.keys(updates).length === 0) {
+    return NextResponse.json(
+      { error: 'چیزی برای ذخیره ارسال نشده است' },
+      { status: 400 }
+    )
+  }
+
   const { error } = await supabaseAdmin()
     .from('admin_operator_profiles')
-    .update({ allowed_paths: allowedPaths })
+    .update(updates)
     .eq('user_id', userId)
 
   if (error) {
@@ -92,5 +128,9 @@ export async function POST(request: Request) {
       { status: 500 }
     )
   }
-  return NextResponse.json({ ok: true, allowed_paths: allowedPaths })
+  return NextResponse.json({
+    ok: true,
+    allowed_paths: (updates.allowed_paths as string[] | undefined) ?? null,
+    role: (updates.role as string | undefined) ?? null,
+  })
 }
