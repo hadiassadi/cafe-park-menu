@@ -1,6 +1,8 @@
 // app/admin/page.tsx
 import Link from 'next/link'
+import { redirect } from 'next/navigation'
 import { getOrderStats } from '@/lib/stats'
+import { getOperatorRole } from '@/lib/admin/roles'
 import CleanupOrdersCard from './components/CleanupOrdersCard'
 
 export const dynamic = 'force-dynamic'
@@ -24,6 +26,11 @@ function ChangeBadge({ value }: { value: number }) {
 }
 
 export default async function AdminDashboard() {
+  // 🎯 پچ ۵۹-آ: داشبورد هم گیت پروفایل دارد — هرکس بدون نشست یا بدون پروفایل
+  // اپراتوری (مشتریِ OTP) به صفحهٔ ورود می‌رود؛ داشبورد برای همهٔ نقش‌ها باز است
+  const me = await getOperatorRole()
+  if (!me) redirect('/admin/login')
+
   const stats = await getOrderStats()
 
   const maxRevenue = Math.max(
