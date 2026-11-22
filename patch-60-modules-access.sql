@@ -9,8 +9,15 @@
 alter table public.admin_operator_profiles
   add column if not exists allowed_paths jsonb not null default '[]'::jsonb;
 
--- کنترل نهایی — باید ستون جدید را نشان بدهد
+-- 🎯 پچ ۶۰-ب: ستون is_active هم روی این جدول لازم است (قبلاً فقط روی
+-- staff_members بود) — پروکسی با select کامل بدون این ستون خطا می‌داد و
+-- لاگین کاربران پنل به ?denied=1 می‌خورد. اجرای اینجا هر دو ستون را تضمین می‌کند
+alter table public.admin_operator_profiles
+  add column if not exists is_active boolean not null default true;
+
+-- کنترل نهایی — باید هر دو ستون را نشان بدهد
 select column_name, data_type, column_default
   from information_schema.columns
  where table_name = 'admin_operator_profiles'
-   and column_name = 'allowed_paths';
+   and column_name in ('allowed_paths', 'is_active')
+ order by column_name;
