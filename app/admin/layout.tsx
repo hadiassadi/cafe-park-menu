@@ -97,6 +97,9 @@ export default function AdminLayout({
   const [role, setRole] = useState<OpRole | null>(null)
   // 🎯 پچ ۶۰: لیست دلخواه ماژول‌های این کاربر از whoami — null یعنی هنوز نیامده
   const [allowedPaths, setAllowedPaths] = useState<string[] | null>(null)
+  // 🎯 پچ ۶۰-د: ایمیل کاربرِ واردشده — همیشه در سایدبار دیده می‌شود تا نشستِ
+  // مالک و کارمند با هم اشتباه گرفته نشود
+  const [whoEmail, setWhoEmail] = useState('')
   const [drawerOpen, setDrawerOpen] = useState(false)
   // 🎯 پچ ۴۲: گروه‌های تاشو — undefined/open باز، false بسته؛ پس از mount از localStorage بازیابی می‌شود
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({})
@@ -262,7 +265,10 @@ export default function AdminLayout({
         fetch('/api/admin/whoami', { cache: 'no-store' })
           .then((r) => (r.ok ? r.json() : null))
           .then((d) => {
-            if (!mounted || !d?.role) return
+            if (!mounted) return
+            // 🎯 پچ ۶۰-د: نشانگر هویت — حتی اگر نقش نیامد، ایمیل را نشان بده
+            if (d?.email) setWhoEmail(String(d.email))
+            if (!d?.role) return
             setRole(d.role as OpRole)
             // 🎯 پچ ۶۰: paths = [] یعنی «پیش‌فرض نقش»
             setAllowedPaths(
@@ -464,6 +470,21 @@ export default function AdminLayout({
         </nav>
 
         <div className="admin-sidebar-footer">
+          {/* 🎯 پچ ۶۰-د: نشانگر هویت کاربرِ واردشده */}
+          {whoEmail && (
+            <div
+              dir="ltr"
+              style={{
+                fontSize: '.72rem',
+                opacity: 0.65,
+                textAlign: 'left',
+                margin: '0 8px 8px',
+                wordBreak: 'break-all',
+              }}
+            >
+              👤 {whoEmail}
+            </div>
+          )}
           <Link
             href="/"
             target="_blank"
@@ -568,6 +589,21 @@ export default function AdminLayout({
             </nav>
 
             <div className="admin-drawer-footer">
+              {/* 🎯 پچ ۶۰-د: نشانگر هویت کاربرِ واردشده */}
+              {whoEmail && (
+                <div
+                  dir="ltr"
+                  style={{
+                    fontSize: '.72rem',
+                    opacity: 0.65,
+                    textAlign: 'left',
+                    margin: '0 12px 8px',
+                    wordBreak: 'break-all',
+                  }}
+                >
+                  👤 {whoEmail}
+                </div>
+              )}
               <Link
                 href="/"
                 target="_blank"
