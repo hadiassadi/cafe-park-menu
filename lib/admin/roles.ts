@@ -21,11 +21,22 @@ export async function getOperatorRole(): Promise<{
   const auth = await requireAdminUser()
   if (auth.denied) return null
   const db = supabaseAdmin()
-  const { data } = await db
+  const { data, error } = await db
     .from('admin_operator_profiles')
     .select('role, allowed_paths')
     .eq('user_id', auth.userId)
     .maybeSingle()
+  // 🎯 پچ ۶۰-ب: اگر ستون allowed_paths هنوز در جدول نباشد (SQL اجرا نشده)،
+  // select کامل خطا می‌دهد — با حداقل ستون‌ها دوباره می‌خوانیم تا نقش از دست نرود
+  let profRow: { role?: string | null; allowed_paths?: unknown } | null = data
+  if (error) {
+    const { data: d2 } = await db
+      .from('admin_operator_profiles')
+      .select('role')
+      .eq('user_id', auth.userId)
+      .maybeSingle()
+    profRow = d2
+  }
 
   // 🎯 پچ ۵۸ — بیمهٔ نقش: کاربرِ ADMIN_EMAILS بدون پروفایل یا با نقش قدیمی
   // (مثل operatorِ پچ ۵۲) هرگز از مالک پایین‌تر نمی‌آید؛ بقیه سخت‌گیرانه staff
@@ -35,13 +46,13 @@ export async function getOperatorRole(): Promise<{
     .filter(Boolean)
   const isEnvAdmin = adminEmails.includes(auth.email || '')
 
-  const role = data?.role as OpRole | undefined
+  const role = profRow?.role as OpRole | undefined
   const finalRole: OpRole =
     role && OP_ROLES.includes(role) ? role : isEnvAdmin ? 'owner' : 'staff'
 
   // 🎯 پچ ۶۰: لیست دلخواه ماژول‌ها — خالی/null یعنی «پیش‌فرض نقش»
   // (مالک همیشه از accessAllowsPath عبور می‌کند، لیست برایش بی‌اثر است)
-  const allowedPaths = sanitizeAllowedPaths(data?.allowed_paths)
+  const allowedPaths = sanitizeAllowedPaths(profRow?.allowed_paths)
   return { userId: auth.userId, role: finalRole, allowedPaths }
 }
 

@@ -98,20 +98,41 @@ export async function proxy(request: NextRequest) {
         const adminDb = createClient(url, serviceKey, {
           auth: { persistSession: false, autoRefreshToken: false },
         })
-        const { data: p } = await adminDb
+        const { data: p, error: perr } = await adminDb
           .from('admin_operator_profiles')
           .select('role, is_active, allowed_paths')
           .eq('user_id', data.user.id)
           .maybeSingle()
-        prof = p
+        if (perr) {
+          // 🎯 پچ ۶۰-ب: اگر ستون‌های پچ ۶۰ هنوز در جدول نباشند (SQL اجرا نشده)،
+          // select کامل خطا می‌دهد — با حداقل ستون‌ها دوباره می‌خوانیم تا لاگین
+          // رفتار پچ ۵۹-ج را داشته باشد؛ ردِ قطعی فقط وقتی است که اصلاً سطر نباشد
+          const { data: p2 } = await adminDb
+            .from('admin_operator_profiles')
+            .select('role')
+            .eq('user_id', data.user.id)
+            .maybeSingle()
+          prof = p2
+        } else {
+          prof = p
+        }
       } else {
         // 🎯 پچ ۵۹-ب: بدون سرویس‌کلید — با نشست خود کاربر (نیازمند SQL ۵۹-ب)
-        const { data: p } = await supabase
+        const { data: p, error: perr } = await supabase
           .from('admin_operator_profiles')
           .select('role, is_active, allowed_paths')
           .eq('user_id', data.user.id)
           .maybeSingle()
-        prof = p
+        if (perr) {
+          const { data: p2 } = await supabase
+            .from('admin_operator_profiles')
+            .select('role')
+            .eq('user_id', data.user.id)
+            .maybeSingle()
+          prof = p2
+        } else {
+          prof = p
+        }
       }
 
       if (!prof || prof.is_active === false) {
