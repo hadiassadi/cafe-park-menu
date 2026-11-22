@@ -1,8 +1,8 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { OpRole, ROLE_LABEL } from '@/lib/admin/role-matrix'
-import type { AdminModuleDef } from '@/lib/admin/modules'
+import { OP_ROLES, OpRole, ROLE_LABEL } from '@/lib/admin/role-matrix'
+import { defaultPathsForRole, type AdminModuleDef } from '@/lib/admin/modules'
 
 type Operator = {
   user_id: string
@@ -37,6 +37,7 @@ const CSS = `
 .am60-chip--custom{background:rgba(59,130,246,.15);border-color:rgba(59,130,246,.5);color:#3b82f6}
 .am60-chip--role{background:rgba(127,127,127,.12)}
 .am60-chip--off{background:rgba(239,68,68,.12);border-color:rgba(239,68,68,.4);color:#dc2626}
+.am60-role{font-size:.78rem;border:1px solid rgba(127,127,127,.4);border-radius:8px;padding:4px 8px;background:rgba(127,127,127,.1);color:inherit;cursor:pointer;font-family:inherit}
 .am60-body{border-top:1px solid rgba(127,127,127,.25);padding:12px 14px;display:flex;flex-direction:column;gap:14px}
 .am60-group-label{font-size:.8rem;font-weight:800;opacity:.65;margin-bottom:6px}
 .am60-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:8px}
@@ -61,6 +62,8 @@ export default function AccessManager() {
   const [openId, setOpenId] = useState('')
   const [drafts, setDrafts] = useState<Record<string, string[]>>({})
   const [savingId, setSavingId] = useState('')
+  // 🎯 پچ ۶۰-ج: نقش خودِ کاربرِ واردشده — تغییر نقش دیگران فقط با مالک
+  const [myRole, setMyRole] = useState<OpRole | null>(null)
 
   useEffect(() => {
     let mounted = true
@@ -79,12 +82,18 @@ export default function AccessManager() {
           init[op.user_id] =
             op.allowed_paths.length > 0
               ? [...op.allowed_paths]
-              : [...op.default_paths]
+              : defaultPathsForRole(op.role)
         }
         setDrafts(init)
       })
       .catch((e: Error) => mounted && setError(e.message || 'بارگذاری انجام نشد'))
       .finally(() => mounted && setLoading(false))
+    fetch('/api/admin/whoami', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (mounted && d?.role) setMyRole(d.role as OpRole)
+      })
+      .catch(() => {})
     return () => {
       mounted = false
     }
@@ -113,24 +122,47 @@ export default function AccessManager() {
 
   function resetToRole(userId: string) {
     const op = ops.find((o) => o.user_id === userId)
-    setDrafts((prev) => ({ ...prev, [userId]: op ? [...op.default_paths] : [] }))
+    // 🎯 پچ ۶۰-ج: پیش‌فرض بر اساس نقشِ فعلیِ کارت (نه مقدار قدیمی GET)
+    setDrafts((prev) => ({
+      ...prev,
+      [userId]: op ? defaultPathsForRole(op.role) : [],
+    }))
+  }
+
+  // 🎯 پچ ۶۰-ج: تغییر نقش در همین صفحه — تیک‌ها به پیش‌فرض نقش جدید برمی‌گردند
+  function changeRole(userId: string, role: OpRole) {
+    setOps((prev) =>
+      prev.map((o) => (o.user_id === userId ? { ...o, role } : o))
+    )
+    setDrafts((prev) => ({ ...prev, [userId]: defaultPathsForRole(role) }))
   }
 
   async function save(userId: string) {
     setSavingId(userId)
     setError('')
     try {
+      const op = ops.find((o) => o.user_id === userId)
       const r = await fetch('/api/admin/access', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, allowedPaths: drafts[userId] || [] }),
+        body: JSON.stringify({
+          userId,
+          allowedPaths: drafts[userId] || [],
+          role: op?.role,
+        }),
       })
       const d = await r.json().catch(() => null)
       if (!r.ok) throw new Error(d?.error || 'ذخیره انجام نشد')
       const saved: string[] = d.allowed_paths || []
       setOps((prev) =>
         prev.map((o) =>
-          o.user_id === userId ? { ...o, allowed_paths: saved } : o
+          o.user_id === userId
+            ? {
+                ...o,
+                allowed_paths: saved,
+                role: (d.role as OpRole) || o.role,
+              }
+            : o
         )
       )
       setFlash('✓ ذخیره شد — منو و گیت سرور همین لحظه همین را اعمال می‌کنند')
@@ -164,6 +196,7 @@ export default function AccessManager() {
         const draft = drafts[op.user_id] || []
         const open = openId === op.user_id
         const isOwnerRole = op.role === 'owner'
+        const canEditRole = myRole === 'owner'
         return (
           <div key={op.user_id} className="am60-card">
             <div
@@ -182,9 +215,27 @@ export default function AccessManager() {
                 {op.email && <span className="am60-mail">{op.email}</span>}
               </div>
               <div className="am60-chips">
-                <span className="am60-chip am60-chip--role">
-                  {ROLE_LABEL[op.role] || op.role}
-                </span>
+                {/* 🎯 پچ ۶۰-ج: نقش هم در همین صفحه قابل تغییر است — فقط با مالک */}
+                <select
+                  className="am60-role"
+                  value={op.role}
+                  disabled={!canEditRole}
+                  onClick={(e) => e.stopPropagation()}
+                  onChange={(e) =>
+                    changeRole(op.user_id, e.target.value as OpRole)
+                  }
+                >
+                  {OP_ROLES.map((r) => (
+                    <option key={r} value={r}>
+                      {ROLE_LABEL[r]}
+                    </option>
+                  ))}
+                </select>
+                {op.role === 'owner' && (
+                  <span className="am60-chip am60-chip--off">
+                    همه‌چیز باز — تیک‌ها روی مالک اثری ندارند
+                  </span>
+                )}
                 {custom ? (
                   <span className="am60-chip am60-chip--custom">
                     دلخواه ({op.allowed_paths.length} ماژول)
@@ -240,7 +291,9 @@ export default function AccessManager() {
                   <button
                     type="button"
                     className="am60-btn"
-                    disabled={isOwnerRole || savingId === op.user_id}
+                    disabled={
+                      (isOwnerRole && !canEditRole) || savingId === op.user_id
+                    }
                     onClick={() => save(op.user_id)}
                   >
                     {savingId === op.user_id ? 'در حال ذخیره…' : '💾 ذخیره'}
@@ -256,7 +309,9 @@ export default function AccessManager() {
                   <span className="am60-note">
                     داشبورد همیشه برای همه باز است؛ تیک‌ها فقط بخش‌های دیگر را
                     کنترل می‌کنند.
-                    {isOwnerRole && ' دسترسی مالک سلب‌ناپذیر است.'}
+                    {isOwnerRole
+                      ? ' برای محدودکردن مالک، اول نقشش را تغییر بده و ذخیره کن.'
+                      : ''}
                   </span>
                 </div>
               </div>
