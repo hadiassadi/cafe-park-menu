@@ -3,14 +3,12 @@ import { redirect } from 'next/navigation'
 import { NextResponse } from 'next/server'
 import { requireAdminUser } from './require-admin'
 import { supabaseAdmin } from '@/lib/supabase/server'
-import {
-  OP_ROLES,
-  OpRole,
-  roleAllowsPath,
-} from './role-matrix'
+import { OP_ROLES, OpRole } from './role-matrix'
+import { accessAllowsPath, sanitizeAllowedPaths } from './modules'
 
-// 🎯 پچ ۵۶ — فاز ۴-ب: گاردهای نقش سمت سرور
-//   getOperatorRole: نقش کاربر پنل از admin_operator_profiles (پیش‌فرض staff)
+// 🎯 پچ ۵۶ — گاردهای نقش سمت سرور
+// 🎯 پچ ۶۰ — پشتیبانی از لیست دلخواه ماژول‌ها (allowed_paths):
+//   getOperatorRole: نقش + لیست مجاز کاربر از admin_operator_profiles (پیش‌فرض staff)
 //   requirePagePath: گارد صفحات سرور — ریدایرکت به ورود/داشبورد
 //   requirePathAccess: گارد API route — NextResponse خطا یا null
 //   assertPathAccess: گارد server action — پرتاب خطا
@@ -18,17 +16,16 @@ import {
 export async function getOperatorRole(): Promise<{
   userId: string
   role: OpRole
+  allowedPaths: string[] | null
 } | null> {
   const auth = await requireAdminUser()
   if (auth.denied) return null
   const db = supabaseAdmin()
   const { data } = await db
     .from('admin_operator_profiles')
-    .select('role')
+    .select('role, allowed_paths')
     .eq('user_id', auth.userId)
     .maybeSingle()
-  const role = data?.role as OpRole | undefined
-  if (role && OP_ROLES.includes(role)) return { userId: auth.userId, role }
 
   // 🎯 پچ ۵۸ — بیمهٔ نقش: کاربرِ ADMIN_EMAILS بدون پروفایل یا با نقش قدیمی
   // (مثل operatorِ پچ ۵۲) هرگز از مالک پایین‌تر نمی‌آید؛ بقیه سخت‌گیرانه staff
@@ -37,16 +34,24 @@ export async function getOperatorRole(): Promise<{
     .map((e) => e.trim().toLowerCase())
     .filter(Boolean)
   const isEnvAdmin = adminEmails.includes(auth.email || '')
-  return { userId: auth.userId, role: isEnvAdmin ? 'owner' : 'staff' }
+
+  const role = data?.role as OpRole | undefined
+  const finalRole: OpRole =
+    role && OP_ROLES.includes(role) ? role : isEnvAdmin ? 'owner' : 'staff'
+
+  // 🎯 پچ ۶۰: لیست دلخواه ماژول‌ها — خالی/null یعنی «پیش‌فرض نقش»
+  // (مالک همیشه از accessAllowsPath عبور می‌کند، لیست برایش بی‌اثر است)
+  const allowedPaths = sanitizeAllowedPaths(data?.allowed_paths)
+  return { userId: auth.userId, role: finalRole, allowedPaths }
 }
 
 // گارد صفحات سرور — بدون اجازه: به ورود یا داشبورد می‌رود
 export async function requirePagePath(
   path: string
-): Promise<{ userId: string; role: OpRole }> {
+): Promise<{ userId: string; role: OpRole; allowedPaths: string[] | null }> {
   const me = await getOperatorRole()
   if (!me) redirect('/admin/login')
-  if (!roleAllowsPath(me.role, path)) redirect('/admin')
+  if (!accessAllowsPath(me.role, me.allowedPaths, path)) redirect('/admin')
   return me
 }
 
@@ -57,9 +62,9 @@ export async function requirePathAccess(
   const me = await getOperatorRole()
   if (!me)
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  if (!roleAllowsPath(me.role, path))
+  if (!accessAllowsPath(me.role, me.allowedPaths, path))
     return NextResponse.json(
-      { error: 'دسترسی این بخش فقط برای مالک است' },
+      { error: 'دسترسی به این بخش ندارید' },
       { status: 403 }
     )
   return null
@@ -68,10 +73,10 @@ export async function requirePathAccess(
 // گارد server action — پرتاب خطا (actionها خودشان { error } برمی‌گردانند)
 export async function assertPathAccess(
   path: string
-): Promise<{ userId: string; role: OpRole }> {
+): Promise<{ userId: string; role: OpRole; allowedPaths: string[] | null }> {
   const me = await getOperatorRole()
   if (!me) throw new Error('Unauthorized')
-  if (!roleAllowsPath(me.role, path))
-    throw new Error('دسترسی این بخش فقط برای مالک است')
+  if (!accessAllowsPath(me.role, me.allowedPaths, path))
+    throw new Error('دسترسی به این بخش ندارید')
   return me
 }

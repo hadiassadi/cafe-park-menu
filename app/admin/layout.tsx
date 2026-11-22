@@ -28,6 +28,7 @@ const MENU_GROUPS = [
       { href: '/admin/accounting', label: 'حسابداری', icon: '🧮' },
       { href: '/admin/customers', label: 'مشتریان', icon: '👥' },
       { href: '/admin/users', label: 'کاربران و دسترسی', icon: '🔐' },
+      { href: '/admin/access', label: 'دسترسی ماژول‌ها', icon: '🧩' },
     ],
   },
   {
@@ -94,6 +95,8 @@ export default function AdminLayout({
   const [checking, setChecking] = useState(true)
   // 🎯 پچ ۵۶: نقش اپراتوری — مبنای فیلتر منو و گارد مسیر (تا پاسخ whoami همه چیز)
   const [role, setRole] = useState<OpRole | null>(null)
+  // 🎯 پچ ۶۰: لیست دلخواه ماژول‌های این کاربر از whoami — null یعنی هنوز نیامده
+  const [allowedPaths, setAllowedPaths] = useState<string[] | null>(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
   // 🎯 پچ ۴۲: گروه‌های تاشو — undefined/open باز، false بسته؛ پس از mount از localStorage بازیابی می‌شود
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({})
@@ -259,7 +262,12 @@ export default function AdminLayout({
         fetch('/api/admin/whoami', { cache: 'no-store' })
           .then((r) => (r.ok ? r.json() : null))
           .then((d) => {
-            if (mounted && d?.role) setRole(d.role as OpRole)
+            if (!mounted || !d?.role) return
+            setRole(d.role as OpRole)
+            // 🎯 پچ ۶۰: paths = [] یعنی «پیش‌فرض نقش»
+            setAllowedPaths(
+              Array.isArray(d.paths) ? (d.paths as string[]) : null
+            )
           })
           .catch(() => {})
 
@@ -287,24 +295,34 @@ export default function AdminLayout({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // 🎯 پچ ۵۶: گارد نقش — اگر مسیر فعلی برای نقش مجاز نبود، به داشبورد برگرد
-  // (سمت سرور هم صفحات و APIهای حساس گارد دارند؛ این لایه UI است)
-  useEffect(() => {
-    if (checking || !role) return
-    if (pathname === '/admin/login' || pathname === '/admin') return
-    if (!roleAllowsPath(role, pathname)) router.replace('/admin')
-  }, [role, pathname, checking])
+  // 🎯 پچ ۶۰: تک‌منبع تصمیم منو و گارد مسیر — لیست دلخواهِ کاربر اگر ثبت شده
+  // باشد ملاک است، وگرنه پیش‌فرض نقش (تا رسیدن whoami، منو کامل دیده می‌شود)
+  const menuAllows = (href: string) => {
+    if (allowedPaths && allowedPaths.length > 0) {
+      if (href === '/admin' || href === '/admin/login') return true
+      return allowedPaths.some(
+        (p) => href === p || href.startsWith(p + '/')
+      )
+    }
+    if (!role) return true
+    return roleAllowsPath(role, href)
+  }
 
-  // 🎯 پچ ۵۶: منوی هر نقش — گروه خالی هم حذف می‌شود
-  const visibleGroups = (
-    role
-      ? MENU_GROUPS.map((g) => ({
-          key: g.key,
-          label: g.label,
-          items: g.items.filter((it) => roleAllowsPath(role, it.href)),
-        }))
-      : [...MENU_GROUPS.map((g) => ({ ...g, items: [...g.items] }))]
-  ).filter((g) => g.items.length > 0)
+  // 🎯 پچ ۵۶: گارد نقش — اگر مسیر فعلی مجاز نبود، به داشبورد برگرد
+  // (سمت سرور هم پروکسی و گاردهای نقش گارد دارند؛ این لایه UI است)
+  useEffect(() => {
+    if (checking) return
+    if (pathname === '/admin/login' || pathname === '/admin') return
+    if (!menuAllows(pathname)) router.replace('/admin')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [role, allowedPaths, pathname, checking])
+
+  // 🎯 پچ ۵۶/۶۰: منوی هر کاربر — گروه خالی هم حذف می‌شود
+  const visibleGroups = MENU_GROUPS.map((g) => ({
+    key: g.key,
+    label: g.label,
+    items: g.items.filter((it) => menuAllows(it.href)),
+  })).filter((g) => g.items.length > 0)
 
   if (pathname === '/admin/login') {
     return <main>{children}</main>

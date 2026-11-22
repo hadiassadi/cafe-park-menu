@@ -5,6 +5,8 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 // 🎯 پچ ۵۶ — نقش اپراتوری کاربر پنل؛ مبنای فیلتر منو و گارد مسیر در layout
+// 🎯 پچ ۶۰ — لیست نهایی ماژول‌های مجاز (paths) برای منوی ماژولار
+//   paths = [] یعنی «پیش‌فرض نقش» — layout همان را از ماتریس نقش می‌سازد
 
 export async function GET() {
   try {
@@ -13,7 +15,7 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
     return NextResponse.json(
-      { role: me.role },
+      { role: me.role, paths: me.allowedPaths ?? [] },
       { headers: { 'Cache-Control': 'no-store' } }
     )
   } catch (err) {
