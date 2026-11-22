@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
+import { createClient } from '@supabase/supabase-js'
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
@@ -75,9 +76,40 @@ export async function proxy(request: NextRequest) {
       .filter(Boolean)
 
     const adminEmail = (data.user.email || '').toLowerCase()
-    if (allowedAdmins.length === 0 || !allowedAdmins.includes(adminEmail)) {
-      // fail-closed: اگر ADMIN_EMAILS تنظیم نشده باشد هم هیچ‌کس وارد نمی‌شود
-      return NextResponse.redirect(new URL('/admin/login?denied=1', request.url))
+    if (!allowedAdmins.includes(adminEmail)) {
+      // 🎯 پچ ۵۹-ب: علاوه بر env، کاربرانِ ثبت‌شده در جدول نقش‌ها (پچ ۵۶)
+      // هم از دروازهٔ ورود رد می‌شوند — صندوق‌دار/کارمند/مدیرِ ساخته‌شده از
+      // پنل قبلاً همین‌جا با ?denied=1 بیرون پرت می‌شد
+      // 🎯 پچ ۵۹-ج: چک پروفایل با سرویس‌کلید — مستقل از RLS و سیاست‌های جدول؛
+      // اگر سرویس‌کلید در دسترس نبود، با نشست خود کاربر چک می‌شود (نیازمند SQL ۵۹-ب)
+      // fail-closed: نه در env باشد و نه پروفایل فعال داشته باشد → ممنوع
+      const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+      let panelAllowed = false
+
+      if (serviceKey) {
+        const adminDb = createClient(url, serviceKey, {
+          auth: { persistSession: false, autoRefreshToken: false },
+        })
+        const { data: prof } = await adminDb
+          .from('admin_operator_profiles')
+          .select('user_id')
+          .eq('user_id', data.user.id)
+          .maybeSingle()
+        panelAllowed = !!prof
+      } else {
+        const { data: prof } = await supabase
+          .from('admin_operator_profiles')
+          .select('user_id')
+          .eq('user_id', data.user.id)
+          .maybeSingle()
+        panelAllowed = !!prof
+      }
+
+      if (!panelAllowed) {
+        return NextResponse.redirect(
+          new URL('/admin/login?denied=1', request.url)
+        )
+      }
     }
 
     return response
