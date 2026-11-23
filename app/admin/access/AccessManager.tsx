@@ -14,10 +14,13 @@ type Operator = {
   default_paths: string[]
 }
 
-// 🎯 پچ ۶۰ — مدیر برای هر کاربر تیک می‌زند کدام ماژول‌ها در منویش باشد.
+// 🎯 پچ ۶۰ — مدیر برای هر کاربر تیک می‌زن کدام ماژول‌ها در منویش باشد.
 //   «پیش‌فرض نقش» = لیست خالی در دیتابیس (ماتریس پچ ۵۶ حاکم است)
 //   «دلخواه» = فقط ماژول‌های تیک‌شده — منو و گیت سرور هر دو همین را اعمال می‌کنند
-//   داشبورد و دسترسی مالک سلب‌ناپذیرند.
+// 🎯 پچ ۶۳ — همهٔ تیک‌ها آزاد شدند: داشبورد هم مثل بقیه تیک‌خور است و تیک‌های
+//   مالک هم قابل ذخیره‌اند (مالکِ لیست‌خالی = همه‌چیز؛ مالکِ لیست‌دار = محدود).
+//   ویرایشِ ردیفِ خودِ کاربرِ واردشده، وقتی تیکِ «کاربران و دسترسی» برداشته
+//   می‌شود، تأیید دومرحله‌ای می‌خواهد تا ادمین خودش را قفل نکند.
 
 const CSS = `
 .am60-wrap{max-width:960px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
@@ -64,6 +67,8 @@ export default function AccessManager() {
   const [savingId, setSavingId] = useState('')
   // 🎯 پچ ۶۰-ج: نقش خودِ کاربرِ واردشده — تغییر نقش دیگران فقط با مالک
   const [myRole, setMyRole] = useState<OpRole | null>(null)
+  // 🎯 پچ ۶۳: ایمیل خودِ کاربرِ واردشده — برای تشخیص «ردیفِ خودم»
+  const [myEmail, setMyEmail] = useState('')
 
   useEffect(() => {
     let mounted = true
@@ -91,7 +96,10 @@ export default function AccessManager() {
     fetch('/api/admin/whoami', { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
-        if (mounted && d?.role) setMyRole(d.role as OpRole)
+        if (!mounted) return
+        if (d?.role) setMyRole(d.role as OpRole)
+        // 🎯 پچ ۶۳: برای هشدار «خودت را قفل نکن»
+        if (d?.email) setMyEmail(String(d.email))
       })
       .catch(() => {})
     return () => {
@@ -109,8 +117,8 @@ export default function AccessManager() {
     return Array.from(map.entries())
   }, [modules])
 
-  function toggle(userId: string, href: string, locked: boolean) {
-    if (locked) return
+  // 🎯 پچ ۶۳: همهٔ تیک‌ها آزاد — داشبورد هم مثل بقیه انتخاب‌شدنی است
+  function toggle(userId: string, href: string) {
     setDrafts((prev) => {
       const cur = prev[userId] || []
       const next = cur.includes(href)
@@ -137,17 +145,31 @@ export default function AccessManager() {
     setDrafts((prev) => ({ ...prev, [userId]: defaultPathsForRole(role) }))
   }
 
+  const isMe = (op: Operator) =>
+    !!op.email &&
+    !!myEmail &&
+    op.email.trim().toLowerCase() === myEmail.trim().toLowerCase()
+
   async function save(userId: string) {
+    const op = ops.find((o) => o.user_id === userId)
+    const draft = drafts[userId] || []
+    // 🎯 پچ ۶۳: حفاظت از خودقفل‌شدگی — اگر ردیفِ خودم است و تیکِ
+    // «کاربران و دسترسی» را برداشته‌ام، با تأیید صریح ادامه بده
+    if (op && isMe(op) && !draft.includes('/admin/users')) {
+      const ok = window.confirm(
+        'هشدار: برای خودت تیکِ «کاربران و دسترسی» را برداشته‌ای — پس از ذخیره، دیگر به این صفحه دسترسی نداری تا با SQL برگردد. ادامه می‌دهی؟'
+      )
+      if (!ok) return
+    }
     setSavingId(userId)
     setError('')
     try {
-      const op = ops.find((o) => o.user_id === userId)
       const r = await fetch('/api/admin/access', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           userId,
-          allowedPaths: drafts[userId] || [],
+          allowedPaths: draft,
           role: op?.role,
         }),
       })
@@ -179,10 +201,11 @@ export default function AccessManager() {
       <style>{CSS}</style>
       <div className="am60-head">
         <div>
-          <div className="am60-title">🧩 دسترسی ماژول‌ها</div>
+          <div className="am60-title">🧩 سطح دسترسی ماژول‌ها</div>
           <div className="am60-sub">
             برای هر کاربر تیک بزن کدام بخش‌ها در منویش باشد — منو و گیت سرور هر
-            دو همین لیست را اعمال می‌کنند
+            دو همین لیست را اعمال می‌کنند. داشبورد هم مثل بقیهٔ تیک‌هاست؛ اگر
+            همهٔ تیک‌ها را برداری، کاربر به پیش‌فرض نقشش برمی‌گردد.
           </div>
         </div>
         {flash && <div className="am60-flash">{flash}</div>}
@@ -195,7 +218,6 @@ export default function AccessManager() {
         const custom = op.allowed_paths.length > 0
         const draft = drafts[op.user_id] || []
         const open = openId === op.user_id
-        const isOwnerRole = op.role === 'owner'
         const canEditRole = myRole === 'owner'
         return (
           <div key={op.user_id} className="am60-card">
@@ -211,6 +233,7 @@ export default function AccessManager() {
               <div className="am60-id">
                 <span className="am60-name">
                   {op.display_name || op.email || op.user_id.slice(0, 8)}
+                  {isMe(op) && ' — شما'}
                 </span>
                 {op.email && <span className="am60-mail">{op.email}</span>}
               </div>
@@ -232,8 +255,8 @@ export default function AccessManager() {
                   ))}
                 </select>
                 {op.role === 'owner' && (
-                  <span className="am60-chip am60-chip--off">
-                    همه‌چیز باز — تیک‌ها روی مالک اثری ندارند
+                  <span className="am60-chip am60-chip--role">
+                    مالک — تا وقتی لیست ذخیره نشده همه‌چیز باز است
                   </span>
                 )}
                 {custom ? (
@@ -260,30 +283,18 @@ export default function AccessManager() {
                   <div key={group}>
                     <div className="am60-group-label">{group}</div>
                     <div className="am60-grid">
-                      {items.map((m) => {
-                        const locked = m.href === '/admin' || isOwnerRole
-                        const checked = locked || draft.includes(m.href)
-                        return (
-                          <label
-                            key={m.href}
-                            className={
-                              'am60-check' + (locked ? ' am60-check--locked' : '')
-                            }
-                          >
-                            <input
-                              type="checkbox"
-                              checked={checked}
-                              disabled={locked}
-                              onChange={() =>
-                                toggle(op.user_id, m.href, locked)
-                              }
-                            />
-                            <span>
-                              {m.icon} {m.label}
-                            </span>
-                          </label>
-                        )
-                      })}
+                      {items.map((m) => (
+                        <label key={m.href} className="am60-check">
+                          <input
+                            type="checkbox"
+                            checked={draft.includes(m.href)}
+                            onChange={() => toggle(op.user_id, m.href)}
+                          />
+                          <span>
+                            {m.icon} {m.label}
+                          </span>
+                        </label>
+                      ))}
                     </div>
                   </div>
                 ))}
@@ -291,9 +302,7 @@ export default function AccessManager() {
                   <button
                     type="button"
                     className="am60-btn"
-                    disabled={
-                      (isOwnerRole && !canEditRole) || savingId === op.user_id
-                    }
+                    disabled={savingId === op.user_id}
                     onClick={() => save(op.user_id)}
                   >
                     {savingId === op.user_id ? 'در حال ذخیره…' : '💾 ذخیره'}
@@ -301,17 +310,14 @@ export default function AccessManager() {
                   <button
                     type="button"
                     className="am60-btn am60-btn--ghost"
-                    disabled={isOwnerRole || savingId === op.user_id}
+                    disabled={savingId === op.user_id}
                     onClick={() => resetToRole(op.user_id)}
                   >
                     بازگشت به پیش‌فرض نقش
                   </button>
                   <span className="am60-note">
-                    داشبورد همیشه برای همه باز است؛ تیک‌ها فقط بخش‌های دیگر را
-                    کنترل می‌کنند.
-                    {isOwnerRole
-                      ? ' برای محدودکردن مالک، اول نقشش را تغییر بده و ذخیره کن.'
-                      : ''}
+                    لیست خالی = پیش‌فرض نقش. برای ردیفِ خودت حواس‌ت به تیکِ
+                    «کاربران و دسترسی» باشد تا قفل نشوی.
                   </span>
                 </div>
               </div>

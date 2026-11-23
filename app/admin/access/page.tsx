@@ -1,10 +1,9 @@
-import AccessManager from './AccessManager'
+import { redirect } from 'next/navigation'
 
 export const dynamic = 'force-dynamic'
 
-// 🎯 پچ ۶۰ — صفحهٔ «دسترسی ماژول‌ها»: مدیر برای هر کاربر تیک می‌زند کدام بخش‌ها
-// در منویش دیده شود؛ گیت سرور (پروکسی + گاردهای نقش) همان لیست را اعمال می‌کند
-// (مجوز این صفحه در پروکسی و API با requirePathAccess('/admin/access') کنترل می‌شود)
+// 🎯 پچ ۶۳ — مدیریت دسترسی ماژول‌ها در صفحهٔ «کاربران و دسترسی» ادغام شد؛
+// این مسیر فقط لینک‌های قدیمی را به همان صفحه منتقل می‌کند
 export default function AccessPage() {
-  return <AccessManager />
+  redirect('/admin/users')
 }

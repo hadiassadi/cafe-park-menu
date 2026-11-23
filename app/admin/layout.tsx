@@ -28,7 +28,18 @@ const MENU_GROUPS = [
       { href: '/admin/accounting', label: 'حسابداری', icon: '🧮' },
       { href: '/admin/customers', label: 'مشتریان', icon: '👥' },
       { href: '/admin/users', label: 'کاربران و دسترسی', icon: '🔐' },
-      { href: '/admin/access', label: 'دسترسی ماژول‌ها', icon: '🧩' },
+  const menuAllows = (href: string) => {
+    if (!whoamiReady) return false
+    if (href === '/admin/login') return true
+    if (allowedPaths && allowedPaths.length > 0) {
+      // 🎯 پچ ۶۳: داشبورد هم مشمول تیک‌ها؛ '/admin' فقط خود داشبورد را باز می‌کند
+      return allowedPaths.some(
+        (p) => href === p || (p !== '/admin' && href.startsWith(p + '/'))
+      )
+    }
+    if (!role) return false
+    return roleAllowsPath(role, href)
+  }
     ],
   },
   {

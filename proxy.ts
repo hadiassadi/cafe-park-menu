@@ -7,7 +7,9 @@ import { OP_ROLES, OpRole } from './lib/admin/role-matrix'
 // 🎯 پچ ۵۹-ب/۵۹-ج: دروازهٔ ورود نقش‌ها را می‌شناسد (چک پروفایل با سرویس‌کلید —
 // مستقل از RLS؛ اگر سرویس‌کلید نبود، با نشست خود کاربر چک می‌شود)
 // 🎯 پچ ۶۰: گیت ماژولار — هر صفحهٔ /admin فقط با ماژولِ تیک‌شده در لیست دلخواه
-// کاربر یا پیش‌فرض نقشش باز می‌شود؛ داشبورد همیشه برای همهٔ کاربران پنل باز است
+// کاربر یا پیش‌فرض نقشش باز می‌شود
+// 🎯 پچ ۶۳: داشبورد هم مشمول تیک‌ها شد؛ اگر خودِ /admin اجازه نداشت، به ورود
+// می‌رود (نه ریدایرکت به خودش که حلقهٔ بی‌نهایت می‌شد)
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
@@ -142,14 +144,17 @@ export async function proxy(request: NextRequest) {
       }
 
       // 🎯 پچ ۶۰: گیت ماژولار صفحات — لیست دلخواه اگر ثبت شده باشد، وگرنه
-      // پیش‌فرض نقش (ماتریس پچ ۵۶). داشبورد در accessAllowsPath همیشه باز است
+      // پیش‌فرض نقش (ماتریس پچ ۵۶). پچ ۶۳: داشبورد هم مشمول تیک‌هاست؛ اگر
+      // خودِ /admin اجازه نداشت، به ورود می‌رود تا حلقهٔ ریدایرکت رخ ندهد
       const role: OpRole =
         prof.role && OP_ROLES.includes(prof.role as OpRole)
           ? (prof.role as OpRole)
           : 'staff'
       const allowedPaths = sanitizeAllowedPaths(prof.allowed_paths)
       if (!accessAllowsPath(role, allowedPaths, pathname)) {
-        return NextResponse.redirect(new URL('/admin', request.url))
+        const dest =
+          pathname === '/admin' ? '/admin/login?denied=2' : '/admin'
+        return NextResponse.redirect(new URL(dest, request.url))
       }
     }
 

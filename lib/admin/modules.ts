@@ -1,10 +1,12 @@
-import { OpRole, roleAllowsPath } from './role-matrix'
-
-// 🎯 پچ ۶۰ — رجیستری ماژول‌های پنل: منبع واحد برای صفحهٔ «دسترسی ماژول‌ها»،
+// 🎯 پچ ۶۰ — رجیستری ماژول‌های پنل: منبع واحد برای مدیریت دسترسی‌ها،
 // فیلتر منوی سایدبار و گیت ماژولار پروکسی.
 // خالص و بدون وابستگی سرور تا هم در Edge (proxy.ts) و هم در کلاینت (layout)
 // و هم در گاردهای سرور استفاده شود.
-// ⚠️ هر بخش جدیدِ پنل باید همین‌جا اضافه شود تا در صفحهٔ دسترسی‌ها ظاهر شود.
+// ⚠️ هر بخش جدیدِ پنل باید همین‌جا اضافه شود تا در مدیریت دسترسی‌ها ظاهر شود.
+//
+// 🎯 پچ ۶۳ — «دسترسی ماژول‌ها» در صفحهٔ «کاربران و دسترسی» ادغام شد:
+//   مسیر /admin/access دیگر ماژول مستقل نیست (redirect به /admin/users دارد)
+//   و مدیریت تیک‌ها با تیکِ «کاربران و دسترسی» مجاز می‌شود.
 
 export type AdminModuleDef = {
   href: string
@@ -22,7 +24,6 @@ export const ADMIN_MODULES: AdminModuleDef[] = [
   { href: '/admin/accounting', label: 'حسابداری', icon: '🧮', group: 'عملیات روزانه' },
   { href: '/admin/customers', label: 'مشتریان', icon: '👥', group: 'عملیات روزانه' },
   { href: '/admin/users', label: 'کاربران و دسترسی', icon: '🔐', group: 'عملیات روزانه' },
-  { href: '/admin/access', label: 'دسترسی ماژول‌ها', icon: '🧩', group: 'عملیات روزانه' },
   // کاتالوگ و منو
   { href: '/admin/products', label: 'محصولات', icon: '☕', group: 'کاتالوگ و منو' },
   { href: '/admin/categories', label: 'دسته‌ها', icon: '📂', group: 'کاتالوگ و منو' },
@@ -56,8 +57,10 @@ export function defaultPathsForRole(role: OpRole): string[] {
   )
 }
 
-// لیست ذخیره‌شدهٔ کاربر را به مسیرهای شناخته‌شده محدود می‌کند — بدون افزودن داشبورد
+// لیست ذخیره‌شدهٔ کاربر را به مسیرهای شناخته‌شده محدود می‌کند
 // (لیست خالی یعنی «پیش‌فرض نقش» و ماتریس نقش حاکم است)
+// 🎯 پچ ۶۰-ب: مسیرهای قدیمیِ حذف‌شده از رجیستری (مثل /admin/access) خودکار
+// از لیست‌ها پاک می‌شوند — نیازی به SQL پاکسازی نیست
 export function sanitizeAllowedPaths(raw: unknown): string[] {
   if (!Array.isArray(raw)) return []
   const known = new Set(ADMIN_MODULES.map((m) => m.href))
@@ -68,33 +71,32 @@ export function sanitizeAllowedPaths(raw: unknown): string[] {
   return out
 }
 
-// برای ذخیره در صفحهٔ دسترسی‌ها: داشبورد همیشه داخل لیست می‌ماند
+// برای ذخیره در مدیریت دسترسی‌ها — 🎯 پچ ۶۳: داشبورد هم مثل بقیهٔ تیک‌هاست
+// و دیگر اجباری نیست؛ لیست خالی یعنی «پیش‌فرض نقش»
 export function normalizeAllowedPaths(raw: unknown): string[] {
-  const out = sanitizeAllowedPaths(raw)
-  if (!out.includes('/admin')) out.unshift('/admin')
-  return out
+  return sanitizeAllowedPaths(raw)
 }
 
 // 🎯 تصمیم واحد گیت ماژولار — منو، صفحات، actionها و پروکسی همه از این استفاده می‌کنند:
-//   مالک → همه‌چیز؛ داشبورد و ورود → همیشه باز؛
-//   لیست دلخواهِ ثبت‌شده → ملاک نهایی؛ در غیر این صورت پیش‌فرض نقش
+//   ورود → همیشه باز؛
+//   لیست دلخواهِ ثبت‌شده → ملاک نهایی (مالک هم، از پچ ۶۳)؛
+//   در غیر این صورت پیش‌فرض نقش (ماتریس پچ ۵۶ — مالک = همه‌چیز)
 //
-// 🎯 پچ ۶۰-و (فیکس بحرانی): تیکِ «داشبورد» (مسیر '/admin') فقط خودِ صفحهٔ داشبورد
-// را باز می‌کند، نه کل درخت /admin/* — چون چک پیشوندیِ startsWith('/admin/') روی
-// هر صفحهٔ دیگری هم true می‌داد و عملاً همهٔ ماژول‌ها را برای همه باز می‌کرد.
-// مسیر '/admin' داخل لیست پس از چکِ exactِ داشبورد، در تطبیق پیشوندی نادیده گرفته می‌شود.
+// 🎯 پچ ۶۰-و: تیکِ «داشبورد» (مسیر '/admin') فقط خودِ صفحهٔ داشبورد را باز
+// می‌کند، نه کل درخت /admin/* — تطبیق پیشوندی برای '/admin' بی‌اثر است.
+//
+// 🎯 پچ ۶۳: داشبورد دیگر همیشه‌باز نیست و از تیک پیروی می‌کند؛ اگر کسی بدون
+// تیک داشبورد به /admin برسد، گاردها به صفحهٔ ورود می‌فرستندش (نه حلقهٔ ریدایرکت).
 export function accessAllowsPath(
   role: OpRole,
   allowedPaths: string[] | null | undefined,
   path: string
 ): boolean {
   const clean = path.length > 1 ? path.replace(/\/+$/, '') : path
-  if (clean === '/admin' || clean === '/admin/login') return true
-  if (role === 'owner') return true
+  if (clean === '/admin/login') return true
   if (allowedPaths && allowedPaths.length > 0) {
     return allowedPaths.some(
-      (p) =>
-        p !== '/admin' && (clean === p || clean.startsWith(p + '/'))
+      (p) => clean === p || (p !== '/admin' && clean.startsWith(p + '/'))
     )
   }
   return roleAllowsPath(role, clean)

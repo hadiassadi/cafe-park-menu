@@ -12,6 +12,8 @@ import { accessAllowsPath, sanitizeAllowedPaths } from './modules'
 //   requirePagePath: گارد صفحات سرور — ریدایرکت به ورود/داشبورد
 //   requirePathAccess: گارد API route — NextResponse خطا یا null
 //   assertPathAccess: گارد server action — پرتاب خطا
+// 🎯 پچ ۶۳ — مالک هم مشمول لیست دلخواه شد؛ داشبوردِ بدون تیک → صفحهٔ ورود
+// (نه ریدایرکت به خودِ داشبورد که حلقهٔ بی‌نهایت می‌شد)
 
 export async function getOperatorRole(): Promise<{
   userId: string
@@ -52,7 +54,7 @@ export async function getOperatorRole(): Promise<{
     role && OP_ROLES.includes(role) ? role : isEnvAdmin ? 'owner' : 'staff'
 
   // 🎯 پچ ۶۰: لیست دلخواه ماژول‌ها — خالی/null یعنی «پیش‌فرض نقش»
-  // (مالک همیشه از accessAllowsPath عبور می‌کند، لیست برایش بی‌اثر است)
+  // 🎯 پچ ۶۳: این لیست برای مالک هم اعمال می‌شود؛ مالکِ لیست‌خالی = همه‌چیز
   const allowedPaths = sanitizeAllowedPaths(profRow?.allowed_paths)
   // 🎯 پچ ۶۰-د: ایمیل هم برگردانده می‌شود — نشانگر «با چه کاربری وارد شده‌ای»
   // در سایدبار از همین می‌آید تا اشتباه‌گرفتن نشست مالک/کارمند رخ ندهد
@@ -60,12 +62,14 @@ export async function getOperatorRole(): Promise<{
 }
 
 // گارد صفحات سرور — بدون اجازه: به ورود یا داشبورد می‌رود
+// 🎯 پچ ۶۳: اگر خودِ داشبورد اجازه ندارد، به ورود می‌رود تا حلقه رخ ندهد
 export async function requirePagePath(
   path: string
 ): Promise<{ userId: string; role: OpRole; allowedPaths: string[] | null }> {
   const me = await getOperatorRole()
   if (!me) redirect('/admin/login')
-  if (!accessAllowsPath(me.role, me.allowedPaths, path)) redirect('/admin')
+  if (!accessAllowsPath(me.role, me.allowedPaths, path))
+    redirect(path === '/admin' ? '/admin/login?denied=2' : '/admin')
   return me
 }
 

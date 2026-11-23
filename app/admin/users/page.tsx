@@ -4,6 +4,7 @@ import UsersClient, {
   PanelUser,
   StaffRow,
 } from '@/app/admin/components/UsersClient'
+import AccessManager from '@/app/admin/access/AccessManager'
 
 export const dynamic = 'force-dynamic'
 
@@ -12,6 +13,8 @@ export const dynamic = 'force-dynamic'
 // admin_operator_profiles. گارد نقش: فقط مالک (پچ ۵۶).
 // پچ ۵۷: پرچم «مدیر env» (ایمیل در ADMIN_EMAILS) تا کاربران پنل از مشتریان
 // OTP جدا دیده شوند — لیست پیش‌فرض فقط مدیرهای env و کاربران دارای نقش است.
+// 🎯 پچ ۶۳ — مدیریت دسترسی ماژول‌ها هم در همین صفحه ادغام شد
+// (تیکِ «کاربران و دسترسی» = اجازهٔ مدیریت تیک‌ها؛ تغییر نقش فقط با مالک)
 
 export default async function UsersPage() {
   const me = await requirePagePath('/admin/users')
@@ -81,5 +84,10 @@ export default async function UsersPage() {
 
   const staff = (staffRes.data ?? []) as unknown as StaffRow[]
 
-  return <UsersClient staff={staff} panelUsers={panelUsers} />
+  return (
+    <>
+      <UsersClient staff={staff} panelUsers={panelUsers} />
+      <AccessManager />
+    </>
+  )
 }

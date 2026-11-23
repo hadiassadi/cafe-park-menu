@@ -13,16 +13,17 @@ import { OP_ROLES, OpRole } from '@/lib/admin/role-matrix'
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-// 🎯 پچ ۶۰ — پشت‌صحنهٔ صفحهٔ «دسترسی ماژول‌ها»:
+// 🎯 پچ ۶۰ — پشت‌صحنهٔ مدیریت دسترسی ماژول‌ها:
 //   GET: فهرست اپراتورها (+ایمیل از auth) + ماژول‌ها + پیش‌فرض هر نقش
 //   POST: ذخیرهٔ لیست دلخواه (allowed_paths) و — از ۶۰-ج — تغییر نقش
-// مجوز: GET با requirePathAccess('/admin/access') — پیش‌فرض: مالک و مدیر
-// تغییر نقش فقط با مالک (تا مدیر نتواند خودش را مالک کند)
+// 🎯 پچ ۶۳ — ادغام در «کاربران و دسترسی»: مجوز این API از '/admin/access'
+// به '/admin/users' تغییر کرد — یعنی تیکِ «کاربران و دسترسی» هم اجازهٔ
+// مدیریت تیک‌ها می‌دهد. تغییر نقش همچنان فقط با مالک.
 
 type OperatorRow = Record<string, unknown>
 
 export async function GET() {
-  const denied = await requirePathAccess('/admin/access')
+  const denied = await requirePathAccess('/admin/users')
   if (denied) return denied
 
   const db = supabaseAdmin()
@@ -68,12 +69,12 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  // 🎯 پچ ۶۰-ج: به‌جای requirePathAccess، خودِ getOperatorRole را می‌خوانیم
-  // تا تغییرِ نقش را فقط برای مالک ممکن کنیم
+  // 🎯 پچ ۶۰-ج: تغییرِ نقش فقط برای مالک
+  // 🎯 پچ ۶۳: مجوز از '/admin/users' — هماهنگ با ادغام صفحه‌ها
   const me = await getOperatorRole()
   if (!me)
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  if (!accessAllowsPath(me.role, me.allowedPaths, '/admin/access'))
+  if (!accessAllowsPath(me.role, me.allowedPaths, '/admin/users'))
     return NextResponse.json(
       { error: 'دسترسی به این بخش ندارید' },
       { status: 403 }
@@ -90,7 +91,8 @@ export async function POST(request: Request) {
 
   const updates: Record<string, unknown> = {}
 
-  // لیست دلخواه — فقط مسیرهای شناخته‌شدهٔ رجیستری + داشبورد همیشه داخل لیست
+  // لیست دلخواه — فقط مسیرهای شناخته‌شدهٔ رجیستری
+  // 🎯 پچ ۶۳: داشبورد دیگر اجباری نیست؛ لیست خالی یعنی «پیش‌فرض نقش»
   if (Array.isArray(body?.allowedPaths)) {
     updates.allowed_paths = normalizeAllowedPaths(body.allowedPaths)
   }
