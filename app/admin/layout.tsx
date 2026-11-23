@@ -28,18 +28,6 @@ const MENU_GROUPS = [
       { href: '/admin/accounting', label: 'حسابداری', icon: '🧮' },
       { href: '/admin/customers', label: 'مشتریان', icon: '👥' },
       { href: '/admin/users', label: 'کاربران و دسترسی', icon: '🔐' },
-  const menuAllows = (href: string) => {
-    if (!whoamiReady) return false
-    if (href === '/admin/login') return true
-    if (allowedPaths && allowedPaths.length > 0) {
-      // 🎯 پچ ۶۳: داشبورد هم مشمول تیک‌ها؛ '/admin' فقط خود داشبورد را باز می‌کند
-      return allowedPaths.some(
-        (p) => href === p || (p !== '/admin' && href.startsWith(p + '/'))
-      )
-    }
-    if (!role) return false
-    return roleAllowsPath(role, href)
-  }
     ],
   },
   {
@@ -106,7 +94,7 @@ export default function AdminLayout({
   const [checking, setChecking] = useState(true)
   // 🎯 پچ ۵۶: نقش اپراتوری — مبنای فیلتر منو و گارد مسیر (تا پاسخ whoami همه چیز)
   const [role, setRole] = useState<OpRole | null>(null)
-    // 🎯 پچ ۶۰: لیست دلخواه ماژول‌های این کاربر از whoami — null یعنی هنوز نیامده
+  // 🎯 پچ ۶۰: لیست دلخواه ماژول‌های این کاربر از whoami — null یعنی هنوز نیامده
   const [allowedPaths, setAllowedPaths] = useState<string[] | null>(null)
   // پچ ۶۲: تا پاسخ whoami منو fail-closed است — هیچ آیتمی رندر نمی‌شود
   const [whoamiReady, setWhoamiReady] = useState(false)
@@ -274,7 +262,7 @@ export default function AdminLayout({
         }
         setChecking(false)
 
-                // پچ ۶۲: whoami با یک تلاش مجدد؛ پاسخ یا خطا در هر حالت
+        // پچ ۶۲: whoami با یک تلاش مجدد؛ پاسخ یا خطا در هر حالت
         // whoamiReady=true می‌شود تا منو از حالت fail-closed خارج شود
         const loadWhoami = (attempt = 0) => {
           fetch('/api/admin/whoami', { cache: 'no-store' })
@@ -329,23 +317,23 @@ export default function AdminLayout({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-    // 🎯 پچ ۶۰/۶۲: تک‌منبع تصمیم منو و گارد مسیر — لیست دلخواهِ کاربر اگر ثبت شده
-  // باشد ملاک است، وگرنه پیش‌فرض نقش. پچ ۶۲: تا رسیدن whoami هیچ آیتمی نشان
-  // داده نمی‌شود (fail-closed) و داشبورد همیشه برای همه باز است.
+  // 🎯 پچ ۶۰/۶۲/۶۳: تک‌منبع تصمیم منو و گارد مسیر — لیست دلخواهِ کاربر اگر ثبت
+  // شده باشد ملاک است، وگرنه پیش‌فرض نقش. تا رسیدن whoami هیچ آیتمی نشان داده
+  // نمی‌شود (fail-closed)؛ داشبورد هم مشمول تیک‌هاست (پچ ۶۳).
   const menuAllows = (href: string) => {
     if (!whoamiReady) return false
-    if (href === '/admin' || href === '/admin/login') return true
+    if (href === '/admin/login') return true
     if (allowedPaths && allowedPaths.length > 0) {
-      // 🎯 پچ ۶۰-و: تیک داشبورد ('/admin') فقط خود داشبورد — نه پیشوندِ کل /admin/*
+      // 🎯 پچ ۶۳: داشبورد هم مشمول تیک‌ها؛ '/admin' فقط خود داشبورد را باز می‌کند
       return allowedPaths.some(
-        (p) => p !== '/admin' && (href === p || href.startsWith(p + '/'))
+        (p) => href === p || (p !== '/admin' && href.startsWith(p + '/'))
       )
     }
     if (!role) return false
     return roleAllowsPath(role, href)
   }
 
-    // 🎯 پچ ۵۶: گارد نقش — اگر مسیر فعلی مجاز نبود، به داشبورد برگرد
+  // 🎯 پچ ۵۶: گارد نقش — اگر مسیر فعلی مجاز نبود، به داشبورد برگرد
   // پچ ۶۲: ریدایرکت فقط بعد از آماده‌شدن whoami — وگرنه لینک مستقیمِ مجاز
   // هم در لحظهٔ اول به داشبورد پرت می‌شد
   useEffect(() => {
@@ -454,7 +442,7 @@ export default function AdminLayout({
           )}
         </div>
 
-                <nav className="admin-nav">
+        <nav className="admin-nav">
           {/* پچ ۶۲: تا رسیدن whoami اسکلتون منو — نه همهٔ آیتم‌ها */}
           {!whoamiReady && (
             <div aria-busy="true" style={{ padding: '4px 12px' }}>
@@ -683,3 +671,4 @@ export default function AdminLayout({
     </div>
   )
 }
+
