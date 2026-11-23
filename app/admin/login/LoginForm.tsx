@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabaseBrowser } from '@/lib/supabase/client'
 
@@ -20,11 +20,37 @@ export default function LoginForm() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  // 🎯 پچ ۶۵: اگر همین مرورگر از قبل نشستِ باز دارد، همان اول لو بده —
+  // «با کدام حساب وارد شده‌ای» قبل از تایپ، نه بعد از گم‌شدن در پنل
+  const [staleSession, setStaleSession] = useState('')
+
+  useEffect(() => {
+    let mounted = true
+    fetch('/api/auth/session-whoami', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (mounted && d?.authed && d?.email) setStaleSession(String(d.email))
+      })
+      .catch(() => {})
+    return () => {
+      mounted = false
+    }
+  }, [])
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
     setError('')
     setLoading(true)
+
+    // 🎯 پچ ۶۵: قبل از ورود، هر نشست قبلی همین مرورگر پاک می‌شود — حتی
+    // کوکی‌های httpOnly که با auth.signOut مرورگری پاک نمی‌شوند. بدون این،
+    // ورودِ کاربر جدید می‌توانست روی نشست قدیمیِ کاربر دیگر سوار شود.
+    try {
+      await fetch('/api/auth/session-reset', { method: 'POST' })
+    } catch {
+      // اگر endpoint موقتاً در دسترس نبود، ورود عادی ادامه پیدا می‌کند
+    }
+    await supabaseBrowser().auth.signOut()
 
     const { error } = await supabaseBrowser().auth.signInWithPassword({
       email,
@@ -35,6 +61,26 @@ export default function LoginForm() {
       setError(faError(error.message))
       setLoading(false)
       return
+    }
+
+    // 🎯 پچ ۶۵: اثبات هویت — نشستِ واقعی سرور باید همان ایمیلی باشد که تایپ شد.
+    // اگر کوکی قدیمی جا مانده بود، پاک می‌شود و کاربر یک‌بار دیگر ورود می‌زند.
+    try {
+      const v = await fetch('/api/auth/session-whoami', { cache: 'no-store' })
+        .then((r) => (r.ok ? r.json() : null))
+        .catch(() => null)
+      if (v?.authed && v?.email && v.email.toLowerCase() !== email.trim().toLowerCase()) {
+        await fetch('/api/auth/session-reset', { method: 'POST' }).catch(() => {})
+        await supabaseBrowser().auth.signOut()
+        setError(
+          'نشست قدیمی این مرورگر مزاحم ورود بود و پاک شد — ایمیل و رمز را دوباره بزن.'
+        )
+        setStaleSession('')
+        setLoading(false)
+        return
+      }
+    } catch {
+      // بررسی هویت شکست خورد — مثل قبل ادامه بده
     }
 
     // 🎯 پچ ۵۹-آ: بعد از ورود موفق، وضعیت دسترسی پنل را دقیق چک می‌کنیم تا
@@ -73,6 +119,24 @@ export default function LoginForm() {
           <h1>ورود مدیریت</h1>
           <p>پنل مدیریت منوی کافه پارک</p>
         </div>
+
+        {staleSession && (
+          <p
+            role="status"
+            style={{
+              fontSize: 12.5,
+              color: '#8a6d1f',
+              background: '#fdf6e3',
+              border: '1px solid #ecd9a0',
+              borderRadius: 8,
+              padding: '8px 10px',
+              margin: '0 0 12px',
+            }}
+          >
+            ⚠️ این مرورگر از قبل با <b dir="ltr">{staleSession}</b> وارد شده است.
+            با زدن «ورود» آن نشست پاک و جایگزین می‌شود.
+          </p>
+        )}
 
         <div className="login-field">
           <label htmlFor="login-email">ایمیل</label>

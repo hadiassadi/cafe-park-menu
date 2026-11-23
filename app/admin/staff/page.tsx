@@ -41,6 +41,17 @@ export default async function StaffListPage() {
     (profs ?? []).map((p: any) => [p.user_id as string, p])
   )
 
+  // 🎯 پچ ۶۵ — ایمیل اکانت‌های متصل در فهرست هم دیده شود (نه فقط «متصل است»)
+  let authEmailById = new Map<string, string>()
+  try {
+    const { data: list } = await db.auth.admin.listUsers({ perPage: 200 })
+    authEmailById = new Map(
+      (list?.users ?? []).map((u: any) => [String(u.id), String(u.email ?? '')])
+    )
+  } catch (err) {
+    console.error('[staff list] listUsers:', err)
+  }
+
   return (
     <main className="admin">
       <div className="admin-header">
@@ -97,8 +108,8 @@ export default async function StaffListPage() {
                 نقش پرسنلی: {s.role ?? '—'} · تلفن:{' '}
                 {s.phone ? <span dir="ltr">{s.phone}</span> : '—'} ·{' '}
                 {s.auth_user_id
-                  ? p
-                    ? 'اکانت پنل متصل است'
+                  ? authEmailById.get(String(s.auth_user_id))
+                    ? `اکانت متصل: ${authEmailById.get(String(s.auth_user_id))}`
                     : 'اکانت دارد، پروفایل پنل ندارد'
                   : 'بدون اکانت پنل'}
               </div>

@@ -102,6 +102,13 @@ export default function AdminLayout({
   // 🎯 پچ ۶۰-د: ایمیل کاربرِ واردشده — همیشه در سایدبار دیده می‌شود تا نشستِ
   // مالک و کارمند با هم اشتباه گرفته نشود
   const [whoEmail, setWhoEmail] = useState('')
+  // 🎯 پچ ۶۵: لیبل نقش کنار ایمیل — «با چه نقشی وارد شده‌ای» بدون ابهام
+  const OP_ROLE_LABEL: Record<string, string> = {
+    owner: 'مالک',
+    manager: 'مدیر',
+    cashier: 'صندوق‌دار',
+    staff: 'کارمند',
+  }
   const [drawerOpen, setDrawerOpen] = useState(false)
   // 🎯 پچ ۴۲: گروه‌های تاشو — undefined/open باز، false بسته؛ پس از mount از localStorage بازیابی می‌شود
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({})
@@ -515,6 +522,7 @@ export default function AdminLayout({
               }}
             >
               👤 {whoEmail}
+              {role ? ` · ${OP_ROLE_LABEL[role] ?? role}` : ''}
             </div>
           )}
           <Link
@@ -634,6 +642,7 @@ export default function AdminLayout({
                   }}
                 >
                   👤 {whoEmail}
+                  {role ? ` · ${OP_ROLE_LABEL[role] ?? role}` : ''}
                 </div>
               )}
               <Link

@@ -4,6 +4,7 @@ import type { CSSProperties } from 'react'
 import { getOperatorRole } from '@/lib/admin/roles'
 import { accessAllowsPath } from '@/lib/admin/modules'
 import { supabaseAdmin } from '@/lib/supabase/server'
+import StaffAuthLinkForm, { LinkOption } from '../StaffAuthLinkForm'
 
 export const dynamic = 'force-dynamic'
 
@@ -75,6 +76,48 @@ export default async function StaffProfilePage({
           .maybeSingle()
       ).data
     : null
+
+  // 🎯 پچ ۶۵ — اکانتِ متصل باید «با نام» دیده شود، نه فقط «متصل ✅»:
+  // ایمیل همهٔ اکانت‌های auth + پروفایل‌های اپراتوری برای نمایش و ویرایشگر اتصال
+  const OP_ROLE_LABEL: Record<string, string> = {
+    owner: 'مالک',
+    manager: 'مدیر',
+    cashier: 'صندوق‌دار',
+    staff: 'کارمند',
+  }
+  let authUsers: { id: string; email: string }[] = []
+  try {
+    const { data: list } = await db.auth.admin.listUsers({ perPage: 200 })
+    authUsers = (list?.users ?? []).map((u: any) => ({
+      id: String(u.id),
+      email: String(u.email ?? ''),
+    }))
+  } catch (err) {
+    console.error('[staff profile] listUsers:', err)
+  }
+  const linkedEmail = staff.auth_user_id
+    ? (authUsers.find((a) => a.id === staff.auth_user_id)?.email ?? null)
+    : null
+  const { data: allProfs } = await db
+    .from('admin_operator_profiles')
+    .select('user_id, display_name, role, is_active')
+  const profAllByUser = new Map(
+    (allProfs ?? []).map((p: any) => [p.user_id as string, p])
+  )
+  const linkOptions: LinkOption[] = authUsers
+    .filter((a) => {
+      const p = profAllByUser.get(a.id)
+      return p && p.is_active !== false
+    })
+    .map((a) => {
+      const p = profAllByUser.get(a.id) as any
+      return {
+        user_id: a.id,
+        email: a.email,
+        display_name: String(p.display_name ?? ''),
+        role_label: OP_ROLE_LABEL[p.role] ?? String(p.role),
+      }
+    })
 
   // آمار شیفت‌های واقعی — بر اساس opened_by
   let shifts: ShiftLite[] = []
@@ -153,7 +196,15 @@ export default async function StaffProfilePage({
             )}
           </div>
           <div>
-            اکانت پنل: <strong>{staff.auth_user_id ? 'متصل ✅' : 'ندارد ⛔'}</strong>
+            اکانت پنل:{' '}
+            {staff.auth_user_id ? (
+              <strong>
+                متصل ✅{' '}
+                <span dir="ltr">({linkedEmail ?? 'ایمیل یافت نشد'})</span>
+              </strong>
+            ) : (
+              <strong>ندارد ⛔</strong>
+            )}
             {staff.auth_user_id && !prof ? ' (پروفایل پنل ثبت نشده)' : ''}
           </div>
           {prof?.display_name && (
@@ -171,6 +222,18 @@ export default async function StaffProfilePage({
           {staff.note && <div>یادداشت: {staff.note}</div>}
         </div>
       </section>
+
+      {/* 🎯 پچ ۶۵ — ویرایشگر اتصال کارمند↔اکانت پنل (تا امروز فقط با SQL دستی) */}
+      {canViewAny && (
+        <section className="admin-card" style={{ marginBottom: 14 }}>
+          <h2 style={{ fontSize: 15, margin: '0 0 6px' }}>🔗 اکانت پنل متصل</h2>
+          <StaffAuthLinkForm
+            staffId={staff.id}
+            current={staff.auth_user_id}
+            options={linkOptions}
+          />
+        </section>
+      )}
 
       {/* آمار شیفت‌ها */}
       <section className="admin-card" style={{ marginBottom: 14 }}>
