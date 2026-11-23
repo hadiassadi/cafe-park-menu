@@ -28,6 +28,7 @@ const MENU_GROUPS = [
       { href: '/admin/accounting', label: 'حسابداری', icon: '🧮' },
       { href: '/admin/customers', label: 'مشتریان', icon: '👥' },
       { href: '/admin/users', label: 'کاربران و دسترسی', icon: '🔐' },
+      { href: '/admin/staff', label: 'پروفایل کارمند', icon: '🧑‍💼' },
     ],
   },
   {

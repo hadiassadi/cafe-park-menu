@@ -1,16 +1,21 @@
 import 'server-only'
 import { NextRequest, NextResponse } from 'next/server'
-import { requireAdminUser } from '@/lib/admin/require-admin'
+import { resolveShiftActor } from '@/lib/admin/shift-auth'
 import { rateLimit, tooMany } from '@/lib/rate-limit'
 import { supabaseAdmin } from '@/lib/supabase/server'
 
 export const dynamic = 'force-dynamic'
 
-// 🎯 پچ ۵۱: شیفت کاری اپراتور — باز/بستن + جمع‌های زنده و مغایرت
-// 🎯 پچ ۵۲: گردش کامل شیفت — تحویل صندوق از شیفت قبلی، ساعات کاری مجاز،
+// 🎯 پچ ۶۱: شیفت کاری اپراتور — باز/بستن + جمع‌های زنده و مغایرت
+// 🎯 پچ ۶۲: گردش کامل شیفت — تحویل صندوق از شیفت قبلی، ساعت کاری مجاز،
 //            سفارش‌های بازِ مانده هنگام بستن، نام نمایشی لحظهٔ ثبت
-//  GET   → شیفت بازِ من + جمع‌های لحظه‌ای + شیفت قبلی (مبنای تحویل) + ساعات کاری من
-//  POST  → باز کردن شیفت (تنخواه/تحویل) — خارج از ساعات کاری مجاز رد می‌شود
+// 🎯 پچ ۶۴: هویت شیفت با resolveShiftActor — هم جلسهٔ پنل و هم توکن کارمند
+//            موبایل (staff-otp) مجاز است؛ منطق شیفت تغییری نکرده است.
+// 🎯 پچ ۶۴ — اصلاح نوع «سرمایه»: مبلغ تنخواه/شمارش با parseAmount پارس می‌شود —
+//            ارقام فارسی/عربی و جداکننده‌ها («۵۰۰٬۰۰۰» یا '500,000') معتبرند و
+//            مقدار همیشه به‌صورت عدد صحیح در ستون bigint ذخیره می‌شود.
+//  GET   → شیفت بازِ من + جمع‌های لحظه‌ای + شیفت قبلی (مبنای تحویل) + ساعت کاری من
+//  POST  → باز کردن شیفت (تنخواه/تحویل) — خارج از ساعت کاری مجاز رد می‌شود
 //  PATCH → بستن شیفت (شمارش واقعی نقدی → مغایرت خودکار)
 
 type ShiftTotals = {
@@ -22,6 +27,23 @@ type ShiftTotals = {
 }
 
 const MAX_FLOAT = 500_000_000
+
+// 🎯 پچ ۶۴: پارس امن مبالغ ورودی — فارسی/عربی/لاتین + هر جداکننده‌ای
+const PERSIAN_DIGITS = '۰۱۲۳۴۵۶۷۸۹'
+const ARABIC_DIGITS = '٠١٢٣٤٥٦٧٨٩'
+function parseAmount(raw: unknown): number {
+  if (typeof raw === 'number') {
+    return Number.isFinite(raw) ? Math.floor(raw) : NaN
+  }
+  let s = String(raw ?? '').trim()
+  if (!s) return NaN
+  s = s.replace(/[۰-۹]/g, (d) => String(PERSIAN_DIGITS.indexOf(d)))
+  s = s.replace(/[٠-٩]/g, (d) => String(ARABIC_DIGITS.indexOf(d)))
+  s = s.replace(/[,\s٬]/g, '')
+  if (!/^\d+$/.test(s)) return NaN
+  const n = Math.floor(Number(s))
+  return Number.isFinite(n) ? n : NaN
+}
 
 async function shiftTotals(
   db: ReturnType<typeof supabaseAdmin>,
@@ -83,7 +105,7 @@ async function openOrdersCount(
   return count ?? 0
 }
 
-// نام نمایشی کاربر (متابدیتا یا ایمیل) — اسنپ‌شات برای مودال تحویل
+// نام نمایشی کاربر (متادیتا یا ایمیل) — اسنپ‌شات برای مودال تحویل
 async function userName(
   db: ReturnType<typeof supabaseAdmin>,
   userId: string
@@ -167,8 +189,8 @@ async function previousClosedShift(
 }
 
 export async function GET(req: NextRequest) {
-  const auth = await requireAdminUser()
-  if (auth.denied) return auth.denied
+  const actor = await resolveShiftActor()
+  if (actor.denied) return actor.denied
 
   const rl = rateLimit(req, 'admin-shifts-get', 120, 60_000)
   if (!rl.ok) return tooMany(rl)
@@ -176,9 +198,9 @@ export async function GET(req: NextRequest) {
   try {
     const db = supabaseAdmin()
     const [cur, prev, win] = await Promise.all([
-      myOpenShift(db, auth.userId),
+      myOpenShift(db, actor.userId),
       previousClosedShift(db),
-      myWindow(db, auth.userId),
+      myWindow(db, actor.userId),
     ])
     if (!cur) {
       return NextResponse.json(
@@ -210,15 +232,16 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const auth = await requireAdminUser()
-  if (auth.denied) return auth.denied
+  const actor = await resolveShiftActor()
+  if (actor.denied) return actor.denied
 
   const rl = rateLimit(req, 'admin-shifts-open', 20, 60_000)
   if (!rl.ok) return tooMany(rl)
 
   try {
     const body: any = await req.json().catch(() => null)
-    const openingFloat = Math.floor(Number(body?.opening_float ?? 0))
+    // 🎯 پچ ۶۴: مبلغ تنخواه/تحویل با parseAmount — ارقام فارسی و جداکننده OK
+    const openingFloat = parseAmount(body?.opening_float ?? 0)
     if (
       !Number.isFinite(openingFloat) ||
       openingFloat < 0 ||
@@ -232,18 +255,18 @@ export async function POST(req: NextRequest) {
 
     const db = supabaseAdmin()
 
-    // 🎯 پچ ۵۲: ساعات کاری مجاز — اگر مدیر برای این کاربر بازه تعریف کرده باشد
-    const win = await myWindow(db, auth.userId)
+    // 🎯 پچ ۶۲: ساعت کاری مجاز — اگر مدیر برای این کاربر بازه تعریف کرده باشد
+    const win = await myWindow(db, actor.userId)
     if (win && !withinWindow(nowTehranHM(), win.start, win.end)) {
       return NextResponse.json(
         {
-          error: `⏱ ساعات کاری تو از ${win.start} تا ${win.end} است — باز کردن شیفت الان ممکن نیست`,
+          error: `⏱ ساعت کاری تو از ${win.start} تا ${win.end} است — باز کردن شیفت الان ممکن نیست`,
         },
         { status: 403 }
       )
     }
 
-    const existing = await myOpenShift(db, auth.userId)
+    const existing = await myOpenShift(db, actor.userId)
     if (existing) {
       return NextResponse.json(
         { error: 'شما یک شیفت باز دارید — اول همان را ببند' },
@@ -251,7 +274,7 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // 🎯 پچ ۵۲: تحویل صندوق از شیفت قبلی (اختیاری)
+    // 🎯 پچ ۶۲: تحویل صندوق از شیفت قبلی (اختیاری)
     const prevShiftId =
       typeof body?.previous_shift_id === 'string' && body.previous_shift_id
         ? body.previous_shift_id
@@ -270,7 +293,7 @@ export async function POST(req: NextRequest) {
         .maybeSingle()
       if (!prevRow?.closed_at) {
         return NextResponse.json(
-          { error: 'شیفت مبدا تحویل باز یا پیدا نشد' },
+          { error: 'شیفت مبدأ تحویل باز یا پیدا نشد' },
           { status: 400 }
         )
       }
@@ -289,11 +312,11 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const myName = await userName(db, auth.userId)
+    const myName = await userName(db, actor.userId)
     const { data: shift, error } = await db
       .from('shifts')
       .insert({
-        opened_by: auth.userId,
+        opened_by: actor.userId,
         opened_by_name: myName,
         opening_float: openingFloat,
         ...handover,
@@ -312,8 +335,8 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
-  const auth = await requireAdminUser()
-  if (auth.denied) return auth.denied
+  const actor = await resolveShiftActor()
+  if (actor.denied) return actor.denied
 
   const rl = rateLimit(req, 'admin-shifts-close', 20, 60_000)
   if (!rl.ok) return tooMany(rl)
@@ -321,10 +344,11 @@ export async function PATCH(req: NextRequest) {
   try {
     const body: any = await req.json().catch(() => null)
     // شمارش واقعی نقدی — خالی یعنی بدون شمارش ببند (مغایرت ثبت نمی‌شود)
+    // 🎯 پچ ۶۴: با parseAmount — «۵۰۰٬۰۰۰» هم درست پارس می‌شود
     const counted =
       body?.counted_cash === null || body?.counted_cash === undefined
         ? null
-        : Math.floor(Number(body.counted_cash))
+        : parseAmount(body.counted_cash)
     if (
       counted !== null &&
       (!Number.isFinite(counted) || counted < 0 || counted > MAX_FLOAT)
@@ -340,7 +364,7 @@ export async function PATCH(req: NextRequest) {
         : null
 
     const db = supabaseAdmin()
-    const cur = await myOpenShift(db, auth.userId)
+    const cur = await myOpenShift(db, actor.userId)
     if (!cur) {
       return NextResponse.json(
         { error: 'شیفت بازی نداری' },
@@ -355,13 +379,13 @@ export async function PATCH(req: NextRequest) {
     const expectedCash = Number(cur.opening_float) + totals.cash
     const discrepancy = counted === null ? null : counted - expectedCash
 
-    const myName = await userName(db, auth.userId)
+    const myName = await userName(db, actor.userId)
 
-    // 🎯 پچ ۵۲-ب: شیفت «صاحب» بدون نیاز به تایید — هنگام بستن خودکار تایید می‌شود
+    // 🎯 پچ ۶۲-ب: شیفت «صاحب» بدون نیاز به تأیید — هنگام بستن خودکار تأیید می‌شود
     const { data: profRole } = await db
       .from('admin_operator_profiles')
       .select('role')
-      .eq('user_id', auth.userId)
+      .eq('user_id', actor.userId)
       .maybeSingle()
     const isOwner = profRole?.role === 'owner'
 
@@ -369,10 +393,10 @@ export async function PATCH(req: NextRequest) {
       .from('shifts')
       .update({
         closed_at: new Date().toISOString(),
-        closed_by: auth.userId,
+        closed_by: actor.userId,
         closed_by_name: myName,
         ...(isOwner
-          ? { approved_by: auth.userId, approved_at: new Date().toISOString() }
+          ? { approved_by: actor.userId, approved_at: new Date().toISOString() }
           : {}),
         counted_cash: counted,
         expected_cash: expectedCash,

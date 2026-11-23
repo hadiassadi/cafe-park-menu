@@ -26,6 +26,9 @@ export const ADMIN_MODULES: AdminModuleDef[] = [
   { href: '/admin/accounting', label: 'حسابداری', icon: '🧮', group: 'عملیات روزانه' },
   { href: '/admin/customers', label: 'مشتریان', icon: '👥', group: 'عملیات روزانه' },
   { href: '/admin/users', label: 'کاربران و دسترسی', icon: '🔐', group: 'عملیات روزانه' },
+  // 🎯 پچ ۶۴: هاب پروفایل کارمندان — صفحهٔ مستقل با گارد خودش؛ برای کاربران
+  // غیرمالک باید در مدیریت دسترسی‌ها تیک بخورد (پیش‌فرضِ نقش‌های پایین‌تر بسته است)
+  { href: '/admin/staff', label: 'پروفایل کارمند', icon: '🧑‍💼', group: 'عملیات روزانه' },
   // کاتالوگ و منو
   { href: '/admin/products', label: 'محصولات', icon: '☕', group: 'کاتالوگ و منو' },
   { href: '/admin/categories', label: 'دسته‌ها', icon: '📂', group: 'کاتالوگ و منو' },
