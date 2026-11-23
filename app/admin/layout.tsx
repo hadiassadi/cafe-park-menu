@@ -95,8 +95,10 @@ export default function AdminLayout({
   const [checking, setChecking] = useState(true)
   // 🎯 پچ ۵۶: نقش اپراتوری — مبنای فیلتر منو و گارد مسیر (تا پاسخ whoami همه چیز)
   const [role, setRole] = useState<OpRole | null>(null)
-  // 🎯 پچ ۶۰: لیست دلخواه ماژول‌های این کاربر از whoami — null یعنی هنوز نیامده
+    // 🎯 پچ ۶۰: لیست دلخواه ماژول‌های این کاربر از whoami — null یعنی هنوز نیامده
   const [allowedPaths, setAllowedPaths] = useState<string[] | null>(null)
+  // پچ ۶۲: تا پاسخ whoami منو fail-closed است — هیچ آیتمی رندر نمی‌شود
+  const [whoamiReady, setWhoamiReady] = useState(false)
   // 🎯 پچ ۶۰-د: ایمیل کاربرِ واردشده — همیشه در سایدبار دیده می‌شود تا نشستِ
   // مالک و کارمند با هم اشتباه گرفته نشود
   const [whoEmail, setWhoEmail] = useState('')
@@ -261,21 +263,36 @@ export default function AdminLayout({
         }
         setChecking(false)
 
-        // 🎯 پچ ۵۶: نقش اپراتوری برای فیلتر منو و گارد مسیر
-        fetch('/api/admin/whoami', { cache: 'no-store' })
-          .then((r) => (r.ok ? r.json() : null))
-          .then((d) => {
-            if (!mounted) return
-            // 🎯 پچ ۶۰-د: نشانگر هویت — حتی اگر نقش نیامد، ایمیل را نشان بده
-            if (d?.email) setWhoEmail(String(d.email))
-            if (!d?.role) return
-            setRole(d.role as OpRole)
-            // 🎯 پچ ۶۰: paths = [] یعنی «پیش‌فرض نقش»
-            setAllowedPaths(
-              Array.isArray(d.paths) ? (d.paths as string[]) : null
-            )
-          })
-          .catch(() => {})
+                // پچ ۶۲: whoami با یک تلاش مجدد؛ پاسخ یا خطا در هر حالت
+        // whoamiReady=true می‌شود تا منو از حالت fail-closed خارج شود
+        const loadWhoami = (attempt = 0) => {
+          fetch('/api/admin/whoami', { cache: 'no-store' })
+            .then((r) => (r.ok ? r.json() : null))
+            .then((d) => {
+              if (!mounted) return
+              if (!d && attempt < 1) {
+                setTimeout(() => loadWhoami(attempt + 1), 800)
+                return
+              }
+              // 🎯 پچ ۶۰-د: نشانگر هویت — حتی اگر نقش نیامد، ایمیل را نشان بده
+              if (d?.email) setWhoEmail(String(d.email))
+              if (d?.role) setRole(d.role as OpRole)
+              // 🎯 پچ ۶۰: paths = [] یعنی «پیش‌فرض نقش»؛ null یعنی خطا/بدون پاسخ
+              setAllowedPaths(
+                d && Array.isArray(d.paths) ? (d.paths as string[]) : null
+              )
+              setWhoamiReady(true)
+            })
+            .catch(() => {
+              if (!mounted) return
+              if (attempt < 1) {
+                setTimeout(() => loadWhoami(attempt + 1), 800)
+                return
+              }
+              setWhoamiReady(true)
+            })
+        }
+        loadWhoami()
 
         try {
           if ('Notification' in window && Notification.permission === 'default') {
@@ -301,28 +318,32 @@ export default function AdminLayout({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // 🎯 پچ ۶۰: تک‌منبع تصمیم منو و گارد مسیر — لیست دلخواهِ کاربر اگر ثبت شده
-  // باشد ملاک است، وگرنه پیش‌فرض نقش (تا رسیدن whoami، منو کامل دیده می‌شود)
+    // 🎯 پچ ۶۰/۶۲: تک‌منبع تصمیم منو و گارد مسیر — لیست دلخواهِ کاربر اگر ثبت شده
+  // باشد ملاک است، وگرنه پیش‌فرض نقش. پچ ۶۲: تا رسیدن whoami هیچ آیتمی نشان
+  // داده نمی‌شود (fail-closed) و داشبورد همیشه برای همه باز است.
   const menuAllows = (href: string) => {
+    if (!whoamiReady) return false
+    if (href === '/admin' || href === '/admin/login') return true
     if (allowedPaths && allowedPaths.length > 0) {
-      if (href === '/admin' || href === '/admin/login') return true
       // 🎯 پچ ۶۰-و: تیک داشبورد ('/admin') فقط خود داشبورد — نه پیشوندِ کل /admin/*
       return allowedPaths.some(
         (p) => p !== '/admin' && (href === p || href.startsWith(p + '/'))
       )
     }
-    if (!role) return true
+    if (!role) return false
     return roleAllowsPath(role, href)
   }
 
-  // 🎯 پچ ۵۶: گارد نقش — اگر مسیر فعلی مجاز نبود، به داشبورد برگرد
-  // (سمت سرور هم پروکسی و گاردهای نقش گارد دارند؛ این لایه UI است)
+    // 🎯 پچ ۵۶: گارد نقش — اگر مسیر فعلی مجاز نبود، به داشبورد برگرد
+  // پچ ۶۲: ریدایرکت فقط بعد از آماده‌شدن whoami — وگرنه لینک مستقیمِ مجاز
+  // هم در لحظهٔ اول به داشبورد پرت می‌شد
   useEffect(() => {
     if (checking) return
+    if (!whoamiReady) return
     if (pathname === '/admin/login' || pathname === '/admin') return
     if (!menuAllows(pathname)) router.replace('/admin')
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [role, allowedPaths, pathname, checking])
+  }, [role, allowedPaths, whoamiReady, pathname, checking])
 
   // 🎯 پچ ۵۶/۶۰: منوی هر کاربر — گروه خالی هم حذف می‌شود
   const visibleGroups = MENU_GROUPS.map((g) => ({
@@ -422,8 +443,18 @@ export default function AdminLayout({
           )}
         </div>
 
-        <nav className="admin-nav">
-          {visibleGroups.map((group) => {
+                <nav className="admin-nav">
+          {/* پچ ۶۲: تا رسیدن whoami اسکلتون منو — نه همهٔ آیتم‌ها */}
+          {!whoamiReady && (
+            <div aria-busy="true" style={{ padding: '4px 12px' }}>
+              <div className="skel-card" style={{ height: 34, marginBottom: 8, borderRadius: 10 }} />
+              <div className="skel-card" style={{ height: 34, marginBottom: 8, borderRadius: 10 }} />
+              <div className="skel-card" style={{ height: 34, marginBottom: 8, borderRadius: 10 }} />
+              <div className="skel-card" style={{ height: 34, marginBottom: 8, borderRadius: 10 }} />
+              <div className="skel-card" style={{ height: 34, marginBottom: 8, borderRadius: 10 }} />
+            </div>
+          )}
+          {whoamiReady && visibleGroups.map((group) => {
             const collapsed = openGroups[group.key] === false
             return (
               <div
