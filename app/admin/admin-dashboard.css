@@ -5,13 +5,24 @@
    دست‌نخورده‌اند؛ فقط کلاس‌های جدید dash-* این‌جا تعریف شده‌اند.
    ═══════════════════════════════════════ */
 
-/* ─── نوار خوش‌آمد: عنوان + نشان نقش + تاریخ + CTA ─── */
+/* ─── نوار خوش‌آمد: عنوان + نشان نقش + تاریخ + CTA ───
+   🎯 پچ ۶۸: نوار خوش‌آمد پس‌زمینهٔ قهوه‌ای دارد (dashboard-welcome)؛
+   همهٔ عناصر روی آن باید رنگ صریحِ سفید داشته باشند — قبلاً پیل نقش
+   قهوه‌روی‌قهوه‌ای و تاریخ خاکستری روی قهوه‌ای عملاً نامرئی بودند. */
 .dash-welcome {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
   flex-wrap: wrap;
+}
+
+.dash-welcome h1 {
+  color: #ffffff;
+}
+
+.dash-welcome p {
+  color: rgba(255, 255, 255, 0.92);
 }
 
 .dash-welcome-side {
@@ -24,11 +35,12 @@
 .dash-role-badge {
   display: inline-flex;
   align-items: center;
-  padding: 5px 14px;
+  gap: 6px;
+  padding: 6px 14px;
   border-radius: 999px;
-  background: var(--admin-surface-2);
-  border: 1px solid var(--admin-border);
-  color: var(--admin-primary);
+  background: rgba(255, 255, 255, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.38);
+  color: #ffffff;
   font-size: 12.5px;
   font-weight: 800;
   white-space: nowrap;
@@ -36,7 +48,8 @@
 
 .dash-date {
   font-size: 12px;
-  color: var(--admin-text-muted);
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.88);
   white-space: nowrap;
 }
 
@@ -46,19 +59,19 @@
   gap: 6px;
   padding: 8px 18px;
   border-radius: 999px;
-  background: var(--admin-primary);
-  color: var(--admin-primary-fg);
+  background: #ffffff;
+  color: var(--admin-primary-deep);
   font-size: 13px;
   font-weight: 800;
   text-decoration: none;
   white-space: nowrap;
-  box-shadow: 0 2px 8px rgba(41, 37, 31, 0.18);
+  box-shadow: 0 2px 8px rgba(41, 37, 31, 0.22);
   transition: background 0.15s ease;
 }
 
 .dash-cta:hover {
-  background: var(--admin-primary-deep);
-  color: var(--admin-primary-fg);
+  background: var(--admin-surface-2);
+  color: var(--admin-primary-deep);
 }
 
 /* ─── سه ستون آماری اصلی ─── */
@@ -86,8 +99,26 @@
 }
 
 .dash-hero-icon {
-  font-size: 22px;
+  width: 42px;
+  height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 13px;
+  background: var(--admin-surface-2);
+  border: 1px solid var(--admin-border-soft);
+  font-size: 20px;
   line-height: 1;
+}
+
+.dash-hero-card.tone-gold .dash-hero-icon {
+  background: #f7ecd9;
+  border-color: #ecd9b0;
+}
+
+.dash-hero-card.tone-green .dash-hero-icon {
+  background: var(--admin-success-soft);
+  border-color: #cfe2d2;
 }
 
 .dash-hero-value {
@@ -95,11 +126,20 @@
   font-weight: 800;
   color: var(--admin-text-strong);
   font-variant-numeric: tabular-nums;
+  line-height: 1.3;
 }
 
 .dash-hero-label {
   font-size: 12px;
   color: var(--admin-text-muted);
+}
+
+/* 🎯 پچ ۶۸: توضیح کوتاه برای کارت‌هایی که عددشان صفر است */
+.dash-hero-zero {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--admin-text-faint);
+  margin-top: -2px;
 }
 
 .dash-hero-card.tone-gold .dash-hero-value {

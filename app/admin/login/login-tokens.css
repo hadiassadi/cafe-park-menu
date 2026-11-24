@@ -1,0 +1,46 @@
+/* ═══════════════════════════════════════
+   LOGIN TOKENS — پچ ۶۸: تعمیر صفحهٔ ورود ادمین
+   ریشهٔ باگ: صفحهٔ /admin/login بیرون از .admin-shell رندر می‌شود
+   (لایوت برای لاگین شل را برنمی‌گرداند)، پس متغیرهای var(--admin-*)
+   تعریف نشده بودند → پس‌زمینهٔ کارت و دکمه بی‌اعتبار و فقط متن سفید
+   می‌ماند. این‌جا همان توکن‌ها با مقادیر پیش‌فرضِ روشن، فقط داخل
+   محدودهٔ .login-page تعریف می‌شوند (بدون اثر به هیچ صفحهٔ دیگر).
+   ═══════════════════════════════════════ */
+.login-page {
+  --admin-bg: #f7f3eb;
+  --admin-surface: #fffdf9;
+  --admin-surface-2: #f5f0e9;
+  --admin-surface-3: #fbf9f5;
+  --admin-border: #e3ddd2;
+  --admin-border-soft: #ebe6de;
+  --admin-text: #4a443d;
+  --admin-text-strong: #29251f;
+  --admin-text-soft: #625b51;
+  --admin-text-muted: #766f64;
+  --admin-text-faint: #8b8277;
+  --admin-text-disabled: #b8ad9c;
+  --admin-primary: #6b4f3a;
+  --admin-primary-light: #9a6b3f;
+  --admin-primary-deep: #5a4230;
+  --admin-primary-fg: #ffffff;
+  --admin-hover: #f5f0e9;
+  --admin-danger: #dc2626;
+  --admin-danger-strong: #9b3c32;
+  --admin-danger-soft: #fde8e6;
+  --admin-success: #477052;
+  --admin-success-strong: #2d5d3e;
+  --admin-success-light: #8cc79a;
+  --admin-success-soft: #e5f0e6;
+  --admin-warning: #d99f59;
+  --admin-radius: 16px;
+  --admin-radius-sm: 10px;
+  --admin-shadow: 0 1px 4px rgba(41, 37, 31, 0.08);
+  --admin-font-body: 'Vazirmatn', Tahoma, Arial, sans-serif;
+  --admin-font-heading: 'Vazirmatn', Tahoma, Arial, sans-serif;
+  --admin-space-1: 4px;
+  --admin-space-2: 8px;
+  --admin-space-3: 12px;
+  --admin-space-4: 16px;
+  --admin-space-5: 20px;
+  --admin-space-6: 24px;
+}

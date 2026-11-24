@@ -3,6 +3,9 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabaseBrowser } from '@/lib/supabase/client'
+// 🎯 پچ ۶۸: توکن‌های تم ادمین فقط داخل محدودهٔ .login-page تعریف می‌شوند —
+// صفحهٔ لاگین بیرون از .admin-shell رندر می‌شود و بدون این، کارت و دکمه بی‌رنگ می‌مانند
+import './login-tokens.css'
 
 function faError(message: string) {
   if (/invalid login credentials/i.test(message)) {

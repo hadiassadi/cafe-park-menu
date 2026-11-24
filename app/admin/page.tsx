@@ -56,6 +56,25 @@ const fmtDateTime = (v: unknown) => {
   }
 }
 
+// 🎯 پچ ۶۸: مبلغ را از هر شکلی (عدد یا رشتهٔ عددی) به عدد می‌رساند؛
+// مقدار نامعتبر → null تا ستون مبلغ ردیف پنهان شود، نه اینکه «NaN» بنویسد
+const parseAmount = (v: unknown): number | null => {
+  if (typeof v === 'number' && isFinite(v)) return v
+  if (typeof v === 'string' && v.trim() !== '') {
+    const n = Number(v.replace(/[,\s]/g, ''))
+    if (isFinite(n)) return n
+  }
+  return null
+}
+
+// 🎯 پچ ۶۸: شناسهٔ سفارش (UUID بلند) به ۸ نویسهٔ اول کوتاه می‌شود
+const shortOrderId = (id: unknown, fallback: number) => {
+  const s = String(id ?? '').trim()
+  if (!s) return String(fallback + 1)
+  const head = s.split('-')[0].toUpperCase()
+  return head.slice(0, 8)
+}
+
 // سفارش‌های اخیر — کم‌ریسک‌ترین حالت: select('*') و خوانش دفاعی فیلدها.
 // هر خطای کوئری/اسکیمای متفاوت فقط باعث مخفی‌شدن این بخش می‌شود، نه کرش صفحه.
 async function fetchRecentOrders(): Promise<Record<string, unknown>[] | null> {
@@ -108,6 +127,11 @@ function HeroStat({
       <div className="dash-hero-icon">{icon}</div>
       <div className="dash-hero-value">{formatPrice(value)}</div>
       <div className="dash-hero-label">{label}</div>
+      {/* 🎯 پچ ۶۸: عدد صفر فارسی (۰) ریز است و کارت را «خالی» نشان می‌دهد —
+          توضیح کوتاه زیر کارت، صفرِ معنادار را جای خالیِ مشکوک عوض می‌کند */}
+      {value === 0 && (
+        <div className="dash-hero-zero">هنوز در این بازه چیزی ثبت نشده</div>
+      )}
     </div>
   )
 }
@@ -235,19 +259,25 @@ export default async function AdminDashboard() {
         </div>
       </section>
 
-      {/* 🎯 پچ ۶۷: سفارش‌های اخیر — فقط مالک/مدیر؛ خطای کوئری فقط بخش را مخفی می‌کند */}
+      {/* 🎯 پچ ۶۷/۶۸: سفارش‌های اخیر — فقط مالک/مدیر؛ خطای کوئری فقط بخش را مخفی می‌کند */}
       {canSeeFinance && recentOrders && (
         <section className="dashboard-section">
-          <h2>🆕 سفارش‌های اخیر</h2>
+          <h2>🧾 سفارش‌های اخیر</h2>
           <div className="dash-recent">
             {recentOrders.map((o, i) => {
               const id = o.id
               const createdAt = o.created_at
               const status = o.status
-              const total = o.total
+              // 🎯 پچ ۶۸: مبلغ با نام‌های مختلف ذخیره می‌شود — همه را با احتیاط می‌خوانیم؛
+              // اگر هیچ‌کدام عدد معتبر نبود، ستون مبلغ همان ردیف نشان داده نمی‌شود
+              const rawTotal =
+                o.total ?? o.total_amount ?? o.final_amount ?? o.amount
+              const total = parseAmount(rawTotal)
+              // 🎯 پچ ۶۸: شناسهٔ کامل UUID خیلی بلند است — فقط ۸ نویسهٔ اول
+              const shortId = shortOrderId(id, i)
               return (
                 <div key={String(id ?? i)} className="dash-recent-row">
-                  <span className="dash-recent-id">#{String(id ?? i)}</span>
+                  <span className="dash-recent-id">#{shortId}</span>
                   {createdAt ? (
                     <span className="dash-recent-time">
                       {fmtDateTime(createdAt)}
@@ -258,7 +288,7 @@ export default async function AdminDashboard() {
                       {statusLabel(status)}
                     </span>
                   ) : null}
-                  {typeof total === 'number' ? (
+                  {total !== null ? (
                     <span className="dash-recent-amount">
                       {formatPrice(total)} تومان
                     </span>
