@@ -4,6 +4,10 @@
 //   - صندوق‌دار/کارمند: فقط شمارش سفارش‌ها + میان‌برهای مجاز (بدون هیچ عدد مالی)
 //   - پیوندهای میان‌بُر با همان گاردِ منو فیلتر می‌شوند (accessAllowsPath)
 //   - نگهداری دیتابیس فقط برای مالک
+// 🎯 پچ ۶۸ — پولیش: نشان نقش و تاریخ در نوار خوش‌آمد، کپشن صفر کارت‌ها،
+//   شناسهٔ کوتاه و مبلغِ دفاعی سفارش‌های اخیر
+// 🎯 پچ ۶۹ — تب‌های داخلی بخش‌ها: نمای کلی / نمودارها / پرفروش‌ها / ابزارها —
+//   دیگر اسکرول طولانی لازم نیست؛ نوار بالای صفحه از پچ ۶۶ دست‌نخورده می‌ماند
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { getOrderStats } from '@/lib/stats'
@@ -16,6 +20,7 @@ import {
 import { ROLE_LABEL } from '@/lib/admin/role-matrix'
 import { supabaseAdmin } from '@/lib/supabase/server'
 import CleanupOrdersCard from './components/CleanupOrdersCard'
+import SectionTabs, { type SectionTabDef } from './components/SectionTabs'
 import './admin-dashboard.css'
 
 export const dynamic = 'force-dynamic'
@@ -194,6 +199,299 @@ export default async function AdminDashboard() {
   )
   const maxPeakHour = Math.max(...stats.peakHours.map((h) => h.orders), 1)
 
+  /* ── بخش‌های صفحه — هر کدام یک node؛ در پچ ۶۹ داخل تب‌ها چیده می‌شوند ── */
+
+  const recentOrdersSection =
+    canSeeFinance && recentOrders ? (
+      <section className="dashboard-section">
+        <h2>🧾 سفارش‌های اخیر</h2>
+        <div className="dash-recent">
+          {recentOrders.map((o, i) => {
+            const id = o.id
+            const createdAt = o.created_at
+            const status = o.status
+            // 🎯 پچ ۶۸: مبلغ با نام‌های مختلف ذخیره می‌شود — همه را با احتیاط می‌خوانیم؛
+            // اگر هیچ‌کدام عدد معتبر نبود، ستون مبلغ همان ردیف نشان داده نمی‌شود
+            const rawTotal =
+              o.total ?? o.total_amount ?? o.final_amount ?? o.amount
+            const total = parseAmount(rawTotal)
+            // 🎯 پچ ۶۸: شناسهٔ کامل UUID خیلی بلند است — فقط ۸ نویسهٔ اول
+            const shortId = shortOrderId(id, i)
+            return (
+              <div key={String(id ?? i)} className="dash-recent-row">
+                <span className="dash-recent-id">#{shortId}</span>
+                {createdAt ? (
+                  <span className="dash-recent-time">
+                    {fmtDateTime(createdAt)}
+                  </span>
+                ) : null}
+                {status ? (
+                  <span className={`dash-status s-${String(status)}`}>
+                    {statusLabel(status)}
+                  </span>
+                ) : null}
+                {total !== null ? (
+                  <span className="dash-recent-amount">
+                    {formatPrice(total)} تومان
+                  </span>
+                ) : null}
+              </div>
+            )
+          })}
+        </div>
+        {allows('/admin/orders') && (
+          <Link href="/admin/orders" className="dash-recent-more">
+            مشاهدهٔ همهٔ سفارش‌ها ←
+          </Link>
+        )}
+      </section>
+    ) : null
+
+  const quickLinksSection =
+    quickLinks.length > 0 ? (
+      <section className="dashboard-section">
+        <h2>🔗 دسترسی سریع</h2>
+        <div className="quick-links-grid">
+          {quickLinks.map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              className="quick-link-card"
+            >
+              <div className="quick-link-icon">{item.icon}</div>
+              <div>
+                <strong>{item.label}</strong>
+                <small>رفتن به بخش {item.label}</small>
+              </div>
+            </Link>
+          ))}
+        </div>
+      </section>
+    ) : null
+
+  const comparisonSection = (
+    <section className="dashboard-section">
+      <h2>📊 مقایسه با ماه قبل</h2>
+      <div className="comparison-grid">
+        <div className="comparison-card">
+          <div className="comparison-header">
+            <span className="comparison-label">💰 فروش</span>
+            <ChangeBadge value={stats.comparison.revenueChange} />
+          </div>
+          <div className="comparison-value">
+            {formatPrice(stats.month.revenue)}
+            <small>تومان</small>
+          </div>
+        </div>
+
+        <div className="comparison-card">
+          <div className="comparison-header">
+            <span className="comparison-label">🛒 سفارش</span>
+            <ChangeBadge value={stats.comparison.ordersChange} />
+          </div>
+          <div className="comparison-value">
+            {formatPrice(stats.month.orders)}
+            <small>سفارش</small>
+          </div>
+        </div>
+
+        <div className="comparison-card">
+          <div className="comparison-header">
+            <span className="comparison-label">📈 میانگین هر سفارش</span>
+            <ChangeBadge value={stats.comparison.avgOrderChange} />
+          </div>
+          <div className="comparison-value">
+            {formatPrice(stats.avgOrderValue)}
+            <small>تومان</small>
+          </div>
+        </div>
+      </div>
+    </section>
+  )
+
+  const dailyChartSection = (
+    <section className="dashboard-section">
+      <h2>
+        📉 فروش ۷ روز اخیر
+        <small className="dash-section-note">
+          مجموع این هفته: {formatPrice(stats.week.revenue)} تومان ·{' '}
+          {formatPrice(stats.week.orders)} سفارش
+        </small>
+      </h2>
+      <div className="chart-card">
+        <div className="chart-bars">
+          {stats.dailyRevenue.map((day) => {
+            const height =
+              maxRevenue > 0 ? (day.revenue / maxRevenue) * 100 : 0
+            return (
+              <div key={day.date} className="chart-col">
+                <div className="chart-col-value">
+                  {day.revenue > 0 ? formatPrice(day.revenue) : ''}
+                </div>
+                <div className="chart-bar-wrapper">
+                  <div
+                    className="chart-bar"
+                    style={{ height: `${Math.max(height, 2)}%` }}
+                  />
+                </div>
+                <div className="chart-col-label">{day.label}</div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    </section>
+  )
+
+  const monthlyChartSection = (
+    <section className="dashboard-section">
+      <h2>📊 فروش ۶ ماه اخیر</h2>
+      <div className="chart-card">
+        <div className="chart-bars">
+          {stats.monthlyRevenue.map((month) => {
+            const height =
+              maxMonthlyRevenue > 0
+                ? (month.revenue / maxMonthlyRevenue) * 100
+                : 0
+            return (
+              <div key={month.month} className="chart-col">
+                <div className="chart-col-value">
+                  {month.revenue > 0 ? formatPrice(month.revenue) : ''}
+                </div>
+                <div className="chart-bar-wrapper">
+                  <div
+                    className="chart-bar"
+                    style={{ height: `${Math.max(height, 2)}%` }}
+                  />
+                </div>
+                <div className="chart-col-label">{month.label}</div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    </section>
+  )
+
+  const peakHoursSection = (
+    <section className="dashboard-section">
+      <h2>⏰ ساعات پرترافیک (۳۰ روز اخیر)</h2>
+      <div className="chart-card">
+        <div className="peak-hours">
+          {stats.peakHours.map((hour) => {
+            const height =
+              maxPeakHour > 0 ? (hour.orders / maxPeakHour) * 100 : 0
+            return (
+              <div key={hour.hour} className="peak-hour-col">
+                <div className="peak-hour-value">
+                  {hour.orders > 0 ? formatPrice(hour.orders) : ''}
+                </div>
+                <div className="peak-hour-bar-wrapper">
+                  <div
+                    className="peak-hour-bar"
+                    style={{ height: `${Math.max(height, 2)}%` }}
+                  />
+                </div>
+                <div className="peak-hour-label">{hour.label}</div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    </section>
+  )
+
+  const topProductsSection = (
+    <section className="dashboard-section">
+      <h2>⭐ پرفروش‌ترین محصولات (۳۰ روز اخیر)</h2>
+      {stats.topProducts.length === 0 ? (
+        <div className="admin-card">
+          <p className="empty-admin">هنوز فروشی ثبت نشده است.</p>
+        </div>
+      ) : (
+        <div className="top-products-list">
+          {stats.topProducts.map((product, idx) => (
+            <div key={product.name} className="top-product-item">
+              <div className="top-product-rank">#{formatPrice(idx + 1)}</div>
+              <div className="top-product-info">
+                <strong>{product.name}</strong>
+                <small>
+                  {formatPrice(product.count)} عدد فروش ·{' '}
+                  {formatPrice(product.revenue)} تومان
+                </small>
+              </div>
+              <div className="top-product-bar">
+                <div
+                  className="top-product-bar-fill"
+                  style={{
+                    width: `${
+                      (product.count / stats.topProducts[0].count) * 100
+                    }%`,
+                  }}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  )
+
+  const cleanupSection = (
+    <section className="dashboard-section">
+      <h2>🧹 نگهداری دیتابیس</h2>
+      <CleanupOrdersCard />
+    </section>
+  )
+
+  /* ── 🎯 پچ ۶۹: چیدمان تب‌ها بر اساس نقش ──
+     مالک/مدیر: نمای کلی | نمودارها | پرفروش‌ها (+ ابزارها فقط مالک)
+     صندوق‌دار/کارمند: فقط «نمای کلی» → SectionTabs نوار را نشان نمی‌دهد */
+  const tabs: SectionTabDef[] = [
+    {
+      id: 'overview',
+      icon: '🏠',
+      label: 'نمای کلی',
+      node: (
+        <>
+          {recentOrdersSection}
+          {quickLinksSection}
+        </>
+      ),
+    },
+  ]
+
+  if (canSeeFinance) {
+    tabs.push({
+      id: 'charts',
+      icon: '📈',
+      label: 'نمودارها',
+      node: (
+        <>
+          {comparisonSection}
+          {dailyChartSection}
+          {monthlyChartSection}
+          {peakHoursSection}
+        </>
+      ),
+    })
+    tabs.push({
+      id: 'top-products',
+      icon: '⭐',
+      label: 'پرفروش‌ها',
+      node: topProductsSection,
+    })
+  }
+
+  if (isOwner) {
+    tabs.push({
+      id: 'tools',
+      icon: '🧹',
+      label: 'ابزارها',
+      node: cleanupSection,
+    })
+  }
+
   return (
     <div className="dashboard">
       {/* خوش‌آمد + نشان نقش + تاریخ + CTA ثبت سفارش */}
@@ -213,7 +511,7 @@ export default async function AdminDashboard() {
         </div>
       </div>
 
-      {/* 🎯 پچ ۶۷: سه ستون آماری اصلی — نقش‌آگاه */}
+      {/* 🎯 پچ ۶۷: سه ستون آماری اصلی — نقش‌آگاه؛ همیشه بالای صفحه می‌ماند */}
       <section className="dashboard-section">
         <div className="dash-hero">
           {canSeeFinance ? (
@@ -259,251 +557,8 @@ export default async function AdminDashboard() {
         </div>
       </section>
 
-      {/* 🎯 پچ ۶۷/۶۸: سفارش‌های اخیر — فقط مالک/مدیر؛ خطای کوئری فقط بخش را مخفی می‌کند */}
-      {canSeeFinance && recentOrders && (
-        <section className="dashboard-section">
-          <h2>🧾 سفارش‌های اخیر</h2>
-          <div className="dash-recent">
-            {recentOrders.map((o, i) => {
-              const id = o.id
-              const createdAt = o.created_at
-              const status = o.status
-              // 🎯 پچ ۶۸: مبلغ با نام‌های مختلف ذخیره می‌شود — همه را با احتیاط می‌خوانیم؛
-              // اگر هیچ‌کدام عدد معتبر نبود، ستون مبلغ همان ردیف نشان داده نمی‌شود
-              const rawTotal =
-                o.total ?? o.total_amount ?? o.final_amount ?? o.amount
-              const total = parseAmount(rawTotal)
-              // 🎯 پچ ۶۸: شناسهٔ کامل UUID خیلی بلند است — فقط ۸ نویسهٔ اول
-              const shortId = shortOrderId(id, i)
-              return (
-                <div key={String(id ?? i)} className="dash-recent-row">
-                  <span className="dash-recent-id">#{shortId}</span>
-                  {createdAt ? (
-                    <span className="dash-recent-time">
-                      {fmtDateTime(createdAt)}
-                    </span>
-                  ) : null}
-                  {status ? (
-                    <span className={`dash-status s-${String(status)}`}>
-                      {statusLabel(status)}
-                    </span>
-                  ) : null}
-                  {total !== null ? (
-                    <span className="dash-recent-amount">
-                      {formatPrice(total)} تومان
-                    </span>
-                  ) : null}
-                </div>
-              )
-            })}
-          </div>
-          {allows('/admin/orders') && (
-            <Link href="/admin/orders" className="dash-recent-more">
-              مشاهدهٔ همهٔ سفارش‌ها ←
-            </Link>
-          )}
-        </section>
-      )}
-
-      {/* آمار تفصیلی و نمودارها — فقط مالک/مدیر */}
-      {canSeeFinance && (
-        <>
-          {/* ✅ مقایسه با ماه قبل */}
-          <section className="dashboard-section">
-            <h2>📊 مقایسه با ماه قبل</h2>
-            <div className="comparison-grid">
-              <div className="comparison-card">
-                <div className="comparison-header">
-                  <span className="comparison-label">💰 فروش</span>
-                  <ChangeBadge value={stats.comparison.revenueChange} />
-                </div>
-                <div className="comparison-value">
-                  {formatPrice(stats.month.revenue)}
-                  <small>تومان</small>
-                </div>
-              </div>
-
-              <div className="comparison-card">
-                <div className="comparison-header">
-                  <span className="comparison-label">🛒 سفارش</span>
-                  <ChangeBadge value={stats.comparison.ordersChange} />
-                </div>
-                <div className="comparison-value">
-                  {formatPrice(stats.month.orders)}
-                  <small>سفارش</small>
-                </div>
-              </div>
-
-              <div className="comparison-card">
-                <div className="comparison-header">
-                  <span className="comparison-label">📈 میانگین هر سفارش</span>
-                  <ChangeBadge value={stats.comparison.avgOrderChange} />
-                </div>
-                <div className="comparison-value">
-                  {formatPrice(stats.avgOrderValue)}
-                  <small>تومان</small>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          {/* نمودار فروش ۷ روز اخیر — 🎯 پچ ۶۷: مجموع هفته در زیرنویس برگشت */}
-          <section className="dashboard-section">
-            <h2>
-              📉 فروش ۷ روز اخیر
-              <small className="dash-section-note">
-                مجموع این هفته: {formatPrice(stats.week.revenue)} تومان ·{' '}
-                {formatPrice(stats.week.orders)} سفارش
-              </small>
-            </h2>
-            <div className="chart-card">
-              <div className="chart-bars">
-                {stats.dailyRevenue.map((day) => {
-                  const height =
-                    maxRevenue > 0 ? (day.revenue / maxRevenue) * 100 : 0
-                  return (
-                    <div key={day.date} className="chart-col">
-                      <div className="chart-col-value">
-                        {day.revenue > 0 ? formatPrice(day.revenue) : ''}
-                      </div>
-                      <div className="chart-bar-wrapper">
-                        <div
-                          className="chart-bar"
-                          style={{ height: `${Math.max(height, 2)}%` }}
-                        />
-                      </div>
-                      <div className="chart-col-label">{day.label}</div>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          </section>
-
-          {/* ✅ نمودار فروش ۶ ماه اخیر */}
-          <section className="dashboard-section">
-            <h2>📊 فروش ۶ ماه اخیر</h2>
-            <div className="chart-card">
-              <div className="chart-bars">
-                {stats.monthlyRevenue.map((month) => {
-                  const height =
-                    maxMonthlyRevenue > 0
-                      ? (month.revenue / maxMonthlyRevenue) * 100
-                      : 0
-                  return (
-                    <div key={month.month} className="chart-col">
-                      <div className="chart-col-value">
-                        {month.revenue > 0 ? formatPrice(month.revenue) : ''}
-                      </div>
-                      <div className="chart-bar-wrapper">
-                        <div
-                          className="chart-bar"
-                          style={{ height: `${Math.max(height, 2)}%` }}
-                        />
-                      </div>
-                      <div className="chart-col-label">{month.label}</div>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          </section>
-
-          {/* ✅ ساعات پرترافیک */}
-          <section className="dashboard-section">
-            <h2>⏰ ساعات پرترافیک (۳۰ روز اخیر)</h2>
-            <div className="chart-card">
-              <div className="peak-hours">
-                {stats.peakHours.map((hour) => {
-                  const height =
-                    maxPeakHour > 0 ? (hour.orders / maxPeakHour) * 100 : 0
-                  return (
-                    <div key={hour.hour} className="peak-hour-col">
-                      <div className="peak-hour-value">
-                        {hour.orders > 0 ? formatPrice(hour.orders) : ''}
-                      </div>
-                      <div className="peak-hour-bar-wrapper">
-                        <div
-                          className="peak-hour-bar"
-                          style={{ height: `${Math.max(height, 2)}%` }}
-                        />
-                      </div>
-                      <div className="peak-hour-label">{hour.label}</div>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          </section>
-
-          {/* پرفروش‌ترین محصولات */}
-          <section className="dashboard-section">
-            <h2>⭐ پرفروش‌ترین محصولات (۳۰ روز اخیر)</h2>
-            {stats.topProducts.length === 0 ? (
-              <div className="admin-card">
-                <p className="empty-admin">هنوز فروشی ثبت نشده است.</p>
-              </div>
-            ) : (
-              <div className="top-products-list">
-                {stats.topProducts.map((product, idx) => (
-                  <div key={product.name} className="top-product-item">
-                    <div className="top-product-rank">
-                      #{formatPrice(idx + 1)}
-                    </div>
-                    <div className="top-product-info">
-                      <strong>{product.name}</strong>
-                      <small>
-                        {formatPrice(product.count)} عدد فروش ·{' '}
-                        {formatPrice(product.revenue)} تومان
-                      </small>
-                    </div>
-                    <div className="top-product-bar">
-                      <div
-                        className="top-product-bar-fill"
-                        style={{
-                          width: `${
-                            (product.count / stats.topProducts[0].count) * 100
-                          }%`,
-                        }}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
-        </>
-      )}
-
-      {/* 🔗 میان‌برهای مجازِ همین نقش — پچ ۶۷: فیلتر با گارد دسترسی */}
-      {quickLinks.length > 0 && (
-        <section className="dashboard-section">
-          <h2>🔗 دسترسی سریع</h2>
-          <div className="quick-links-grid">
-            {quickLinks.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                className="quick-link-card"
-              >
-                <div className="quick-link-icon">{item.icon}</div>
-                <div>
-                  <strong>{item.label}</strong>
-                  <small>رفتن به بخش {item.label}</small>
-                </div>
-              </Link>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* 🧹 پاکسازی سفارش‌های قدیمی — فقط مالک */}
-      {isOwner && (
-        <section className="dashboard-section">
-          <h2>🧹 نگهداری دیتابیس</h2>
-          <CleanupOrdersCard />
-        </section>
-      )}
+      {/* 🎯 پچ ۶۹: بقیهٔ بخش‌ها داخل تب‌های داخلی */}
+      <SectionTabs tabs={tabs} />
     </div>
   )
 }
