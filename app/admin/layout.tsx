@@ -1,9 +1,10 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabaseBrowser } from '@/lib/supabase/client'
+import './admin-tabs.css'
 import AdminThemeToggle from './components/AdminThemeToggle'
 import NewOrderAlert from './components/NewOrderAlert'
 import ShiftGate from './components/ShiftGate'
@@ -77,6 +78,24 @@ const MENU_GROUPS = [
       { href: '/admin/backup', label: 'پشتیبان‌گیری', icon: '💾' },
     ],
   },
+] as const
+
+// 🎯 پچ ۶۶: تب‌های سریعِ یکدست — نوار ثابت بالای محتوا در همهٔ صفحه‌نمایش‌ها.
+// خلاصهٔ پرکاربردِ منو است؛ مابقی بخش‌ها از سایدبار/منوی کامل در دسترس‌اند.
+// با همان گاردِ منو فیلتر می‌شود (menuAllows) — هر نقش فقط تب‌های مجاز خودش را می‌بیند.
+const ADMIN_TABS = [
+  { href: '/admin', label: 'خانه', icon: '🏠' },
+  { href: '/admin/orders', label: 'سفارش‌ها', icon: '🛒' },
+  { href: '/admin/orders/new', label: 'ثبت سفارش', icon: '➕' },
+  { href: '/admin/shifts', label: 'شیفت‌ها', icon: '⏱' },
+  { href: '/admin/accounting', label: 'حسابداری', icon: '🧮' },
+  { href: '/admin/customers', label: 'مشتریان', icon: '👥' },
+  { href: '/admin/products', label: 'محصولات', icon: '☕' },
+  { href: '/admin/memberships', label: 'باشگاه', icon: '🎓' },
+  { href: '/admin/wallet', label: 'کیف پول', icon: '👛' },
+  { href: '/admin/reports/sales', label: 'گزارش فروش', icon: '💰' },
+  { href: '/admin/settings', label: 'تنظیمات', icon: '⚙️' },
+  { href: '/admin/users', label: 'کاربران', icon: '🔐' },
 ] as const
 
 // 🎯 پچ ۴۲: کلید ذخیره وضعیت گروه‌های تاشو
@@ -359,6 +378,18 @@ export default function AdminLayout({
     items: g.items.filter((it) => menuAllows(it.href)),
   })).filter((g) => g.items.length > 0)
 
+  // 🎯 پچ ۶۶: تب‌های مجازِ این کاربر برای نوار بالا — همان گاردِ منو (fail-closed)
+  const visibleTabs = ADMIN_TABS.filter((t) => menuAllows(t.href))
+
+  // 🎯 پچ ۶۶: تب فعال خودکار در وسط نوار دیده شود (موبایل — نوار اسکرول‌شدنی)
+  const tabsScrollRef = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    if (!whoamiReady) return
+    const el = tabsScrollRef.current?.querySelector('.admin-tab.active')
+    el?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname, whoamiReady])
+
   if (pathname === '/admin/login') {
     return <main>{children}</main>
   }
@@ -405,6 +436,34 @@ export default function AdminLayout({
 
       {/* 🎯 پچ ۵۲: دروازهٔ شیفت — بدون شیفت باز، مودال باز کردن/تحویل خودکار می‌آید */}
       <ShiftGate />
+
+      {/* 🎯 پچ ۶۶: نوار تب‌های یکدست — ثابتِ بالای محتوا، هم دسکتاپ هم موبایل.
+          در صفحهٔ POS پنهان است (مثل سایدبار خود-پنهان) و تا آماده‌شدن whoami
+          fail-closed هیچ تبی رندر نمی‌شود. */}
+      {!isPosPage && visibleTabs.length > 0 && (
+        <nav className="admin-tabs" aria-label="تب‌های سریع پنل">
+          <div className="admin-tabs-scroll" ref={tabsScrollRef}>
+            {visibleTabs.map((t) => {
+              const hasBadge = t.href === '/admin/orders' && pendingCount > 0
+              return (
+                <Link
+                  key={t.href}
+                  href={t.href}
+                  className={`admin-tab${isActive(t.href) ? ' active' : ''}`}
+                >
+                  <span className="admin-tab-icon">{t.icon}</span>
+                  <span>{t.label}</span>
+                  {hasBadge && (
+                    <span className="admin-tab-badge">
+                      {pendingCount.toLocaleString('fa-IR')}
+                    </span>
+                  )}
+                </Link>
+              )
+            })}
+          </div>
+        </nav>
+      )}
 
       {/* ═══════════ هدر موبایل (فقط < 768px) ═══════════ */}
       <header className="admin-mobile-header">

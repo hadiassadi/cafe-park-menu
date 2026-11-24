@@ -1,0 +1,105 @@
+/* ═══════════════════════════════════════
+   ADMIN TABS — پچ ۶۶: نوار تب‌های یکدست
+   نوار ثابتِ بالای محتوا؛ هم دسکتاپ هم موبایل.
+   همهٔ رنگ‌ها از توکن‌های ادمین می‌آیند — در حالت شب خودکار تیره می‌شود.
+   نکته: به‌جای sticky از fixed استفاده شده چون .admin-main
+   دارای overflow-x: hidden است و sticky داخلش کار نمی‌کند.
+   ═══════════════════════════════════════ */
+.admin-tabs {
+  position: fixed;
+  top: 0;
+  right: 240px; /* جای سایدبار دسکتاپ (چیدمان RTL) */
+  left: 0;
+  z-index: 85;
+  background: var(--admin-bg);
+  border-bottom: 1px solid var(--admin-border-soft);
+  padding: 8px 24px;
+}
+
+.admin-tabs-scroll {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  max-width: 1100px;
+  margin-inline: auto;
+  padding: 2px;
+}
+
+.admin-tabs-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.admin-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: var(--admin-surface);
+  border: 1px solid var(--admin-border);
+  color: var(--admin-text);
+  font-size: 12.5px;
+  font-weight: 700;
+  font-family: inherit;
+  white-space: nowrap;
+  text-decoration: none;
+  flex-shrink: 0;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.admin-tab:hover {
+  background: var(--admin-hover);
+  color: var(--admin-primary);
+}
+
+.admin-tab.active {
+  background: var(--admin-primary);
+  border-color: var(--admin-primary);
+  color: var(--admin-primary-fg);
+  box-shadow: 0 2px 8px rgba(41, 37, 31, 0.18);
+}
+
+.admin-tab-icon {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.admin-tab-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--admin-danger);
+  color: #fff;
+  font-size: 10.5px;
+  font-weight: 800;
+}
+
+/* محتوا باید زیر نوار ثابت جا شود — با specificity بالاتر از globals.css */
+.admin-shell .admin-main {
+  padding-top: 80px;
+}
+
+@media (max-width: 768px) {
+  .admin-tabs {
+    top: 56px; /* دقیقاً زیر هدر ثابت موبایل */
+    right: 0;
+    left: 0;
+    padding: 7px 14px;
+  }
+
+  .admin-shell .admin-main {
+    padding-top: 122px; /* ۵۶px هدر + ~۵۲px نوار تب + تنفس */
+  }
+}
+
+/* POS کیوسک: نوار تب هم مثل سایدبار پنهان می‌شود (JSX هم رندر نمی‌کند) */
+.pos-kiosk .admin-tabs {
+  display: none !important;
+}
