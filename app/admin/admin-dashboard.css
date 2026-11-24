@@ -1,0 +1,235 @@
+/* ═══════════════════════════════════════
+   ADMIN DASHBOARD — پچ ۶۷: استایل داشبورد بازسازی‌شده
+   همهٔ رنگ‌ها از توکن‌های ادمین می‌آیند — حالت شب خودکار.
+   کلاس‌های قدیمی داشبورد (stat-card, chart-card, quick-link-card و …)
+   دست‌نخورده‌اند؛ فقط کلاس‌های جدید dash-* این‌جا تعریف شده‌اند.
+   ═══════════════════════════════════════ */
+
+/* ─── نوار خوش‌آمد: عنوان + نشان نقش + تاریخ + CTA ─── */
+.dash-welcome {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.dash-welcome-side {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.dash-role-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 14px;
+  border-radius: 999px;
+  background: var(--admin-surface-2);
+  border: 1px solid var(--admin-border);
+  color: var(--admin-primary);
+  font-size: 12.5px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.dash-date {
+  font-size: 12px;
+  color: var(--admin-text-muted);
+  white-space: nowrap;
+}
+
+.dash-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 18px;
+  border-radius: 999px;
+  background: var(--admin-primary);
+  color: var(--admin-primary-fg);
+  font-size: 13px;
+  font-weight: 800;
+  text-decoration: none;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(41, 37, 31, 0.18);
+  transition: background 0.15s ease;
+}
+
+.dash-cta:hover {
+  background: var(--admin-primary-deep);
+  color: var(--admin-primary-fg);
+}
+
+/* ─── سه ستون آماری اصلی ─── */
+.dash-hero {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.dash-hero-card {
+  background: var(--admin-surface);
+  border: 1px solid var(--admin-border);
+  border-radius: var(--admin-radius);
+  padding: 18px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  box-shadow: var(--admin-shadow);
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+
+.dash-hero-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--admin-primary-light);
+}
+
+.dash-hero-icon {
+  font-size: 22px;
+  line-height: 1;
+}
+
+.dash-hero-value {
+  font-size: 26px;
+  font-weight: 800;
+  color: var(--admin-text-strong);
+  font-variant-numeric: tabular-nums;
+}
+
+.dash-hero-label {
+  font-size: 12px;
+  color: var(--admin-text-muted);
+}
+
+.dash-hero-card.tone-gold .dash-hero-value {
+  color: var(--admin-primary);
+}
+
+.dash-hero-card.tone-green .dash-hero-value {
+  color: var(--admin-success-strong);
+}
+
+/* ─── سفارش‌های اخیر ─── */
+.dash-recent {
+  background: var(--admin-surface);
+  border: 1px solid var(--admin-border);
+  border-radius: var(--admin-radius);
+  padding: 6px 16px;
+  box-shadow: var(--admin-shadow);
+}
+
+.dash-recent-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--admin-border-soft);
+  flex-wrap: wrap;
+}
+
+.dash-recent-row:last-child {
+  border-bottom: 0;
+}
+
+.dash-recent-id {
+  font-weight: 800;
+  color: var(--admin-text-strong);
+  font-size: 13px;
+}
+
+.dash-recent-time {
+  font-size: 12px;
+  color: var(--admin-text-muted);
+}
+
+.dash-recent-amount {
+  margin-inline-start: auto;
+  font-weight: 800;
+  font-size: 13px;
+  color: var(--admin-primary);
+}
+
+.dash-status {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  background: var(--admin-surface-2);
+  border: 1px solid var(--admin-border);
+  color: var(--admin-text);
+}
+
+.dash-status.s-pending,
+.dash-status.s-preparing {
+  background: #fff7e6;
+  border-color: #ecd9b0;
+  color: #8a6d1f;
+}
+
+.dash-status.s-ready,
+.dash-status.s-delivered,
+.dash-status.s-completed,
+.dash-status.s-paid {
+  background: var(--admin-success-soft);
+  border-color: #cfe2d2;
+  color: var(--admin-success-strong);
+}
+
+.dash-status.s-cancelled,
+.dash-status.s-canceled {
+  background: var(--admin-danger-soft);
+  border-color: #f3c9c5;
+  color: var(--admin-danger-strong);
+}
+
+.dash-recent-more {
+  display: inline-block;
+  margin-top: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--admin-primary);
+  text-decoration: none;
+}
+
+.dash-recent-more:hover {
+  text-decoration: underline;
+}
+
+/* ─── زیرنویس بخش‌ها (مثل مجموع هفته) ─── */
+.dash-section-note {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--admin-text-muted);
+}
+
+/* ─── موبایل ─── */
+@media (max-width: 640px) {
+  .dash-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .dash-hero-value {
+    font-size: 22px;
+  }
+
+  .dash-recent-amount {
+    margin-inline-start: 0;
+  }
+}
+
+/* ─── حالت شب: پیل‌های رنگی وضعیت باید روی زمینهٔ تیره خوانا بمانند ─── */
+.admin-shell.dark-mode .dash-status.s-pending,
+.admin-shell.dark-mode .dash-status.s-preparing {
+  background: rgba(217, 159, 89, 0.15);
+  border-color: rgba(217, 159, 89, 0.4);
+  color: var(--admin-warning);
+}
+
+.admin-shell.dark-mode .dash-recent-amount {
+  color: var(--admin-primary-light);
+}
