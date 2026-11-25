@@ -1,26 +1,36 @@
 // app/admin/page.tsx
 // 🎯 پچ ۶۷ — بازسازی کامل داشبورد نقش‌آگاه
 // 🎯 پچ ۶۸ — کپشن صفر کارت‌ها، شناسهٔ کوتاه و مبلغِ دفاعی سفارش‌های اخیر
-// 🎯 پچ ۶۹ — تب‌های داخلی بخش‌ها (نمای کلی / نمودارها / پرفروش‌ها / ابزارها)
-// 🎯 پچ ۷۰ — حذف دسترسی سریع تکراری، انتقال تاریخ/نقش به نوار وضعیت ثابت،
-//   دسترسی مالی برای نقش‌های سفارشیِ دارای تیک «گزارش فروش»
-// 🎯 پچ ۷۱ — سرعت و آمار شخصی:
-//   • لود اولیه فقط آمار سبک ۳۵ روزه (getQuickStats) — نه شش ماه داده
-//   • دادهٔ تب «نمودارها» و «پرفروش‌ها» فقط با باز شدن همان تب لود می‌شود
-//     (ChartsPanel / TopProductsPanel از /api/admin/dashboard/stats)
-//   • صندوق‌دار/کارمند: فقط آمار و سفارش‌های شخصی خودش (operator_id)
-//     — دیگر آمار کل مجموعه را نمی‌بیند
-//   • مبلغ واقعی از ستون subtotal و شمارهٔ واقعی سفارش از order_number
+// 🎯 پچ ۷۰ — نوار وضعیت ثابت + دسترسی مالی برای نقش سفارشیِ دارای «گزارش فروش»
+// 🎯 پچ ۷۱ — سرعت (آمار سبک ۳۵ روزه) + لود تنبل تب‌ها + آمار شخصی operator_id
+// 🎯 پچ ۷۲ — داشبورد قابل تنظیم برای هر کاربر:
+//   • هر بخش آماری = یک «ویجت» = یک تب مستقل؛ کاربر از «⚙️ تنظیم داشبورد»
+//     تیک می‌زند کدام بخش‌ها باشند — ذخیره برای حسابِ خودش (dashboard_prefs)
+//   • ترتیب تب‌ها = ترتیب اولویت رجیستری: صندوق و بانک ← نمودارها ←
+//     پرفروش‌ها ← سفارش‌های اخیر ← ابزارها
+//   • ویجت جدید «صندوق و بانک امروز»: وجه نقد صندوق / کارتخوان / آنلاین /
+//     کارت‌به‌کارتِ امروز از order_payments تأییدشده (همان منبع صفحهٔ شیفت‌ها)
+//   • کارت‌های هیرو (امروز/ماه) همیشه بالای داشبورد می‌مانند
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
+import type { ReactNode } from 'react'
 import { requireAdminUser } from '@/lib/admin/require-admin'
 import { getOperatorRole } from '@/lib/admin/roles'
 import { accessAllowsPath } from '@/lib/admin/modules'
 import { getQuickStats, getOperatorStats } from '@/lib/dashboard-stats'
+import {
+  DASHBOARD_WIDGETS,
+  type DashboardWidgetId,
+  canSeeFinanceFor,
+  defaultWidgetsFor,
+  sanitizeWidgets,
+  widgetsForRole,
+} from '@/lib/admin/dashboard-widgets'
 import { supabaseAdmin } from '@/lib/supabase/server'
 import CleanupOrdersCard from './components/CleanupOrdersCard'
 import ChartsPanel from './components/ChartsPanel'
 import TopProductsPanel from './components/TopProductsPanel'
+import DashboardSettings from './components/DashboardSettings'
 import SectionTabs, { type SectionTabDef } from './components/SectionTabs'
 import './admin-dashboard.css'
 
@@ -74,7 +84,7 @@ const parseAmount = (v: unknown): number | null => {
   return null
 }
 
-// 🎯 پچ ۷۱: شمارهٔ واقعی سفارش (order_number از پچ ۵۱) — fallback شناسهٔ کوتاه
+// 🎯 پچ ۷۱: شمارهٔ واقعی سفارش (order_number) — fallback شناسهٔ کوتاه
 const displayOrderId = (row: Record<string, unknown>, fallback: number) => {
   const orderNumber = Number(row.order_number)
   if (Number.isFinite(orderNumber) && orderNumber > 0) {
@@ -85,8 +95,7 @@ const displayOrderId = (row: Record<string, unknown>, fallback: number) => {
   return s.split('-')[0].toUpperCase().slice(0, 8)
 }
 
-// سفارش‌های اخیر — ستون‌های مشخص و فیلترهای همان stats.ts؛ سبک و امن.
-// operatorId پاس شود → فقط سفارش‌های شخصیِ همان اپراتور (داشبورد صندوق‌دار).
+// سفارش‌های اخیر — ستون‌های مشخص و فیلترهای امن؛ operatorId → فقط شخصی
 async function fetchRecentOrders(
   operatorId?: string
 ): Promise<Record<string, unknown>[] | null> {
@@ -108,6 +117,65 @@ async function fetchRecentOrders(
   }
 }
 
+// 🎯 پچ ۷۲: صندوق و بانک امروز — تجمیع پرداخت‌های تأییدشدهٔ امروز بر اساس
+// روش پرداخت (همان منبعِ گزارش شیفت‌ها: order_payments: method/amount/status)
+type CashToday = {
+  cash: number
+  card: number
+  online: number
+  transfer: number
+  total: number
+  ok: boolean
+}
+
+async function fetchCashToday(): Promise<CashToday> {
+  const empty: CashToday = {
+    cash: 0,
+    card: 0,
+    online: 0,
+    transfer: 0,
+    total: 0,
+    ok: false,
+  }
+  try {
+    const db = supabaseAdmin()
+    const start = new Date()
+    start.setHours(0, 0, 0, 0)
+    const { data, error } = await db
+      .from('order_payments')
+      .select('method, amount, created_at')
+      .eq('status', 'confirmed')
+      .gte('created_at', start.toISOString())
+    if (error || !data) {
+      console.error('[dashboard cash] error:', error)
+      return empty
+    }
+    const out: CashToday = { ...empty, ok: true }
+    for (const p of data) {
+      const amount = Number(p.amount) || 0
+      out.total += amount
+      switch (String(p.method).toLowerCase()) {
+        case 'cash':
+          out.cash += amount
+          break
+        case 'card':
+          out.card += amount
+          break
+        case 'online':
+          out.online += amount
+          break
+        case 'transfer':
+          out.transfer += amount
+          break
+      }
+    }
+    return out
+  } catch (err) {
+    console.error('[dashboard cash] unexpected:', err)
+    return empty
+  }
+}
+
 function HeroStat({
   icon,
   label,
@@ -124,8 +192,6 @@ function HeroStat({
       <div className="dash-hero-icon">{icon}</div>
       <div className="dash-hero-value">{formatPrice(value)}</div>
       <div className="dash-hero-label">{label}</div>
-      {/* صفرِ فارسی ریز است و کارت را «خالی» نشان می‌دهد — کپشن زیر کارت،
-          صفرِ معنادار را جای خالیِ مشکوک عوض می‌کند */}
       {value === 0 && (
         <div className="dash-hero-zero">هنوز در این بازه چیزی ثبت نشده</div>
       )}
@@ -134,7 +200,7 @@ function HeroStat({
 }
 
 export default async function AdminDashboard() {
-  // 🎯 گیت نشست — و شناسهٔ کاربر برای آمار شخصی (الگوی همان روت ثبت سفارش)
+  // 🎯 گیت نشست + شناسهٔ کاربر (آمار شخصی + کلید تنظیمات داشبورد)
   const auth = await requireAdminUser()
   if (auth.denied || !auth.userId) redirect('/admin/login')
   const userId = auth.userId
@@ -144,24 +210,43 @@ export default async function AdminDashboard() {
 
   const role = me.role
   const isOwner = role === 'owner'
-  const canSeeFinance =
-    role === 'owner' ||
-    role === 'manager' ||
-    (Array.isArray(me.allowedPaths) &&
-      me.allowedPaths.length > 0 &&
-      accessAllowsPath(role, me.allowedPaths, '/admin/reports/sales'))
+  const canSeeFinance = canSeeFinanceFor(role, me.allowedPaths)
 
-  const allows = (href: string) => accessAllowsPath(role, me.allowedPaths, href)
+  const allows = (href: string) =>
+    accessAllowsPath(role, me.allowedPaths, href)
   const canRegisterOrder = allows('/admin/orders/new')
 
-  // 🎯 پچ ۷۱: آمار سبک — مالک/مدیر کل مجموعه، بقیه فقط شخصیِ خودشان
-  const [quickStats, operatorStats, recentOrders] = await Promise.all([
-    canSeeFinance ? getQuickStats() : Promise.resolve(null),
-    canSeeFinance ? Promise.resolve(null) : getOperatorStats(userId),
-    canSeeFinance ? fetchRecentOrders() : fetchRecentOrders(userId),
-  ])
+  // ── داده‌ها: آمار سبک + سفارش‌های اخیر + (مالک/مدیر) صندوق امروز ──
+  const [quickStats, operatorStats, recentOrders, cashToday] =
+    await Promise.all([
+      canSeeFinance ? getQuickStats() : Promise.resolve(null),
+      canSeeFinance ? Promise.resolve(null) : getOperatorStats(userId),
+      canSeeFinance ? fetchRecentOrders() : fetchRecentOrders(userId),
+      canSeeFinance ? fetchCashToday() : Promise.resolve(null),
+    ])
 
-  // ── کارت‌های بالای داشبورد ──
+  // 🎯 پچ ۷۲: چیدمان ذخیره‌شدهٔ این کاربر (یا پیش‌فرض نقشش)
+  let savedWidgets: DashboardWidgetId[] | null = null
+  try {
+    const db = supabaseAdmin()
+    const { data: prefRow, error: prefErr } = await db
+      .from('dashboard_prefs')
+      .select('widgets')
+      .eq('user_id', userId)
+      .maybeSingle()
+    if (!prefErr && prefRow?.widgets) {
+      savedWidgets = sanitizeWidgets(prefRow.widgets, role, canSeeFinance)
+    }
+  } catch {}
+  const activeWidgets =
+    savedWidgets ?? defaultWidgetsFor(role, canSeeFinance)
+
+  // ویجت‌های در دسترس این نقش — برای مودال تنظیم داشبورد
+  const availableWidgets = widgetsForRole(role, canSeeFinance).map(
+    ({ id, label, icon, description }) => ({ id, label, icon, description })
+  )
+
+  // ── کارت‌های هیرو (همیشه بالای داشبورد — خارج از تیک‌ها) ──
   const heroCards = canSeeFinance
     ? [
         <HeroStat
@@ -208,7 +293,64 @@ export default async function AdminDashboard() {
         />,
       ]
 
-  /* ── تب «نمای کلی»: سفارش‌های اخیر (مالک/مدیر: همه — بقیه: فقط مال خودشان) ── */
+  /* ── ویجت «صندوق و بانک امروز» — اولویت اول مالک/مدیر ── */
+  const cashSection = (
+    <section className="dashboard-section">
+      <h2>
+        💵 صندوق و بانک امروز
+        <small className="dash-section-note">
+          مجموع پرداخت‌های تأییدشدهٔ امروز به تفکیک روش
+        </small>
+      </h2>
+      {cashToday?.ok ? (
+        <>
+          <div className="dash-hero">
+            <div className="dash-hero-card tone-gold">
+              <div className="dash-hero-icon">💵</div>
+              <div className="dash-hero-value">
+                {formatPrice(cashToday.cash)}
+              </div>
+              <div className="dash-hero-label">وجه نقد در صندوق (تومان)</div>
+            </div>
+            <div className="dash-hero-card">
+              <div className="dash-hero-icon">💳</div>
+              <div className="dash-hero-value">
+                {formatPrice(cashToday.card)}
+              </div>
+              <div className="dash-hero-label">کارتخوان (تومان)</div>
+            </div>
+            <div className="dash-hero-card">
+              <div className="dash-hero-icon">🌐</div>
+              <div className="dash-hero-value">
+                {formatPrice(cashToday.online)}
+              </div>
+              <div className="dash-hero-label">پرداخت آنلاین (تومان)</div>
+            </div>
+            <div className="dash-hero-card">
+              <div className="dash-hero-icon">🔁</div>
+              <div className="dash-hero-value">
+                {formatPrice(cashToday.transfer)}
+              </div>
+              <div className="dash-hero-label">کارت‌به‌کارت/انتقال (تومان)</div>
+            </div>
+          </div>
+          <div className="admin-card dash-cash-total">
+            🧾 جمع کل ورودی امروز:{' '}
+            <strong>{formatPrice(cashToday.total)} تومان</strong>
+          </div>
+        </>
+      ) : (
+        <div className="admin-card">
+          <p className="empty-admin">
+            دادهٔ پرداخت‌ها فعلاً در دسترس نیست — اگر تازه SQL نسخه‌های قبل
+            را اجرا کرده‌ای، یک پرداخت تأییدشده ثبت کن و دوباره بیا.
+          </p>
+        </div>
+      )}
+    </section>
+  )
+
+  /* ── ویجت «سفارش‌های اخیر» ── */
   const recentOrdersTitle = canSeeFinance
     ? '🧾 سفارش‌های اخیر'
     : '🧾 سفارش‌های اخیر من'
@@ -270,46 +412,28 @@ export default async function AdminDashboard() {
     </section>
   )
 
-  /* ── چیدمان تب‌ها بر اساس نقش ──
-     مالک/مدیر: نمای کلی | نمودارها | پرفروش‌ها (+ ابزارها فقط مالک)
-     — دادهٔ نمودارها/پرفروش‌ها فقط با باز شدن تب لود می‌شود (لود تنبل)
-     صندوق‌دار/کارمند: فقط «نمای کلی» شخصی → نوار تب نمایش داده نمی‌شود */
-  const tabs: SectionTabDef[] = [
-    {
-      id: 'overview',
-      icon: '🏠',
-      label: 'نمای کلی',
-      node: recentOrdersSection,
-    },
-  ]
-
-  if (canSeeFinance) {
-    tabs.push({
-      id: 'charts',
-      icon: '📈',
-      label: 'نمودارها',
-      node: <ChartsPanel />,
-    })
-    tabs.push({
-      id: 'top-products',
-      icon: '⭐',
-      label: 'پرفروش‌ها',
-      node: <TopProductsPanel />,
-    })
+  // ── 🎯 پچ ۷۲: هر ویجت = یک تب مستقل؛ ترتیب = انتخاب ذخیره‌شدهٔ کاربر ──
+  const widgetNodes: Record<DashboardWidgetId, ReactNode> = {
+    cash: cashSection,
+    charts: <ChartsPanel />,
+    top: <TopProductsPanel />,
+    recent: recentOrdersSection,
+    tools: cleanupSection,
   }
 
-  if (isOwner) {
-    tabs.push({
-      id: 'tools',
-      icon: '🧹',
-      label: 'ابزارها',
-      node: cleanupSection,
-    })
-  }
+  const tabs: SectionTabDef[] = activeWidgets.map((id) => {
+    const def = DASHBOARD_WIDGETS.find((w) => w.id === id)
+    return {
+      id,
+      icon: def?.icon ?? '📄',
+      label: def?.label ?? id,
+      node: widgetNodes[id],
+    }
+  })
 
   return (
     <div className="dashboard">
-      {/* خوش‌آمد + CTA — تاریخ و نشان نقش در نوار وضعیت ثابت بالای صفحه‌اند */}
+      {/* خوش‌آمد + CTA + دکمهٔ تنظیم داشبورد */}
       <div className="dashboard-welcome dash-welcome">
         <div>
           <h1>👋 خوش آمدی</h1>
@@ -320,6 +444,10 @@ export default async function AdminDashboard() {
           </p>
         </div>
         <div className="dash-welcome-side">
+          <DashboardSettings
+            widgets={availableWidgets}
+            initialWidgets={activeWidgets}
+          />
           {canRegisterOrder && (
             <Link href="/admin/orders/new" className="dash-cta">
               ➕ ثبت سفارش حضوری
@@ -328,12 +456,13 @@ export default async function AdminDashboard() {
         </div>
       </div>
 
-      {/* 🎯 پچ ۷۱: سه کارت آماری — نقش‌آگاه؛ صندوق‌دار فقط آمار شخصی خودش */}
+      {/* کارت‌های هیرو — همیشه دیده می‌شوند (استاندارد پایهٔ داشبورد) */}
       <section className="dashboard-section">
         <div className="dash-hero">{heroCards}</div>
       </section>
 
-      <SectionTabs tabs={tabs} />
+      {/* تب‌های ویجت — بر اساس انتخاب خود کاربر */}
+      {tabs.length > 0 && <SectionTabs tabs={tabs} />}
     </div>
   )
 }

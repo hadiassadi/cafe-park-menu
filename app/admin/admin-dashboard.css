@@ -251,3 +251,205 @@
 .dash-retry-btn:hover {
   color: var(--admin-primary-light, var(--admin-primary));
 }
+
+/* ─── 🎯 پچ ۷۲: دکمهٔ «تنظیم داشبورد» + مودال انتخاب ویجت‌ها ─── */
+.dash-settings-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 16px;
+  border-radius: 10px;
+  border: 1px solid var(--admin-border);
+  background: var(--admin-surface);
+  color: var(--admin-text-strong, var(--admin-text));
+  font-size: 12.5px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.dash-settings-btn:hover {
+  background: var(--admin-hover, var(--admin-surface));
+  color: var(--admin-primary);
+}
+
+.dash-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.dash-modal {
+  width: 100%;
+  max-width: 480px;
+  max-height: 86vh;
+  overflow-y: auto;
+  background: var(--admin-surface);
+  border: 1px solid var(--admin-border);
+  border-radius: 14px;
+  padding: 18px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
+}
+
+.dash-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.dash-modal-header h3 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.dash-modal-close {
+  background: none;
+  border: none;
+  font-size: 15px;
+  cursor: pointer;
+  color: var(--admin-text-muted, var(--admin-text));
+  padding: 4px 6px;
+  border-radius: 6px;
+}
+
+.dash-modal-close:hover {
+  background: var(--admin-hover, var(--admin-surface));
+}
+
+.dash-modal-hint {
+  font-size: 12px;
+  color: var(--admin-text-muted, var(--admin-text));
+  line-height: 1.9;
+  margin: 0 0 12px;
+}
+
+.dash-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dash-widget-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--admin-border);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.dash-widget-row:hover {
+  background: var(--admin-hover, var(--admin-surface));
+}
+
+.dash-widget-row.checked {
+  border-color: var(--admin-primary);
+  background: color-mix(in srgb, var(--admin-primary) 8%, transparent);
+}
+
+.dash-widget-row input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--admin-primary);
+  flex-shrink: 0;
+}
+
+.dash-widget-icon {
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.dash-widget-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.dash-widget-text strong {
+  font-size: 13px;
+}
+
+.dash-widget-text small {
+  font-size: 11px;
+  color: var(--admin-text-muted, var(--admin-text));
+  line-height: 1.7;
+}
+
+.dash-widget-order {
+  font-size: 10.5px;
+  font-weight: 800;
+  color: var(--admin-primary);
+  white-space: nowrap;
+}
+
+.dash-modal-empty {
+  font-size: 12.5px;
+  color: var(--admin-text-muted, var(--admin-text));
+  margin: 0;
+}
+
+.dash-modal-error {
+  font-size: 12px;
+  color: var(--admin-danger, #c0392b);
+  margin: 10px 0 0;
+}
+
+.dash-modal-footer {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.dash-modal-save {
+  flex: 1;
+  padding: 10px;
+  border-radius: 10px;
+  border: none;
+  background: var(--admin-primary);
+  color: var(--admin-primary-fg, #fff);
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.dash-modal-save:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.dash-modal-cancel {
+  padding: 10px 16px;
+  border-radius: 10px;
+  border: 1px solid var(--admin-border);
+  background: var(--admin-surface);
+  color: var(--admin-text-strong, var(--admin-text));
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.dash-modal-cancel:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* جمع کل ورودی امروز در ویجت صندوق */
+.dash-cash-total {
+  margin-top: 10px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.dash-cash-total strong {
+  color: var(--admin-primary);
+}

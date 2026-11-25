@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getOperatorRole } from '@/lib/admin/roles'
+import { supabaseAdmin } from '@/lib/supabase/server'
 import { APP_BUILD } from '@/lib/version'
 
 export const runtime = 'nodejs'
@@ -9,6 +10,10 @@ export const dynamic = 'force-dynamic'
 // 🎯 پچ ۶۰ — لیست نهایی ماژول‌های مجاز (paths) برای منوی ماژولار
 //   paths = [] یعنی «پیش‌فرض نقش» — layout همان را از ماتریس نقش می‌سازد
 // 🎯 پچ ۶۰-د/هـ — email (نشانگر هویت سایدبار) + build (مُهر نسخهٔ دیپلوی)
+// 🎯 پچ ۷۲ — name (نام نمایشی برای نوار وضعیت) + lastLogin (آخرین ورود همان
+//   شخص از auth — همان منبعی که صفحهٔ کاربران نشان می‌دهد). هر دو با fallback
+//   امن: اگر جدول/ستون نبود یا خطا داد، ایمیلِ کاربر جای نام می‌نشیند و
+//   lastLogin خالی می‌ماند — هیچ‌وقت پاسخ whoami خراب نمی‌شود.
 
 export async function GET() {
   try {
@@ -16,11 +21,48 @@ export async function GET() {
     if (!me) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
+
+    // 🎯 پچ ۷۲: نام نمایشی + آخرین ورود — خطاها بی‌صدا نادیده گرفته می‌شوند
+    let displayName = ''
+    let lastLogin: string | null = null
+    try {
+      const db = supabaseAdmin()
+      const { data: prof } = await db
+        .from('admin_operator_profiles')
+        .select('display_name')
+        .eq('user_id', me.userId)
+        .maybeSingle()
+      if (typeof prof?.display_name === 'string' && prof.display_name.trim()) {
+        displayName = prof.display_name.trim()
+      }
+
+      const { data: authUser } = await db.auth.admin.getUserById(me.userId)
+      const u = authUser?.user
+      if (
+        !displayName &&
+        typeof u?.user_metadata?.full_name === 'string' &&
+        u.user_metadata.full_name.trim()
+      ) {
+        displayName = u.user_metadata.full_name.trim()
+      }
+      const ls = (u as { last_sign_in_at?: string } | null | undefined)
+        ?.last_sign_in_at
+      if (typeof ls === 'string' && ls) lastLogin = ls
+    } catch (e) {
+      console.error('[whoami] profile/last-login enrich skipped:', e)
+    }
+
+    if (!displayName && me.email) {
+      displayName = me.email.split('@')[0]
+    }
+
     return NextResponse.json(
       {
         role: me.role,
         paths: me.allowedPaths ?? [],
         email: me.email,
+        name: displayName,
+        lastLogin,
         build: APP_BUILD,
       },
       { headers: { 'Cache-Control': 'no-store' } }

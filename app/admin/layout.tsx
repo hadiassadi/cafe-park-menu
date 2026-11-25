@@ -110,6 +110,9 @@ export default function AdminLayout({
   // 🎯 پچ ۶۰-د: ایمیل کاربرِ واردشده — همیشه در سایدبار دیده می‌شود تا نشستِ
   // مالک و کارمند با هم اشتباه گرفته نشود
   const [whoEmail, setWhoEmail] = useState('')
+  // 🎯 پچ ۷۲: نام نمایشی + آخرین ورود کاربر — برای نوار وضعیت (از whoami)
+  const [whoName, setWhoName] = useState('')
+  const [lastLoginIso, setLastLoginIso] = useState<string | null>(null)
   // 🎯 پچ ۶۵: لیبل نقش کنار ایمیل — «با چه نقشی وارد شده‌ای» بدون ابهام
   const OP_ROLE_LABEL: Record<string, string> = {
     owner: 'مالک',
@@ -312,6 +315,13 @@ export default function AdminLayout({
               }
               // 🎯 پچ ۶۰-د: نشانگر هویت — حتی اگر نقش نیامد، ایمیل را نشان بده
               if (d?.email) setWhoEmail(String(d.email))
+              // 🎯 پچ ۷۲: نام نمایشی + آخرین ورود — نوار وضعیت
+              if (typeof d?.name === 'string' && d.name) {
+                setWhoName(String(d.name))
+              }
+              if (typeof d?.lastLogin === 'string' && d.lastLogin) {
+                setLastLoginIso(String(d.lastLogin))
+              }
               if (d?.role) setRole(d.role as OpRole)
               // 🎯 پچ ۶۰: paths = [] یعنی «پیش‌فرض نقش»؛ null یعنی خطا/بدون پاسخ
               setAllowedPaths(
@@ -439,24 +449,30 @@ export default function AdminLayout({
       {/* 🎯 پچ ۵۲: دروازهٔ شیفت — بدون شیفت باز، مودال باز کردن/تحویل خودکار می‌آید */}
       <ShiftGate />
 
-      {/* 🎯 پچ ۷۱: نوار وضعیت ثابت — تاریخ شمسی + ساعت زنده + نشان نقش +
-          دکمهٔ پین منوی سمت راست. در صفحهٔ POS پنهان است و لاگین اصلاً
-          به این شل نمی‌رسد. */}
+      {/* 🎯 پچ ۷۲: نوار وضعیت ثابت — روز + تاریخ + سال + ساعت + نام شخص +
+          نشان نقش + آخرین ورود همان شخص. در صفحهٔ POS پنهان است. */}
       {!isPosPage && (
         <div className="admin-status-bar">
           <AdminStatusBar
             roleLabel={role ? (OP_ROLE_LABEL[role] ?? role) : ''}
+            userName={whoName}
+            lastLoginIso={lastLoginIso}
           />
-          <button
-            type="button"
-            className="admin-sidebar-toggle"
-            onClick={toggleSidebarHidden}
-            aria-label={sidebarHidden ? 'نمایش منو' : 'مخفی کردن منو'}
-            title={sidebarHidden ? 'نمایش منوی سمت راست' : 'مخفی کردن منوی سمت راست'}
-          >
-            {sidebarHidden ? '☰' : '⇤'}
-          </button>
         </div>
+      )}
+
+      {/* 🎯 پچ ۷۲: دکمهٔ بازگشت منو — فقط وقتی کاربر منو را از پینِ روی خودِ
+          منو مخفی کرده باشد (دسکتاپ؛ موبایل drawer خودش را دارد) */}
+      {sidebarHidden && !isPosPage && (
+        <button
+          type="button"
+          className="admin-sidebar-restore"
+          onClick={toggleSidebarHidden}
+          aria-label="نمایش منو"
+          title="نمایش منوی سمت راست"
+        >
+          ☰
+        </button>
       )}
 
       {/* ═══════════ هدر موبایل (فقط < 768px) ═══════════ */}
@@ -490,6 +506,19 @@ export default function AdminLayout({
         <div className="admin-sidebar-header">
           <div className="admin-logo">☕ کافه پارک</div>
           <div className="admin-logo-sub">پنل مدیریت</div>
+          {/* 🎯 پچ ۷۲: پین مخفی/نمایان منو — روی خودِ منو، در همهٔ صفحات
+              (POS پین مخصوص خودش را دارد) */}
+          {!isPosPage && (
+            <button
+              type="button"
+              className="admin-sidebar-pin"
+              onClick={toggleSidebarHidden}
+              aria-label="مخفی کردن منو"
+              title="مخفی کردن منوی سمت راست"
+            >
+              ⇤
+            </button>
+          )}
           {/* 🎯 پچ ۵۰-هـ: پین — منو باز و ثابت می‌ماند (مثلاً هنگام زدن فاکتور) */}
           {isPosPage && (
             <button

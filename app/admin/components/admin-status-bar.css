@@ -63,11 +63,51 @@
   white-space: nowrap;
 }
 
-/* ─── 🎯 پچ ۷۱: دکمهٔ پین/مخفی منوی سمت راست ─── */
-.admin-sidebar-toggle {
-  flex-shrink: 0;
+/* ─── 🎯 پچ ۷۲: آیتم «آخرین ورود» — ملایم‌تر از بقیه ─── */
+.admin-status-lastlogin {
+  color: var(--admin-text-muted, var(--admin-text));
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* ─── 🎯 پچ ۷۲: پین منو روی خودِ سایدبار (به‌جای دکمهٔ نوار وضعیت) ───
+   گوشهٔ چپِ سرصفحهٔ سایدبار (انتهای RTL) — همیشه روی منو دیده می‌شود */
+.admin-sidebar-header {
+  position: relative;
+}
+
+.admin-sidebar-pin {
+  position: absolute;
+  top: 10px;
+  left: 10px;
   width: 30px;
   height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: transparent;
+  border: 1px solid var(--admin-border);
+  color: var(--admin-text-strong, var(--admin-text));
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.admin-sidebar-pin:hover {
+  background: var(--admin-hover, var(--admin-surface));
+  color: var(--admin-primary);
+}
+
+/* دکمهٔ بازگشت ☰ — فقط وقتی منو مخفی است؛ گوشهٔ چپِ نوار وضعیت (دسکتاپ) */
+.admin-sidebar-restore {
+  position: fixed;
+  top: 6px;
+  left: 12px;
+  z-index: 86;
+  width: 32px;
+  height: 32px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -78,12 +118,19 @@
   font-size: 15px;
   line-height: 1;
   cursor: pointer;
-  transition: background 0.15s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
 }
 
-.admin-sidebar-toggle:hover {
+.admin-sidebar-restore:hover {
   background: var(--admin-hover, var(--admin-surface));
   color: var(--admin-primary);
+}
+
+@media (max-width: 768px) {
+  /* موبایل drawerِ خودش را دارد — دکمهٔ بازگشت دسکتاپ لازم نیست */
+  .admin-sidebar-restore {
+    display: none;
+  }
 }
 
 /* ─── موبایل: زیر هدر ثابت، فشرده‌تر ─── */
