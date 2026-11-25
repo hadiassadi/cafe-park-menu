@@ -136,7 +136,13 @@ export default function DashboardSettings({
     }
   }
 
-  const enabledRows = widgets.filter((w) => selected.includes(w.id))
+  // 🎯 پچ ۷۴-الف — ردیف‌های روشن باید به «ترتیب انتخاب کاربر» رندر شوند، نه
+  // ترتیب رجیستری: قبلاً با widgets.filter می‌گرفتیم؛ در نتیجه ▲▼ و درگ روی
+  // اندیس‌های selected عمل می‌کردند ولی نمایش ثابت می‌ماند (به‌ظاهر کار
+  // نمی‌کردند). با map روی selected، اندیس‌های نمایش = اندیس‌های ذخیره.
+  const enabledRows = selected
+    .map((id) => widgets.find((w) => w.id === id))
+    .filter((w): w is WidgetDef => Boolean(w))
   const disabledRows = widgets.filter((w) => !selected.includes(w.id))
 
   return (
