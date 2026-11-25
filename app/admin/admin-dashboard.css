@@ -467,3 +467,125 @@
   color: var(--admin-text-muted, var(--admin-text));
   margin-bottom: 10px;
 }
+
+/* ─── 🎯 پچ ۷۴: قفل چیدمان + کشیدن‌ورها کردن در مودال تنظیم داشبورد ─── */
+
+/* ردیف قفل — بالای فهرست بخش‌ها */
+.dash-lock-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--admin-border-soft, var(--admin-border, #e5e0d8));
+  border-radius: 12px;
+  background: var(--admin-surface, #fff);
+  margin: 0 0 10px;
+}
+
+.dash-lock-row.locked {
+  background: var(--admin-gold-soft, #fdf6e9);
+  border-color: var(--admin-gold, var(--admin-primary, #c9a227));
+}
+
+.dash-lock-switch {
+  flex-shrink: 0;
+  min-width: 96px;
+  min-height: 36px;
+  border-radius: 999px;
+  border: 1px solid var(--admin-border, #ddd);
+  background: var(--admin-surface, #fff);
+  color: var(--admin-text, #333);
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.dash-lock-row.locked .dash-lock-switch {
+  background: var(--admin-primary, #c9a227);
+  border-color: var(--admin-primary, #c9a227);
+  color: var(--admin-primary-fg, #fff);
+}
+
+.dash-lock-switch:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.dash-lock-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.dash-lock-text strong {
+  font-size: 13px;
+  color: var(--admin-text-strong, var(--admin-text, #333));
+}
+
+.dash-lock-text small {
+  font-size: 11.5px;
+  color: var(--admin-text-muted, #888);
+  line-height: 1.6;
+}
+
+/* ردیف قابل کشیدن + دستگیره + دکمه‌های ▲▼ */
+.dash-widget-row.draggable {
+  cursor: grab;
+}
+
+.dash-widget-row.draggable:active {
+  cursor: grabbing;
+}
+
+.dash-widget-grip {
+  flex-shrink: 0;
+  font-size: 15px;
+  color: var(--admin-text-muted, #999);
+  user-select: none;
+  letter-spacing: 1px;
+}
+
+.dash-widget-movers {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.dash-move-btn {
+  width: 22px;
+  height: 18px;
+  border-radius: 6px;
+  border: 1px solid var(--admin-border, #ddd);
+  background: var(--admin-surface, #fff);
+  color: var(--admin-text, #333);
+  font-size: 9px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.dash-move-btn:hover:not(:disabled) {
+  background: var(--admin-hover, #f5f1ea);
+  color: var(--admin-primary, #c9a227);
+}
+
+.dash-move-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+/* ردیف خاموش در حالت قفل */
+.dash-widget-row.locked-row {
+  opacity: 0.7;
+}
+
+/* برچسب گروه «خاموش» */
+.dash-modal-group {
+  margin: 14px 0 4px;
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--admin-text-muted, #888);
+}

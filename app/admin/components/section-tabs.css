@@ -83,3 +83,39 @@
 .admin-shell.dark-mode .section-tab-btn.active {
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
 }
+
+/* ─── 🎯 پچ ۷۴: دکمهٔ مخفی‌کردن بخش فعال از داشبورد ───
+   انتهای نوار تب‌ها می‌نشیند؛ وقتی چیدمان قفل است اصلاً رندر نمی‌شود */
+.section-tab-hide {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  margin-inline-start: 2px;
+  border-radius: 8px;
+  border: 1px dashed var(--admin-border, var(--admin-border-soft, #ddd));
+  background: transparent;
+  color: var(--admin-text-muted, inherit);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.75;
+  transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.section-tab-hide:hover {
+  opacity: 1;
+  background: var(--admin-danger-soft, #fdecea);
+  color: var(--admin-danger, #c0392b);
+  border-color: var(--admin-danger, #c0392b);
+}
+
+.section-tab-hide:disabled {
+  opacity: 0.4;
+  cursor: wait;
+}
+
+/* حالت تک‌تب: نوار باریک فقط با یک تب + ✕ */
+.section-tabs-bar--single {
+  gap: 6px;
+}

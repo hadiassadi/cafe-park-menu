@@ -285,16 +285,20 @@ export default async function AdminDashboard() {
 
   // 🎯 پچ ۷۲: چیدمان ذخیره‌شدهٔ این کاربر (یا پیش‌فرض نقشش)
   let savedWidgets: DashboardWidgetId[] | null = null
+  // 🎯 پچ ۷۴: قفل چیدمان همین کاربر (SQL پچ ۷۴ — ستون locked)
+  let dashLocked = false
   try {
     const db = supabaseAdmin()
     const { data: prefRow, error: prefErr } = await db
       .from('dashboard_prefs')
-      .select('widgets')
+      .select('widgets, locked')
       .eq('user_id', userId)
       .maybeSingle()
     if (!prefErr && prefRow?.widgets) {
       savedWidgets = sanitizeWidgets(prefRow.widgets, role, canSeeFinance)
     }
+    // 🎯 پچ ۷۴: حالت قفل چیدمان — وقتی true، نه ✕ مخفی‌کردن هست نه جابه‌جایی
+    dashLocked = prefRow?.locked === true
   } catch {}
   const activeWidgets =
     savedWidgets ?? defaultWidgetsFor(role, canSeeFinance)
@@ -559,6 +563,7 @@ export default async function AdminDashboard() {
           <DashboardSettings
             widgets={availableWidgets}
             initialWidgets={activeWidgets}
+            initialLocked={dashLocked}
           />
           {canRegisterOrder && (
             <Link href="/admin/orders/new" className="dash-cta">
@@ -573,8 +578,14 @@ export default async function AdminDashboard() {
         <div className="dash-hero">{heroCards}</div>
       </section>
 
-      {/* تب‌های ویجت — بر اساس انتخاب خود کاربر */}
-      {tabs.length > 0 && <SectionTabs tabs={tabs} />}
+      {/* تب‌های ویجت — بر اساس انتخاب خود کاربر
+          🎯 پچ ۷۴: وقتی چیدمان قفل است hideOrder پاس نمی‌شود → ✕ مخفی‌کردن نمی‌آید */}
+      {tabs.length > 0 && (
+        <SectionTabs
+          tabs={tabs}
+          hideOrder={dashLocked ? undefined : activeWidgets}
+        />
+      )}
     </div>
   )
 }
