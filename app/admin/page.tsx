@@ -1,23 +1,18 @@
 // app/admin/page.tsx
 // 🎯 پچ ۶۷ — بازسازی کامل داشبورد: نقش‌آگاه و دسترسی‌آگاه
 //   - مالک/مدیر: آمار کامل مالی، نمودارها، سفارش‌های اخیر، مقایسهٔ ماهانه
-//   - صندوق‌دار/کارمند: فقط شمارش سفارش‌ها + میان‌برهای مجاز (بدون هیچ عدد مالی)
-//   - پیوندهای میان‌بُر با همان گاردِ منو فیلتر می‌شوند (accessAllowsPath)
+//   - صندوق‌دار/کارمند: فقط شمارش سفارش‌ها (بدون هیچ عدد مالی)
 //   - نگهداری دیتابیس فقط برای مالک
-// 🎯 پچ ۶۸ — پولیش: نشان نقش و تاریخ در نوار خوش‌آمد، کپشن صفر کارت‌ها،
-//   شناسهٔ کوتاه و مبلغِ دفاعی سفارش‌های اخیر
-// 🎯 پچ ۶۹ — تب‌های داخلی بخش‌ها: نمای کلی / نمودارها / پرفروش‌ها / ابزارها —
-//   دیگر اسکرول طولانی لازم نیست؛ نوار بالای صفحه از پچ ۶۶ دست‌نخورده می‌ماند
+// 🎯 پچ ۶۸ — پولیش: کپشن صفر کارت‌ها، شناسهٔ کوتاه و مبلغِ دفاعی سفارش‌های اخیر
+// 🎯 پچ ۶۹ — تب‌های داخلی بخش‌ها: نمای کلی / نمودارها / پرفروش‌ها / ابزارها
+// 🎯 پچ ۷۰ — دسترسی سریع حذف شد (با نوار تب‌های بالا تکراری بود)؛ تاریخ و
+//   نشان نقش به نوار وضعیت ثابت بالای صفحه منتقل شد؛ نقش‌های با دسترسی
+//   سفارشیِ «گزارش فروش» هم داشبورد مالی کامل می‌بینند
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { getOrderStats } from '@/lib/stats'
 import { getOperatorRole } from '@/lib/admin/roles'
-import {
-  accessAllowsPath,
-  ADMIN_MODULES,
-  type AdminModuleDef,
-} from '@/lib/admin/modules'
-import { ROLE_LABEL } from '@/lib/admin/role-matrix'
+import { accessAllowsPath } from '@/lib/admin/modules'
 import { supabaseAdmin } from '@/lib/supabase/server'
 import CleanupOrdersCard from './components/CleanupOrdersCard'
 import SectionTabs, { type SectionTabDef } from './components/SectionTabs'
@@ -97,25 +92,6 @@ async function fetchRecentOrders(): Promise<Record<string, unknown>[] | null> {
   }
 }
 
-// 🎯 پچ ۶۷: میان‌برهای پیشنهادی داشبورد — از رجیستری ماژول‌ها برچسب و آیکون می‌گیرند
-// و با گارد دسترسی فیلتر می‌شوند؛ پس هر نقش فقط میان‌برهای مجاز خودش را می‌بیند.
-const QUICK_LINK_HREFS = [
-  '/admin/orders',
-  '/admin/orders/new',
-  '/admin/shifts',
-  '/admin/customers',
-  '/admin/products',
-  '/admin/categories',
-  '/admin/tables',
-  '/admin/memberships',
-  '/admin/coupons',
-  '/admin/wallet',
-  '/admin/reports/sales',
-  '/admin/cancellations',
-  '/admin/settings',
-  '/admin/users',
-]
-
 function HeroStat({
   icon,
   label,
@@ -164,7 +140,14 @@ export default async function AdminDashboard() {
   const isOwner = role === 'owner'
   // عدد مالی (فروش) فقط برای مالک و مدیر — ماتریس پچ ۵۶: صندوق‌دار/کارمند
   // گزارش فروش ندارند، پس داشبورد هم هیچ عدد تومانی به آن‌ها نشان نمی‌دهد
-  const canSeeFinance = role === 'owner' || role === 'manager'
+  // 🎯 پچ ۷۰: نقش‌های با لیست دسترسیِ دلخواه که «گزارش فروش» برایشان تیک خورده
+  // هم داشبورد مالی کامل می‌بینند (سطح دسترسی خاص)
+  const canSeeFinance =
+    role === 'owner' ||
+    role === 'manager' ||
+    (Array.isArray(me.allowedPaths) &&
+      me.allowedPaths.length > 0 &&
+      accessAllowsPath(role, me.allowedPaths, '/admin/reports/sales'))
 
   const stats = await getOrderStats()
   const recentOrders = canSeeFinance ? await fetchRecentOrders() : null
@@ -172,22 +155,7 @@ export default async function AdminDashboard() {
   // 🎯 پچ ۶۷: همان گاردِ منو (لیست دلخواه ثبت‌شده → ملاک؛ وگرنه پیش‌فرض نقش)
   const allows = (href: string) => accessAllowsPath(role, me.allowedPaths, href)
 
-  const quickLinks: AdminModuleDef[] = QUICK_LINK_HREFS.map((href) =>
-    ADMIN_MODULES.find((m) => m.href === href)
-  ).filter((m): m is AdminModuleDef => !!m && allows(m.href))
-
   const canRegisterOrder = allows('/admin/orders/new')
-
-  let todayFa = ''
-  try {
-    todayFa = new Date().toLocaleDateString('fa-IR', {
-      timeZone: 'Asia/Tehran',
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    })
-  } catch {}
 
   const maxRevenue = Math.max(
     ...stats.dailyRevenue.map((d) => d.revenue),
@@ -244,28 +212,6 @@ export default async function AdminDashboard() {
             مشاهدهٔ همهٔ سفارش‌ها ←
           </Link>
         )}
-      </section>
-    ) : null
-
-  const quickLinksSection =
-    quickLinks.length > 0 ? (
-      <section className="dashboard-section">
-        <h2>🔗 دسترسی سریع</h2>
-        <div className="quick-links-grid">
-          {quickLinks.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className="quick-link-card"
-            >
-              <div className="quick-link-icon">{item.icon}</div>
-              <div>
-                <strong>{item.label}</strong>
-                <small>رفتن به بخش {item.label}</small>
-              </div>
-            </Link>
-          ))}
-        </div>
       </section>
     ) : null
 
@@ -444,20 +390,16 @@ export default async function AdminDashboard() {
     </section>
   )
 
-  /* ── 🎯 پچ ۶۹: چیدمان تب‌ها بر اساس نقش ──
+  /* ── 🎯 پچ ۶۹/۷۰: چیدمان تب‌ها بر اساس نقش ──
      مالک/مدیر: نمای کلی | نمودارها | پرفروش‌ها (+ ابزارها فقط مالک)
-     صندوق‌دار/کارمند: فقط «نمای کلی» → SectionTabs نوار را نشان نمی‌دهد */
+     صندوق‌دار/کارمند: فقط «نمای کلی» → SectionTabs نوار را نشان نمی‌دهد
+     🎯 پچ ۷۰: «دسترسی سریع» حذف شد — با نوار تب‌های بالای صفحه تکراری بود */
   const tabs: SectionTabDef[] = [
     {
       id: 'overview',
       icon: '🏠',
       label: 'نمای کلی',
-      node: (
-        <>
-          {recentOrdersSection}
-          {quickLinksSection}
-        </>
-      ),
+      node: recentOrdersSection,
     },
   ]
 
@@ -494,15 +436,13 @@ export default async function AdminDashboard() {
 
   return (
     <div className="dashboard">
-      {/* خوش‌آمد + نشان نقش + تاریخ + CTA ثبت سفارش */}
+      {/* خوش‌آمد + CTA ثبت سفارش — تاریخ و نشان نقش از پچ ۷۰ در نوار وضعیت بالای صفحه‌اند */}
       <div className="dashboard-welcome dash-welcome">
         <div>
           <h1>👋 خوش آمدی</h1>
           <p>خلاصهٔ عملکرد کافه پارک در یک نگاه</p>
         </div>
         <div className="dash-welcome-side">
-          <span className="dash-role-badge">{ROLE_LABEL[role]}</span>
-          {todayFa && <span className="dash-date">{todayFa}</span>}
           {canRegisterOrder && (
             <Link href="/admin/orders/new" className="dash-cta">
               ➕ ثبت سفارش حضوری

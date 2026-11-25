@@ -8,6 +8,7 @@ import './admin-tabs.css'
 import AdminThemeToggle from './components/AdminThemeToggle'
 import NewOrderAlert from './components/NewOrderAlert'
 import ShiftGate from './components/ShiftGate'
+import AdminStatusBar from './components/AdminStatusBar'
 import { useOrderNotifications } from '@/lib/use-order-notifications'
 import { useDocumentTitle } from '@/lib/use-document-title'
 import {
@@ -462,6 +463,13 @@ export default function AdminLayout({
               )
             })}
           </div>
+
+          {/* 🎯 پچ ۷۰: نوار وضعیت ثابت — تاریخ شمسی + ساعت زنده + نشان نقش.
+              داخل nav تب‌هاست: با همان نوار ثابت بالا می‌ماند و در POS/لاگین
+              خودکار پنهان است. */}
+          <AdminStatusBar
+            roleLabel={role ? (OP_ROLE_LABEL[role] ?? role) : ''}
+          />
         </nav>
       )}
 

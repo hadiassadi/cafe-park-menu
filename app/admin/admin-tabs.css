@@ -81,8 +81,14 @@
   font-weight: 800;
 }
 
-/* محتوا باید زیر نوار ثابت جا شود — با specificity بالاتر از globals.css */
+/* محتوا باید زیر نوار ثابت جا شود — با specificity بالاتر از globals.css
+   🎯 پچ ۷۰: نوار وضعیت (تاریخ/ساعت/نقش) داخل nav تب‌هاست → پدینگ بیشتر */
 .admin-shell .admin-main {
+  padding-top: 122px;
+}
+
+/* 🎯 پچ ۷۰: صفحهٔ POS نوار تب/وضعیت ندارد → پدینگ مثل قبل */
+.admin-shell.admin-shell--autohide .admin-main {
   padding-top: 80px;
 }
 
@@ -95,7 +101,11 @@
   }
 
   .admin-shell .admin-main {
-    padding-top: 122px; /* ۵۶px هدر + ~۵۲px نوار تب + تنفس */
+    padding-top: 164px; /* ۵۶px هدر + نوار تب + نوار وضعیت + تنفس */
+  }
+
+  .admin-shell.admin-shell--autohide .admin-main {
+    padding-top: 122px;
   }
 }
 
