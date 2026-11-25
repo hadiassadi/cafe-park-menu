@@ -14,6 +14,8 @@ export const dynamic = 'force-dynamic'
 //   شخص از auth — همان منبعی که صفحهٔ کاربران نشان می‌دهد). هر دو با fallback
 //   امن: اگر جدول/ستون نبود یا خطا داد، ایمیلِ کاربر جای نام می‌نشیند و
 //   lastLogin خالی می‌ماند — هیچ‌وقت پاسخ whoami خراب نمی‌شود.
+// 🎯 پچ ۷۳ — نام واقعی: اول staff_members.full_name (auth_user_id + is_active)،
+//   بعد display_name پروفایل اپراتوری، بعد full_name متادیتای auth، آخر ایمیل.
 
 export async function GET() {
   try {
@@ -27,17 +29,40 @@ export async function GET() {
     let lastLogin: string | null = null
     try {
       const db = supabaseAdmin()
-      const { data: prof } = await db
-        .from('admin_operator_profiles')
-        .select('display_name')
-        .eq('user_id', me.userId)
+
+      // 🎯 پچ ۷۳: اولویت ۱ — نام واقعی از staff_members (auth_user_id = کاربر
+      // واردشده، فعال) — همان نامی که مالک در صفحهٔ کارکنان ثبت می‌کند
+      const { data: staffRow } = await db
+        .from('staff_members')
+        .select('full_name')
+        .eq('auth_user_id', me.userId)
+        .eq('is_active', true)
         .maybeSingle()
-      if (typeof prof?.display_name === 'string' && prof.display_name.trim()) {
-        displayName = prof.display_name.trim()
+      if (
+        typeof staffRow?.full_name === 'string' &&
+        staffRow.full_name.trim()
+      ) {
+        displayName = staffRow.full_name.trim()
+      }
+
+      // اولویت ۲ — نام نمایشی پروفایل اپراتوری (پچ ۷۲)
+      if (!displayName) {
+        const { data: prof } = await db
+          .from('admin_operator_profiles')
+          .select('display_name')
+          .eq('user_id', me.userId)
+          .maybeSingle()
+        if (
+          typeof prof?.display_name === 'string' &&
+          prof.display_name.trim()
+        ) {
+          displayName = prof.display_name.trim()
+        }
       }
 
       const { data: authUser } = await db.auth.admin.getUserById(me.userId)
       const u = authUser?.user
+      // اولویت ۳ — full_name در متادیتای auth
       if (
         !displayName &&
         typeof u?.user_metadata?.full_name === 'string' &&
@@ -52,6 +77,7 @@ export async function GET() {
       console.error('[whoami] profile/last-login enrich skipped:', e)
     }
 
+    // اولویت ۴ — بخش اول ایمیل
     if (!displayName && me.email) {
       displayName = me.email.split('@')[0]
     }

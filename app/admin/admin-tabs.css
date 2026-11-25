@@ -87,9 +87,10 @@
   padding-top: 64px;
 }
 
-/* 🎯 پچ ۷۰/۷۱: صفحهٔ POS هیچ نوار ثابتی ندارد → پدینگ مثل قبل */
+/* 🎯 پچ ۷۳: صفحهٔ POS هیچ نوار ثابتی بالای خود ندارد (نوار وضعیت در POS
+   رندر نمی‌شود و دستگیرهٔ منو وسط ارتفاع است) — فقط فاصلهٔ طبیعی محتوا */
 .admin-shell.admin-shell--autohide .admin-main {
-  padding-top: 80px;
+  padding-top: 16px;
 }
 
 @media (max-width: 768px) {
@@ -98,8 +99,9 @@
     padding-top: 104px;
   }
 
+  /* 🎯 پچ ۷۳: موبایل POS — فقط هدر موبایل (۵۶px) + فاصلهٔ طبیعی */
   .admin-shell.admin-shell--autohide .admin-main {
-    padding-top: 122px;
+    padding-top: 72px;
   }
 }
 

@@ -27,9 +27,9 @@ export type DashboardWidgetDef = {
 export const DASHBOARD_WIDGETS: DashboardWidgetDef[] = [
   {
     id: 'cash',
-    label: 'صندوق و بانک امروز',
+    label: 'صندوق و بانک',
     icon: '💵',
-    description: 'وجه نقد صندوق، کارتخوان، پرداخت آنلاین و کارت‌به‌کارت امروز',
+    description: 'موجودی فعلی صندوق و حساب‌های بانکی از دفتر کل + ورودی امروز',
     finance: true,
   },
   {

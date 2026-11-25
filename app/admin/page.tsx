@@ -176,6 +176,63 @@ async function fetchCashToday(): Promise<CashToday> {
   }
 }
 
+// 🎯 پچ ۷۳: موجودی فعلی هر خزانه (صندوق/بانک) از دفتر کل — همان منطق
+// گزارش حسابداری (lib/accounting/reports.ts) ولی بدون فیلتر تاریخ تا
+// ترازِ تجمعی حساب‌های kind='treasury' به دست بیاید:
+//   موجودی = Σ(بدهکار − بستانکار) همهٔ زمان‌ها برای هر حساب خزانه
+type TreasuryBal = {
+  name: string
+  treasuryType: string | null
+  bal: number
+}
+
+async function fetchTreasuryBalances(): Promise<{
+  ok: boolean
+  rows: TreasuryBal[]
+}> {
+  try {
+    const db = supabaseAdmin()
+    const { data, error } = await db
+      .from('gl_lines')
+      .select(
+        'side, amount, account_id, gl_accounts(name, kind, treasury_type)'
+      )
+    if (error || !data) {
+      console.error('[dashboard treasury] error:', error)
+      return { ok: false, rows: [] }
+    }
+    const byAcc: Record<
+      string,
+      { name: string; treasuryType: string | null; bal: number }
+    > = {}
+    for (const l of data) {
+      const acc = l.gl_accounts as {
+        name?: string
+        kind?: string
+        treasury_type?: string
+      } | null
+      if (!acc || acc.kind !== 'treasury') continue
+      const rec = (byAcc[l.account_id] ??= {
+        name: String(acc.name ?? ''),
+        treasuryType: acc.treasury_type ?? null,
+        bal: 0,
+      })
+      const amt = Number(l.amount) || 0
+      rec.bal += l.side === 'debit' ? amt : -amt
+    }
+    const rows = Object.values(byAcc).sort((a, b) => {
+      // صندوق نقدی اول، بعد حساب‌های بانکی به ترتیب الفبا
+      const cashA = /صندوق|نقد/.test(a.name) ? 0 : 1
+      const cashB = /صندوق|نقد/.test(b.name) ? 0 : 1
+      return cashA - cashB || a.name.localeCompare(b.name, 'fa')
+    })
+    return { ok: true, rows }
+  } catch (err) {
+    console.error('[dashboard treasury] unexpected:', err)
+    return { ok: false, rows: [] }
+  }
+}
+
 function HeroStat({
   icon,
   label,
@@ -216,13 +273,14 @@ export default async function AdminDashboard() {
     accessAllowsPath(role, me.allowedPaths, href)
   const canRegisterOrder = allows('/admin/orders/new')
 
-  // ── داده‌ها: آمار سبک + سفارش‌های اخیر + (مالک/مدیر) صندوق امروز ──
-  const [quickStats, operatorStats, recentOrders, cashToday] =
+  // ── داده‌ها: آمار سبک + سفارش‌های اخیر + (مالک/مدیر) صندوق و خزانه‌ها ──
+  const [quickStats, operatorStats, recentOrders, cashToday, treasury] =
     await Promise.all([
       canSeeFinance ? getQuickStats() : Promise.resolve(null),
       canSeeFinance ? Promise.resolve(null) : getOperatorStats(userId),
       canSeeFinance ? fetchRecentOrders() : fetchRecentOrders(userId),
       canSeeFinance ? fetchCashToday() : Promise.resolve(null),
+      canSeeFinance ? fetchTreasuryBalances() : Promise.resolve(null),
     ])
 
   // 🎯 پچ ۷۲: چیدمان ذخیره‌شدهٔ این کاربر (یا پیش‌فرض نقشش)
@@ -293,24 +351,78 @@ export default async function AdminDashboard() {
         />,
       ]
 
-  /* ── ویجت «صندوق و بانک امروز» — اولویت اول مالک/مدیر ── */
+  /* ── ویجت «صندوق و بانک» — اولویت اول مالک/مدیر ──
+     🎯 پچ ۷۳: موجودی فعلی هر خزانه از دفتر کل + ورودی امروز به تفکیک روش */
   const cashSection = (
     <section className="dashboard-section">
       <h2>
-        💵 صندوق و بانک امروز
+        💵 صندوق و بانک
         <small className="dash-section-note">
-          مجموع پرداخت‌های تأییدشدهٔ امروز به تفکیک روش
+          موجودی فعلی خزانه‌ها از دفتر کل + ورودی امروز
         </small>
       </h2>
-      {cashToday?.ok ? (
+
+      {/* موجودی فعلی خزانه‌ها — تراز تجمعی حساب‌های kind=treasury */}
+      {treasury?.ok && treasury.rows.length > 0 && (
         <>
           <div className="dash-hero">
-            <div className="dash-hero-card tone-gold">
-              <div className="dash-hero-icon">💵</div>
+            {treasury.rows.map((t) => {
+              const isCash = /صندوق|نقد/.test(t.name)
+              return (
+                <div
+                  key={t.name}
+                  className={`dash-hero-card${isCash ? ' tone-gold' : ''}`}
+                >
+                  <div className="dash-hero-icon">{isCash ? '💵' : '🏦'}</div>
+                  <div className="dash-hero-value">
+                    {formatPrice(t.bal)}
+                  </div>
+                  <div className="dash-hero-label">
+                    {t.name} (تومان)
+                  </div>
+                  {t.bal === 0 && (
+                    <div className="dash-hero-zero">
+                      بدون گردش ثبت‌شده تا امروز
+                    </div>
+                  )}
+                  {t.bal < 0 && (
+                    <div className="dash-hero-zero">
+                      منفی — ثبت‌های این حساب نیاز به بررسی دارد
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+          <div className="admin-card dash-cash-total">
+            🏛️ جمع موجودی همهٔ خزانه‌ها:{' '}
+            <strong>
+              {formatPrice(
+                treasury.rows.reduce((s, t) => s + t.bal, 0)
+              )}{' '}
+              تومان
+            </strong>
+          </div>
+        </>
+      )}
+      {treasury && !treasury.ok && (
+        <div className="admin-card dash-treasury-note">
+          موجودی خزانه‌ها فعلاً در دسترس نیست — ماژول حسابداری (دفتر کل) هنوز
+          فعال نشده یا اولین سند ثبت نشده است.
+        </div>
+      )}
+
+      {/* ورودی امروز به تفکیک روش پرداخت */}
+      {cashToday?.ok ? (
+        <>
+          <h3 className="dash-subhead">ورودی امروز</h3>
+          <div className="dash-hero">
+            <div className="dash-hero-card tone-green">
+              <div className="dash-hero-icon">🪙</div>
               <div className="dash-hero-value">
                 {formatPrice(cashToday.cash)}
               </div>
-              <div className="dash-hero-label">وجه نقد در صندوق (تومان)</div>
+              <div className="dash-hero-label">وجه نقد دریافتی (تومان)</div>
             </div>
             <div className="dash-hero-card">
               <div className="dash-hero-icon">💳</div>
