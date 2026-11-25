@@ -81,31 +81,40 @@
   font-weight: 800;
 }
 
-/* محتوا باید زیر نوار ثابت جا شود — با specificity بالاتر از globals.css
-   🎯 پچ ۷۰: نوار وضعیت (تاریخ/ساعت/نقش) داخل nav تب‌هاست → پدینگ بیشتر */
+/* 🎯 پچ ۷۱: تب‌های بالای صفحه حذف شدند — فقط نوار وضعیت (~۴۰px) ثابت است.
+   فاصلهٔ نوار تا شروع محتوا کم شد (قبلاً ۱۲۲px بود و شکایت فاصلهٔ زیاد داشتیم) */
 .admin-shell .admin-main {
-  padding-top: 122px;
+  padding-top: 64px;
 }
 
-/* 🎯 پچ ۷۰: صفحهٔ POS نوار تب/وضعیت ندارد → پدینگ مثل قبل */
+/* 🎯 پچ ۷۰/۷۱: صفحهٔ POS هیچ نوار ثابتی ندارد → پدینگ مثل قبل */
 .admin-shell.admin-shell--autohide .admin-main {
   padding-top: 80px;
 }
 
 @media (max-width: 768px) {
-  .admin-tabs {
-    top: 56px; /* دقیقاً زیر هدر ثابت موبایل */
-    right: 0;
-    left: 0;
-    padding: 7px 14px;
-  }
-
+  /* 🎯 پچ ۷۱: موبایل — فقط هدر (۵۶px) + نوار وضعیت */
   .admin-shell .admin-main {
-    padding-top: 164px; /* ۵۶px هدر + نوار تب + نوار وضعیت + تنفس */
+    padding-top: 104px;
   }
 
   .admin-shell.admin-shell--autohide .admin-main {
     padding-top: 122px;
+  }
+}
+
+/* 🎯 پچ ۷۱: منوی سمت راست مخفی (دکمهٔ پین در نوار وضعیت) — فقط دسکتاپ */
+@media (min-width: 769px) {
+  .admin-shell.admin-sidebar-hidden .admin-sidebar {
+    display: none;
+  }
+
+  .admin-shell.admin-sidebar-hidden .admin-status-bar {
+    right: 0;
+  }
+
+  .admin-shell.admin-sidebar-hidden .admin-main {
+    margin-right: 0;
   }
 }
 

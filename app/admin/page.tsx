@@ -1,20 +1,26 @@
 // app/admin/page.tsx
-// 🎯 پچ ۶۷ — بازسازی کامل داشبورد: نقش‌آگاه و دسترسی‌آگاه
-//   - مالک/مدیر: آمار کامل مالی، نمودارها، سفارش‌های اخیر، مقایسهٔ ماهانه
-//   - صندوق‌دار/کارمند: فقط شمارش سفارش‌ها (بدون هیچ عدد مالی)
-//   - نگهداری دیتابیس فقط برای مالک
-// 🎯 پچ ۶۸ — پولیش: کپشن صفر کارت‌ها، شناسهٔ کوتاه و مبلغِ دفاعی سفارش‌های اخیر
-// 🎯 پچ ۶۹ — تب‌های داخلی بخش‌ها: نمای کلی / نمودارها / پرفروش‌ها / ابزارها
-// 🎯 پچ ۷۰ — دسترسی سریع حذف شد (با نوار تب‌های بالا تکراری بود)؛ تاریخ و
-//   نشان نقش به نوار وضعیت ثابت بالای صفحه منتقل شد؛ نقش‌های با دسترسی
-//   سفارشیِ «گزارش فروش» هم داشبورد مالی کامل می‌بینند
+// 🎯 پچ ۶۷ — بازسازی کامل داشبورد نقش‌آگاه
+// 🎯 پچ ۶۸ — کپشن صفر کارت‌ها، شناسهٔ کوتاه و مبلغِ دفاعی سفارش‌های اخیر
+// 🎯 پچ ۶۹ — تب‌های داخلی بخش‌ها (نمای کلی / نمودارها / پرفروش‌ها / ابزارها)
+// 🎯 پچ ۷۰ — حذف دسترسی سریع تکراری، انتقال تاریخ/نقش به نوار وضعیت ثابت،
+//   دسترسی مالی برای نقش‌های سفارشیِ دارای تیک «گزارش فروش»
+// 🎯 پچ ۷۱ — سرعت و آمار شخصی:
+//   • لود اولیه فقط آمار سبک ۳۵ روزه (getQuickStats) — نه شش ماه داده
+//   • دادهٔ تب «نمودارها» و «پرفروش‌ها» فقط با باز شدن همان تب لود می‌شود
+//     (ChartsPanel / TopProductsPanel از /api/admin/dashboard/stats)
+//   • صندوق‌دار/کارمند: فقط آمار و سفارش‌های شخصی خودش (operator_id)
+//     — دیگر آمار کل مجموعه را نمی‌بیند
+//   • مبلغ واقعی از ستون subtotal و شمارهٔ واقعی سفارش از order_number
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { getOrderStats } from '@/lib/stats'
+import { requireAdminUser } from '@/lib/admin/require-admin'
 import { getOperatorRole } from '@/lib/admin/roles'
 import { accessAllowsPath } from '@/lib/admin/modules'
+import { getQuickStats, getOperatorStats } from '@/lib/dashboard-stats'
 import { supabaseAdmin } from '@/lib/supabase/server'
 import CleanupOrdersCard from './components/CleanupOrdersCard'
+import ChartsPanel from './components/ChartsPanel'
+import TopProductsPanel from './components/TopProductsPanel'
 import SectionTabs, { type SectionTabDef } from './components/SectionTabs'
 import './admin-dashboard.css'
 
@@ -27,12 +33,14 @@ const formatPrice = (price: number) =>
 // برچسب وضعیت سفارش — مقدار ناشناخته همان متن خام نشان داده می‌شود (بدون کرش)
 const STATUS_LABELS: Record<string, string> = {
   pending: 'در انتظار تأیید',
+  confirmed: 'تأییدشده',
   preparing: 'در حال آماده‌سازی',
   ready: 'آماده',
   delivering: 'در حال ارسال',
   delivered: 'تحویل‌شده',
   completed: 'تکمیل‌شده',
   paid: 'پرداخت‌شده',
+  unpaid: 'پرداخت‌نشده',
   cancelled: 'لغو شده',
   canceled: 'لغو شده',
 }
@@ -56,8 +64,7 @@ const fmtDateTime = (v: unknown) => {
   }
 }
 
-// 🎯 پچ ۶۸: مبلغ را از هر شکلی (عدد یا رشتهٔ عددی) به عدد می‌رساند؛
-// مقدار نامعتبر → null تا ستون مبلغ ردیف پنهان شود، نه اینکه «NaN» بنویسد
+// مبلغ را از هر شکلی (عدد یا رشتهٔ عددی) به عدد می‌رساند؛ مقدار نامعتبر → null
 const parseAmount = (v: unknown): number | null => {
   if (typeof v === 'number' && isFinite(v)) return v
   if (typeof v === 'string' && v.trim() !== '') {
@@ -67,24 +74,33 @@ const parseAmount = (v: unknown): number | null => {
   return null
 }
 
-// 🎯 پچ ۶۸: شناسهٔ سفارش (UUID بلند) به ۸ نویسهٔ اول کوتاه می‌شود
-const shortOrderId = (id: unknown, fallback: number) => {
-  const s = String(id ?? '').trim()
+// 🎯 پچ ۷۱: شمارهٔ واقعی سفارش (order_number از پچ ۵۱) — fallback شناسهٔ کوتاه
+const displayOrderId = (row: Record<string, unknown>, fallback: number) => {
+  const orderNumber = Number(row.order_number)
+  if (Number.isFinite(orderNumber) && orderNumber > 0) {
+    return String(orderNumber)
+  }
+  const s = String(row.id ?? '').trim()
   if (!s) return String(fallback + 1)
-  const head = s.split('-')[0].toUpperCase()
-  return head.slice(0, 8)
+  return s.split('-')[0].toUpperCase().slice(0, 8)
 }
 
-// سفارش‌های اخیر — کم‌ریسک‌ترین حالت: select('*') و خوانش دفاعی فیلدها.
-// هر خطای کوئری/اسکیمای متفاوت فقط باعث مخفی‌شدن این بخش می‌شود، نه کرش صفحه.
-async function fetchRecentOrders(): Promise<Record<string, unknown>[] | null> {
+// سفارش‌های اخیر — ستون‌های مشخص و فیلترهای همان stats.ts؛ سبک و امن.
+// operatorId پاس شود → فقط سفارش‌های شخصیِ همان اپراتور (داشبورد صندوق‌دار).
+async function fetchRecentOrders(
+  operatorId?: string
+): Promise<Record<string, unknown>[] | null> {
   try {
     const db = supabaseAdmin()
-    const { data, error } = await db
+    let q = db
       .from('orders')
-      .select('*')
+      .select('id, order_number, status, subtotal, created_at, operator_id')
+      .is('deleted_at', null)
+      .eq('is_test', false)
       .order('created_at', { ascending: false })
       .limit(6)
+    if (operatorId) q = q.eq('operator_id', operatorId)
+    const { data, error } = await q
     if (error || !data || data.length === 0) return null
     return data as Record<string, unknown>[]
   } catch {
@@ -108,8 +124,8 @@ function HeroStat({
       <div className="dash-hero-icon">{icon}</div>
       <div className="dash-hero-value">{formatPrice(value)}</div>
       <div className="dash-hero-label">{label}</div>
-      {/* 🎯 پچ ۶۸: عدد صفر فارسی (۰) ریز است و کارت را «خالی» نشان می‌دهد —
-          توضیح کوتاه زیر کارت، صفرِ معنادار را جای خالیِ مشکوک عوض می‌کند */}
+      {/* صفرِ فارسی ریز است و کارت را «خالی» نشان می‌دهد — کپشن زیر کارت،
+          صفرِ معنادار را جای خالیِ مشکوک عوض می‌کند */}
       {value === 0 && (
         <div className="dash-hero-zero">هنوز در این بازه چیزی ثبت نشده</div>
       )}
@@ -117,31 +133,17 @@ function HeroStat({
   )
 }
 
-function ChangeBadge({ value }: { value: number }) {
-  if (value === 0) {
-    return <span className="change-badge neutral">−</span>
-  }
-  const isPositive = value > 0
-  return (
-    <span
-      className={`change-badge ${isPositive ? 'positive' : 'negative'}`}
-    >
-      {isPositive ? '↑' : '↓'} {Math.abs(value).toLocaleString('fa-IR')}٪
-    </span>
-  )
-}
-
 export default async function AdminDashboard() {
-  // 🎯 گیت پروفایل پچ ۵۹-آ: بدون نشست یا بدون پروفایل اپراتوری → صفحهٔ ورود
+  // 🎯 گیت نشست — و شناسهٔ کاربر برای آمار شخصی (الگوی همان روت ثبت سفارش)
+  const auth = await requireAdminUser()
+  if (auth.denied || !auth.userId) redirect('/admin/login')
+  const userId = auth.userId
+
   const me = await getOperatorRole()
   if (!me) redirect('/admin/login')
 
   const role = me.role
   const isOwner = role === 'owner'
-  // عدد مالی (فروش) فقط برای مالک و مدیر — ماتریس پچ ۵۶: صندوق‌دار/کارمند
-  // گزارش فروش ندارند، پس داشبورد هم هیچ عدد تومانی به آن‌ها نشان نمی‌دهد
-  // 🎯 پچ ۷۰: نقش‌های با لیست دسترسیِ دلخواه که «گزارش فروش» برایشان تیک خورده
-  // هم داشبورد مالی کامل می‌بینند (سطح دسترسی خاص)
   const canSeeFinance =
     role === 'owner' ||
     role === 'manager' ||
@@ -149,237 +151,115 @@ export default async function AdminDashboard() {
       me.allowedPaths.length > 0 &&
       accessAllowsPath(role, me.allowedPaths, '/admin/reports/sales'))
 
-  const stats = await getOrderStats()
-  const recentOrders = canSeeFinance ? await fetchRecentOrders() : null
-
-  // 🎯 پچ ۶۷: همان گاردِ منو (لیست دلخواه ثبت‌شده → ملاک؛ وگرنه پیش‌فرض نقش)
   const allows = (href: string) => accessAllowsPath(role, me.allowedPaths, href)
-
   const canRegisterOrder = allows('/admin/orders/new')
 
-  const maxRevenue = Math.max(
-    ...stats.dailyRevenue.map((d) => d.revenue),
-    1
-  )
-  const maxMonthlyRevenue = Math.max(
-    ...stats.monthlyRevenue.map((m) => m.revenue),
-    1
-  )
-  const maxPeakHour = Math.max(...stats.peakHours.map((h) => h.orders), 1)
+  // 🎯 پچ ۷۱: آمار سبک — مالک/مدیر کل مجموعه، بقیه فقط شخصیِ خودشان
+  const [quickStats, operatorStats, recentOrders] = await Promise.all([
+    canSeeFinance ? getQuickStats() : Promise.resolve(null),
+    canSeeFinance ? Promise.resolve(null) : getOperatorStats(userId),
+    canSeeFinance ? fetchRecentOrders() : fetchRecentOrders(userId),
+  ])
 
-  /* ── بخش‌های صفحه — هر کدام یک node؛ در پچ ۶۹ داخل تب‌ها چیده می‌شوند ── */
+  // ── کارت‌های بالای داشبورد ──
+  const heroCards = canSeeFinance
+    ? [
+        <HeroStat
+          key="rev-today"
+          icon="💰"
+          label="فروش امروز (تومان)"
+          value={quickStats?.today.revenue ?? 0}
+          tone="gold"
+        />,
+        <HeroStat
+          key="ord-today"
+          icon="🛒"
+          label="سفارش امروز"
+          value={quickStats?.today.orders ?? 0}
+          tone="green"
+        />,
+        <HeroStat
+          key="rev-month"
+          icon="🗓️"
+          label="فروش این ماه (تومان)"
+          value={quickStats?.month.revenue ?? 0}
+        />,
+      ]
+    : [
+        <HeroStat
+          key="my-rev-today"
+          icon="💰"
+          label="فروش امروز من (تومان)"
+          value={operatorStats?.today.revenue ?? 0}
+          tone="gold"
+        />,
+        <HeroStat
+          key="my-ord-today"
+          icon="🛒"
+          label="سفارش‌های امروز من"
+          value={operatorStats?.today.orders ?? 0}
+          tone="green"
+        />,
+        <HeroStat
+          key="my-rev-month"
+          icon="🗓️"
+          label="فروش این ماه من (تومان)"
+          value={operatorStats?.month.revenue ?? 0}
+        />,
+      ]
 
-  const recentOrdersSection =
-    canSeeFinance && recentOrders ? (
-      <section className="dashboard-section">
-        <h2>🧾 سفارش‌های اخیر</h2>
-        <div className="dash-recent">
-          {recentOrders.map((o, i) => {
-            const id = o.id
-            const createdAt = o.created_at
-            const status = o.status
-            // 🎯 پچ ۶۸: مبلغ با نام‌های مختلف ذخیره می‌شود — همه را با احتیاط می‌خوانیم؛
-            // اگر هیچ‌کدام عدد معتبر نبود، ستون مبلغ همان ردیف نشان داده نمی‌شود
-            const rawTotal =
-              o.total ?? o.total_amount ?? o.final_amount ?? o.amount
-            const total = parseAmount(rawTotal)
-            // 🎯 پچ ۶۸: شناسهٔ کامل UUID خیلی بلند است — فقط ۸ نویسهٔ اول
-            const shortId = shortOrderId(id, i)
-            return (
-              <div key={String(id ?? i)} className="dash-recent-row">
-                <span className="dash-recent-id">#{shortId}</span>
-                {createdAt ? (
-                  <span className="dash-recent-time">
-                    {fmtDateTime(createdAt)}
-                  </span>
-                ) : null}
-                {status ? (
-                  <span className={`dash-status s-${String(status)}`}>
-                    {statusLabel(status)}
-                  </span>
-                ) : null}
-                {total !== null ? (
-                  <span className="dash-recent-amount">
-                    {formatPrice(total)} تومان
-                  </span>
-                ) : null}
-              </div>
-            )
-          })}
-        </div>
-        {allows('/admin/orders') && (
-          <Link href="/admin/orders" className="dash-recent-more">
-            مشاهدهٔ همهٔ سفارش‌ها ←
-          </Link>
-        )}
-      </section>
-    ) : null
+  /* ── تب «نمای کلی»: سفارش‌های اخیر (مالک/مدیر: همه — بقیه: فقط مال خودشان) ── */
+  const recentOrdersTitle = canSeeFinance
+    ? '🧾 سفارش‌های اخیر'
+    : '🧾 سفارش‌های اخیر من'
 
-  const comparisonSection = (
+  const recentOrdersSection = recentOrders ? (
     <section className="dashboard-section">
-      <h2>📊 مقایسه با ماه قبل</h2>
-      <div className="comparison-grid">
-        <div className="comparison-card">
-          <div className="comparison-header">
-            <span className="comparison-label">💰 فروش</span>
-            <ChangeBadge value={stats.comparison.revenueChange} />
-          </div>
-          <div className="comparison-value">
-            {formatPrice(stats.month.revenue)}
-            <small>تومان</small>
-          </div>
-        </div>
-
-        <div className="comparison-card">
-          <div className="comparison-header">
-            <span className="comparison-label">🛒 سفارش</span>
-            <ChangeBadge value={stats.comparison.ordersChange} />
-          </div>
-          <div className="comparison-value">
-            {formatPrice(stats.month.orders)}
-            <small>سفارش</small>
-          </div>
-        </div>
-
-        <div className="comparison-card">
-          <div className="comparison-header">
-            <span className="comparison-label">📈 میانگین هر سفارش</span>
-            <ChangeBadge value={stats.comparison.avgOrderChange} />
-          </div>
-          <div className="comparison-value">
-            {formatPrice(stats.avgOrderValue)}
-            <small>تومان</small>
-          </div>
-        </div>
-      </div>
-    </section>
-  )
-
-  const dailyChartSection = (
-    <section className="dashboard-section">
-      <h2>
-        📉 فروش ۷ روز اخیر
-        <small className="dash-section-note">
-          مجموع این هفته: {formatPrice(stats.week.revenue)} تومان ·{' '}
-          {formatPrice(stats.week.orders)} سفارش
-        </small>
-      </h2>
-      <div className="chart-card">
-        <div className="chart-bars">
-          {stats.dailyRevenue.map((day) => {
-            const height =
-              maxRevenue > 0 ? (day.revenue / maxRevenue) * 100 : 0
-            return (
-              <div key={day.date} className="chart-col">
-                <div className="chart-col-value">
-                  {day.revenue > 0 ? formatPrice(day.revenue) : ''}
-                </div>
-                <div className="chart-bar-wrapper">
-                  <div
-                    className="chart-bar"
-                    style={{ height: `${Math.max(height, 2)}%` }}
-                  />
-                </div>
-                <div className="chart-col-label">{day.label}</div>
-              </div>
-            )
-          })}
-        </div>
-      </div>
-    </section>
-  )
-
-  const monthlyChartSection = (
-    <section className="dashboard-section">
-      <h2>📊 فروش ۶ ماه اخیر</h2>
-      <div className="chart-card">
-        <div className="chart-bars">
-          {stats.monthlyRevenue.map((month) => {
-            const height =
-              maxMonthlyRevenue > 0
-                ? (month.revenue / maxMonthlyRevenue) * 100
-                : 0
-            return (
-              <div key={month.month} className="chart-col">
-                <div className="chart-col-value">
-                  {month.revenue > 0 ? formatPrice(month.revenue) : ''}
-                </div>
-                <div className="chart-bar-wrapper">
-                  <div
-                    className="chart-bar"
-                    style={{ height: `${Math.max(height, 2)}%` }}
-                  />
-                </div>
-                <div className="chart-col-label">{month.label}</div>
-              </div>
-            )
-          })}
-        </div>
-      </div>
-    </section>
-  )
-
-  const peakHoursSection = (
-    <section className="dashboard-section">
-      <h2>⏰ ساعات پرترافیک (۳۰ روز اخیر)</h2>
-      <div className="chart-card">
-        <div className="peak-hours">
-          {stats.peakHours.map((hour) => {
-            const height =
-              maxPeakHour > 0 ? (hour.orders / maxPeakHour) * 100 : 0
-            return (
-              <div key={hour.hour} className="peak-hour-col">
-                <div className="peak-hour-value">
-                  {hour.orders > 0 ? formatPrice(hour.orders) : ''}
-                </div>
-                <div className="peak-hour-bar-wrapper">
-                  <div
-                    className="peak-hour-bar"
-                    style={{ height: `${Math.max(height, 2)}%` }}
-                  />
-                </div>
-                <div className="peak-hour-label">{hour.label}</div>
-              </div>
-            )
-          })}
-        </div>
-      </div>
-    </section>
-  )
-
-  const topProductsSection = (
-    <section className="dashboard-section">
-      <h2>⭐ پرفروش‌ترین محصولات (۳۰ روز اخیر)</h2>
-      {stats.topProducts.length === 0 ? (
-        <div className="admin-card">
-          <p className="empty-admin">هنوز فروشی ثبت نشده است.</p>
-        </div>
-      ) : (
-        <div className="top-products-list">
-          {stats.topProducts.map((product, idx) => (
-            <div key={product.name} className="top-product-item">
-              <div className="top-product-rank">#{formatPrice(idx + 1)}</div>
-              <div className="top-product-info">
-                <strong>{product.name}</strong>
-                <small>
-                  {formatPrice(product.count)} عدد فروش ·{' '}
-                  {formatPrice(product.revenue)} تومان
-                </small>
-              </div>
-              <div className="top-product-bar">
-                <div
-                  className="top-product-bar-fill"
-                  style={{
-                    width: `${
-                      (product.count / stats.topProducts[0].count) * 100
-                    }%`,
-                  }}
-                />
-              </div>
+      <h2>{recentOrdersTitle}</h2>
+      <div className="dash-recent">
+        {recentOrders.map((o, i) => {
+          const total = parseAmount(o.subtotal)
+          const status = o.status
+          return (
+            <div key={String(o.id ?? i)} className="dash-recent-row">
+              <span className="dash-recent-id">
+                #{displayOrderId(o, i)}
+              </span>
+              {o.created_at ? (
+                <span className="dash-recent-time">
+                  {fmtDateTime(o.created_at)}
+                </span>
+              ) : null}
+              {status ? (
+                <span className={`dash-status s-${String(status)}`}>
+                  {statusLabel(status)}
+                </span>
+              ) : null}
+              {total !== null ? (
+                <span className="dash-recent-amount">
+                  {formatPrice(total)} تومان
+                </span>
+              ) : null}
             </div>
-          ))}
-        </div>
+          )
+        })}
+      </div>
+      {canSeeFinance && allows('/admin/orders') && (
+        <Link href="/admin/orders" className="dash-recent-more">
+          مشاهدهٔ همهٔ سفارش‌ها ←
+        </Link>
       )}
+    </section>
+  ) : (
+    <section className="dashboard-section">
+      <h2>{recentOrdersTitle}</h2>
+      <div className="admin-card">
+        <p className="empty-admin">
+          {canSeeFinance
+            ? 'هنوز سفارشی ثبت نشده است.'
+            : 'هنوز سفارشی با نام تو ثبت نشده — با ثبت اولین سفارش، آمار شخصی‌ات همین‌جا دیده می‌شود.'}
+        </p>
+      </div>
     </section>
   )
 
@@ -390,10 +270,10 @@ export default async function AdminDashboard() {
     </section>
   )
 
-  /* ── 🎯 پچ ۶۹/۷۰: چیدمان تب‌ها بر اساس نقش ──
+  /* ── چیدمان تب‌ها بر اساس نقش ──
      مالک/مدیر: نمای کلی | نمودارها | پرفروش‌ها (+ ابزارها فقط مالک)
-     صندوق‌دار/کارمند: فقط «نمای کلی» → SectionTabs نوار را نشان نمی‌دهد
-     🎯 پچ ۷۰: «دسترسی سریع» حذف شد — با نوار تب‌های بالای صفحه تکراری بود */
+     — دادهٔ نمودارها/پرفروش‌ها فقط با باز شدن تب لود می‌شود (لود تنبل)
+     صندوق‌دار/کارمند: فقط «نمای کلی» شخصی → نوار تب نمایش داده نمی‌شود */
   const tabs: SectionTabDef[] = [
     {
       id: 'overview',
@@ -408,20 +288,13 @@ export default async function AdminDashboard() {
       id: 'charts',
       icon: '📈',
       label: 'نمودارها',
-      node: (
-        <>
-          {comparisonSection}
-          {dailyChartSection}
-          {monthlyChartSection}
-          {peakHoursSection}
-        </>
-      ),
+      node: <ChartsPanel />,
     })
     tabs.push({
       id: 'top-products',
       icon: '⭐',
       label: 'پرفروش‌ها',
-      node: topProductsSection,
+      node: <TopProductsPanel />,
     })
   }
 
@@ -436,11 +309,15 @@ export default async function AdminDashboard() {
 
   return (
     <div className="dashboard">
-      {/* خوش‌آمد + CTA ثبت سفارش — تاریخ و نشان نقش از پچ ۷۰ در نوار وضعیت بالای صفحه‌اند */}
+      {/* خوش‌آمد + CTA — تاریخ و نشان نقش در نوار وضعیت ثابت بالای صفحه‌اند */}
       <div className="dashboard-welcome dash-welcome">
         <div>
           <h1>👋 خوش آمدی</h1>
-          <p>خلاصهٔ عملکرد کافه پارک در یک نگاه</p>
+          <p>
+            {canSeeFinance
+              ? 'خلاصهٔ عملکرد کافه پارک در یک نگاه'
+              : 'خلاصهٔ عملکرد خودت در یک نگاه'}
+          </p>
         </div>
         <div className="dash-welcome-side">
           {canRegisterOrder && (
@@ -451,53 +328,11 @@ export default async function AdminDashboard() {
         </div>
       </div>
 
-      {/* 🎯 پچ ۶۷: سه ستون آماری اصلی — نقش‌آگاه؛ همیشه بالای صفحه می‌ماند */}
+      {/* 🎯 پچ ۷۱: سه کارت آماری — نقش‌آگاه؛ صندوق‌دار فقط آمار شخصی خودش */}
       <section className="dashboard-section">
-        <div className="dash-hero">
-          {canSeeFinance ? (
-            <>
-              <HeroStat
-                icon="💰"
-                label="فروش امروز (تومان)"
-                value={stats.today.revenue}
-                tone="gold"
-              />
-              <HeroStat
-                icon="🛒"
-                label="سفارش امروز"
-                value={stats.today.orders}
-                tone="green"
-              />
-              <HeroStat
-                icon="🗓️"
-                label="فروش این ماه (تومان)"
-                value={stats.month.revenue}
-              />
-            </>
-          ) : (
-            <>
-              <HeroStat
-                icon="🛒"
-                label="سفارش امروز"
-                value={stats.today.orders}
-                tone="green"
-              />
-              <HeroStat
-                icon="📈"
-                label="سفارش این هفته"
-                value={stats.week.orders}
-              />
-              <HeroStat
-                icon="🗓️"
-                label="سفارش این ماه"
-                value={stats.month.orders}
-              />
-            </>
-          )}
-        </div>
+        <div className="dash-hero">{heroCards}</div>
       </section>
 
-      {/* 🎯 پچ ۶۹: بقیهٔ بخش‌ها داخل تب‌های داخلی */}
       <SectionTabs tabs={tabs} />
     </div>
   )

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabaseBrowser } from '@/lib/supabase/client'
@@ -81,23 +81,11 @@ const MENU_GROUPS = [
   },
 ] as const
 
-// 🎯 پچ ۶۶: تب‌های سریعِ یکدست — نوار ثابت بالای محتوا در همهٔ صفحه‌نمایش‌ها.
-// خلاصهٔ پرکاربردِ منو است؛ مابقی بخش‌ها از سایدبار/منوی کامل در دسترس‌اند.
-// با همان گاردِ منو فیلتر می‌شود (menuAllows) — هر نقش فقط تب‌های مجاز خودش را می‌بیند.
-const ADMIN_TABS = [
-  { href: '/admin', label: 'خانه', icon: '🏠' },
-  { href: '/admin/orders', label: 'سفارش‌ها', icon: '🛒' },
-  { href: '/admin/orders/new', label: 'ثبت سفارش', icon: '➕' },
-  { href: '/admin/shifts', label: 'شیفت‌ها', icon: '⏱' },
-  { href: '/admin/accounting', label: 'حسابداری', icon: '🧮' },
-  { href: '/admin/customers', label: 'مشتریان', icon: '👥' },
-  { href: '/admin/products', label: 'محصولات', icon: '☕' },
-  { href: '/admin/memberships', label: 'باشگاه', icon: '🎓' },
-  { href: '/admin/wallet', label: 'کیف پول', icon: '👛' },
-  { href: '/admin/reports/sales', label: 'گزارش فروش', icon: '💰' },
-  { href: '/admin/settings', label: 'تنظیمات', icon: '⚙️' },
-  { href: '/admin/users', label: 'کاربران', icon: '🔐' },
-] as const
+// 🎯 پچ ۷۱: تب‌های سریع بالای صفحه حذف شد — منوی سمت راست کافی است و دو
+// فهرست هم‌زمان فقط تکرار بود. جای آن فقط «نوار وضعیت» ثابت می‌ماند (تاریخ /
+// ساعت / نقش) به‌همراه دکمهٔ پین برای مخفی و نمایان کردن منوی سمت راست در
+// همهٔ صفحات (کلید: cafe-park-admin-sidebar-hidden).
+const SIDEBAR_HIDDEN_KEY = 'cafe-park-admin-sidebar-hidden'
 
 // 🎯 پچ ۴۲: کلید ذخیره وضعیت گروه‌های تاشو
 const NAV_GROUPS_KEY = 'cafe-park-admin-nav-groups'
@@ -139,6 +127,9 @@ export default function AdminLayout({
   const [posSidebarPinned, setPosSidebarPinned] = useState(false)
   const isPosPage = pathname === '/admin/orders/new'
   const sidebarVisible = isPosPage && (posSidebarOpen || posSidebarPinned)
+
+  // 🎯 پچ ۷۱: پین منوی سمت راست در همهٔ صفحات — مخفی/نمایان با ذخیره در localStorage
+  const [sidebarHidden, setSidebarHidden] = useState(false)
 
   const {
     pendingCount,
@@ -191,6 +182,24 @@ export default function AdminLayout({
       setPosSidebarPinned(localStorage.getItem(POS_SIDEBAR_PIN_KEY) === '1')
     } catch {}
   }, [])
+
+  // 🎯 پچ ۷۱: بازیابی وضعیت مخفی/نمایان منوی سمت راست (بدون hydration mismatch)
+  useEffect(() => {
+    try {
+      setSidebarHidden(localStorage.getItem(SIDEBAR_HIDDEN_KEY) === '1')
+    } catch {}
+  }, [])
+
+  // 🎯 پچ ۷۱: مخفی/نمایان کردن منوی سمت راست در همهٔ صفحات
+  const toggleSidebarHidden = () => {
+    setSidebarHidden((p) => {
+      const next = !p
+      try {
+        localStorage.setItem(SIDEBAR_HIDDEN_KEY, next ? '1' : '0')
+      } catch {}
+      return next
+    })
+  }
 
   // 🎯 پچ ۵۰-هـ: پین/برداشتن پین + ذخیره در localStorage
   const togglePosPin = () => {
@@ -379,17 +388,7 @@ export default function AdminLayout({
     items: g.items.filter((it) => menuAllows(it.href)),
   })).filter((g) => g.items.length > 0)
 
-  // 🎯 پچ ۶۶: تب‌های مجازِ این کاربر برای نوار بالا — همان گاردِ منو (fail-closed)
-  const visibleTabs = ADMIN_TABS.filter((t) => menuAllows(t.href))
-
-  // 🎯 پچ ۶۶: تب فعال خودکار در وسط نوار دیده شود (موبایل — نوار اسکرول‌شدنی)
-  const tabsScrollRef = useRef<HTMLDivElement | null>(null)
-  useEffect(() => {
-    if (!whoamiReady) return
-    const el = tabsScrollRef.current?.querySelector('.admin-tab.active')
-    el?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pathname, whoamiReady])
+  // 🎯 پچ ۷۱: (تب‌های بالای صفحه حذف شدند — نوار وضعیت جای آن‌ها را گرفته)
 
   if (pathname === '/admin/login') {
     return <main>{children}</main>
@@ -409,7 +408,9 @@ export default function AdminLayout({
         'admin-shell' +
         (isPosPage ? ' admin-shell--autohide' : '') +
         (sidebarVisible ? ' admin-sidebar-open' : '') +
-        (isPosPage && posSidebarPinned ? ' admin-sidebar-pinned' : '')
+        (isPosPage && posSidebarPinned ? ' admin-sidebar-pinned' : '') +
+        // 🎯 پچ ۷۱: منوی سمت راست مخفی (فقط دسکتاپ اثر دارد — CSS مدیا)
+        (sidebarHidden ? ' admin-sidebar-hidden' : '')
       }
     >
       {/* 🎯 پچ ۵۰-هـ: دستگیرهٔ لبهٔ راست — hover یا کلیک، منو را باز می‌کند */}
@@ -438,39 +439,24 @@ export default function AdminLayout({
       {/* 🎯 پچ ۵۲: دروازهٔ شیفت — بدون شیفت باز، مودال باز کردن/تحویل خودکار می‌آید */}
       <ShiftGate />
 
-      {/* 🎯 پچ ۶۶: نوار تب‌های یکدست — ثابتِ بالای محتوا، هم دسکتاپ هم موبایل.
-          در صفحهٔ POS پنهان است (مثل سایدبار خود-پنهان) و تا آماده‌شدن whoami
-          fail-closed هیچ تبی رندر نمی‌شود. */}
-      {!isPosPage && visibleTabs.length > 0 && (
-        <nav className="admin-tabs" aria-label="تب‌های سریع پنل">
-          <div className="admin-tabs-scroll" ref={tabsScrollRef}>
-            {visibleTabs.map((t) => {
-              const hasBadge = t.href === '/admin/orders' && pendingCount > 0
-              return (
-                <Link
-                  key={t.href}
-                  href={t.href}
-                  className={`admin-tab${isActive(t.href) ? ' active' : ''}`}
-                >
-                  <span className="admin-tab-icon">{t.icon}</span>
-                  <span>{t.label}</span>
-                  {hasBadge && (
-                    <span className="admin-tab-badge">
-                      {pendingCount.toLocaleString('fa-IR')}
-                    </span>
-                  )}
-                </Link>
-              )
-            })}
-          </div>
-
-          {/* 🎯 پچ ۷۰: نوار وضعیت ثابت — تاریخ شمسی + ساعت زنده + نشان نقش.
-              داخل nav تب‌هاست: با همان نوار ثابت بالا می‌ماند و در POS/لاگین
-              خودکار پنهان است. */}
+      {/* 🎯 پچ ۷۱: نوار وضعیت ثابت — تاریخ شمسی + ساعت زنده + نشان نقش +
+          دکمهٔ پین منوی سمت راست. در صفحهٔ POS پنهان است و لاگین اصلاً
+          به این شل نمی‌رسد. */}
+      {!isPosPage && (
+        <div className="admin-status-bar">
           <AdminStatusBar
             roleLabel={role ? (OP_ROLE_LABEL[role] ?? role) : ''}
           />
-        </nav>
+          <button
+            type="button"
+            className="admin-sidebar-toggle"
+            onClick={toggleSidebarHidden}
+            aria-label={sidebarHidden ? 'نمایش منو' : 'مخفی کردن منو'}
+            title={sidebarHidden ? 'نمایش منوی سمت راست' : 'مخفی کردن منوی سمت راست'}
+          >
+            {sidebarHidden ? '☰' : '⇤'}
+          </button>
+        </div>
       )}
 
       {/* ═══════════ هدر موبایل (فقط < 768px) ═══════════ */}
