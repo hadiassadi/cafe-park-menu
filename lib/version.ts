@@ -1,3 +1,3 @@
 // 🎯 پچ ۶۰-و: مُهر نسخهٔ کد — تشخیص «آیا همین کد واقعاً دیپلوی شده؟»
-// بعد از دیپلوی، /api/admin/whoami باید "build":"75" را برگرداند.
-export const APP_BUILD = '75'
+// بعد از دیپلوی، /api/admin/whoami باید "build":"76" را برگرداند.
+export const APP_BUILD = '76'

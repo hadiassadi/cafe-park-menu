@@ -589,3 +589,115 @@
   font-weight: 800;
   color: var(--admin-text-muted, #888);
 }
+
+/* ═══════════════════════════════════════
+   🎯 پچ ۷۶ — ویجت «شیفت باز جاری» + ویجت «لغوهای امروز»
+   ═══════════════════════════════════════ */
+
+/* ── شیفت باز جاری ── */
+.dash-shift {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dash-shift-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  background: var(--admin-surface);
+  border: 1px solid var(--admin-border-soft);
+  border-radius: 10px;
+  padding: 10px 14px;
+}
+
+.dash-shift-row > span {
+  color: var(--admin-text-muted);
+  font-size: 13px;
+}
+
+.dash-shift-row strong {
+  color: var(--admin-text-strong);
+  font-size: 14px;
+}
+
+.dash-shift-row.dash-shift-warn {
+  border-color: #9b3c32;
+  background: #fdeaea;
+}
+
+.dash-shift-row.dash-shift-warn > span,
+.dash-shift-row.dash-shift-warn strong {
+  color: #9b3c32;
+}
+
+.dash-shift-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+  flex-wrap: wrap;
+}
+
+.dash-shift-actions--center {
+  justify-content: center;
+}
+
+.dash-shift-hint {
+  font-size: 12px;
+  color: var(--admin-text-muted);
+}
+
+.dash-shift-empty {
+  text-align: center;
+}
+
+/* ── لغوهای امروز ── */
+.dash-cancels {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dash-cancel-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  background: var(--admin-surface);
+  border: 1px solid var(--admin-border-soft);
+  border-right: 3px solid #9b3c32;
+  border-radius: 10px;
+  padding: 10px 14px;
+}
+
+.dash-cancel-reason {
+  background: #fdeaea;
+  color: #9b3c32;
+  font-size: 12px;
+  font-weight: 800;
+  border-radius: 999px;
+  padding: 3px 10px;
+  white-space: nowrap;
+}
+
+.dash-cancel-by {
+  font-size: 12px;
+  color: var(--admin-text-muted);
+  white-space: nowrap;
+}
+
+.dash-cancel-note {
+  flex-basis: 100%;
+  font-size: 12.5px;
+  color: var(--admin-text-muted);
+  line-height: 1.7;
+}
+
+.dash-cancel-more {
+  font-size: 12.5px;
+  color: var(--admin-text-muted);
+  text-align: center;
+  padding: 4px 0;
+}

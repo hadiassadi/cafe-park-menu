@@ -11,6 +11,13 @@
 //   • ویجت جدید «صندوق و بانک امروز»: وجه نقد صندوق / کارتخوان / آنلاین /
 //     کارت‌به‌کارتِ امروز از order_payments تأییدشده (همان منبع صفحهٔ شیفت‌ها)
 //   • کارت‌های هیرو (امروز/ماه) همیشه بالای داشبورد می‌مانند
+// 🎯 پچ ۷۶ — دو ویجت جدید + اصلاح مرز «امروز»:
+//   • «شیفت باز جاری» (ShiftCurrentCard — کلاینت؛ منبع: API رسمی /api/admin/shifts)
+//   • «لغوهای امروز» (سمت سرور: fetchCancelsToday — سفارش‌های لغوشدهٔ امروز
+//     به وقت تهران با دلیل/یادداشت/مبلغ؛ فقط نقش‌های مالی)
+//   • مرز «امروز» ویجت صندوق هم به وقت تهران اصلاح شد — قبلاً نیمه‌شبِ سرور
+//     (UTC روی هاست ابری) مبنا بود و ۰۰:۰۰ تا ۰۳:۳۰ صبحِ تهران روز اشتباه
+//     می‌گرفت.
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import type { ReactNode } from 'react'
@@ -28,6 +35,7 @@ import {
 } from '@/lib/admin/dashboard-widgets'
 import { supabaseAdmin } from '@/lib/supabase/server'
 import CleanupOrdersCard from './components/CleanupOrdersCard'
+import ShiftCurrentCard from './components/ShiftCurrentCard'
 import ChartsPanel from './components/ChartsPanel'
 import TopProductsPanel from './components/TopProductsPanel'
 import DashboardSettings from './components/DashboardSettings'
@@ -128,6 +136,19 @@ type CashToday = {
   ok: boolean
 }
 
+// 🎯 پچ ۷۶: ابتدای «امروز» به وقت تهران (+۰۳:۳۰ ثابت — ایران از ۱۴۰۱ ساعت
+// تابستانی ندارد). قبلاً نیمه‌شبِ سرور مبنا بود (روی هاست ابری = UTC) و ساعت
+// ۰۰:۰۰ تا ۰۳:۳۰ صبحِ تهران، اشتباهی روزِ قبل را «امروز» می‌گرفت.
+function tehranTodayStart(): Date {
+  const ymd = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Tehran',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date())
+  return new Date(`${ymd}T00:00:00+03:30`)
+}
+
 async function fetchCashToday(): Promise<CashToday> {
   const empty: CashToday = {
     cash: 0,
@@ -139,8 +160,7 @@ async function fetchCashToday(): Promise<CashToday> {
   }
   try {
     const db = supabaseAdmin()
-    const start = new Date()
-    start.setHours(0, 0, 0, 0)
+    const start = tehranTodayStart()
     const { data, error } = await db
       .from('order_payments')
       .select('method, amount, created_at')
@@ -174,6 +194,54 @@ async function fetchCashToday(): Promise<CashToday> {
     console.error('[dashboard cash] unexpected:', err)
     return empty
   }
+}
+
+// 🎯 پچ ۷۶: لغوهای امروز (به وقت تهران) — با دلیل، یادداشت و به دست چه کسی.
+// ستون‌های reason/note/by همان فیلدهای ثبت‌شدهٔ لغو در جدول orders هستند
+// (همان چیزی که صفحهٔ سفارش‌ها و مدیریت لغوها نشان می‌دهند).
+type CancelRow = {
+  id: string
+  order_number: number | null
+  subtotal: number | null
+  cancelled_at: string | null
+  cancellation_reason_label: string | null
+  cancellation_note: string | null
+  cancelled_by: string | null
+}
+
+async function fetchCancelsToday(): Promise<CancelRow[] | null> {
+  try {
+    const db = supabaseAdmin()
+    const { data, error } = await db
+      .from('orders')
+      .select(
+        'id, order_number, subtotal, cancelled_at, cancellation_reason_label, cancellation_note, cancelled_by'
+      )
+      .eq('status', 'cancelled')
+      .is('deleted_at', null)
+      .eq('is_test', false)
+      .gte('cancelled_at', tehranTodayStart().toISOString())
+      .order('cancelled_at', { ascending: false })
+      .limit(50)
+    if (error) {
+      console.error('[dashboard cancels] error:', error)
+      return null
+    }
+    return (data ?? []) as CancelRow[]
+  } catch (err) {
+    console.error('[dashboard cancels] unexpected:', err)
+    return null
+  }
+}
+
+// لغوکننده: مقادیر شناخته‌شده فارسی می‌شوند؛ شناسهٔ خام → «کاربر پنل»،
+// مقدار خالی → هیچ (ردیف بدون این چیپ رندر می‌شود)
+const cancelByLabel = (v: unknown) => {
+  if (!v) return null
+  const s = String(v).toLowerCase()
+  if (s === 'admin' || s === 'operator') return 'اپراتور'
+  if (s === 'customer') return 'مشتری'
+  return 'کاربر پنل'
 }
 
 // 🎯 پچ ۷۳: موجودی فعلی هر خزانه (صندوق/بانک) از دفتر کل — همان منطق
@@ -273,15 +341,22 @@ export default async function AdminDashboard() {
     accessAllowsPath(role, me.allowedPaths, href)
   const canRegisterOrder = allows('/admin/orders/new')
 
-  // ── داده‌ها: آمار سبک + سفارش‌های اخیر + (مالک/مدیر) صندوق و خزانه‌ها ──
-  const [quickStats, operatorStats, recentOrders, cashToday, treasury] =
-    await Promise.all([
-      canSeeFinance ? getQuickStats() : Promise.resolve(null),
-      canSeeFinance ? Promise.resolve(null) : getOperatorStats(userId),
-      canSeeFinance ? fetchRecentOrders() : fetchRecentOrders(userId),
-      canSeeFinance ? fetchCashToday() : Promise.resolve(null),
-      canSeeFinance ? fetchTreasuryBalances() : Promise.resolve(null),
-    ])
+  // ── داده‌ها: آمار سبک + سفارش‌های اخیر + (مالک/مدیر) صندوق و خزانه‌ها و لغوها ──
+  const [
+    quickStats,
+    operatorStats,
+    recentOrders,
+    cashToday,
+    treasury,
+    cancels,
+  ] = await Promise.all([
+    canSeeFinance ? getQuickStats() : Promise.resolve(null),
+    canSeeFinance ? Promise.resolve(null) : getOperatorStats(userId),
+    canSeeFinance ? fetchRecentOrders() : fetchRecentOrders(userId),
+    canSeeFinance ? fetchCashToday() : Promise.resolve(null),
+    canSeeFinance ? fetchTreasuryBalances() : Promise.resolve(null),
+    canSeeFinance ? fetchCancelsToday() : Promise.resolve(null),
+  ])
 
   // 🎯 پچ ۷۲: چیدمان ذخیره‌شدهٔ این کاربر (یا پیش‌فرض نقشش)
   let savedWidgets: DashboardWidgetId[] | null = null
@@ -521,6 +596,83 @@ export default async function AdminDashboard() {
     </section>
   )
 
+  /* ── 🎯 پچ ۷۶: ویجت «لغوهای امروز» — فقط نقش‌های مالی (رجیستری: finance) ── */
+  const cancelsTotal = (cancels ?? []).reduce(
+    (s, c) => s + (parseAmount(c.subtotal) ?? 0),
+    0
+  )
+
+  const cancelsSection = canSeeFinance ? (
+    <section className="dashboard-section">
+      <h2>
+        ❌ لغوهای امروز
+        <small className="dash-section-note">
+          سفارش‌های لغوشدهٔ امروز (به وقت تهران) با دلیل ثبت‌شده
+        </small>
+      </h2>
+      {cancels === null ? (
+        <div className="admin-card">
+          <p className="empty-admin">
+            دادهٔ لغوها فعلاً در دسترس نیست — بعداً دوباره بیا.
+          </p>
+        </div>
+      ) : cancels.length === 0 ? (
+        <div className="admin-card">
+          <p className="empty-admin">
+            🎉 امروز هیچ سفارشی لغو نشده است.
+          </p>
+        </div>
+      ) : (
+        <>
+          <div className="admin-card dash-cash-total">
+            🧮 جمع لغوهای امروز:{' '}
+            <strong>{formatPrice(cancels.length)}</strong> سفارش · جمع مبلغ:{' '}
+            <strong>{formatPrice(cancelsTotal)}</strong> تومان
+          </div>
+          <div className="dash-cancels">
+            {cancels.slice(0, 10).map((c, i) => {
+              const by = cancelByLabel(c.cancelled_by)
+              const amount = parseAmount(c.subtotal)
+              return (
+                <div key={String(c.id ?? i)} className="dash-cancel-row">
+                  <span className="dash-recent-id">
+                    #{displayOrderId(c as Record<string, unknown>, i)}
+                  </span>
+                  {c.cancelled_at ? (
+                    <span className="dash-recent-time">
+                      {fmtDateTime(c.cancelled_at)}
+                    </span>
+                  ) : null}
+                  <span className="dash-cancel-reason">
+                    {c.cancellation_reason_label || 'دلیل ثبت نشده'}
+                  </span>
+                  {amount !== null ? (
+                    <span className="dash-recent-amount">
+                      {formatPrice(amount)} تومان
+                    </span>
+                  ) : null}
+                  {by ? (
+                    <span className="dash-cancel-by">به دست: {by}</span>
+                  ) : null}
+                  {c.cancellation_note ? (
+                    <span className="dash-cancel-note">
+                      📝 {c.cancellation_note}
+                    </span>
+                  ) : null}
+                </div>
+              )
+            })}
+            {cancels.length > 10 && (
+              <div className="dash-cancel-more">
+                و {formatPrice(cancels.length - 10)} مورد دیگر…
+              </div>
+            )}
+          </div>
+        </>
+      )}
+    </section>
+  ) : null
+
   const cleanupSection = (
     <section className="dashboard-section">
       <h2>🧹 نگهداری دیتابیس</h2>
@@ -529,8 +681,11 @@ export default async function AdminDashboard() {
   )
 
   // ── 🎯 پچ ۷۲: هر ویجت = یک تب مستقل؛ ترتیب = انتخاب ذخیره‌شدهٔ کاربر ──
+  // 🎯 پچ ۷۶: دو ویجت جدید — shift (همهٔ نقش‌ها) و cancels (فقط مالی)
   const widgetNodes: Record<DashboardWidgetId, ReactNode> = {
     cash: cashSection,
+    shift: <ShiftCurrentCard />,
+    cancels: cancelsSection,
     charts: <ChartsPanel />,
     top: <TopProductsPanel />,
     recent: recentOrdersSection,

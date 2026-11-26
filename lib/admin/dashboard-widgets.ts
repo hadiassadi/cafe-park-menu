@@ -6,10 +6,24 @@
 //   نمایش تب‌ها (اولویت‌دارترها اول).
 //   کارت‌های هیرو (امروز/این ماه) همیشه بالای داشبورد هستند و مشمول
 //   تیک‌ها نیستند — استاندارد پایهٔ هر داشبورد.
+// 🎯 پچ ۷۶ — دو ویجت جدید:
+//   • shift  «شیفت باز جاری» — وضعیت شیفت جاری از API رسمی /api/admin/shifts
+//     + دکمهٔ باز/بستن (embed خودِ ShiftBadge). برای همهٔ نقش‌ها — هر که شیفت
+//     می‌گیرد باید وضعیت شیفتش را ببیند.
+//   • cancels «لغوهای امروز» — سفارش‌های لغوشدهٔ امروز (به وقت تهران) با
+//     دلیل/یادداشت/مبلغ. دادهٔ حساس کسب‌وکار → فقط نقش‌های مالی (مالک/مدیر/
+//     سفارشیِ دارای گزارش فروش).
 import { accessAllowsPath } from './modules'
 import { OpRole } from './role-matrix'
 
-export type DashboardWidgetId = 'cash' | 'charts' | 'top' | 'recent' | 'tools'
+export type DashboardWidgetId =
+  | 'cash'
+  | 'shift'
+  | 'cancels'
+  | 'charts'
+  | 'top'
+  | 'recent'
+  | 'tools'
 
 export type DashboardWidgetDef = {
   id: DashboardWidgetId
@@ -23,13 +37,29 @@ export type DashboardWidgetDef = {
 }
 
 // ⚠️ ترتیب این آرایه = ترتیب اولویت تب‌ها (اولویت‌دارترها اول):
-// صندوق و بانک → نمودارها → پرفروش‌ها → سفارش‌های اخیر → ابزارها
+// صندوق و بانک → شیفت باز جاری → لغوهای امروز → نمودارها → پرفروش‌ها →
+// سفارش‌های اخیر → ابزارها
 export const DASHBOARD_WIDGETS: DashboardWidgetDef[] = [
   {
     id: 'cash',
     label: 'صندوق و بانک',
     icon: '💵',
     description: 'موجودی فعلی صندوق و حساب‌های بانکی از دفتر کل + ورودی امروز',
+    finance: true,
+  },
+  {
+    id: 'shift',
+    label: 'شیفت باز جاری',
+    icon: '⏱',
+    description:
+      'وضعیت شیفت در حال اجرا: شروع، تنخواه، فروش به تفکیک روش، سفارش باز و نقدی موردانتظار — با دکمهٔ باز/بستن شیفت',
+  },
+  {
+    id: 'cancels',
+    label: 'لغوهای امروز',
+    icon: '❌',
+    description:
+      'سفارش‌های لغوشدهٔ امروز به وقت تهران، با دلیل ثبت‌شده، یادداشت و جمع مبلغ',
     finance: true,
   },
   {
